@@ -71,7 +71,7 @@ def _resource_path(rel: str) -> Path:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.4.1"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 

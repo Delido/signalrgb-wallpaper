@@ -127,6 +127,13 @@
   .canvas-area {
     position: relative;
     display: flex; flex-direction: column;
+    /* Without min-width:0, this grid item defaults to min-width:auto,
+       which lets its min-content (the full-size canvas) push the 1fr
+       grid column wider than the viewport. The body's overflow:hidden
+       then clips the excess, and canvas-scroll's overflow:auto never
+       sees any overflow to scroll — its parent cell already grew to
+       fit. min-width:0 forces this cell to honour the 1fr width. */
+    min-width: 0;
     min-height: 0;
     background:
       repeating-conic-gradient(#1d2128 0% 25%, #14171c 0% 50%) 50% / 24px 24px;
@@ -149,8 +156,28 @@
     overflow: auto;
     position: relative;
     padding: 24px;
-    /* Inner alignment when image is smaller than viewport */
-    display: flex; align-items: center; justify-content: center;
+    /* The well-known "centered but scrollable" pattern: a flex container
+       with `margin: auto` on the single flex child. When the child fits,
+       auto margins absorb the spare space (centred). When the child
+       overflows, auto margins resolve to 0 and the parent's overflow:auto
+       gives you proper scrollbars in both axes. */
+    display: flex;
+    /* Critical: without min-width:0/min-height:0 the flex item's default
+       min-{width,height}:auto lets it grow to its content size, which
+       defeats the overflow:auto on the parent — scrollbars never appear
+       because the container quietly expands instead of clipping. */
+    min-width: 0;
+    min-height: 0;
+  }
+  .canvas-scroll > * {
+    margin: auto;
+    /* `flex: 0 0 auto` keeps the canvas-host at its natural size
+       (= canvas CSS size). Without it, the default flex-shrink:1 lets
+       the flex layout compress canvas-host to fit the container — the
+       big canvas inside then overflows canvas-host visually, but
+       canvas-host's box itself still fits the parent, so the parent's
+       overflow:auto never triggers a scrollbar. */
+    flex: 0 0 auto;
   }
   .canvas-host {
     position: relative;
@@ -320,11 +347,18 @@
           Polygon <small>— click corners, drag to reshape, confirm to apply</small></label>
         <label><input type="radio" name="tool" value="ellipse">
           Ellipse <small>— drag bbox, then resize via handles, confirm</small></label>
+        <label><input type="radio" name="tool" value="restore">
+          Restore brush <small>— paint over transparent pixels to bring the original back</small></label>
       </div>
       <div class="row">
         <label for="threshold">Tolerance</label>
         <input id="threshold" type="range" min="0" max="200" value="30">
         <span class="val" id="threshold-val">30</span>
+      </div>
+      <div class="row">
+        <label for="brush-size">Brush size</label>
+        <input id="brush-size" type="range" min="3" max="120" value="20">
+        <span class="val" id="brush-size-val">20</span>
       </div>
       <div class="check-row">
         <input type="checkbox" id="feather" checked>
@@ -442,6 +476,8 @@ const els = {
   toolRadios:   document.querySelectorAll('input[name="tool"]'),
   threshold:    $("threshold"),
   thresholdVal: $("threshold-val"),
+  brushSize:    $("brush-size"),
+  brushSizeVal: $("brush-size-val"),
   feather:      $("feather"),
   history:      $("history"),
   undoBtn:      $("undo-btn"),
@@ -516,6 +552,12 @@ let boundedRegion = null;
 let boundedAnchor = null;  // mousedown anchor for drag-vs-click distinction
 let boundedDragging = false;
 
+// For the "Restore brush" tool: an in-progress stroke is a list of
+// circular stamps recorded along the drag path. On mouseup the stroke
+// gets committed to clicks as a single restore entry; applyMask paints
+// originalData's alpha back over any pixel inside any stamp.
+let brushStroke = null;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast helper
 // ─────────────────────────────────────────────────────────────────────────────
@@ -570,6 +612,7 @@ function loadFile(file) {
       cancelShapeEdit();
       boundedRegion = null;
       updateActiveRegionOverlay();
+      brushStroke = null;
       els.canvasHost.style.display = "block";
       els.placeholder.style.display = "none";
       els.imgStat.innerHTML =
@@ -644,6 +687,14 @@ els.rotateBtn.addEventListener("click", () => {
     if (c.kind === "ellipse") {
       return { kind: "ellipse", cx: h - 1 - c.cy, cy: c.cx, rx: c.ry, ry: c.rx };
     }
+    if (c.kind === "restore") {
+      // Each stamp's (x, y) rotates the same way as any other point; r
+      // stays put because the brush is a circle (rotation-invariant).
+      return {
+        kind: "restore",
+        strokes: c.strokes.map((st) => ({ x: h - 1 - st.y, y: st.x, r: st.r })),
+      };
+    }
     return c;
   });
   // Cancel any in-progress shape — coords would be in stale orientation.
@@ -675,6 +726,9 @@ els.toolRadios.forEach((r) => {
       boundedRegion = null;
       updateActiveRegionOverlay();
     }
+    // Abandon any half-drawn brush stroke. The caller can't have
+    // mouseup'd yet (we'd already be done), so this is the safe drop.
+    brushStroke = null;
   });
 });
 
@@ -684,6 +738,9 @@ els.toolRadios.forEach((r) => {
 
 els.threshold.addEventListener("input", () => {
   els.thresholdVal.textContent = els.threshold.value;
+});
+els.brushSize.addEventListener("input", () => {
+  els.brushSizeVal.textContent = els.brushSize.value;
 });
 els.threshold.addEventListener("change", () => {
   // Live-update the most-recent colour click (with or without region)
@@ -733,6 +790,13 @@ function clampY(y) { return Math.max(0, Math.min(els.canvas.height - 1, y)); }
 
 els.canvas.addEventListener("mousedown", (e) => {
   if (!originalData) return;
+  if (currentTool === "restore") {
+    const { x, y } = canvasPx(e);
+    brushStroke = [];
+    stampBrushAt(x, y);
+    e.preventDefault();
+    return;
+  }
   if (currentTool === "region") {
     const { x, y } = canvasPx(e);
     dragStart = { x, y };
@@ -762,6 +826,15 @@ els.canvas.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("mousemove", (e) => {
+  // Restore brush drag — paint stamps along the path while the user
+  // moves the mouse. Higher-priority than region-rect drag because
+  // both can be active in different tool modes; brushStroke is non-
+  // null only while the user is actively dragging in restore mode.
+  if (brushStroke) {
+    const { x, y } = canvasPx(e);
+    stampBrushAt(x, y);
+    return;
+  }
   // Shape-handle / ellipse-draw drag takes priority over region-rect drag.
   if (shapeDrag) {
     const { x, y } = canvasPx(e);
@@ -822,6 +895,17 @@ window.addEventListener("mousemove", (e) => {
 });
 
 window.addEventListener("mouseup", () => {
+  // Finish a brush stroke first — commit it as a single restore entry
+  // so undo treats one drag as one operation.
+  if (brushStroke) {
+    if (brushStroke.length > 0) {
+      clicks.push({ kind: "restore", strokes: brushStroke });
+      updateHistory();
+      applyMask();   // re-apply with feather so the rim looks consistent
+    }
+    brushStroke = null;
+    return;
+  }
   // Finish any handle / move / ellipse-draw drag first.
   if (shapeDrag) {
     els.shapeOverlay.querySelectorAll(".dragging").forEach((el) => el.classList.remove("dragging"));
@@ -1178,77 +1262,123 @@ function applyMask() {
   const w = els.canvas.width, h = els.canvas.height;
   const out = new ImageData(new Uint8ClampedArray(originalData.data), w, h);
   const data = out.data;
+  const orig = originalData.data;
+  const N = clicks.length;
 
-  // Bucket the click list by kind so the per-pixel loop only iterates
-  // checks that actually apply. Colour entries optionally carry a
-  // `region` snapshot (from the "Click in region" tool) restricting
-  // where the match applies — we forward it verbatim.
-  const colorClicks   = clicks.filter((c) => c.kind === "color")
-                              .map((c) => ({ r: c.r, g: c.g, b: c.b,
-                                             t2: c.threshold * c.threshold,
-                                             region: c.region || null }));
-  const regionClicks  = clicks.filter((c) => c.kind === "region");
-  const ellipseClicks = clicks.filter((c) => c.kind === "ellipse");
-  const polygonClicks = clicks.filter((c) => c.kind === "polygon");
+  if (N > 0) {
+    // Per-pixel sequential through clicks. We need order-sensitive
+    // application (not bucketed) so the restore-brush can correctly
+    // override removals that came before it AND in turn be overridden
+    // by removals that come after it.
+    //
+    // Pre-compile what we can: color → t2; restore → stroke bbox.
+    const compiled = new Array(N);
+    for (let i = 0; i < N; i++) {
+      const c = clicks[i];
+      if (c.kind === "color") {
+        compiled[i] = { kind: "color", r: c.r, g: c.g, b: c.b,
+                        t2: c.threshold * c.threshold,
+                        region: c.region || null };
+      } else if (c.kind === "restore") {
+        let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+        for (let s = 0; s < c.strokes.length; s++) {
+          const st = c.strokes[s];
+          if (st.x - st.r < xMin) xMin = st.x - st.r;
+          if (st.y - st.r < yMin) yMin = st.y - st.r;
+          if (st.x + st.r > xMax) xMax = st.x + st.r;
+          if (st.y + st.r > yMax) yMax = st.y + st.r;
+        }
+        compiled[i] = { kind: "restore", strokes: c.strokes,
+                        bbox: { xMin, yMin, xMax, yMax } };
+      } else {
+        compiled[i] = c;
+      }
+    }
 
-  if (clicks.length > 0) {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const p = (y * w + x) * 4;
-        let cleared = false;
-
-        // Region (cheapest: bbox check)
-        for (let k = 0; k < regionClicks.length; k++) {
-          const rc = regionClicks[k];
-          if (x >= rc.x0 && x <= rc.x1 && y >= rc.y0 && y <= rc.y1) {
-            data[p + 3] = 0; cleared = true; break;
+        let alpha = orig[p + 3];
+        for (let k = 0; k < N; k++) {
+          const c = compiled[k];
+          if (c.kind === "color") {
+            if (c.region &&
+                (x < c.region.x0 || x > c.region.x1 ||
+                 y < c.region.y0 || y > c.region.y1)) continue;
+            const dr = data[p]     - c.r;
+            const dg = data[p + 1] - c.g;
+            const db = data[p + 2] - c.b;
+            if (dr * dr + dg * dg + db * db <= c.t2) alpha = 0;
+          } else if (c.kind === "region") {
+            if (x >= c.x0 && x <= c.x1 && y >= c.y0 && y <= c.y1) alpha = 0;
+          } else if (c.kind === "polygon") {
+            if (pointInPolygon(x, y, c.points)) alpha = 0;
+          } else if (c.kind === "ellipse") {
+            if (c.rx > 0 && c.ry > 0) {
+              const dx = (x - c.cx) / c.rx;
+              const dy = (y - c.cy) / c.ry;
+              if (dx * dx + dy * dy <= 1) alpha = 0;
+            }
+          } else if (c.kind === "restore") {
+            if (x < c.bbox.xMin || x > c.bbox.xMax ||
+                y < c.bbox.yMin || y > c.bbox.yMax) continue;
+            for (let s = 0; s < c.strokes.length; s++) {
+              const st = c.strokes[s];
+              const dx = x - st.x, dy = y - st.y;
+              if (dx * dx + dy * dy <= st.r * st.r) {
+                alpha = orig[p + 3];
+                break;
+              }
+            }
           }
         }
-        if (cleared) continue;
-
-        // Ellipse (normalized-distance check)
-        for (let k = 0; k < ellipseClicks.length; k++) {
-          const ec = ellipseClicks[k];
-          if (ec.rx <= 0 || ec.ry <= 0) continue;
-          const dx = (x - ec.cx) / ec.rx;
-          const dy = (y - ec.cy) / ec.ry;
-          if (dx * dx + dy * dy <= 1) {
-            data[p + 3] = 0; cleared = true; break;
-          }
-        }
-        if (cleared) continue;
-
-        // Polygon (ray cast)
-        for (let k = 0; k < polygonClicks.length; k++) {
-          if (pointInPolygon(x, y, polygonClicks[k].points)) {
-            data[p + 3] = 0; cleared = true; break;
-          }
-        }
-        if (cleared) continue;
-
-        // Color match (last — most expensive when many entries exist).
-        // Region-restricted entries early-skip when the pixel is outside.
-        for (let k = 0; k < colorClicks.length; k++) {
-          const cc = colorClicks[k];
-          if (cc.region) {
-            if (x < cc.region.x0 || x > cc.region.x1 ||
-                y < cc.region.y0 || y > cc.region.y1) continue;
-          }
-          const dr = data[p]     - cc.r;
-          const dg = data[p + 1] - cc.g;
-          const db = data[p + 2] - cc.b;
-          if (dr * dr + dg * dg + db * db <= cc.t2) {
-            data[p + 3] = 0;
-            break;
-          }
-        }
+        data[p + 3] = alpha;
       }
     }
   }
 
-  if (els.feather.checked && clicks.length > 0) featherEdges(out);
+  if (els.feather.checked && N > 0) featherEdges(out);
   ctx.putImageData(out, 0, 0);
 }
+
+// Place a circular brush stamp at (x, y) using the current brush-size
+// slider. Records the stamp into the in-progress stroke and immediately
+// paints the live preview back to the displayed canvas — restoring
+// originalData's alpha for every pixel inside the circle. We only
+// read/write the local bbox of the stamp so big images stay snappy
+// even with rapid mouse moves.
+function stampBrushAt(cx, cy) {
+  if (!originalData || !brushStroke) return;
+  const r = clampInt(parseInt(els.brushSize.value, 10), 1, 200);
+  brushStroke.push({ x: clampX(cx), y: clampY(cy), r });
+
+  const w = els.canvas.width, h = els.canvas.height;
+  const xMin = Math.max(0, Math.floor(cx - r));
+  const yMin = Math.max(0, Math.floor(cy - r));
+  const xMax = Math.min(w - 1, Math.ceil(cx + r));
+  const yMax = Math.min(h - 1, Math.ceil(cy + r));
+  const bw = xMax - xMin + 1, bh = yMax - yMin + 1;
+  if (bw <= 0 || bh <= 0) return;
+  const img = ctx.getImageData(xMin, yMin, bw, bh);
+  const buf = img.data;
+  const orig = originalData.data;
+  const r2 = r * r;
+  for (let yy = 0; yy < bh; yy++) {
+    const py = yMin + yy;
+    const dy = py - cy;
+    for (let xx = 0; xx < bw; xx++) {
+      const px = xMin + xx;
+      const dx = px - cx;
+      if (dx * dx + dy * dy > r2) continue;
+      const localIdx = (yy * bw + xx) * 4;
+      const origIdx  = (py * w + px) * 4;
+      buf[localIdx + 3] = orig[origIdx + 3];
+    }
+  }
+  ctx.putImageData(img, xMin, yMin);
+}
+
+function clampInt(v, lo, hi) { return Math.max(lo, Math.min(hi, isFinite(v) ? v : lo)); }
 
 // Standard even-odd ray-cast for point-in-polygon. O(n) per pixel where
 // n is the polygon's corner count.
@@ -1480,6 +1610,10 @@ function updateHistory() {
       row.innerHTML =
         '<span class="swatch" style="background:#9bf"></span>' +
         '<span class="label">#' + (i + 1) + ' ellipse · ' + Math.round(2 * c.rx) + '×' + Math.round(2 * c.ry) + '</span>';
+    } else if (c.kind === "restore") {
+      row.innerHTML =
+        '<span class="swatch" style="background:#9d9"></span>' +
+        '<span class="label">#' + (i + 1) + ' restore · ' + c.strokes.length + ' stamps</span>';
     }
     els.history.appendChild(row);
   });

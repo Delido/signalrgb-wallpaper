@@ -4,6 +4,42 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-05-17
+
+### Added
+
+- **Restore brush** tool in the wallpaper builder. New "Restore brush"
+  radio in the tool list; "Brush size" slider (3–120 px, default 20).
+  Click+drag over a transparent area to paint the original pixels back
+  to opaque. The stroke previews live as you drag — the brushed
+  pixels' alpha gets restored from the pristine ImageData immediately,
+  no wait for the full mask recompute. On mouseup the whole stroke is
+  committed as a single `restore` history entry, undoable as one
+  operation.
+
+### Fixed
+
+- Wallpaper builder: when zoomed in beyond viewport size, the canvas
+  area now actually scrolls. Was caused by a chain of default
+  `min-{width,height}: auto` on the grid/flex layout that let the
+  canvas expand its parents instead of triggering `overflow: auto`
+  scrollbars. Fixed by adding `min-width: 0` to the canvas-area grid
+  cell and `flex: 0 0 auto` to scroll children — both standard
+  Chromium workarounds.
+
+### Changed
+
+- `applyMask` rewritten to be **order-sensitive** per-pixel (was
+  bucketed-by-kind). This is what makes the restore brush compose
+  correctly with subsequent removals: remove → restore → remove-again
+  works because clicks are processed in order, with restore setting
+  alpha back to the original and a later removal still able to clear
+  it. The previous bucketed pass would have applied restore as a
+  final override regardless of position. Same big-O complexity; tiny
+  bit more per-pixel work for edits with many history entries.
+- Rotation rotates restore-stroke coordinates the same way it rotates
+  region / polygon / ellipse coords, so the brush survives a 90° turn.
+
 ## [0.4.0] - 2026-05-17
 
 ### Added

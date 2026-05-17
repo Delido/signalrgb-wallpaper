@@ -14,8 +14,9 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes from
 the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.2.0 — first public release. Bridge + tray + multi-screen
-> all working. Inno Setup installer planned for the next minor release.
+> **Status:** v0.4.1 — installer ships, multi-screen works, in-browser
+> wallpaper builder with polygon / ellipse / region / restore-brush
+> tools, apply-to-screen pipeline, About dialog with OSS attribution.
 
 ## Features
 
@@ -23,7 +24,15 @@ whatever colour your current effect is producing right now.
 - **1–3 monitor support** with independent settings per screen
 - **System tray dialog** for everything: background per screen, glow layout
   (pixel grid / stripes / pills / off), strength, dim, blur — live apply
-- **Standalone bridge** as a single `.exe` (no Python required)
+- **In-browser wallpaper builder** (`Build Wallpaper…` in tray) for
+  carving transparent regions out of any image. Color-click, drag-region,
+  polygon, ellipse, "click in region", and a **restore brush** to undo
+  over-aggressive edits. Apply straight to a screen with one click, or
+  save as PNG. Multi-monitor split halves an image across two screens.
+- **One-click installer** (`SignalRGBWallpaperSetup-*.exe`, per-user,
+  no admin) handles the bridge, the SignalRGB plugin, the Lively zips,
+  autostart, and an Add/Remove Programs entry.
+- **Standalone bridge** as a single `.exe` (no Python required for users)
 - **Stable wire protocol** — UDP from plugin to bridge, WebSocket from
   bridge to wallpaper, well-defined frame format
 
