@@ -144,6 +144,10 @@ function ensureZones(cols, rows) {
 function rgbCss(r, g, b) { return "rgb(" + r + "," + g + "," + b + ")"; }
 
 function renderFrame(buf) {
+  // Honor Lively's pause-wallpapers / page-hidden state: drop frames so
+  // the glow layer freezes on the last rendered colours. We still consume
+  // the WS message (so the queue doesn't back up) but skip the DOM writes.
+  if (isPaused) return;
   // Wire: [S][R][screen u8][wH][wL][hH][hL][rgb...]  -> 7-byte header
   if (buf.length < 7) return;
   if (buf[0] !== 0x53 || buf[1] !== 0x52) return;
@@ -406,6 +410,55 @@ window.wallpaperPropertyListener = {
     }
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pause/resume integration.
+//
+// LivelyInfo.Arguments contains "--pause-event true" which opts this wallpaper
+// in to Lively's playback notifications. When the user picks "Pause wallpapers"
+// from Lively's tray, Lively calls livelyWallpaperPlaybackChanged(state). Payload
+// shape varies across Lively builds — we accept boolean, {IsRunning}, {playing},
+// {isPlaying} etc.
+//
+// We also subscribe to document.visibilitychange as a defensive fallback: some
+// hosts (CEF in fullscreen-minimised state, RDP disconnects) only fire that.
+// ─────────────────────────────────────────────────────────────────────────────
+let isPaused = false;
+function setPaused(p) {
+  p = !!p;
+  if (p === isPaused) return;
+  isPaused = p;
+  console.log("[wallpaper] paused =", p);
+  if (showStatusEnabled) {
+    flashDebug(p ? "paused (Lively)" : "resumed (Lively)");
+  }
+}
+
+window.livelyWallpaperPlaybackChanged = function (state) {
+  let playing;
+  if (typeof state === "boolean") {
+    playing = state;
+  } else if (state && typeof state === "object") {
+    playing = (state.IsRunning  !== undefined) ? !!state.IsRunning
+            : (state.isRunning  !== undefined) ? !!state.isRunning
+            : (state.IsPlaying  !== undefined) ? !!state.IsPlaying
+            : (state.isPlaying  !== undefined) ? !!state.isPlaying
+            : (state.playing    !== undefined) ? !!state.playing
+            : true;
+  } else if (typeof state === "string") {
+    // Some builds pass "playing" / "paused" as plain strings.
+    playing = /^(playing|running|resumed|true|1)$/i.test(state);
+  } else {
+    playing = true;
+  }
+  setPaused(!playing);
+};
+
+document.addEventListener("visibilitychange", () => {
+  // document.hidden=true → user switched to another wallpaper, RDP'd out,
+  // locked the workstation etc. Treat as a pause; resume on visible again.
+  setPaused(document.hidden);
+});
 </script>
 </body>
 </html>
