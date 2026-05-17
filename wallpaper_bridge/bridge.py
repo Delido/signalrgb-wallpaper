@@ -48,6 +48,7 @@ import threading
 import time
 import tkinter as tk
 import urllib.parse
+import webbrowser
 from io import BytesIO
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -55,14 +56,33 @@ from tkinter import filedialog, ttk
 import pystray
 from PIL import Image, ImageDraw
 
+
+def _resource_path(rel: str) -> Path:
+    """Resolve a path that works both in dev runs and PyInstaller --onefile
+    bundles. PyInstaller extracts bundled --add-data files into a temp dir
+    pointed to by sys._MEIPASS; in dev the file sits next to bridge.py."""
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base) / rel
+    return Path(__file__).parent / rel
+
 # ============================================================================
 # Constants
 # ============================================================================
+
+APP_NAME    = "SignalRGB Wallpaper Bridge"
+APP_VERSION = "0.3.0"
+APP_AUTHOR  = "Delido"
+APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
 UDP_HOST = "127.0.0.1"
 UDP_PORT = 17320
 WS_HOST  = "127.0.0.1"
 WS_PORT  = 17320
+
+# Max payload size accepted on POST /screen/<N>/background. Generous (50 MB)
+# but bounded — the builder caps output well below this in practice.
+MAX_BACKGROUND_UPLOAD_BYTES = 50 * 1024 * 1024
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MAX_SCREEN_INDEX = 7  # generous upper bound; plugin caps at 2 (3 screens)
@@ -108,6 +128,15 @@ def config_path() -> Path:
     folder = Path(base) / "SignalRGBWallpaper"
     folder.mkdir(parents=True, exist_ok=True)
     return folder / "config.json"
+
+
+def screens_dir() -> Path:
+    """Where builder-uploaded backgrounds get persisted, one file per
+    screen with a unix-millis timestamp suffix so the browser can't cache
+    a stale image after re-upload."""
+    p = config_path().parent / "screens"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def default_config() -> dict:
@@ -278,10 +307,11 @@ class Broadcaster:
     cross-thread calls (e.g. tray->push_settings) use call_soon_threadsafe.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count):
+    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background):
         self.loop = loop
         self.get_settings = get_settings        # callable(screen:int)->dict
         self.get_screen_count = get_screen_count  # callable()->int (1..N_SCREENS)
+        self.update_background = update_background  # callable(screen:int, png_bytes:bytes)->bool
         self.clients_by_screen: dict[int, set] = {}
         self._lock = asyncio.Lock()
 
@@ -403,6 +433,80 @@ class Broadcaster:
             except Exception: pass
             return
 
+        # POST /screen/<N>/background — receive a PNG from the builder
+        # and apply it as that screen's background. Body is the raw PNG
+        # bytes (no multipart wrapper; Content-Type: image/png). We
+        # save with a millisecond-timestamped filename so the wallpaper
+        # page re-fetches a fresh URL (avoids stale-image cache hits).
+        if method == "POST" and target.startswith("/screen/"):
+            parts = target.split("?", 1)[0].strip("/").split("/")
+            # ["screen", "<N>", "background"]
+            if len(parts) >= 3 and parts[0] == "screen" and parts[2] == "background":
+                try:
+                    screen_idx = int(parts[1])
+                except ValueError:
+                    screen_idx = -1
+                if 0 <= screen_idx < N_SCREENS:
+                    try:
+                        content_length = int(headers.get(b"content-length", b"0") or 0)
+                    except ValueError:
+                        content_length = 0
+                    if 0 < content_length <= MAX_BACKGROUND_UPLOAD_BYTES:
+                        try:
+                            body = await reader.readexactly(content_length)
+                            ok = self.update_background(screen_idx, body)
+                            if ok:
+                                await self.push_settings(screen_idx, self.get_settings(screen_idx))
+                                payload = b'{"ok":true}'
+                            else:
+                                payload = b'{"ok":false}'
+                            head = (
+                                "HTTP/1.1 200 OK\r\n"
+                                "Content-Type: application/json\r\n"
+                                f"Content-Length: {len(payload)}\r\n"
+                                "Cache-Control: no-store\r\n"
+                                "Connection: close\r\n\r\n"
+                            ).encode()
+                            writer.write(head + payload)
+                        except asyncio.IncompleteReadError:
+                            http_error(writer, 400, "incomplete body")
+                        except Exception as e:
+                            http_error(writer, 500, f"upload failed: {e}")
+                    else:
+                        http_error(writer, 400, f"bad content-length: {content_length} (max {MAX_BACKGROUND_UPLOAD_BYTES})")
+                else:
+                    http_error(writer, 404, f"unknown screen index: {screen_idx} (allowed 0..{N_SCREENS-1})")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+
+        # Local in-browser wallpaper builder. Opened via the tray "Build
+        # Wallpaper…" menu item. Pure client-side canvas app — we just
+        # serve the static HTML file bundled alongside the exe.
+        if method == "GET" and target.split("?", 1)[0] in ("/builder", "/builder/"):
+            try:
+                builder_path = _resource_path("builder.html")
+                data = builder_path.read_bytes()
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(data)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + data)
+            except FileNotFoundError:
+                http_error(writer, 500, "builder.html not bundled with this build")
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
         http_error(writer, 404, "not found")
         try: await writer.drain()
         except Exception: pass
@@ -471,6 +575,33 @@ class BridgeRuntime:
         with self.config_lock:
             return int(self.config.get("screenCount", 1))
 
+    def _update_background(self, screen: int, png_bytes: bytes) -> bool:
+        """Persist a builder-uploaded PNG and point the screen's bgImage
+        setting at it. Unique-timestamped filename so the wallpaper page
+        sees a new URL and refetches (avoids stale-cache hits). Old
+        screen-N-*.png files are deleted so the screens/ folder doesn't
+        bloat over many edits."""
+        try:
+            millis = int(time.time() * 1000)
+            target = screens_dir() / f"screen-{screen}-{millis}.png"
+            target.write_bytes(png_bytes)
+            for old in screens_dir().glob(f"screen-{screen}-*.png"):
+                if old != target:
+                    try: old.unlink()
+                    except OSError: pass
+            with self.config_lock:
+                self.config["screens"][str(screen)]["bgImage"] = str(target)
+                cfg_snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(cfg_snapshot)
+            except Exception as e:
+                print(f"[bg] save_config failed: {e}")
+            print(f"[bg] screen={screen} saved {target.name} ({len(png_bytes)} bytes)")
+            return True
+        except Exception as e:
+            print(f"[bg] update failed: {e}")
+            return False
+
     def push_settings(self, screen: int, settings: dict):
         if self.broadcaster:
             self.broadcaster.push_settings_threadsafe(screen, settings)
@@ -483,7 +614,12 @@ class BridgeRuntime:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         self.loop = loop
-        self.broadcaster = Broadcaster(loop, self._get_settings, self._get_screen_count)
+        self.broadcaster = Broadcaster(
+            loop,
+            self._get_settings,
+            self._get_screen_count,
+            self._update_background,
+        )
         try:
             loop.run_until_complete(self._serve())
         except Exception as e:
@@ -714,6 +850,89 @@ class SettingsDialog:
 
 
 # ============================================================================
+# About dialog
+# ============================================================================
+
+class AboutDialog:
+    """Standalone Tk window with version info, repo link, and open-source
+    attribution. Spawned per click on the tray's About item, on its own
+    daemon thread, so it doesn't conflict with the Settings dialog or
+    block the tray message pump."""
+
+    def show(self):
+        root = tk.Tk()
+        root.title(f"About {APP_NAME}")
+        root.geometry("560x520")
+        root.minsize(520, 480)
+
+        # Header
+        ttk.Label(root, text=APP_NAME,
+                  font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=16, pady=(16, 0))
+        ttk.Label(root, text=f"Version {APP_VERSION}",
+                  foreground="#666").pack(anchor="w", padx=16)
+        ttk.Label(root, text=f"© 2026 {APP_AUTHOR}. MIT Licensed.",
+                  foreground="#666").pack(anchor="w", padx=16, pady=(8, 0))
+
+        # Quick links
+        links = ttk.Frame(root)
+        links.pack(fill="x", padx=16, pady=10)
+        ttk.Button(links, text="Open on GitHub",
+                   command=lambda: webbrowser.open(APP_REPO)).pack(side="left")
+        ttk.Button(links, text="MIT License",
+                   command=lambda: webbrowser.open(APP_REPO + "/blob/main/LICENSE")
+                   ).pack(side="left", padx=(6, 0))
+
+        ttk.Separator(root).pack(fill="x", padx=16, pady=(4, 8))
+        ttk.Label(root, text="Open-source software used by this app",
+                  font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=16)
+
+        oss_text = (
+            "Bundled in SignalRGBBridge.exe:\n"
+            "\n"
+            "  • Python 3 — PSF License\n"
+            "    https://www.python.org/  •  https://docs.python.org/3/license.html\n"
+            "\n"
+            "  • pystray (system tray icon) — LGPL 3.0\n"
+            "    https://github.com/moses-palmer/pystray\n"
+            "\n"
+            "  • Pillow / PIL (image library) — MIT-CMU (HPND)\n"
+            "    https://github.com/python-pillow/Pillow\n"
+            "\n"
+            "  • PyInstaller (single-file packager) — GPL 2.0+ with linking exception\n"
+            "    https://github.com/pyinstaller/pyinstaller\n"
+            "\n"
+            "  • tkinter (Settings & About dialogs) — PSF License (Python stdlib)\n"
+            "\n"
+            "Hosts the wallpaper plays inside (not bundled):\n"
+            "\n"
+            "  • Lively Wallpaper — GPL 3.0\n"
+            "    https://github.com/rocksdanister/lively\n"
+            "\n"
+            "  • SignalRGB — proprietary; this project uses their public plugin API.\n"
+            "    https://signalrgb.com/  •  https://docs.signalrgb.com/\n"
+        )
+
+        text_frame = ttk.Frame(root)
+        text_frame.pack(fill="both", expand=True, padx=16, pady=(4, 4))
+        sb = ttk.Scrollbar(text_frame, orient="vertical")
+        sb.pack(side="right", fill="y")
+        text = tk.Text(text_frame, wrap="word", relief="flat",
+                       background=root.cget("background"),
+                       font=("Consolas", 9), yscrollcommand=sb.set)
+        text.insert("1.0", oss_text)
+        text.config(state="disabled")
+        text.pack(side="left", fill="both", expand=True)
+        sb.config(command=text.yview)
+
+        btn_row = ttk.Frame(root)
+        btn_row.pack(fill="x", padx=16, pady=12)
+        ttk.Button(btn_row, text="Close", command=root.destroy).pack(side="right")
+
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.mainloop()
+
+
+# ============================================================================
 # Tray icon
 # ============================================================================
 
@@ -744,10 +963,12 @@ class TrayApp:
 
     def run(self):
         menu = pystray.Menu(
-            pystray.MenuItem("Settings…",    self._open_settings,    default=True),
-            pystray.MenuItem("Reload config", self._reload_config),
+            pystray.MenuItem("Settings…",         self._open_settings, default=True),
+            pystray.MenuItem("Build Wallpaper…",  self._open_builder),
+            pystray.MenuItem("Reload config",     self._reload_config),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit",          self._quit),
+            pystray.MenuItem("About…",            self._open_about),
+            pystray.MenuItem("Quit",              self._quit),
         )
         self.icon = pystray.Icon(
             name="SignalRGBWallpaper",
@@ -789,6 +1010,27 @@ class TrayApp:
             dialog.show()
         except Exception as e:
             print(f"[tray] settings dialog crashed: {e}")
+
+    def _open_about(self, icon, item):
+        threading.Thread(target=self._show_about_dialog, daemon=True,
+                         name="about-dialog").start()
+
+    def _show_about_dialog(self):
+        try:
+            AboutDialog().show()
+        except Exception as e:
+            print(f"[tray] about dialog crashed: {e}")
+
+    def _open_builder(self, icon, item):
+        # Open the bundled HTML wallpaper builder in the user's default
+        # browser. The bridge serves it at /builder on the same port the
+        # WS / image proxy listen on, so the URL is always reachable when
+        # the bridge is running.
+        url = f"http://{WS_HOST}:{WS_PORT}/builder"
+        try:
+            webbrowser.open(url, new=2)
+        except Exception as e:
+            print(f"[tray] failed to open browser: {e}")
 
     def _reload_config(self, icon, item):
         try:

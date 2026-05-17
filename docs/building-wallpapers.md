@@ -5,7 +5,59 @@ image. Wherever the image is fully transparent (or partly transparent),
 the SignalRGB glow shines through. Wherever it's opaque, you just see
 the image — no glow.
 
-This guide walks you through making your own from a regular wallpaper.
+There are two ways to make one:
+
+1. **The built-in builder** (since v0.3.0) — open the tray icon → "Build
+   Wallpaper…" — see [next section](#built-in-builder-the-quick-path).
+   Good for ~80% of cases: pick an image, click bright colours, save.
+2. **GIMP** (or any image editor with alpha + selection) — full control,
+   irregular shapes, soft brushes — see [GIMP workflow](#gimp-workflow-full-control).
+
+## Built-in builder (the quick path)
+
+The bridge ships a small canvas-based image editor that does the "remove
+all pixels matching this colour" workflow inline, no external tool
+needed.
+
+### Steps
+
+1. Right-click the **SignalRGB Wallpaper tray icon** → **Build Wallpaper…**.
+   Your default browser opens to `http://127.0.0.1:17320/builder`.
+2. Click **Choose image…** (or drag a PNG/JPG/WebP into the canvas area).
+3. The image appears on a checkerboard background — the checkerboard is
+   what'll show through wherever you make pixels transparent.
+4. Tweak the **Tolerance** slider (default 30) — higher = a single click
+   removes a wider range of similar colours.
+5. **Click a bright pixel** on the canvas (e.g. a window in a skyscraper,
+   a neon sign). Every pixel within tolerance becomes transparent. Click
+   more places to remove more colours; each click is logged in the
+   sidebar.
+6. Adjust the Tolerance slider AFTER a click and it re-applies live so
+   you can dial in the right tolerance for the most recent pick.
+7. The **Soften edges (2 px feather)** checkbox is on by default — keeps
+   transparent-area edges from looking pixelated when the glow blurs
+   through.
+8. Click **Undo** to remove the last click, or **Reset** to start over.
+9. Click **Save as PNG**. The file downloads via your browser as
+   `<original-name>-glow.png`.
+10. Right-click the tray icon → **Settings…** → pick the screen tab →
+    **Background image** → Browse → pick your new PNG → **Save**.
+
+That's it. The wallpaper updates live across all monitors displaying
+that screen index — no Lively reload.
+
+### Tips for the builder
+
+- The canvas keeps the **original** pixels in memory — undoing or
+  changing the tolerance never compounds losses.
+- Clicking on an already-transparent pixel is a no-op (we sample from
+  the pristine original, not the current display).
+- Out-of-the-box, the click samples the EXACT pixel you clicked. If you
+  click a slightly-off-bright pixel by accident, raise the tolerance to
+  cover the actual range you wanted.
+- For super-fine work (e.g. removing a single window pane without
+  removing a similar-colored shadow on a roof), use GIMP — the builder
+  is global colour matching, not spatial.
 
 ## The concept in one picture
 
@@ -75,9 +127,11 @@ Search terms that find good candidates: "cyberpunk city night",
 "vaporwave room", "neon alley", "synthwave skyline", "spaceship
 cockpit", "night street rain reflection".
 
-## GIMP workflow (recommended — free, cross-platform)
+## GIMP workflow (full control)
 
-GIMP is the canonical free image editor. Download from
+GIMP is the canonical free image editor — use it when the built-in
+builder's "remove pixels matching this colour" approach isn't precise
+enough (irregular shapes, soft brushes, manual masking). Download from
 [gimp.org](https://www.gimp.org/) — Windows installer is ~250 MB.
 
 ### 1. Open your image

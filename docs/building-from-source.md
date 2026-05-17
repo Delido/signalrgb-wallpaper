@@ -41,9 +41,9 @@ python -m PyInstaller `
   --hidden-import pystray._win32 `
   --collect-all pystray `
   --collect-submodules PIL `
+  --add-data "builder.html;." `
   --distpath dist_bridge `
   --workpath build_bridge `
-  --specpath build_bridge `
   bridge.py
 
 # Output: wallpaper_bridge\dist_bridge\SignalRGBBridge.exe  (~19 MB)
@@ -59,6 +59,10 @@ Flags explained:
   static analyser misses pystray's Win32 backend; this forces inclusion.
 - `--collect-submodules PIL` — Pillow's image loaders are lazy-loaded;
   this pulls them all in so the tray icon image works.
+- `--add-data "builder.html;."` — bundles the in-browser wallpaper
+  builder so it's served at `/builder`. Path is resolved relative to
+  the spec file's directory (CWD), so don't pass `--specpath` or the
+  source path won't resolve.
 
 ### Quick rebuild loop during development
 

@@ -122,6 +122,11 @@ bridge restarts.
 ## Tray menu options
 
 - **Settings…** — opens the dialog described above
+- **Build Wallpaper…** *(since v0.3.0)* — opens the in-browser image
+  editor at `http://127.0.0.1:17320/builder` in your default browser.
+  Load an image, click bright areas to make them transparent, save as
+  PNG. See [building-wallpapers.md](building-wallpapers.md#built-in-builder-the-quick-path)
+  for the workflow.
 - **Reload config** — re-reads `config.json` from disk and pushes
   everything to all wallpapers. Use this if you edited the file by hand.
 - **Quit** — hard-kills the bridge process. Wallpapers will see WS

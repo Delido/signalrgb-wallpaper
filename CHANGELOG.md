@@ -4,6 +4,67 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-17
+
+### Added
+
+- **In-browser wallpaper builder.** New tray menu item **"Build
+  Wallpaper…"** opens an HTML5-canvas image editor at
+  `http://127.0.0.1:17320/builder` in the user's default browser. Pure
+  client-side editor, no extra install needed. Features:
+  - Drag-and-drop or file picker to load PNG / JPEG / WebP / GIF / BMP.
+  - **Two tools**: "Click pixel" (removes globally-similar colours) and
+    "Drag rectangle" (removes a region you select).
+  - **Tolerance slider** (0–200) tunes the colour-match width; tweaking
+    after a click live-updates the most recent match.
+  - **Soften edges** option adds a 2 px feathered rim around transparent
+    cut-outs so they don't look pixelated under the CSS blur.
+  - **Undo / Reset** for non-destructive iteration (the pristine
+    original is kept in memory).
+  - **Rotate 90°** for portrait/landscape mismatches; click history
+    survives.
+  - **Zoom** controls (− / + / Fit / 100%) and Ctrl+wheel.
+  - **Output size cap** (default 4K) so saved PNGs don't run to 50 MB+
+    on 8K source images.
+  - **Save as PNG** downloads via the browser.
+  - **Apply directly to Screen 1 / 2 / 3** buttons POST the current
+    image to the bridge — wallpaper updates live, no Settings dialog
+    round-trip.
+  - **Multi-monitor split**: cut the image vertically in half and apply
+    the two halves to two screens at once. Optional yellow split-guide
+    overlay on the canvas.
+  - Toast notifications confirm save / apply success or failure.
+  - See [docs/building-wallpapers.md](docs/building-wallpapers.md#built-in-builder-the-quick-path)
+    for the workflow.
+- **`POST /screen/<N>/background`** bridge endpoint accepts a PNG body,
+  writes it to
+  `%LOCALAPPDATA%\SignalRGBWallpaper\screens\screen-<N>-<millis>.png`,
+  updates the screen's config to point at it, persists `config.json`,
+  and pushes the new settings to connected wallpapers. Unique-timestamp
+  filename avoids browser-cache hits on rapid re-uploads; older
+  `screen-<N>-*.png` files are auto-cleaned.
+- **`GET /builder`** route serves the bundled `builder.html` (added via
+  PyInstaller `--add-data "builder.html;."`).
+- **"About…"** tray menu item opens a dialog with version, repo link,
+  MIT license link, and full open-source attribution: Python (PSF),
+  pystray (LGPL 3.0), Pillow (MIT-CMU/HPND), PyInstaller (GPL 2.0+ with
+  linking exception), tkinter (PSF), plus reference notes for Lively
+  Wallpaper (GPL 3.0) and SignalRGB (proprietary, via plugin API).
+- Docs: `docs/building-wallpapers.md` now leads with the built-in
+  builder as the quick path and reframes the GIMP workflow as the
+  full-control alternative. `docs/tray-settings.md` documents the new
+  "Build Wallpaper…" menu item.
+
+### Changed
+
+- Build command in `docs/building-from-source.md`: dropped
+  `--specpath build_bridge` (broke `--add-data` resolution because
+  PyInstaller resolves data paths relative to the spec file's
+  directory) and added `--add-data "builder.html;."`. Spec file now
+  lands next to `bridge.py`; gitignored.
+- `.markdownlint.json`: MD013 now skips code blocks and tables
+  (legitimate long lines in PowerShell snippets shouldn't trigger).
+
 ## [0.2.3] - 2026-05-17
 
 ### Fixed
