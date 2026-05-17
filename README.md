@@ -76,6 +76,8 @@ Full step-by-step with screenshots: see
   and dropdown does
 - [Multi-screen setup](docs/multi-screen-setup.md) — placing devices on
   the SignalRGB canvas, assigning Lively wallpapers to monitors
+- [Building glow wallpapers](docs/building-wallpapers.md) — picking a
+  source image, GIMP workflow to cut transparent regions, what looks good
 - [Troubleshooting](docs/troubleshooting.md) — when the wallpaper stays
   black, when SignalRGB doesn't show the device, when the tray dies
 - [Architecture](docs/architecture.md) — wire formats, threading model,
