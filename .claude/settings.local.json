@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(curl -s \"https://raw.githubusercontent.com/rocksdanister/lively/core-separation/src/Lively/Lively.Player.WebView2/StartArgs.cs\" -o \"c:/Users/smend/AppData/Local/Temp/lively-inv/wv2_StartArgs.cs\")"
-    ]
-  }
-}
