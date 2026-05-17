@@ -45,6 +45,7 @@ import os
 import struct
 import sys
 import threading
+import time
 import tkinter as tk
 import urllib.parse
 from io import BytesIO
@@ -526,6 +527,10 @@ class SettingsDialog:
         self.vars: list[dict[str, tk.Variable]] = []
         # Top-level (non-per-screen) Vars — currently just screenCount.
         self.global_vars: dict[str, tk.Variable] = {}
+        # "Saved at HH:MM:SS" status label — updated on every Save click so
+        # iterative tweaks (multi-screen tuning, image picker) have feedback
+        # that the persist + push actually happened.
+        self._saved_label: tk.Label | None = None
 
     def show(self):
         self.root = tk.Tk()
@@ -559,10 +564,16 @@ class SettingsDialog:
 
         btn_row = ttk.Frame(self.root)
         btn_row.pack(fill="x", padx=8, pady=8)
-        ttk.Button(btn_row, text="Cancel", command=self._on_cancel).pack(side="right")
-        ttk.Button(btn_row, text="Save",   command=self._on_save).pack(side="right", padx=(0, 6))
+        # Close just dismisses the window. Save persists + pushes but keeps
+        # the dialog open so the user can iterate / test / tweak the next
+        # screen tab without re-opening.
+        ttk.Button(btn_row, text="Close", command=self._on_close).pack(side="right")
+        ttk.Button(btn_row, text="Save",  command=self._on_save).pack(side="right", padx=(0, 6))
+        # Inline confirmation label, left-aligned. Empty until first save.
+        self._saved_label = ttk.Label(btn_row, text="", foreground="#2a8a2a")
+        self._saved_label.pack(side="left", padx=(2, 0))
 
-        self.root.protocol("WM_DELETE_WINDOW", self._on_cancel)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.mainloop()
 
     # -- tab construction ---------------------------------------------------
@@ -690,12 +701,14 @@ class SettingsDialog:
         for n in range(N_SCREENS):
             settings = {k: var.get() for k, var in self.vars[n].items()}
             self.config["screens"][str(n)] = settings
-        # Caller persists and pushes — single shot per Save click.
+        # Caller persists + pushes to live wallpapers. We deliberately keep
+        # the dialog open so the user can iterate (test, switch tabs, tweak
+        # the next screen) without re-opening it from the tray every time.
         self.on_save(self.config)
-        if self.root is not None:
-            self.root.destroy()
+        if self._saved_label is not None:
+            self._saved_label.config(text="✓ Saved at " + time.strftime("%H:%M:%S"))
 
-    def _on_cancel(self):
+    def _on_close(self):
         if self.root is not None:
             self.root.destroy()
 

@@ -8,7 +8,10 @@ touch it.
 Right-click the tray icon (RGB monitor in the system tray) → **Settings…**.
 A window with one global section at top + three tabs (Screen 1 / 2 / 3)
 below opens. Click **Save** at the bottom to write changes to disk and
-push them live to the wallpapers; **Cancel** discards.
+push them live to the wallpapers — the dialog stays open so you can
+tweak iteratively or switch screen tabs. A "✓ Saved at HH:MM:SS"
+indicator next to the button confirms each save. Click **Close** when
+done.
 
 ## Global section: "SignalRGB device count"
 
