@@ -125,6 +125,7 @@
 
   /* ── Canvas area ────────────────────────────────────────────────────── */
   .canvas-area {
+    position: relative;
     display: flex; flex-direction: column;
     min-height: 0;
     background:
@@ -172,6 +173,81 @@
     pointer-events: none;
     display: none;
   }
+  /* Persistent yellow rectangle that bounds where the "Click in region"
+     colour matcher applies. Shown while a region is active; survives
+     across clicks within the region. */
+  .canvas-host #active-region {
+    position: absolute;
+    border: 1.5px dashed #ffd24c;
+    background: rgba(255, 210, 76, 0.10);
+    pointer-events: none;
+    display: none;
+  }
+  .canvas-host #active-region.on { display: block; }
+  /* SVG overlay for polygon/ellipse editing — covers the rendered canvas
+     1:1. Mouse events pass through to the canvas unless they land on a
+     handle (which has pointer-events: auto). */
+  .canvas-host #shape-overlay {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    display: none;
+  }
+  .canvas-host #shape-overlay.active { display: block; }
+  .canvas-host #shape-overlay .shape-fill {
+    fill: rgba(106, 176, 255, 0.18);
+    stroke: #fff;
+    stroke-dasharray: 4 4;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+    /* Drag the shape body itself to translate the whole shape. Handles
+       (corners / midpoints) still get their own grab cursor via the
+       .handle rule below. */
+    pointer-events: auto;
+    cursor: move;
+  }
+  .canvas-host #shape-overlay .shape-fill.moving { cursor: grabbing; }
+  .canvas-host #shape-overlay .handle {
+    fill: #6ab0ff;
+    stroke: #fff;
+    stroke-width: 1.5;
+    cursor: grab;
+    pointer-events: auto;
+    vector-effect: non-scaling-stroke;
+  }
+  .canvas-host #shape-overlay .handle:hover { fill: #8fc4ff; }
+  .canvas-host #shape-overlay .handle.dragging { cursor: grabbing; fill: #fff; }
+
+  /* Floating toolbar shown when a shape is mid-edit. Position:fixed so
+     the user never has to scroll to find Confirm/Cancel, regardless of
+     where their viewport is in the (potentially zoomed/scrolled) canvas. */
+  .shape-toolbar {
+    position: fixed;
+    /* 60px clears the page header (~50px tall) and the canvas-toolbar
+       row below it without overlapping either. */
+    top: 60px; right: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: none;
+    align-items: center; gap: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 60;
+    font-size: 12.5px;
+    max-width: calc(100vw - 24px);
+  }
+  .shape-toolbar.on { display: flex; }
+  .shape-toolbar .label {
+    max-width: 460px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .shape-toolbar .label { color: var(--text-dim); }
+  .shape-toolbar .label strong { color: var(--text); }
+
   .canvas-host #split-line {
     position: absolute;
     top: 0; bottom: 0;
@@ -236,8 +312,14 @@
       <div class="radio-list">
         <label><input type="radio" name="tool" value="color" checked>
           Click pixel <small>— remove all similar colours</small></label>
+        <label><input type="radio" name="tool" value="bounded">
+          Click in region <small>— drag rectangle first, then click colours inside</small></label>
         <label><input type="radio" name="tool" value="region">
           Drag rectangle <small>— remove a region you draw</small></label>
+        <label><input type="radio" name="tool" value="polygon">
+          Polygon <small>— click corners, drag to reshape, confirm to apply</small></label>
+        <label><input type="radio" name="tool" value="ellipse">
+          Ellipse <small>— drag bbox, then resize via handles, confirm</small></label>
       </div>
       <div class="row">
         <label for="threshold">Tolerance</label>
@@ -323,6 +405,9 @@
       <div class="canvas-host" id="canvas-host" style="display: none;">
         <canvas id="canvas"></canvas>
         <div id="selection-rect"></div>
+        <div id="active-region"></div>
+        <svg id="shape-overlay" preserveAspectRatio="none"
+             xmlns="http://www.w3.org/2000/svg"></svg>
         <div id="split-line"></div>
       </div>
       <div class="placeholder" id="placeholder">
@@ -330,6 +415,11 @@
         Anything with bright, distinct hotspots works best —<br>
         night cityscapes, neon art, sci-fi panels, etc.
       </div>
+    </div>
+    <div class="shape-toolbar" id="shape-toolbar">
+      <span class="label" id="shape-toolbar-label">Drawing shape…</span>
+      <button class="btn primary" id="shape-confirm">Confirm</button>
+      <button class="btn" id="shape-cancel">Cancel</button>
     </div>
   </div>
 </main>
@@ -369,8 +459,15 @@ const els = {
   canvas:       $("canvas"),
   placeholder:  $("placeholder"),
   selectionRect:$("selection-rect"),
+  activeRegion: $("active-region"),
   splitLine:    $("split-line"),
   canvasStat:   $("canvas-stat"),
+
+  shapeOverlay: $("shape-overlay"),
+  shapeToolbar: $("shape-toolbar"),
+  shapeLabel:   $("shape-toolbar-label"),
+  shapeConfirm: $("shape-confirm"),
+  shapeCancel:  $("shape-cancel"),
 
   zoomOut:      $("zoom-out"),
   zoomIn:       $("zoom-in"),
@@ -386,13 +483,21 @@ const ctx = els.canvas.getContext("2d", { willReadFrequently: true });
 // State
 //
 // originalData is the pristine (rotated, if user rotated) ImageData of the
-// loaded image. clicks is the ordered list of edits to apply on top; each
-// entry is either:
-//   { kind: "color",  r, g, b, threshold }
-//   { kind: "region", x0, y0, x1, y1 }    -- coords are canvas pixels
+// loaded image. clicks is the ordered list of committed edits to apply on
+// top; each entry is one of:
+//   { kind: "color",   r, g, b, threshold }
+//   { kind: "region",  x0, y0, x1, y1 }
+//   { kind: "polygon", points: [{x,y}, ...] }
+//   { kind: "ellipse", cx, cy, rx, ry }
+// All coords are CANVAS pixels.
+//
+// editingShape is the in-progress polygon/ellipse the user is drawing
+// before confirming. Same schema as clicks entries. Rendered as an SVG
+// overlay with draggable handles; committed to clicks on Confirm.
+//
 // applyMask() rebuilds the displayed canvas from originalData + clicks +
-// feather flag, never mutating originalData. That keeps undo / threshold
-// changes non-destructive.
+// feather flag, never mutating originalData. Undo and threshold changes
+// stay non-destructive.
 // ─────────────────────────────────────────────────────────────────────────────
 
 let originalData = null;
@@ -400,6 +505,16 @@ let clicks = [];
 let sourceName = "wallpaper";
 let zoom = 1.0;       // CSS scaling factor on the canvas element
 let currentTool = "color";
+let editingShape = null;
+let shapeDrag = null; // { type: "corner", idx } | { type: "ellipse-handle", pos } | { type: "ellipse-draw", anchor: {x, y} }
+
+// For the "Click in region" tool: the active bounded rectangle
+// (canvas-px coords) persists across clicks until the user drags a new
+// one or switches tool. New color clicks made in this tool get the
+// region attached so applyMask restricts the colour match to it.
+let boundedRegion = null;
+let boundedAnchor = null;  // mousedown anchor for drag-vs-click distinction
+let boundedDragging = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast helper
@@ -452,12 +567,16 @@ function loadFile(file) {
       ctx.drawImage(img, 0, 0);
       originalData = ctx.getImageData(0, 0, els.canvas.width, els.canvas.height);
       clicks = [];
+      cancelShapeEdit();
+      boundedRegion = null;
+      updateActiveRegionOverlay();
       els.canvasHost.style.display = "block";
       els.placeholder.style.display = "none";
       els.imgStat.innerHTML =
         "<strong>" + escapeHtml(file.name) + "</strong>  " +
         img.naturalWidth + " × " + img.naturalHeight + " px";
       setControlsEnabled(true);
+      syncShapeOverlay();
       fitZoom();
       updateHistory();
       updateCanvasStat();
@@ -507,18 +626,32 @@ els.rotateBtn.addEventListener("click", () => {
   originalData = newData;
   els.canvas.width = h;
   els.canvas.height = w;
-  // Color clicks survive rotation (they're just colours, no coords).
-  // Region clicks have coords in OLD orientation — transform them too.
+  // Color clicks survive rotation by colour value alone. If a colour
+  // click has an attached region (from the "Click in region" tool), the
+  // region's coords get rotated 90° CW too. Same formula as the region
+  // kind below.
+  const rotRect = (r) => ({ x0: h - 1 - r.y1, y0: r.x0, x1: h - 1 - r.y0, y1: r.x1 });
   clicks = clicks.map((c) => {
-    if (c.kind !== "region") return c;
-    return {
-      kind: "region",
-      x0: h - 1 - c.y1,
-      y0: c.x0,
-      x1: h - 1 - c.y0,
-      y1: c.x1,
-    };
+    if (c.kind === "color" && c.region) {
+      return { ...c, region: rotRect(c.region) };
+    }
+    if (c.kind === "region") {
+      return { kind: "region", ...rotRect(c) };
+    }
+    if (c.kind === "polygon") {
+      return { kind: "polygon", points: c.points.map((p) => ({ x: h - 1 - p.y, y: p.x })) };
+    }
+    if (c.kind === "ellipse") {
+      return { kind: "ellipse", cx: h - 1 - c.cy, cy: c.cx, rx: c.ry, ry: c.rx };
+    }
+    return c;
   });
+  // Cancel any in-progress shape — coords would be in stale orientation.
+  cancelShapeEdit();
+  syncShapeOverlay();
+  // Clear the active region overlay — its coords are also stale now.
+  boundedRegion = null;
+  updateActiveRegionOverlay();
   applyMask();
   fitZoom();
   updateCanvasStat();
@@ -532,6 +665,16 @@ els.toolRadios.forEach((r) => {
   r.addEventListener("change", () => {
     currentTool = r.value;
     els.canvas.classList.toggle("tool-region", currentTool === "region");
+    // Switching tools mid-edit discards the in-progress shape so the user
+    // doesn't have to manually Cancel before drawing differently.
+    if (editingShape) cancelShapeEdit();
+    // The yellow region overlay is the "Click in region" tool's state.
+    // It would be confusing for it to linger after switching to e.g.
+    // polygon — clear it out.
+    if (currentTool !== "bounded") {
+      boundedRegion = null;
+      updateActiveRegionOverlay();
+    }
   });
 });
 
@@ -543,7 +686,8 @@ els.threshold.addEventListener("input", () => {
   els.thresholdVal.textContent = els.threshold.value;
 });
 els.threshold.addEventListener("change", () => {
-  // Live-update the most-recent color click so the user can dial it in.
+  // Live-update the most-recent colour click (with or without region)
+  // so the user can dial it in.
   for (let i = clicks.length - 1; i >= 0; i--) {
     if (clicks[i].kind === "color") {
       clicks[i].threshold = parseInt(els.threshold.value, 10);
@@ -581,25 +725,158 @@ function canvasPx(e) {
   return { x, y };
 }
 
-let dragStart = null;
+let dragStart = null;     // region-rectangle anchor
 let dragCurrent = null;
+
+function clampX(x) { return Math.max(0, Math.min(els.canvas.width  - 1, x)); }
+function clampY(y) { return Math.max(0, Math.min(els.canvas.height - 1, y)); }
 
 els.canvas.addEventListener("mousedown", (e) => {
   if (!originalData) return;
-  if (currentTool !== "region") return;
-  const { x, y } = canvasPx(e);
-  dragStart = { x, y };
-  dragCurrent = { x, y };
-  updateSelectionOverlay();
+  if (currentTool === "region") {
+    const { x, y } = canvasPx(e);
+    dragStart = { x, y };
+    dragCurrent = { x, y };
+    updateSelectionOverlay();
+    return;
+  }
+  if (currentTool === "ellipse") {
+    const { x, y } = canvasPx(e);
+    editingShape = { kind: "ellipse", cx: x, cy: y, rx: 0, ry: 0 };
+    shapeDrag = { type: "ellipse-draw", anchor: { x, y } };
+    showShapeToolbar();
+    renderShapeOverlay();
+    e.preventDefault();
+    return;
+  }
+  if (currentTool === "bounded") {
+    // In bounded mode mousedown could be either the start of a region-
+    // drag or a "click" to pick a colour. Decide on mouseup based on how
+    // far the mouse moved.
+    const { x, y } = canvasPx(e);
+    boundedAnchor = { x, y };
+    boundedDragging = false;
+    dragCurrent = { x, y };
+    return;
+  }
 });
 
 window.addEventListener("mousemove", (e) => {
+  // Shape-handle / ellipse-draw drag takes priority over region-rect drag.
+  if (shapeDrag) {
+    const { x, y } = canvasPx(e);
+    const cx = clampX(x), cy = clampY(y);
+    if (shapeDrag.type === "corner" && editingShape && editingShape.kind === "polygon") {
+      editingShape.points[shapeDrag.idx] = { x: cx, y: cy };
+    } else if (shapeDrag.type === "ellipse-handle" && editingShape && editingShape.kind === "ellipse") {
+      const s = editingShape;
+      switch (shapeDrag.pos) {
+        case "n": s.ry = Math.max(1, s.cy - cy); break;
+        case "s": s.ry = Math.max(1, cy - s.cy); break;
+        case "w": s.rx = Math.max(1, s.cx - cx); break;
+        case "e": s.rx = Math.max(1, cx - s.cx); break;
+      }
+    } else if (shapeDrag.type === "ellipse-draw" && editingShape && editingShape.kind === "ellipse") {
+      const a = shapeDrag.anchor;
+      editingShape.cx = (a.x + cx) / 2;
+      editingShape.cy = (a.y + cy) / 2;
+      editingShape.rx = Math.abs(cx - a.x) / 2;
+      editingShape.ry = Math.abs(cy - a.y) / 2;
+    } else if (shapeDrag.type === "move" && editingShape) {
+      // Translate the entire shape. Movements are computed against the
+      // snapshot taken at mousedown so the shape doesn't accumulate
+      // jitter when the user drags slowly.
+      const dx = x - shapeDrag.initialMouse.x;
+      const dy = y - shapeDrag.initialMouse.y;
+      if (editingShape.kind === "polygon" && shapeDrag.initialPoints) {
+        editingShape.points = shapeDrag.initialPoints.map((p) => ({
+          x: clampX(p.x + dx),
+          y: clampY(p.y + dy),
+        }));
+      } else if (editingShape.kind === "ellipse" && shapeDrag.initialCenter) {
+        editingShape.cx = clampX(shapeDrag.initialCenter.cx + dx);
+        editingShape.cy = clampY(shapeDrag.initialCenter.cy + dy);
+      }
+    }
+    renderShapeOverlay();
+    updateShapeToolbarLabel();
+    return;
+  }
+  if (boundedAnchor) {
+    // Track drag distance to decide click-vs-drag on mouseup. Show the
+    // selection-rect preview while dragging (white-dashed); on commit
+    // we promote it to the persistent yellow active-region overlay.
+    dragCurrent = canvasPx(e);
+    const dx = dragCurrent.x - boundedAnchor.x;
+    const dy = dragCurrent.y - boundedAnchor.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      boundedDragging = true;
+      dragStart = boundedAnchor;
+      updateSelectionOverlay();
+    }
+    return;
+  }
   if (!dragStart) return;
   dragCurrent = canvasPx(e);
   updateSelectionOverlay();
 });
 
-window.addEventListener("mouseup", (e) => {
+window.addEventListener("mouseup", () => {
+  // Finish any handle / move / ellipse-draw drag first.
+  if (shapeDrag) {
+    els.shapeOverlay.querySelectorAll(".dragging").forEach((el) => el.classList.remove("dragging"));
+    els.shapeOverlay.querySelectorAll(".moving").forEach((el) => el.classList.remove("moving"));
+    shapeDrag = null;
+    renderShapeOverlay();
+    return;
+  }
+  // Bounded mode: drag commits a fresh region overlay, click picks a
+  // colour but ONLY inside the current region. No region yet → toast.
+  if (currentTool === "bounded" && boundedAnchor) {
+    const anchor = boundedAnchor;
+    boundedAnchor = null;
+    const wasDragging = boundedDragging;
+    boundedDragging = false;
+    if (wasDragging) {
+      const a = anchor, b = dragCurrent || anchor;
+      const x0 = Math.max(0, Math.min(a.x, b.x));
+      const y0 = Math.max(0, Math.min(a.y, b.y));
+      const x1 = Math.min(els.canvas.width  - 1, Math.max(a.x, b.x));
+      const y1 = Math.min(els.canvas.height - 1, Math.max(a.y, b.y));
+      els.selectionRect.style.display = "none";
+      dragStart = null;
+      dragCurrent = null;
+      if (x1 - x0 >= 4 && y1 - y0 >= 4) {
+        boundedRegion = { x0, y0, x1, y1 };
+        updateActiveRegionOverlay();
+      }
+      return;
+    }
+    // Click (no significant drag) — pick colour at this pixel
+    if (!boundedRegion) {
+      toast("Drag a rectangle first to set the area, then click a colour inside it.", "bad");
+      return;
+    }
+    if (anchor.x < boundedRegion.x0 || anchor.x > boundedRegion.x1 ||
+        anchor.y < boundedRegion.y0 || anchor.y > boundedRegion.y1) {
+      toast("Click inside the yellow region. Drag a new rectangle to relocate it.", "bad");
+      return;
+    }
+    const i = (anchor.y * els.canvas.width + anchor.x) * 4;
+    const r = originalData.data[i];
+    const g = originalData.data[i + 1];
+    const b = originalData.data[i + 2];
+    const a = originalData.data[i + 3];
+    if (a === 0) return;
+    clicks.push({
+      kind: "color", r, g, b,
+      threshold: parseInt(els.threshold.value, 10),
+      region: { ...boundedRegion },
+    });
+    updateHistory();
+    applyMask();
+    return;
+  }
   if (!dragStart) return;
   const a = dragStart, b = dragCurrent || dragStart;
   dragStart = null;
@@ -609,9 +886,6 @@ window.addEventListener("mouseup", (e) => {
   const y0 = Math.max(0, Math.min(a.y, b.y));
   const x1 = Math.min(els.canvas.width  - 1, Math.max(a.x, b.x));
   const y1 = Math.min(els.canvas.height - 1, Math.max(a.y, b.y));
-  // Reject tiny accidental drags — anything < 4 px on a side is treated
-  // as a stray click. Color-tool clicks pass through the click listener
-  // below; region drags this small would just create an invisible cut.
   if (x1 - x0 < 4 || y1 - y0 < 4) return;
   clicks.push({ kind: "region", x0, y0, x1, y1 });
   updateHistory();
@@ -620,6 +894,16 @@ window.addEventListener("mouseup", (e) => {
 
 els.canvas.addEventListener("click", (e) => {
   if (!originalData) return;
+  if (currentTool === "polygon") {
+    const { x, y } = canvasPx(e);
+    if (!editingShape || editingShape.kind !== "polygon") {
+      editingShape = { kind: "polygon", points: [] };
+    }
+    editingShape.points.push({ x: clampX(x), y: clampY(y) });
+    showShapeToolbar();
+    renderShapeOverlay();
+    return;
+  }
   if (currentTool !== "color") return;
   const { x, y } = canvasPx(e);
   if (x < 0 || y < 0 || x >= els.canvas.width || y >= els.canvas.height) return;
@@ -628,10 +912,218 @@ els.canvas.addEventListener("click", (e) => {
   const g = originalData.data[i + 1];
   const b = originalData.data[i + 2];
   const a = originalData.data[i + 3];
-  if (a === 0) return; // clicking already-transparent area: no-op
+  if (a === 0) return;
   clicks.push({ kind: "color", r, g, b, threshold: parseInt(els.threshold.value, 10) });
   updateHistory();
   applyMask();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG overlay — render the in-progress polygon/ellipse with draggable
+// handles. Event delegation: a single mousedown on the overlay catches
+// handle drags; clicks on empty SVG area pass through to the canvas
+// because the overlay has pointer-events:none and only .handle elements
+// re-enable it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function svgEl(name, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function handleRadius() {
+  // Keep handles roughly the same on-screen size at any zoom level. SVG
+  // coords are canvas pixels; CSS scale = zoom; so divide by zoom to
+  // stay near 6 CSS px.
+  return Math.max(4, 6 / zoom);
+}
+
+function syncShapeOverlay() {
+  if (!originalData) return;
+  els.shapeOverlay.setAttribute("viewBox", "0 0 " + els.canvas.width + " " + els.canvas.height);
+}
+
+function renderShapeOverlay() {
+  const svg = els.shapeOverlay;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  if (!editingShape) {
+    svg.classList.remove("active");
+    return;
+  }
+  svg.classList.add("active");
+
+  if (editingShape.kind === "polygon") {
+    const pts = editingShape.points;
+    if (pts.length >= 3) {
+      svg.appendChild(svgEl("polygon", {
+        points: pts.map((p) => p.x + "," + p.y).join(" "),
+        class: "shape-fill",
+      }));
+    } else if (pts.length === 2) {
+      svg.appendChild(svgEl("line", {
+        x1: pts[0].x, y1: pts[0].y,
+        x2: pts[1].x, y2: pts[1].y,
+        class: "shape-fill",
+      }));
+    }
+    pts.forEach((p, idx) => {
+      svg.appendChild(svgEl("circle", {
+        cx: p.x, cy: p.y, r: handleRadius(),
+        class: "handle", "data-idx": String(idx),
+      }));
+    });
+  } else if (editingShape.kind === "ellipse") {
+    const s = editingShape;
+    if (s.rx > 0 && s.ry > 0) {
+      svg.appendChild(svgEl("ellipse", {
+        cx: s.cx, cy: s.cy, rx: s.rx, ry: s.ry,
+        class: "shape-fill",
+      }));
+      const handles = [
+        { pos: "n", x: s.cx, y: s.cy - s.ry },
+        { pos: "e", x: s.cx + s.rx, y: s.cy },
+        { pos: "s", x: s.cx, y: s.cy + s.ry },
+        { pos: "w", x: s.cx - s.rx, y: s.cy },
+      ];
+      handles.forEach((h) => {
+        svg.appendChild(svgEl("circle", {
+          cx: h.x, cy: h.y, r: handleRadius(),
+          class: "handle", "data-pos": h.pos,
+        }));
+      });
+    }
+  }
+}
+
+els.shapeOverlay.addEventListener("mousedown", (e) => {
+  if (!editingShape) return;
+  const t = e.target;
+  if (!t.classList) return;
+
+  // Handle drag (corner of polygon, midpoint of ellipse bbox)
+  if (t.classList.contains("handle")) {
+    if (editingShape.kind === "polygon") {
+      const idx = parseInt(t.dataset.idx, 10);
+      if (!isFinite(idx)) return;
+      shapeDrag = { type: "corner", idx };
+    } else if (editingShape.kind === "ellipse") {
+      const pos = t.dataset.pos;
+      if (!pos) return;
+      shapeDrag = { type: "ellipse-handle", pos };
+    } else {
+      return;
+    }
+    t.classList.add("dragging");
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
+  // Body drag — translate the whole shape. The shape-fill element catches
+  // events because it has pointer-events:auto in CSS; clicks on empty SVG
+  // areas pass through to the canvas (which then handles polygon "add
+  // corner" / ellipse "start new" depending on tool).
+  if (t.classList.contains("shape-fill")) {
+    const { x, y } = canvasPx(e);
+    if (editingShape.kind === "polygon" && editingShape.points.length >= 3) {
+      shapeDrag = {
+        type: "move",
+        initialMouse: { x, y },
+        initialPoints: editingShape.points.map((p) => ({ x: p.x, y: p.y })),
+      };
+    } else if (editingShape.kind === "ellipse" && editingShape.rx > 0 && editingShape.ry > 0) {
+      shapeDrag = {
+        type: "move",
+        initialMouse: { x, y },
+        initialCenter: { cx: editingShape.cx, cy: editingShape.cy },
+      };
+    } else {
+      return;
+    }
+    t.classList.add("moving");
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
+
+// Right-click on a polygon handle deletes the corner (if 3+ remain).
+els.shapeOverlay.addEventListener("contextmenu", (e) => {
+  const t = e.target;
+  if (!t.classList || !t.classList.contains("handle")) return;
+  if (!editingShape || editingShape.kind !== "polygon") return;
+  const idx = parseInt(t.dataset.idx, 10);
+  if (!isFinite(idx)) return;
+  if (editingShape.points.length <= 3) {
+    toast("Polygon needs at least 3 corners. Cancel to remove the whole shape.", "bad");
+    e.preventDefault();
+    return;
+  }
+  editingShape.points.splice(idx, 1);
+  renderShapeOverlay();
+  updateShapeToolbarLabel();
+  e.preventDefault();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shape toolbar (Confirm / Cancel)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showShapeToolbar() {
+  els.shapeToolbar.classList.add("on");
+  updateShapeToolbarLabel();
+}
+function hideShapeToolbar() {
+  els.shapeToolbar.classList.remove("on");
+}
+function updateShapeToolbarLabel() {
+  if (!editingShape) return;
+  if (editingShape.kind === "polygon") {
+    const n = editingShape.points.length;
+    const moveHint = n >= 3 ? "drag the body to move, " : "";
+    els.shapeLabel.innerHTML = "Polygon — <strong>" + n + " corner" + (n === 1 ? "" : "s") +
+      "</strong>. Click empty canvas to add corners, drag handles to reshape, " +
+      moveHint + "right-click handle to delete.";
+  } else if (editingShape.kind === "ellipse") {
+    const s = editingShape;
+    els.shapeLabel.innerHTML = "Ellipse — <strong>" +
+      Math.round(2 * s.rx) + "×" + Math.round(2 * s.ry) +
+      " px</strong>. Drag handles to resize, drag the body to move.";
+  }
+}
+
+function cancelShapeEdit() {
+  editingShape = null;
+  shapeDrag = null;
+  hideShapeToolbar();
+  renderShapeOverlay();
+}
+
+els.shapeConfirm.addEventListener("click", () => {
+  if (!editingShape) return;
+  if (editingShape.kind === "polygon" && editingShape.points.length < 3) {
+    toast("Polygon needs at least 3 corners.", "bad");
+    return;
+  }
+  if (editingShape.kind === "ellipse" && (editingShape.rx < 1 || editingShape.ry < 1)) {
+    toast("Ellipse is too small.", "bad");
+    return;
+  }
+  clicks.push(editingShape);
+  cancelShapeEdit();
+  updateHistory();
+  applyMask();
+});
+
+els.shapeCancel.addEventListener("click", () => {
+  cancelShapeEdit();
+});
+
+// Esc cancels in-progress shape; Enter confirms it.
+window.addEventListener("keydown", (e) => {
+  if (!editingShape) return;
+  if (e.key === "Escape") { cancelShapeEdit(); e.preventDefault(); }
+  else if (e.key === "Enter") { els.shapeConfirm.click(); e.preventDefault(); }
 });
 
 function updateSelectionOverlay() {
@@ -655,6 +1147,24 @@ function updateSelectionOverlay() {
   els.selectionRect.style.display = "block";
 }
 
+// Persistent yellow region overlay for the "Click in region" tool.
+// Re-runs whenever the region changes OR the canvas re-scales (zoom).
+function updateActiveRegionOverlay() {
+  if (!boundedRegion || !originalData) {
+    els.activeRegion.classList.remove("on");
+    return;
+  }
+  const rect = els.canvas.getBoundingClientRect();
+  const hostRect = els.canvasHost.getBoundingClientRect();
+  const sx = rect.width  / els.canvas.width;
+  const sy = rect.height / els.canvas.height;
+  els.activeRegion.style.left   = (boundedRegion.x0 * sx + (rect.left - hostRect.left)) + "px";
+  els.activeRegion.style.top    = (boundedRegion.y0 * sy + (rect.top  - hostRect.top))  + "px";
+  els.activeRegion.style.width  = ((boundedRegion.x1 - boundedRegion.x0) * sx) + "px";
+  els.activeRegion.style.height = ((boundedRegion.y1 - boundedRegion.y0) * sy) + "px";
+  els.activeRegion.classList.add("on");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mask computation
 //
@@ -669,28 +1179,61 @@ function applyMask() {
   const out = new ImageData(new Uint8ClampedArray(originalData.data), w, h);
   const data = out.data;
 
-  // Color clicks: precompute squared thresholds.
-  const colorClicks = clicks.filter((c) => c.kind === "color")
-                            .map((c) => ({ r: c.r, g: c.g, b: c.b, t2: c.threshold * c.threshold }));
-  const regionClicks = clicks.filter((c) => c.kind === "region");
+  // Bucket the click list by kind so the per-pixel loop only iterates
+  // checks that actually apply. Colour entries optionally carry a
+  // `region` snapshot (from the "Click in region" tool) restricting
+  // where the match applies — we forward it verbatim.
+  const colorClicks   = clicks.filter((c) => c.kind === "color")
+                              .map((c) => ({ r: c.r, g: c.g, b: c.b,
+                                             t2: c.threshold * c.threshold,
+                                             region: c.region || null }));
+  const regionClicks  = clicks.filter((c) => c.kind === "region");
+  const ellipseClicks = clicks.filter((c) => c.kind === "ellipse");
+  const polygonClicks = clicks.filter((c) => c.kind === "polygon");
 
-  if (colorClicks.length > 0 || regionClicks.length > 0) {
+  if (clicks.length > 0) {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const p = (y * w + x) * 4;
-        // Region pass first — cheaper, can short-circuit.
         let cleared = false;
+
+        // Region (cheapest: bbox check)
         for (let k = 0; k < regionClicks.length; k++) {
           const rc = regionClicks[k];
           if (x >= rc.x0 && x <= rc.x1 && y >= rc.y0 && y <= rc.y1) {
-            data[p + 3] = 0;
-            cleared = true;
-            break;
+            data[p + 3] = 0; cleared = true; break;
           }
         }
         if (cleared) continue;
+
+        // Ellipse (normalized-distance check)
+        for (let k = 0; k < ellipseClicks.length; k++) {
+          const ec = ellipseClicks[k];
+          if (ec.rx <= 0 || ec.ry <= 0) continue;
+          const dx = (x - ec.cx) / ec.rx;
+          const dy = (y - ec.cy) / ec.ry;
+          if (dx * dx + dy * dy <= 1) {
+            data[p + 3] = 0; cleared = true; break;
+          }
+        }
+        if (cleared) continue;
+
+        // Polygon (ray cast)
+        for (let k = 0; k < polygonClicks.length; k++) {
+          if (pointInPolygon(x, y, polygonClicks[k].points)) {
+            data[p + 3] = 0; cleared = true; break;
+          }
+        }
+        if (cleared) continue;
+
+        // Color match (last — most expensive when many entries exist).
+        // Region-restricted entries early-skip when the pixel is outside.
         for (let k = 0; k < colorClicks.length; k++) {
           const cc = colorClicks[k];
+          if (cc.region) {
+            if (x < cc.region.x0 || x > cc.region.x1 ||
+                y < cc.region.y0 || y > cc.region.y1) continue;
+          }
           const dr = data[p]     - cc.r;
           const dg = data[p + 1] - cc.g;
           const db = data[p + 2] - cc.b;
@@ -705,6 +1248,22 @@ function applyMask() {
 
   if (els.feather.checked && clicks.length > 0) featherEdges(out);
   ctx.putImageData(out, 0, 0);
+}
+
+// Standard even-odd ray-cast for point-in-polygon. O(n) per pixel where
+// n is the polygon's corner count.
+function pointInPolygon(px, py, points) {
+  let inside = false;
+  const n = points.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = points[i].x, yi = points[i].y;
+    const xj = points[j].x, yj = points[j].y;
+    if (((yi > py) !== (yj > py)) &&
+        (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 function featherEdges(img) {
@@ -852,6 +1411,9 @@ function setZoom(z) {
   els.canvas.style.height = (els.canvas.height * zoom) + "px";
   els.zoomDisplay.textContent = Math.round(zoom * 100) + "%";
   positionSplitLine();
+  // Re-render so handle radii stay near constant on-screen size.
+  if (editingShape) renderShapeOverlay();
+  updateActiveRegionOverlay();
 }
 
 function fitZoom() {
@@ -900,13 +1462,24 @@ function updateHistory() {
     row.className = "history-item";
     if (c.kind === "color") {
       const swatch = "rgb(" + c.r + "," + c.g + "," + c.b + ")";
+      const bounded = c.region
+        ? " · in " + (c.region.x1 - c.region.x0 + 1) + "×" + (c.region.y1 - c.region.y0 + 1) + " region"
+        : "";
       row.innerHTML =
         '<span class="swatch" style="background:' + swatch + '"></span>' +
-        '<span class="label">#' + (i + 1) + ' colour rgb(' + c.r + ',' + c.g + ',' + c.b + ') ±' + c.threshold + '</span>';
-    } else {
+        '<span class="label">#' + (i + 1) + ' colour rgb(' + c.r + ',' + c.g + ',' + c.b + ') ±' + c.threshold + bounded + '</span>';
+    } else if (c.kind === "region") {
       row.innerHTML =
         '<span class="swatch" style="background:#888"></span>' +
         '<span class="label">#' + (i + 1) + ' region ' + (c.x1 - c.x0 + 1) + '×' + (c.y1 - c.y0 + 1) + '</span>';
+    } else if (c.kind === "polygon") {
+      row.innerHTML =
+        '<span class="swatch" style="background:#7ab"></span>' +
+        '<span class="label">#' + (i + 1) + ' polygon · ' + c.points.length + ' corners</span>';
+    } else if (c.kind === "ellipse") {
+      row.innerHTML =
+        '<span class="swatch" style="background:#9bf"></span>' +
+        '<span class="label">#' + (i + 1) + ' ellipse · ' + Math.round(2 * c.rx) + '×' + Math.round(2 * c.ry) + '</span>';
     }
     els.history.appendChild(row);
   });

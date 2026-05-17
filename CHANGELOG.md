@@ -4,6 +4,60 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-17
+
+### Added
+
+- **Inno Setup installer** (`SignalRGBWallpaperSetup-0.4.0.exe`,
+  ~21 MB). Per-user install (no admin), copies the bridge to
+  `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`, optionally installs the
+  SignalRGB plugin into `Documents\WhirlwindFX\Plugins\`, drops the
+  three Lively wallpaper zips in a subfolder, registers an HKCU\Run
+  autostart entry, and creates an Add/Remove Programs uninstaller.
+  Two opt-in tasks: "Start bridge automatically on logon" and "Install
+  the SignalRGB plugin into the WhirlwindFX Plugins folder". Build via
+  `installer/build.ps1` (one-shot icon + exe + zips + Inno Setup
+  compile). See [docs/building-from-source.md](docs/building-from-source.md)
+  for the manual build path.
+- **Builder: polygon tool.** New "Polygon" radio in the tool list.
+  Click corners on the canvas to build the polygon outline; drag any
+  corner handle to reshape; right-click a corner to delete it (with at
+  least 3 corners remaining); drag the polygon body to translate the
+  whole shape. Confirm/Cancel toolbar floats at the top-right of the
+  canvas (fixed positioning so it's always reachable). Enter confirms,
+  Esc cancels.
+- **Builder: ellipse tool.** New "Ellipse" radio. Drag a bounding-box
+  rectangle to lay out an axis-aligned ellipse; four N/E/S/W handles
+  let you resize independently; drag the ellipse body to translate it.
+  Confirm/Cancel as for polygon.
+- **Builder: "Click in region" tool.** Drag a rectangle to set a
+  yellow-dashed region of interest. Subsequent clicks inside that
+  region pick a colour AND restrict its colour-match to within the
+  region — useful for "remove this colour but only on this part of the
+  image". The region persists across clicks until you drag a new one,
+  switch tools, or change images.
+- **About dialog now shows OSS attribution**: Python (PSF), Python
+  stdlib, pystray (LGPL 3.0), Pillow (MIT-CMU/HPND), PyInstaller
+  (GPL 2.0+ with linking exception), tkinter, plus an explicit note
+  that `builder.html` is vanilla HTML5/JS with no third-party
+  libraries. Build tooling (gh CLI, git, winget, Inno Setup) listed
+  separately as not-shipped.
+
+### Changed
+
+- Builder shape-toolbar is now `position: fixed` (top-right, 60 px
+  below page header) so Confirm/Cancel never slips off-screen.
+- `applyMask` extended to handle four shape kinds (color, region,
+  polygon, ellipse) and an optional `region` constraint on color
+  entries. Single-pass per pixel; region-restricted color entries
+  short-circuit when out of bounds.
+- Rotation now rotates polygon/ellipse coordinates and
+  region-restricted color clicks by 90° CW so masks stay in place
+  relative to the rotated image. In-progress shape edits are
+  cancelled on rotate (their coords would be in stale orientation).
+- Tool change clears the bounded region overlay so it doesn't linger
+  after switching to a non-bounded tool.
+
 ## [0.3.0] - 2026-05-17
 
 ### Added

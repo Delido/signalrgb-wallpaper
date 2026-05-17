@@ -8,6 +8,10 @@ wallpaper_bridge/__pycache__/
 wallpaper_bridge/SignalRGB_Glow_Screen*.zip
 wallpaper_bridge/SignalRGBBridge*.exe
 
+# Inno Setup output + generated icon — released as assets, not committed
+installer_out/
+installer/icon.ico
+
 # Compiled Python
 *.pyc
 *.pyo

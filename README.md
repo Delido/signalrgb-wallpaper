@@ -37,36 +37,42 @@ whatever colour your current effect is producing right now.
 
 ## Quick start
 
-> Until the Inno Setup installer ships in a later release, setup is a
-> couple of manual file copies + activating things. Five minutes total.
+### Easy path: installer (since v0.4.0)
 
-1. **Download the latest release** from
+1. Grab `SignalRGBWallpaperSetup-<version>.exe` from
    [Releases](https://github.com/Delido/signalrgb-wallpaper/releases).
-   You'll get:
-   - `SignalRGBBridge.exe` — the bridge + tray app
-   - `SignalRGB_Desktop_Wallpaper.js` + `.qml` — the SignalRGB plugin
-   - `SignalRGB_Glow_Screen1.zip` / `Screen2.zip` / `Screen3.zip` — the
-     Lively wallpapers (one per monitor index)
-2. **Install the SignalRGB plugin** — copy both files into
-   `%USERPROFILE%\Documents\WhirlwindFX\Plugins\`. Open SignalRGB; the
-   "Desktop Wallpaper - Screen 1" device appears in the device list.
-3. **Run the bridge** — double-click `SignalRGBBridge.exe`. The tray
-   icon (RGB monitor) appears on the right side of your taskbar.
-4. **Import the wallpapers in Lively** — drag the zip(s) onto Lively.
-   Use `Screen1.zip` for monitor 1; if you have 2 monitors, also import
-   `Screen2.zip` for monitor 2.
-5. **Tell SignalRGB how many monitors you're driving** — right-click
-   the tray icon → **Settings…** → "Number of screens" → set to 2 (or 3).
-   SignalRGB will adjust its device list within a couple of seconds.
-6. **Place the devices on SignalRGB's canvas** wherever you want the
-   colours pulled from. For multi-monitor: place the "Screen 1" device
-   on the left half of the canvas, "Screen 2" on the right half (or
-   however makes sense for your layout).
-7. **Pick background images** in the tray Settings dialog — one tab per
-   screen. Done.
+2. Run it. No admin needed — installs per-user into
+   `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`. Keep both opt-in
+   tasks checked: it installs the SignalRGB plugin into your
+   `Documents\WhirlwindFX\Plugins\` folder and registers the bridge to
+   start on logon.
+3. The installer opens the "Lively wallpapers" subfolder at the end —
+   drag `SignalRGB_Glow_Screen1.zip` (and Screen2/Screen3 if you have
+   multiple monitors) onto Lively to import them.
+4. In SignalRGB: right-click the bridge's tray icon → **Settings…** →
+   "Number of screens" = how many monitors you want to drive.
+5. Place the "Desktop Wallpaper - Screen N" devices on SignalRGB's
+   canvas at the positions you want colours sampled from.
+6. Activate the matching Lively wallpaper on each monitor. Pick
+   background images in the tray Settings → per-screen tabs, or use
+   the built-in **Build Wallpaper…** tool in the tray menu.
 
-Full step-by-step with screenshots: see
-[docs/installation.md](docs/installation.md).
+Uninstall via Windows Settings → Apps, or run `unins000.exe` in the
+install folder.
+
+### Manual path
+
+If you'd rather not run an installer, grab the individual artefacts
+from the same release page and place them yourself:
+
+| File | Where it goes |
+| --- | --- |
+| `SignalRGBBridge.exe` | Anywhere stable (e.g. `C:\Tools\SignalRGBWallpaper\`) |
+| `SignalRGB_Desktop_Wallpaper.js` + `.qml` | `Documents\WhirlwindFX\Plugins\` |
+| `SignalRGB_Glow_Screen{1,2,3}.zip` | Drag into Lively |
+
+Then run `SignalRGBBridge.exe` and proceed with steps 4–6 above.
+Full step-by-step with screenshots: [docs/installation.md](docs/installation.md).
 
 ## Documentation
 
