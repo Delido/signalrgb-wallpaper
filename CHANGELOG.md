@@ -4,6 +4,35 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-05-17
+
+### Fixed
+
+- Lively pause handler in v0.2.2 mishandled the documented payload. The
+  wiki spec is a **JSON-encoded string** like `'{"IsPaused":true}'`
+  (note the field name and direction — `IsPaused`, not `IsPlaying` or
+  `IsRunning`). The v0.2.2 handler treated raw strings via a regex that
+  didn't match and defaulted to "playing", so the pause was never
+  applied even when Lively's hook fired. Now we `JSON.parse` strings
+  first and read `IsPaused` correctly, with defensive fallbacks for
+  other field shapes some Lively builds use.
+- Added a permanently-visible **PAUSED badge** in the top-right corner
+  of the wallpaper (independent of the "Show debug overlay" toggle) so
+  the pause behavior is verifiable.
+
+### Known issue
+
+- **Lively's "Pause wallpapers" tray menu is best-effort** — whether
+  the JS hook fires depends on the Lively build, its current
+  `WallpaperPlaybackPolicy` state, and IPC delivery to the player
+  process. On setups where Lively pauses other wallpapers but not
+  ours, the issue is Lively-side (the hook IPC never reaches the
+  WebView2 player); on setups where it doesn't pause anything,
+  Lively's pause behavior is itself broken in that environment. We
+  ship the correct opt-in (`"Arguments": "--pause-event true"`) and a
+  correct handler — if your Lively starts firing the hook, our code
+  will pick it up.
+
 ## [0.2.2] - 2026-05-17
 
 ### Fixed

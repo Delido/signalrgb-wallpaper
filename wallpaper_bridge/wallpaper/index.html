@@ -39,6 +39,18 @@
   #status.bad { color: #f88; }
   #status.hidden { display: none; }
 
+  /* Always-visible PAUSED badge. Independent of the user's "Show debug
+     overlay" toggle so we can verify Lively's pause hook actually fires.
+     Hidden by default; shown only when isPaused=true. */
+  #paused-badge { position: fixed; top: 10px; right: 10px; z-index: 4;
+                  display: none; padding: 4px 10px;
+                  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+                  font-size: 12px; letter-spacing: 0.05em;
+                  color: #fff; background: rgba(180, 40, 40, 0.85);
+                  border-radius: 3px;
+                  pointer-events: none; user-select: none; }
+  #paused-badge.on { display: block; }
+
   /* ── Layout: Pixel Grid (2D — default) ─────────────────────────────────── */
   #bars.lay-grid {
     display: grid;
@@ -96,6 +108,7 @@
 <img id="bg" alt="">
 <div id="dim"></div>
 <div id="status" class="bad hidden">starting…</div>
+<div id="paused-badge">⏸ PAUSED</div>
 <script>
 "use strict";
 
@@ -424,39 +437,61 @@ window.wallpaperPropertyListener = {
 // hosts (CEF in fullscreen-minimised state, RDP disconnects) only fire that.
 // ─────────────────────────────────────────────────────────────────────────────
 let isPaused = false;
+const pausedBadgeEl = document.getElementById("paused-badge");
 function setPaused(p) {
   p = !!p;
   if (p === isPaused) return;
   isPaused = p;
   console.log("[wallpaper] paused =", p);
+  // Always-visible badge so the user can verify the pause hook fires
+  // regardless of the showStatus debug overlay toggle.
+  if (pausedBadgeEl) pausedBadgeEl.classList.toggle("on", p);
   if (showStatusEnabled) {
     flashDebug(p ? "paused (Lively)" : "resumed (Lively)");
   }
 }
 
+// Lively's wiki documents the payload as a JSON-stringified object with
+// an "IsPaused" boolean field. In practice different Lively builds pass
+// different shapes — raw object, raw bool, JSON-string of an object,
+// etc. Normalise everything to a single `paused` bool.
 window.livelyWallpaperPlaybackChanged = function (state) {
-  let playing;
-  if (typeof state === "boolean") {
-    playing = state;
-  } else if (state && typeof state === "object") {
-    playing = (state.IsRunning  !== undefined) ? !!state.IsRunning
-            : (state.isRunning  !== undefined) ? !!state.isRunning
-            : (state.IsPlaying  !== undefined) ? !!state.IsPlaying
-            : (state.isPlaying  !== undefined) ? !!state.isPlaying
-            : (state.playing    !== undefined) ? !!state.playing
-            : true;
-  } else if (typeof state === "string") {
-    // Some builds pass "playing" / "paused" as plain strings.
-    playing = /^(playing|running|resumed|true|1)$/i.test(state);
-  } else {
-    playing = true;
+  let parsed = state;
+  if (typeof state === "string") {
+    try { parsed = JSON.parse(state); }
+    catch (_) { /* keep raw string for the heuristic below */ }
   }
-  setPaused(!playing);
+  let paused;
+  if (typeof parsed === "boolean") {
+    // Ambiguous: some builds pass `isPlaying`-style bool, others `isPaused`-style.
+    // No way to tell from a naked bool. We assume "true = playing" because
+    // that's the more common convention; an `IsPaused` field would have been
+    // wrapped in an object. Wrong-guess case fixable via the diagnostic
+    // badge — file an issue with your Lively build version.
+    paused = !parsed;
+  } else if (parsed && typeof parsed === "object") {
+    if      ("IsPaused"  in parsed) paused = !!parsed.IsPaused;
+    else if ("isPaused"  in parsed) paused = !!parsed.isPaused;
+    else if ("IsRunning" in parsed) paused = !parsed.IsRunning;
+    else if ("isRunning" in parsed) paused = !parsed.isRunning;
+    else if ("IsPlaying" in parsed) paused = !parsed.IsPlaying;
+    else if ("isPlaying" in parsed) paused = !parsed.isPlaying;
+    else if ("playing"   in parsed) paused = !parsed.playing;
+    else paused = false;
+  } else if (typeof parsed === "string") {
+    // Last-resort: look for explicit "pause" words. Don't match generic
+    // "true"/"1" — those are too ambiguous about which direction.
+    paused = /pause/i.test(parsed);
+  } else {
+    paused = false;
+  }
+  console.log("[wallpaper] livelyWallpaperPlaybackChanged raw=", JSON.stringify(state), "→ paused=", paused);
+  setPaused(paused);
 };
 
 document.addEventListener("visibilitychange", () => {
-  // document.hidden=true → user switched to another wallpaper, RDP'd out,
-  // locked the workstation etc. Treat as a pause; resume on visible again.
+  // document.hidden=true → wallpaper switched away, RDP disconnect, lock
+  // screen etc. Treat as a pause; resume on visible.
   setPaused(document.hidden);
 });
 </script>

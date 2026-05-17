@@ -103,6 +103,7 @@ hardcodes a screen index in its HTML's `<meta>` tag:
 | `SignalRGB_Glow_Screen3.zip` | UDP frames tagged `screen=2` |
 
 And the SignalRGB devices match:
+
 - "Desktop Wallpaper - Screen 1" device sends UDP with `screen=0` byte
 - "Desktop Wallpaper - Screen 2" device sends with `screen=1`
 - "Desktop Wallpaper - Screen 3" device sends with `screen=2`
@@ -118,6 +119,7 @@ placements.
 
 Should be fixed in v0.2.0. If you see it pop up anyway after upgrading,
 do a hard refresh:
+
 - In Lively, deactivate the wallpaper, then reactivate. That re-loads
   the HTML page with the current code.
 - If still leaking, please file an issue.
@@ -154,6 +156,28 @@ bridge every ~2 seconds and adjusts. If it doesn't:
   `{"screenCount": N}`. If the page errors, the bridge isn't running or
   the endpoint is broken.
 - Restart SignalRGB if the plugin seems stuck.
+
+## Lively "Pause wallpapers" doesn't stop the glow
+
+The wallpaper page implements Lively's
+`window.livelyWallpaperPlaybackChanged(state)` hook correctly per the
+[wiki spec](https://github.com/rocksdanister/lively/wiki/Web-Guide-V-:-System-Data),
+opts in via `"Arguments": "--pause-event true"` in `LivelyInfo.json`,
+and shows a red "⏸ PAUSED" badge in the top-right corner when the hook
+fires. **But** whether the hook actually fires depends on the Lively
+build and the user's environment — some setups don't deliver the
+suspend IPC to the WebView2 player at all, in which case our page
+never knows it should pause.
+
+Quick check: when you click "Pause wallpapers" in Lively's tray, do
+**other** Web-type wallpapers in your library actually pause (freeze)?
+
+- **No** → Lively itself isn't pausing in your environment. This is
+  a Lively-side issue; we can't work around it from a wallpaper page.
+  File an issue at the [Lively repo](https://github.com/rocksdanister/lively/issues)
+  with your Lively version and Windows build.
+- **Yes for others but not ours** → file an issue against this project
+  with your Lively version (`Settings → About` in Lively).
 
 ## "Address already in use" on bridge startup
 
