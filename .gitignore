@@ -1,0 +1,25 @@
+# PyInstaller scratch / output — release artifacts are published via gh release
+wallpaper_bridge/build_bridge/
+wallpaper_bridge/dist_bridge/
+wallpaper_bridge/__pycache__/
+*.spec
+
+# Built Lively bundles + bridge exe — released as assets, not committed
+wallpaper_bridge/SignalRGB_Glow_Screen*.zip
+wallpaper_bridge/SignalRGBBridge*.exe
+
+# Compiled Python
+*.pyc
+*.pyo
+__pycache__/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local logs (bridge.exe writes here when run via Setup-Bat history etc.)
+wallpaper.log
+wallpaper_python.log

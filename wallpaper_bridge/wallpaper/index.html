@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SignalRGB Glow Wallpaper</title>
+<!-- Screen index this page subscribes to (set per-bundle by the packager).
+     Bridge routes UDP frames tagged for this index to clients that asked for
+     it via ?screen=N. Default 0; screen0.zip / screen1.zip / screen2.zip
+     each ship with a different content value. -->
+<meta name="signalrgb-screen-index" content="0">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #0a0a14 0%, #000 80%);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+
+  /* Stacking order (back → front):
+     1. body gradient
+     2. #bars  (glow zones)           z-index: 1
+     3. #bg    (the wallpaper image)  z-index: 2   ← image sits ON TOP of glow
+     4. #dim   (darken overlay)       z-index: 3
+     5. #status (debug HUD)           z-index: 4
+  */
+
+  #bars   { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+  #bg     { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover;
+            z-index: 2; transition: opacity 0.3s; }
+  #dim    { position: fixed; inset: 0; background: #000; opacity: 0;
+            z-index: 3; pointer-events: none; }
+  #status { position: fixed; top: 10px; left: 10px; z-index: 4;
+            font-size: 12px; line-height: 1.4;
+            color: #fff; background: rgba(0,0,0,0.55);
+            padding: 4px 8px; border-radius: 3px;
+            pointer-events: none; user-select: none; }
+  #status.ok { color: #6f6; }
+  #status.bad { color: #f88; }
+  #status.hidden { display: none; }
+
+  /* ── Layout: Pixel Grid (2D — default) ─────────────────────────────────── */
+  #bars.lay-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 16), 1fr);
+    grid-template-rows: repeat(var(--rows, 1), 1fr);
+    filter: blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+  }
+  #bars.lay-grid .zone {
+    background: var(--c, #111);
+    transition: background 0.08s linear;
+  }
+
+  /* ── Layout: Vertical Stripes ───────────────────────────────────────────── */
+  #bars.lay-vstripes { display: flex; flex-direction: row; }
+  #bars.lay-vstripes .zone {
+    flex: 1; height: 100%;
+    background: var(--c, #111);
+    transition: background 0.08s linear;
+    filter: blur(calc(var(--stripe-blur, 60px) * var(--glow, 1)));
+  }
+
+  /* ── Layout: Horizontal Stripes ─────────────────────────────────────────── */
+  #bars.lay-hstripes { display: flex; flex-direction: column; }
+  #bars.lay-hstripes .zone {
+    flex: 1; width: 100%;
+    background: var(--c, #111);
+    transition: background 0.08s linear;
+    filter: blur(calc(var(--stripe-blur, 60px) * var(--glow, 1)));
+  }
+
+  /* ── Layout: Centered Pills ─────────────────────────────────────────────── */
+  #bars.lay-pills {
+    display: flex; align-items: center; justify-content: space-evenly;
+    padding: 0 8vw;
+  }
+  #bars.lay-pills .zone {
+    flex: 0 0 auto;
+    width: var(--bar-w, 1.4vw); min-width: 6px;
+    height: var(--bar-h, 38vh);
+    border-radius: 999px;
+    background: var(--c, #111);
+    transition: background 0.08s linear;
+    box-shadow:
+      0 0 calc(18px * var(--glow, 1)) calc(2px * var(--glow, 1)) var(--c, #111),
+      0 0 calc(48px * var(--glow, 1)) calc(6px * var(--glow, 1)) var(--c, #111),
+      0 0 calc(110px * var(--glow, 1)) calc(14px * var(--glow, 1)) var(--c, #111);
+  }
+
+  #bars.lay-off,
+  #bars.disabled { display: none !important; }
+</style>
+</head>
+<body>
+<div id="bars" class="lay-grid"></div>
+<img id="bg" alt="">
+<div id="dim"></div>
+<div id="status" class="bad hidden">starting…</div>
+<script>
+"use strict";
+
+// Pick up the screen index from the meta tag (set per-bundle when the
+// Lively zip is built). Fall back to 0 if missing/garbage.
+const SCREEN_INDEX = (function () {
+  const m = document.querySelector('meta[name="signalrgb-screen-index"]');
+  const v = m && m.getAttribute("content");
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+})();
+
+const WS_URL = "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
+const RECONNECT_MS = 1500;
+
+const bgEl = document.getElementById("bg");
+const dimEl = document.getElementById("dim");
+const barsEl = document.getElementById("bars");
+const statusEl = document.getElementById("status");
+
+const LAYOUT_CLASSES = ["lay-grid", "lay-vstripes", "lay-hstripes", "lay-pills", "lay-off"];
+
+let zoneEls = [];
+let lastCols = 0, lastRows = 0;
+let currentLayout = "lay-grid";
+let frames = 0, fpsT0 = performance.now();
+
+function isGridLayout() { return currentLayout === "lay-grid"; }
+
+function ensureZones(cols, rows) {
+  const wantTotal = isGridLayout() ? cols * rows : cols;
+  if (zoneEls.length === wantTotal && cols === lastCols && rows === lastRows) return;
+  barsEl.innerHTML = "";
+  zoneEls = new Array(wantTotal);
+  for (let i = 0; i < wantTotal; i++) {
+    const d = document.createElement("div");
+    d.className = "zone";
+    barsEl.appendChild(d);
+    zoneEls[i] = d;
+  }
+  lastCols = cols; lastRows = rows;
+  document.documentElement.style.setProperty("--cols", cols);
+  document.documentElement.style.setProperty("--rows", rows);
+}
+
+function rgbCss(r, g, b) { return "rgb(" + r + "," + g + "," + b + ")"; }
+
+function renderFrame(buf) {
+  // Wire: [S][R][screen u8][wH][wL][hH][hL][rgb...]  -> 7-byte header
+  if (buf.length < 7) return;
+  if (buf[0] !== 0x53 || buf[1] !== 0x52) return;
+  // buf[2] is the screen index. The bridge already routed only matching
+  // frames to us; trust that and ignore the byte here.
+  const w = (buf[3] << 8) | buf[4];
+  const h = (buf[5] << 8) | buf[6];
+  if (!w || !h) return;
+  if (buf.length < 7 + w * h * 3) return;
+
+  ensureZones(w, h);
+
+  let off = 7;
+  if (isGridLayout()) {
+    const total = w * h;
+    for (let i = 0; i < total; i++) {
+      zoneEls[i].style.setProperty("--c", rgbCss(buf[off], buf[off + 1], buf[off + 2]));
+      off += 3;
+    }
+  } else {
+    for (let i = 0; i < w; i++) {
+      zoneEls[i].style.setProperty("--c", rgbCss(buf[off], buf[off + 1], buf[off + 2]));
+      off += 3;
+    }
+  }
+
+  frames++;
+  const now = performance.now();
+  if (now - fpsT0 >= 1000) {
+    const fps = (frames * 1000) / (now - fpsT0);
+    frames = 0; fpsT0 = now;
+    if (now >= flashUntil) {
+      statusEl.textContent = "screen " + SCREEN_INDEX + " live " + w + "x" + h + " @ " + fps.toFixed(1) + " fps";
+      statusEl.classList.remove("bad");
+      statusEl.classList.add("ok");
+    }
+  }
+}
+
+let ws = null;
+function connect() {
+  statusEl.textContent = "connecting " + WS_URL + "…";
+  statusEl.classList.remove("ok");
+  statusEl.classList.add("bad");
+  try { ws = new WebSocket(WS_URL); }
+  catch (e) {
+    statusEl.textContent = "ws error: " + e.message;
+    setTimeout(connect, RECONNECT_MS);
+    return;
+  }
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => {
+    statusEl.textContent = "connected " + WS_URL;
+    statusEl.classList.remove("bad");
+    statusEl.classList.add("ok");
+  };
+  ws.onerror = () => {};
+  ws.onclose = () => {
+    statusEl.textContent = "disconnected — retrying…";
+    statusEl.classList.remove("ok");
+    statusEl.classList.add("bad");
+    setTimeout(connect, RECONNECT_MS);
+  };
+  ws.onmessage = (ev) => {
+    // Binary frame = one rendered frame from the plugin via the bridge.
+    if (ev.data instanceof ArrayBuffer) {
+      renderFrame(new Uint8Array(ev.data));
+      return;
+    }
+    // Text frame = settings push from the bridge tray-app. Format:
+    //   { "type": "settings", "screen": N, "data": { bgImage, bgFit, ... } }
+    // Every key maps 1:1 to an existing applyProperty() case below, so we
+    // just forward each (k, v) without translation.
+    if (typeof ev.data === "string") {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg && msg.type === "settings" && msg.data && typeof msg.data === "object") {
+          for (const k of Object.keys(msg.data)) {
+            applyProperty(k, msg.data[k]);
+          }
+        }
+      } catch (e) {
+        console.error("[wallpaper] bad settings frame:", e);
+      }
+    }
+  };
+}
+connect();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Property handling — works in BOTH Lively and Wallpaper Engine.
+// Lively calls livelyPropertyListener(name, value) once per change with raw
+// types (dropdown index, slider int, etc). Wallpaper Engine batches changes
+// via wallpaperPropertyListener.applyUserProperties({name: {value}}) and the
+// value types depend on the manifest definition. We funnel both into the
+// same applyProperty() with already-normalised values.
+// ─────────────────────────────────────────────────────────────────────────────
+let pickedImagePath = "";
+let urlOverride = "";
+
+// Normalise paths from both hosts:
+//   - http(s):// and data: URLs pass through untouched.
+//   - Absolute filesystem paths (Windows drive letters, UNC, POSIX absolute)
+//     get routed through the bridge's HTTP image proxy. Wallpaper Engine's
+//     CEF sandbox blocks file:// URLs outside the project folder; serving the
+//     image over local HTTP bypasses that restriction. Lively works either
+//     way but uses the same path for symmetry.
+//   - Relative paths (e.g. "images/foo.png") stay as-is so they resolve
+//     against the wallpaper folder itself (same origin as the page).
+const IMAGE_PROXY = "http://127.0.0.1:17320/image?path=";
+
+function normalizeImagePath(p) {
+  if (!p) return "";
+  const t = String(p).trim();
+  if (!t) return "";
+  if (/^(https?:|data:)/i.test(t)) return t;
+  if (/^file:/i.test(t)) {
+    // strip the file:// prefix and re-route through the proxy
+    return IMAGE_PROXY + encodeURIComponent(t.replace(/^file:\/{2,3}/i, ""));
+  }
+  if (/^[A-Za-z]:[\\/]/.test(t) || t.startsWith("\\\\") || t.startsWith("/")) {
+    return IMAGE_PROXY + encodeURIComponent(t);
+  }
+  return t;
+}
+
+function setBackground() {
+  const raw = urlOverride && urlOverride.trim() ? urlOverride.trim() : pickedImagePath;
+  const src = normalizeImagePath(raw);
+  console.log("[wallpaper] setBackground: raw=", JSON.stringify(raw), "src=", JSON.stringify(src));
+  flashDebug("raw=" + JSON.stringify(raw) + " | normalised=" + JSON.stringify(src));
+  if (!src) {
+    bgEl.removeAttribute("src");
+    bgEl.style.opacity = "0";
+    return;
+  }
+  bgEl.src = src;
+  bgEl.style.opacity = "1";
+}
+
+bgEl.addEventListener("error", () => {
+  const tried = bgEl.src || "(empty)";
+  const msg = "image load failed: " + tried;
+  console.error("[wallpaper]", msg);
+  // Only surface in the on-screen overlay when the user explicitly enabled
+  // the debug overlay — otherwise we'd silently override their off-toggle
+  // every time an image fails to load.
+  if (showStatusEnabled) {
+    statusEl.textContent = msg;
+    statusEl.classList.remove("ok", "hidden");
+    statusEl.classList.add("bad");
+  }
+});
+
+// Force-show the status overlay with a transient message - used to surface
+// property changes and other diagnostics. Gated on showStatusEnabled so
+// users who disabled the overlay don't see it pop up on every settings
+// push (every applyProperty() call would otherwise flash the overlay back
+// to visible for 8 seconds).
+let _flashTimer = null;
+let flashUntil = 0;
+let showStatusEnabled = false;
+function flashDebug(text) {
+  if (!showStatusEnabled) return;
+  statusEl.textContent = text;
+  statusEl.classList.remove("hidden", "bad", "ok");
+  flashUntil = performance.now() + 8000;  // sticky for 8 s
+  if (_flashTimer) clearTimeout(_flashTimer);
+  _flashTimer = setTimeout(() => {
+    statusEl.textContent = "";
+    flashUntil = 0;
+  }, 8000);
+}
+
+function applyProperty(name, val) {
+  console.log("[wallpaper] property:", name, "=", JSON.stringify(val));
+  // flashDebug is a no-op when showStatusEnabled is false.
+  flashDebug("set " + name + " = " + JSON.stringify(val));
+  switch (name) {
+    case "bgImage":
+      pickedImagePath = val || "";
+      setBackground();
+      break;
+    case "bgImageUrl":
+      urlOverride = val || "";
+      setBackground();
+      break;
+    case "bgFit":
+      bgEl.style.objectFit = val || "cover";
+      break;
+    case "bgDim":
+      dimEl.style.opacity = String((parseInt(val) || 0) / 100);
+      break;
+    case "barLayout": {
+      const cls = LAYOUT_CLASSES.indexOf(val) >= 0 ? val : "lay-grid";
+      LAYOUT_CLASSES.forEach((c) => barsEl.classList.remove(c));
+      barsEl.classList.add(cls);
+      currentLayout = cls;
+      lastCols = 0; lastRows = 0;
+      break;
+    }
+    case "showBars":
+      barsEl.classList.toggle("disabled", !val);
+      break;
+    case "glowStrength":
+      document.documentElement.style.setProperty("--glow", String((parseInt(val) || 100) / 100));
+      break;
+    case "barHeight":
+      document.documentElement.style.setProperty("--bar-h", (parseInt(val) || 38) + "vh");
+      break;
+    case "barWidth":
+      document.documentElement.style.setProperty("--bar-w", ((parseInt(val) || 14) / 10) + "vw");
+      break;
+    case "stripesBlur":
+      document.documentElement.style.setProperty("--stripe-blur", (parseInt(val) || 60) + "px");
+      break;
+    case "gridBlur":
+      document.documentElement.style.setProperty("--grid-blur", (parseInt(val) || 30) + "px");
+      break;
+    case "showStatus":
+      showStatusEnabled = !!val;
+      statusEl.classList.toggle("hidden", !val);
+      // Clear any pending flash so the overlay doesn't stay visible after
+      // the user just turned it off mid-flash.
+      if (!val && _flashTimer) { clearTimeout(_flashTimer); _flashTimer = null; flashUntil = 0; }
+      break;
+  }
+}
+
+// Lively adapter: translate index/typed values to the unified format.
+const LIVELY_BG_FIT  = ["cover", "contain", "fill"];
+const LIVELY_LAYOUT  = LAYOUT_CLASSES; // same indices as the dropdown items
+
+window.livelyPropertyListener = function (name, val) {
+  if (name === "bgFit")     val = LIVELY_BG_FIT[val]  || "cover";
+  if (name === "barLayout") val = LIVELY_LAYOUT[val]  || "lay-grid";
+  applyProperty(name, val);
+};
+
+// Wallpaper Engine adapter: enumerate properties and forward already-correct
+// values (the project.json combos use the same string keys, so no translation
+// is needed here).
+window.wallpaperPropertyListener = {
+  applyUserProperties: function (properties) {
+    console.log("[wallpaper] applyUserProperties:", JSON.stringify(properties));
+    if (!properties) return;
+    for (const name in properties) {
+      const p = properties[name];
+      // Wallpaper Engine usually wraps values in { value: ... } but some
+      // builds / property types pass the raw value directly. Handle both.
+      let val;
+      if (p && typeof p === "object" && "value" in p) {
+        val = p.value;
+      } else if (p === null || ["string", "number", "boolean"].includes(typeof p)) {
+        val = p;
+      } else {
+        continue;
+      }
+      applyProperty(name, val);
+    }
+  },
+};
+</script>
+</body>
+</html>
