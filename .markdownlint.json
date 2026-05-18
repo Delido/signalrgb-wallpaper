@@ -5,5 +5,10 @@
   "MD013": {
     "code_blocks": false,
     "tables": false
-  }
+  },
+  "MD033": {
+    "allowed_elements": ["div", "br", "details", "summary", "img", "a"]
+  },
+  "MD041": false
 }
+

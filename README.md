@@ -1,8 +1,20 @@
-# SignalRGB Desktop Wallpaper
+<div align="center">
 
-[![Release](https://img.shields.io/github/v/release/Delido/signalrgb-wallpaper?include_prereleases&sort=semver)](https://github.com/Delido/signalrgb-wallpaper/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue)
+![SignalRGB Desktop Wallpaper](docs/images/banner.png)
+
+[![Release](https://img.shields.io/github/v/release/Delido/signalrgb-wallpaper?include_prereleases&sort=semver&style=flat-square)](https://github.com/Delido/signalrgb-wallpaper/releases)
+[![Downloads](https://img.shields.io/github/downloads/Delido/signalrgb-wallpaper/total?style=flat-square)](https://github.com/Delido/signalrgb-wallpaper/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue?style=flat-square)](#requirements)
+[![Sponsor](https://img.shields.io/badge/Buy_me_a_coffee-PayPal-00457C?style=flat-square&logo=paypal&logoColor=white)](https://paypal.me/SMendyka)
+
+**Live RGB glow on your desktop, driven by your SignalRGB effect.**
+Multi-monitor, fully configurable, with an in-browser wallpaper builder
+and a one-click installer.
+
+</div>
+
+---
 
 Use your current SignalRGB effect as a glow layer on your desktop wallpaper.
 Up to **3 monitors**, each configurable separately. Renders inside
@@ -10,31 +22,67 @@ Up to **3 monitors**, each configurable separately. Renders inside
 wallpaper — no proprietary host, no custom shaders.
 
 The principle: a PNG with **transparent cut-outs** (windows, signs, neon
-strips, whatever) sits on top of a coloured glow layer. The glow comes from
-the live SignalRGB canvas, so anything you cut transparent shines in
+strips, whatever) sits on top of a coloured glow layer. The glow comes
+from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.4.1 — installer ships, multi-screen works, in-browser
-> wallpaper builder with polygon / ellipse / region / restore-brush
-> tools, apply-to-screen pipeline, About dialog with OSS attribution.
+> **Status:** v0.4.2 — installer + multi-screen + in-browser builder
+> (polygon / ellipse / region / restore-brush) + apply-to-screen +
+> fullscreen auto-pause + About dialog with OSS attribution.
 
 ## Features
 
-- **Live RGB glow** behind a transparent background image, 60 fps target
-- **1–3 monitor support** with independent settings per screen
-- **System tray dialog** for everything: background per screen, glow layout
-  (pixel grid / stripes / pills / off), strength, dim, blur — live apply
-- **In-browser wallpaper builder** (`Build Wallpaper…` in tray) for
+- 🌈 **Live RGB glow** behind a transparent background image, 60 fps target
+- 🖥️ **1–3 monitor support** with independent settings per screen
+- 🎚️ **System tray dialog** for everything: background per screen, glow
+  layout (pixel grid / stripes / pills / off), strength, dim, blur — live apply
+- 🖌️ **In-browser wallpaper builder** (`Build Wallpaper…` in tray) for
   carving transparent regions out of any image. Color-click, drag-region,
   polygon, ellipse, "click in region", and a **restore brush** to undo
   over-aggressive edits. Apply straight to a screen with one click, or
   save as PNG. Multi-monitor split halves an image across two screens.
-- **One-click installer** (`SignalRGBWallpaperSetup-*.exe`, per-user,
+- 🎮 **Auto-pause** when a fullscreen app (game, video, RDP) is active —
+  glow freezes, CPU is saved, resumes within a second when you alt-tab
+  out. Toggle in tray Settings.
+- 📦 **One-click installer** (`SignalRGBWallpaperSetup-*.exe`, per-user,
   no admin) handles the bridge, the SignalRGB plugin, the Lively zips,
   autostart, and an Add/Remove Programs entry.
-- **Standalone bridge** as a single `.exe` (no Python required for users)
-- **Stable wire protocol** — UDP from plugin to bridge, WebSocket from
-  bridge to wallpaper, well-defined frame format
+- 🔌 **Standalone bridge** as a single `.exe` (no Python required for users)
+- 📡 **Stable wire protocol** — UDP from plugin to bridge, WebSocket
+  from bridge to wallpaper, well-defined frame format
+
+## Gallery
+
+> _Screenshots coming. The four captures planned for this section —
+> drop them into [`docs/images/`](docs/images/) with the filenames
+> below and uncomment the table to make them appear._
+
+<!-- markdownlint-disable MD013 -->
+<!--
+  When you have these PNGs in docs/images/, delete the block above and
+  uncomment the table below. Suggested captures, 1280 px wide, PNG:
+
+    docs/images/screenshot-desktop.png   — final wallpaper rendered with glow
+                                          (turn on the colour-cycle effect in
+                                          SignalRGB, take a desktop screenshot)
+    docs/images/screenshot-builder.png   — the in-browser builder mid-edit
+                                          (Tray → "Build Wallpaper…", load any
+                                          image, click a few areas transparent)
+    docs/images/screenshot-tray.png      — the tray Settings dialog with a
+                                          screen tab open
+    docs/images/screenshot-multi.png     — two monitors side-by-side both
+                                          showing the wallpaper
+
+  | | |
+  | :---: | :---: |
+  | ![Desktop with glow](docs/images/screenshot-desktop.png) <br/> _Final wallpaper rendering with cut-outs lit by the live effect_ | ![In-browser builder](docs/images/screenshot-builder.png) <br/> _The in-browser builder — click colours to make them transparent_ |
+  | ![Tray settings](docs/images/screenshot-tray.png) <br/> _Per-screen settings, applied live without re-import_ | ![Multi-monitor](docs/images/screenshot-multi.png) <br/> _Multiple monitors driven independently from one SignalRGB canvas_ |
+-->
+<!-- markdownlint-enable MD013 -->
+
+A short demo video of the builder + a multi-monitor scene would also be
+ideal here — even a 15-second screen recording dropped as a GIF
+(`docs/images/demo.gif`) is enough.
 
 ## Requirements
 
@@ -124,6 +172,23 @@ Issues and PRs welcome. Bug reports should include:
 - The bridge log if relevant: run `SignalRGBBridge.exe` from a CMD
   window (so stdout is visible) or run `python wallpaper_bridge\bridge.py`
   directly
+
+## Support / donate
+
+This project is built and maintained in spare time. If it saves you the
+hassle of writing your own SignalRGB → wallpaper plumbing, or if a glow
+that matches your effect just makes you smile every morning, a small tip
+keeps the motivation up.
+
+<div align="center">
+
+[![Buy me a coffee — PayPal](https://img.shields.io/badge/Buy_me_a_coffee-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/SMendyka)
+
+</div>
+
+Issues, feature requests, and pull requests are also very welcome —
+even just an [issue](https://github.com/Delido/signalrgb-wallpaper/issues)
+with "this is broken on my machine" helps a lot.
 
 ## License
 

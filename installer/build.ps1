@@ -33,12 +33,14 @@ if (-not $Version) {
 }
 Write-Host "Building installer for v$Version" -ForegroundColor Cyan
 
-# --- 1. Generate icon + thumbnail --------------------------------------------
-Write-Host "[1/5] Generating icon.ico + thumbnail.png" -ForegroundColor Yellow
+# --- 1. Generate icon + thumbnail + README banner ----------------------------
+Write-Host "[1/5] Generating icon.ico + thumbnail.png + banner.png" -ForegroundColor Yellow
 & python (Join-Path $installer "generate_icon.py")
 if ($LASTEXITCODE -ne 0) { throw "icon generation failed" }
 & python (Join-Path $installer "generate_thumbnail.py")
 if ($LASTEXITCODE -ne 0) { throw "thumbnail generation failed" }
+& python (Join-Path $installer "generate_banner.py")
+if ($LASTEXITCODE -ne 0) { throw "banner generation failed" }
 
 # --- 2. Rebuild SignalRGBBridge.exe ------------------------------------------
 Write-Host "[2/5] Rebuilding SignalRGBBridge.exe" -ForegroundColor Yellow
