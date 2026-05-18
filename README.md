@@ -26,9 +26,9 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.4.2 — installer + multi-screen + in-browser builder
+> **Status:** v0.4.3 — installer + multi-screen + in-browser builder
 > (polygon / ellipse / region / restore-brush) + apply-to-screen +
-> fullscreen auto-pause + About dialog with OSS attribution.
+> fullscreen auto-pause + redesigned per-screen settings dialog.
 
 ## Features
 
@@ -142,6 +142,36 @@ CSS-grid glow layer behind a transparent background image. The bridge
 also hosts a tray icon for per-screen settings (background image, layout,
 glow strength, etc.) which it pushes live to the wallpaper page over the
 same WebSocket. Full architecture: [docs/architecture.md](docs/architecture.md).
+
+## Roadmap
+
+Loose, unordered list of things on the "would be nice" pile. No commitments
+on timing — pull requests and votes (👍 on the matching issue) welcome.
+
+- **Builder polish** — live brush cursor (circle preview at actual radius),
+  more brush shapes / hardness, additional pattern fills, drag-and-drop
+  image import, full undo/redo history
+- **Desktop widgets** — clock, calendar, weather, and small effect
+  modules that sit on top of the glow layer (opt-in per screen)
+- **Simpler install** — single bootstrapper that pulls Lively if missing,
+  imports the Lively zips automatically, and assigns them to the right
+  screens without manual drag-and-drop
+- **Reworked tray settings** — preview pane, search/jump for long lists,
+  preset slots (save a "background + glow + dim + blur" combo and switch
+  with one click)
+- **More than 3 monitors** — lift the current hard cap to N screens
+- **Localisation** — DE / EN at minimum, tray + builder + installer
+- **Wallpaper preset library** — curated bundle of glow-ready backgrounds
+  shipped with the installer or fetched on demand
+- **Audio-reactive glow mode** — optional layer that pulses with system
+  audio in addition to the SignalRGB colour feed
+- **Wallpaper Engine support** — package the wallpaper as a
+  [Wallpaper Engine](https://www.wallpaperengine.io/) Web project too, so
+  users on the Steam app can run the glow without needing Lively
+
+Have a wish that isn't here?
+[Open an issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
+and tag it `enhancement`.
 
 ## Contributing
 

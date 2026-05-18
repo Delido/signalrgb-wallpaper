@@ -32,3 +32,6 @@ desktop.ini
 # Local logs (bridge.exe writes here when run via Setup-Bat history etc.)
 wallpaper.log
 wallpaper_python.log
+
+# Demo recordings / scratch (not for the repo)
+temp/
