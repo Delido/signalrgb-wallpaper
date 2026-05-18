@@ -4,6 +4,73 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-05-18
+
+### Changed
+
+- **Builder UI restructured GIMP-style.** The single-sidebar wall of
+  controls is replaced by a four-column layout: a vertical icon toolbox
+  on the left (inline-SVG buttons for each of the 6 tools), a Tool
+  Options panel that shows only the sliders/hints relevant to the
+  currently active tool, the canvas in the centre, and a dedicated
+  Files panel on the right with Load / Merge / Output / Apply /
+  Multi-monitor-split sections. Active tool is highlighted; switching
+  tools also updates the panel title and the visible option group.
+- Dead `.radio-list` CSS removed, plus a few orphan styles from the
+  old layout.
+
+### Added
+
+- **Live brush cursor.** While the Restore brush is active the
+  canvas shows a circle (or square) outline that follows the pointer,
+  sized to `2 * brushSize * zoom` in CSS pixels — so what you see is
+  the area a click would actually affect. An inner dashed ring marks
+  the hard-core radius at the current Hardness setting.
+- **Brush hardness slider (0–100).** 100 = fully hard edge (legacy
+  behaviour); lower values fade the alpha linearly from the hard-core
+  radius out to the outer radius. Overlapping stamps within a stroke
+  max-merge their alpha so soft edges don't punch holes in each
+  other.
+- **Brush shape selector (Round / Square).** Segmented buttons in the
+  brush options; square brush uses Chebyshev (max-axis) distance for
+  the same falloff model. Both shapes survive a 90° rotate.
+- **Erase brush.** Seventh tool — opposite of the Restore brush. Drives
+  pixel alpha *down* toward zero with the same size / hardness / shape
+  controls (shared with Restore). Soft edges use min-merge so a hard
+  centre stays fully transparent even if later overlapping soft stamps
+  would otherwise ramp it back up. Live cursor and history rendering
+  match the Restore brush.
+- **Drag-and-drop on the Merge slots.** Both image-A and image-B
+  pickers now accept a dropped image with a visual hover state,
+  matching the canvas's existing DnD.
+- **Full Undo / Redo history.** New Redo button next to Undo; any
+  fresh edit clears the redo stack so we can't resurrect stale
+  operations after the user branches off. Keyboard shortcuts:
+  Ctrl+Z for undo, Ctrl+Y or Ctrl+Shift+Z for redo. The Reset-edits
+  button now stacks everything onto the redo pile, so even Reset is
+  undoable.
+
+## [0.4.4] - 2026-05-18
+
+### Added
+
+- **Merge two images side-by-side in the builder.** New block under
+  Step 1 with two file slots ("Pick image A…", "Pick image B…") plus a
+  "Force 50/50" toggle. The default mode matches heights and keeps both
+  aspect ratios (output width = sum of scaled widths); 50/50 stretches
+  each half to equal width — perfect input for the existing multi-monitor
+  vertical split. The merged canvas runs through the same
+  edit / save / apply / split pipeline as a single loaded image, so all
+  tools (polygon, ellipse, restore brush, etc.) work on it unchanged.
+
+### Changed
+
+- Internal: `loadFile()` refactored to a small `fileToImage()` Promise
+  helper + a shared `applySourceImage(name, source)` entry point. Both
+  the single-image picker and the new merge button funnel through the
+  same code, which is also where future "open from URL / clipboard"
+  sources would slot in cleanly.
+
 ## [0.4.3] - 2026-05-18
 
 ### Fixed

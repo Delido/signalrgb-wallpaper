@@ -38,22 +38,78 @@
 
   main {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 54px 232px 1fr 260px;
     height: calc(100vh - 50px);
   }
 
-  /* ── Sidebar ────────────────────────────────────────────────────────── */
-  aside {
+  /* ── Side panels (toolbox / tool-options / files) ─────────────────────── */
+  .panel {
     background: var(--panel);
-    border-right: 1px solid var(--border);
-    padding: 14px;
     overflow-y: auto;
   }
-  aside section { margin-bottom: 16px; }
-  aside h2 {
+  .panel.left  { border-right: 1px solid var(--border); }
+  .panel.right { border-left:  1px solid var(--border); }
+  .panel section { margin-bottom: 16px; }
+  .panel h2 {
     margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase;
     color: var(--text-dim); letter-spacing: 0.07em; font-weight: 600;
   }
+  .panel.padded { padding: 14px; }
+
+  /* ── Vertical icon toolbox ────────────────────────────────────────────── */
+  .toolbox { padding: 8px 6px; }
+  .tool-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 42px; margin-bottom: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .tool-btn:hover { background: var(--panel-2); color: var(--text); }
+  .tool-btn.active {
+    background: var(--accent-bg);
+    border-color: #3a6ba8;
+    color: #d8e6fc;
+  }
+  .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .tool-btn svg {
+    width: 22px; height: 22px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .tool-btn-divider { height: 1px; background: var(--border); margin: 6px 6px; }
+
+  /* ── Tool-options panel ───────────────────────────────────────────────── */
+  .tool-options-group { margin-bottom: 14px; }
+  .tool-options-group.hidden { display: none; }
+  .tool-options-group .row:first-child { margin-top: 0; }
+
+  /* Round/square brush-shape selector — segmented buttons */
+  .seg-row { display: flex; gap: 6px; margin-top: 6px; }
+  .seg-row .seg {
+    flex: 1; padding: 6px 8px; border-radius: 5px;
+    background: var(--panel-2); color: var(--text-dim);
+    border: 1px solid var(--border); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font: inherit;
+  }
+  .seg-row .seg:hover { color: var(--text); }
+  .seg-row .seg.active {
+    background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc;
+  }
+  .seg-row .seg svg {
+    width: 14px; height: 14px;
+    stroke: currentColor; fill: none; stroke-width: 1.6;
+  }
+
+  /* Merge-slot drop zone — picks up dragover state */
+  .merge-slot { padding: 8px; border: 1px dashed transparent; border-radius: 6px;
+                transition: border-color 0.15s, background 0.15s; }
+  .merge-slot.dragover { border-color: var(--accent); background: #1a2438; }
+  .merge-slot .stat { margin-top: 5px; }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -91,14 +147,6 @@
   .check-row { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
   .check-row input { accent-color: var(--accent); }
   .check-row label { color: var(--text-dim); }
-
-  .radio-list { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px 0; }
-  .radio-list label {
-    display: flex; align-items: center; gap: 7px;
-    color: var(--text); cursor: pointer;
-  }
-  .radio-list input { accent-color: var(--accent); }
-  .radio-list small { color: var(--text-dim); font-size: 11px; }
 
   .hint {
     background: #1a2230; border: 1px solid #2a3a52; border-radius: 5px;
@@ -275,6 +323,34 @@
   .shape-toolbar .label { color: var(--text-dim); }
   .shape-toolbar .label strong { color: var(--text); }
 
+  /* Live brush cursor — circle/square outline that follows the mouse
+     when the restore-brush tool is active, sized to the actual brush
+     radius (in canvas pixels, scaled by current zoom). */
+  .canvas-host #brush-cursor {
+    position: absolute;
+    pointer-events: none;
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    transform: translate(-50%, -50%);
+    display: none;
+    z-index: 4;
+  }
+  .canvas-host #brush-cursor.shape-round  { border-radius: 50%; }
+  .canvas-host #brush-cursor.shape-square { border-radius: 0; }
+  /* Inner ring marking the hard-core radius — at hardness=100 it's the
+     same size as the outer ring (invisible); at lower hardness the gap
+     between rings is the soft-falloff band. */
+  .canvas-host #brush-cursor::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px dashed rgba(255,255,255,0.45);
+    border-radius: inherit;
+    transform: scale(var(--hard-ratio, 1));
+    transform-origin: center;
+  }
+  .canvas-host #brush-cursor.on { display: block; }
+
   .canvas-host #split-line {
     position: absolute;
     top: 0; bottom: 0;
@@ -321,110 +397,133 @@
 </header>
 
 <main>
-  <aside>
+  <!-- ── Icon toolbox (left, narrow) ────────────────────────────────────── -->
+  <div class="panel left toolbox" id="toolbox">
+    <button class="tool-btn active" data-tool="color" title="Click pixel — remove similar colours">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="6"/>
+        <line x1="12" y1="2" x2="12" y2="6"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="6" y2="12"/>
+        <line x1="18" y1="12" x2="22" y2="12"/>
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+    <button class="tool-btn" data-tool="bounded" title="Click in region — drag rectangle, then click colours inside">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="1.2" stroke-dasharray="3 2.5"/>
+        <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+    <button class="tool-btn" data-tool="region" title="Drag rectangle — remove the area you draw">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="6" width="16" height="12" rx="1.2" stroke-dasharray="3 2.5"/>
+      </svg>
+    </button>
+    <button class="tool-btn" data-tool="polygon" title="Polygon — click corners, drag handles, confirm">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <polygon points="12,3 21,9 18,20 6,20 3,9"/>
+        <circle cx="12" cy="3"  r="1.3" fill="currentColor" stroke="none"/>
+        <circle cx="21" cy="9"  r="1.3" fill="currentColor" stroke="none"/>
+        <circle cx="18" cy="20" r="1.3" fill="currentColor" stroke="none"/>
+        <circle cx="6"  cy="20" r="1.3" fill="currentColor" stroke="none"/>
+        <circle cx="3"  cy="9"  r="1.3" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+    <button class="tool-btn" data-tool="ellipse" title="Ellipse — drag bbox, resize handles, confirm">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <ellipse cx="12" cy="12" rx="9" ry="6"/>
+      </svg>
+    </button>
+    <div class="tool-btn-divider"></div>
+    <button class="tool-btn" data-tool="restore" title="Restore brush — paint back transparent pixels">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 14l-3 3c-1 1-1 2.5 0 3.5s2.5 1 3.5 0l3-3"/>
+        <path d="M9 14l5-5 4 4-5 5z"/>
+        <path d="M14 9l5-5c0.8-0.8 2.2-0.8 3 0s0.8 2.2 0 3l-5 5"/>
+      </svg>
+    </button>
+    <button class="tool-btn" data-tool="erase" title="Erase brush — paint pixels transparent">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M16 4l4 4-9 9-4-4z"/>
+        <path d="M7 13l-3 3c-0.8 0.8-0.8 2.2 0 3l1 1h6l2-2"/>
+        <line x1="11" y1="9" x2="15" y2="13"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ── Tool-options + history (left-middle) ───────────────────────────── -->
+  <div class="panel left padded" id="tool-options-panel">
     <section>
-      <h2>1. Load</h2>
-      <div class="btn-row">
-        <label class="btn primary" for="file-input">Choose image…</label>
-        <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+      <h2 id="active-tool-label">Click pixel</h2>
+
+      <div class="tool-options-group" data-tools="color bounded">
+        <div class="row">
+          <label for="threshold">Tolerance</label>
+          <input id="threshold" type="range" min="0" max="200" value="30">
+          <span class="val" id="threshold-val">30</span>
+        </div>
       </div>
-      <div class="stat" id="img-stat">No image loaded.</div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn" id="rotate-btn" disabled>Rotate 90°</button>
+
+      <div class="tool-options-group" data-tools="bounded">
+        <div class="hint">Drag a rectangle first to bound where the colour match applies. Then click colours inside it.</div>
+      </div>
+
+      <div class="tool-options-group" data-tools="region">
+        <div class="hint">Drag a rectangle on the canvas. The area becomes transparent on release.</div>
+      </div>
+
+      <div class="tool-options-group" data-tools="polygon">
+        <div class="hint">Click to place corners. Drag corners to reshape. Press <strong>Confirm</strong> in the floating bar to apply.</div>
+      </div>
+
+      <div class="tool-options-group" data-tools="ellipse">
+        <div class="hint">Drag to draw a bounding box. Resize via handles. Press <strong>Confirm</strong> to apply.</div>
+      </div>
+
+      <div class="tool-options-group" data-tools="restore erase">
+        <div class="row">
+          <label for="brush-size">Size</label>
+          <input id="brush-size" type="range" min="3" max="120" value="20">
+          <span class="val" id="brush-size-val">20</span>
+        </div>
+        <div class="row">
+          <label for="brush-hardness">Hardness</label>
+          <input id="brush-hardness" type="range" min="0" max="100" value="100">
+          <span class="val" id="brush-hardness-val">100</span>
+        </div>
+        <div class="seg-row" id="brush-shape-row">
+          <button class="seg active" data-shape="round">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg>Round
+          </button>
+          <button class="seg" data-shape="square">
+            <svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10"/></svg>Square
+          </button>
+        </div>
+      </div>
+
+      <div class="tool-options-group" data-tools="color bounded region polygon ellipse">
+        <div class="check-row">
+          <input type="checkbox" id="feather" checked>
+          <label for="feather">Soften edges (2 px feather)</label>
+        </div>
       </div>
     </section>
 
     <section>
-      <h2>2. Tool</h2>
-      <div class="radio-list">
-        <label><input type="radio" name="tool" value="color" checked>
-          Click pixel <small>— remove all similar colours</small></label>
-        <label><input type="radio" name="tool" value="bounded">
-          Click in region <small>— drag rectangle first, then click colours inside</small></label>
-        <label><input type="radio" name="tool" value="region">
-          Drag rectangle <small>— remove a region you draw</small></label>
-        <label><input type="radio" name="tool" value="polygon">
-          Polygon <small>— click corners, drag to reshape, confirm to apply</small></label>
-        <label><input type="radio" name="tool" value="ellipse">
-          Ellipse <small>— drag bbox, then resize via handles, confirm</small></label>
-        <label><input type="radio" name="tool" value="restore">
-          Restore brush <small>— paint over transparent pixels to bring the original back</small></label>
-      </div>
-      <div class="row">
-        <label for="threshold">Tolerance</label>
-        <input id="threshold" type="range" min="0" max="200" value="30">
-        <span class="val" id="threshold-val">30</span>
-      </div>
-      <div class="row">
-        <label for="brush-size">Brush size</label>
-        <input id="brush-size" type="range" min="3" max="120" value="20">
-        <span class="val" id="brush-size-val">20</span>
-      </div>
-      <div class="check-row">
-        <input type="checkbox" id="feather" checked>
-        <label for="feather">Soften edges (2 px feather)</label>
-      </div>
+      <h2>History</h2>
       <div class="history" id="history"></div>
       <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn" id="undo-btn"  disabled>Undo</button>
-        <button class="btn danger" id="reset-edits-btn" disabled>Reset edits</button>
-      </div>
-    </section>
-
-    <section>
-      <h2>3. Output</h2>
-      <div class="row">
-        <label for="max-size">Max size</label>
-        <select id="max-size">
-          <option value="0">Original</option>
-          <option value="3840" selected>4K (3840 px)</option>
-          <option value="2560">QHD (2560 px)</option>
-          <option value="1920">FHD (1920 px)</option>
-        </select>
-      </div>
-      <div class="hint" style="margin-top: 8px;">
-        Caps the longer side. Full-res PNGs of 4K wallpapers can run to
-        50 MB+ — the wallpaper page never benefits from more than a
-        couple MP, so 4K is a good default.
-      </div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn primary" id="save-btn" disabled>Save as PNG…</button>
-      </div>
-    </section>
-
-    <section>
-      <h2>4. Apply directly</h2>
-      <div class="hint">
-        Pushes the current image straight into the live wallpaper for the
-        chosen screen — no need to save and re-pick under Settings.
-      </div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn primary apply-screen" data-screen="0" disabled>→ Screen 1</button>
-        <button class="btn primary apply-screen" data-screen="1" disabled>→ Screen 2</button>
-        <button class="btn primary apply-screen" data-screen="2" disabled>→ Screen 3</button>
-      </div>
-    </section>
-
-    <section>
-      <h2>5. Multi-monitor split</h2>
-      <div class="hint">
-        Cut the image vertically in half and apply each half to a
-        screen at once. Useful when you have one wide wallpaper that
-        should span two monitors.
-      </div>
-      <div class="check-row">
-        <input type="checkbox" id="split-preview">
-        <label for="split-preview">Show split guide on canvas</label>
-      </div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn split-btn" data-left="0" data-right="1" disabled>Left → Screen 1, Right → Screen 2</button>
+        <button class="btn" id="undo-btn" disabled>Undo</button>
+        <button class="btn" id="redo-btn" disabled>Redo</button>
       </div>
       <div class="btn-row" style="margin-top: 6px;">
-        <button class="btn split-btn" data-left="1" data-right="2" disabled>Left → Screen 2, Right → Screen 3</button>
+        <button class="btn danger" id="reset-edits-btn" disabled>Reset all edits</button>
       </div>
     </section>
-  </aside>
+  </div>
 
+  <!-- ── Canvas (centre) ────────────────────────────────────────────────── -->
   <div class="canvas-area">
     <div class="canvas-toolbar">
       <button class="btn btn-icon" id="zoom-out"   disabled title="Zoom out">−</button>
@@ -442,6 +541,7 @@
         <div id="active-region"></div>
         <svg id="shape-overlay" preserveAspectRatio="none"
              xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="brush-cursor" class="shape-round"></div>
         <div id="split-line"></div>
       </div>
       <div class="placeholder" id="placeholder">
@@ -455,6 +555,88 @@
       <button class="btn primary" id="shape-confirm">Confirm</button>
       <button class="btn" id="shape-cancel">Cancel</button>
     </div>
+  </div>
+
+  <!-- ── Files / Output / Apply (right) ─────────────────────────────────── -->
+  <div class="panel right padded" id="files-panel">
+    <section>
+      <h2>Load</h2>
+      <div class="btn-row">
+        <label class="btn primary" for="file-input">Choose image…</label>
+        <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+      </div>
+      <div class="stat" id="img-stat">No image loaded.</div>
+      <div class="btn-row" style="margin-top: 8px;">
+        <button class="btn" id="rotate-btn" disabled>Rotate 90°</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Merge two images</h2>
+      <div class="hint" style="margin-bottom: 8px;">
+        Drop or pick two images, side-by-side into one canvas:
+      </div>
+      <div class="merge-slot" id="merge-slot-a">
+        <div class="btn-row">
+          <label class="btn" for="merge-input-a">Pick A…</label>
+          <input id="merge-input-a" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+        </div>
+        <div class="stat" id="merge-a-stat">— or drop a file here</div>
+      </div>
+      <div class="merge-slot" id="merge-slot-b" style="margin-top: 4px;">
+        <div class="btn-row">
+          <label class="btn" for="merge-input-b">Pick B…</label>
+          <input id="merge-input-b" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+        </div>
+        <div class="stat" id="merge-b-stat">— or drop a file here</div>
+      </div>
+      <div class="check-row" style="margin-top: 8px;">
+        <input type="checkbox" id="merge-5050">
+        <label for="merge-5050">Force 50/50</label>
+      </div>
+      <div class="btn-row" style="margin-top: 8px;">
+        <button class="btn primary" id="merge-go" disabled>Merge &amp; load →</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Output</h2>
+      <div class="row">
+        <label for="max-size">Max size</label>
+        <select id="max-size">
+          <option value="0">Original</option>
+          <option value="3840" selected>4K (3840 px)</option>
+          <option value="2560">QHD (2560 px)</option>
+          <option value="1920">FHD (1920 px)</option>
+        </select>
+      </div>
+      <div class="btn-row" style="margin-top: 8px;">
+        <button class="btn primary" id="save-btn" disabled>Save as PNG…</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Apply to screen</h2>
+      <div class="btn-row">
+        <button class="btn primary apply-screen" data-screen="0" disabled>→ 1</button>
+        <button class="btn primary apply-screen" data-screen="1" disabled>→ 2</button>
+        <button class="btn primary apply-screen" data-screen="2" disabled>→ 3</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Multi-monitor split</h2>
+      <div class="check-row">
+        <input type="checkbox" id="split-preview">
+        <label for="split-preview">Show split guide</label>
+      </div>
+      <div class="btn-row" style="margin-top: 6px;">
+        <button class="btn split-btn" data-left="0" data-right="1" disabled>Split → 1 + 2</button>
+      </div>
+      <div class="btn-row" style="margin-top: 6px;">
+        <button class="btn split-btn" data-left="1" data-right="2" disabled>Split → 2 + 3</button>
+      </div>
+    </section>
   </div>
 </main>
 
@@ -473,14 +655,30 @@ const els = {
   imgStat:      $("img-stat"),
   rotateBtn:    $("rotate-btn"),
 
-  toolRadios:   document.querySelectorAll('input[name="tool"]'),
+  mergeSlotA:   $("merge-slot-a"),
+  mergeSlotB:   $("merge-slot-b"),
+  mergeInputA:  $("merge-input-a"),
+  mergeInputB:  $("merge-input-b"),
+  mergeAStat:   $("merge-a-stat"),
+  mergeBStat:   $("merge-b-stat"),
+  merge5050:    $("merge-5050"),
+  mergeGo:      $("merge-go"),
+
+  toolBtns:        document.querySelectorAll(".tool-btn"),
+  activeToolLabel: $("active-tool-label"),
+  toolOptionGroups: document.querySelectorAll(".tool-options-group"),
   threshold:    $("threshold"),
   thresholdVal: $("threshold-val"),
   brushSize:    $("brush-size"),
   brushSizeVal: $("brush-size-val"),
+  brushHardness:    $("brush-hardness"),
+  brushHardnessVal: $("brush-hardness-val"),
+  brushShapeRow:    $("brush-shape-row"),
+  brushCursor:      $("brush-cursor"),
   feather:      $("feather"),
   history:      $("history"),
   undoBtn:      $("undo-btn"),
+  redoBtn:      $("redo-btn"),
   resetEdits:   $("reset-edits-btn"),
 
   maxSize:      $("max-size"),
@@ -553,10 +751,27 @@ let boundedAnchor = null;  // mousedown anchor for drag-vs-click distinction
 let boundedDragging = false;
 
 // For the "Restore brush" tool: an in-progress stroke is a list of
-// circular stamps recorded along the drag path. On mouseup the stroke
-// gets committed to clicks as a single restore entry; applyMask paints
-// originalData's alpha back over any pixel inside any stamp.
+// stamps recorded along the drag path. On mouseup the stroke gets
+// committed to clicks as a single restore entry; applyMask paints
+// originalData's alpha back over any pixel inside any stamp, faded by
+// the per-stamp hardness ramp.
 let brushStroke = null;
+let brushShape = "round";  // "round" | "square"
+
+// Redo stack — populated by undo, cleared by any new edit. updateHistory()
+// reflects emptiness in els.redoBtn.disabled.
+let redoStack = [];
+
+// Tool label shown above the options panel; kept in sync with currentTool.
+const TOOL_LABELS = {
+  color:    "Click pixel",
+  bounded:  "Click in region",
+  region:   "Drag rectangle",
+  polygon:  "Polygon",
+  ellipse:  "Ellipse",
+  restore:  "Restore brush",
+  erase:    "Erase brush",
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast helper
@@ -598,37 +813,151 @@ els.canvasArea.addEventListener("drop", (e) => {
 });
 
 function loadFile(file) {
-  sourceName = file.name.replace(/\.[^.]+$/, "") || "wallpaper";
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      els.canvas.width = img.naturalWidth;
-      els.canvas.height = img.naturalHeight;
-      ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
-      ctx.drawImage(img, 0, 0);
-      originalData = ctx.getImageData(0, 0, els.canvas.width, els.canvas.height);
-      clicks = [];
-      cancelShapeEdit();
-      boundedRegion = null;
-      updateActiveRegionOverlay();
-      brushStroke = null;
-      els.canvasHost.style.display = "block";
-      els.placeholder.style.display = "none";
-      els.imgStat.innerHTML =
-        "<strong>" + escapeHtml(file.name) + "</strong>  " +
-        img.naturalWidth + " × " + img.naturalHeight + " px";
-      setControlsEnabled(true);
-      syncShapeOverlay();
-      fitZoom();
-      updateHistory();
-      updateCanvasStat();
-    };
-    img.onerror = () => { els.imgStat.textContent = "Failed to decode image."; };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+  fileToImage(file).then(
+    (img) => applySourceImage(file.name, img),
+    () => { els.imgStat.textContent = "Failed to decode image."; },
+  );
 }
+
+// Adopts an HTMLImageElement or HTMLCanvasElement as the new source for
+// the editing pipeline. Single point of entry for both "Choose image…"
+// and "Merge & load →".
+function applySourceImage(displayName, source) {
+  const w = source.naturalWidth || source.width;
+  const h = source.naturalHeight || source.height;
+  sourceName = displayName.replace(/\.[^.]+$/, "") || "wallpaper";
+  els.canvas.width = w;
+  els.canvas.height = h;
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(source, 0, 0);
+  originalData = ctx.getImageData(0, 0, w, h);
+  clicks = [];
+  redoStack = [];
+  cancelShapeEdit();
+  boundedRegion = null;
+  updateActiveRegionOverlay();
+  brushStroke = null;
+  els.canvasHost.style.display = "block";
+  els.placeholder.style.display = "none";
+  els.imgStat.innerHTML =
+    "<strong>" + escapeHtml(displayName) + "</strong>  " + w + " × " + h + " px";
+  setControlsEnabled(true);
+  syncShapeOverlay();
+  fitZoom();
+  updateHistory();
+  updateCanvasStat();
+}
+
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Merge two images side-by-side
+//
+// Two file slots, one toggle:
+//   default  → match heights, keep both aspect ratios (output width = sum of
+//              scaled widths). Imagine two photos taped together at the
+//              same height.
+//   force5050 → both panels share exactly half the output width, full
+//              height. Stretches each half horizontally if its aspect ratio
+//              doesn't match. Symmetric output, ideal for "Left → Screen 1,
+//              Right → Screen 2".
+//
+// Result becomes the new source image and runs through the same
+// originalData/clicks pipeline as a freshly-opened single image.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let mergeSlotA = null;  // { img, name }
+let mergeSlotB = null;
+
+function updateMergeStat(slotEl, slot) {
+  if (!slot) { slotEl.textContent = "— or drop a file here"; return; }
+  slotEl.textContent = `${slot.name} — ${slot.img.naturalWidth}×${slot.img.naturalHeight}`;
+}
+
+function updateMergeUI() {
+  updateMergeStat(els.mergeAStat, mergeSlotA);
+  updateMergeStat(els.mergeBStat, mergeSlotB);
+  els.mergeGo.disabled = !(mergeSlotA && mergeSlotB);
+}
+
+function loadSlotFromFile(file, setSlot) {
+  if (!file) return;
+  fileToImage(file).then(
+    (img) => { setSlot({ img, name: file.name }); updateMergeUI(); },
+    () => toast("Failed to decode " + file.name, "bad"),
+  );
+}
+
+function bindMergeSlot(slotEl, inputEl, setSlot) {
+  inputEl.addEventListener("change", (e) => {
+    loadSlotFromFile(e.target.files && e.target.files[0], setSlot);
+  });
+  ["dragenter", "dragover"].forEach((ev) => {
+    slotEl.addEventListener(ev, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      slotEl.classList.add("dragover");
+    });
+  });
+  slotEl.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    slotEl.classList.remove("dragover");
+  });
+  slotEl.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    slotEl.classList.remove("dragover");
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file && /^image\//.test(file.type)) loadSlotFromFile(file, setSlot);
+  });
+}
+bindMergeSlot(els.mergeSlotA, els.mergeInputA, (s) => { mergeSlotA = s; });
+bindMergeSlot(els.mergeSlotB, els.mergeInputB, (s) => { mergeSlotB = s; });
+
+function mergeSideBySide(imgA, imgB, force5050) {
+  const H = Math.max(imgA.naturalHeight, imgB.naturalHeight);
+  let aw, bw;
+  if (force5050) {
+    // Pick the larger of the two scaled-to-H widths so neither half loses
+    // resolution relative to its source. Both halves get that width.
+    const aScaled = imgA.naturalWidth * (H / imgA.naturalHeight);
+    const bScaled = imgB.naturalWidth * (H / imgB.naturalHeight);
+    aw = bw = Math.round(Math.max(aScaled, bScaled));
+  } else {
+    aw = Math.round(imgA.naturalWidth * (H / imgA.naturalHeight));
+    bw = Math.round(imgB.naturalWidth * (H / imgB.naturalHeight));
+  }
+  const off = document.createElement("canvas");
+  off.width = aw + bw;
+  off.height = H;
+  const octx = off.getContext("2d");
+  octx.imageSmoothingQuality = "high";
+  octx.drawImage(imgA, 0, 0, aw, H);
+  octx.drawImage(imgB, aw, 0, bw, H);
+  return off;
+}
+
+els.mergeGo.addEventListener("click", () => {
+  if (!mergeSlotA || !mergeSlotB) return;
+  const merged = mergeSideBySide(mergeSlotA.img, mergeSlotB.img, els.merge5050.checked);
+  const stripExt = (n) => n.replace(/\.[^.]+$/, "");
+  const name = `${stripExt(mergeSlotA.name)}+${stripExt(mergeSlotB.name)}.png`;
+  applySourceImage(name, merged);
+  toast(`Merged ${merged.width}×${merged.height} loaded.`, "good");
+});
 
 function setControlsEnabled(on) {
   els.rotateBtn.disabled    = !on;
@@ -687,12 +1016,17 @@ els.rotateBtn.addEventListener("click", () => {
     if (c.kind === "ellipse") {
       return { kind: "ellipse", cx: h - 1 - c.cy, cy: c.cx, rx: c.ry, ry: c.rx };
     }
-    if (c.kind === "restore") {
+    if (c.kind === "restore" || c.kind === "erase") {
       // Each stamp's (x, y) rotates the same way as any other point; r
       // stays put because the brush is a circle (rotation-invariant).
+      // Square stamps stay axis-aligned squares after a 90° rotation.
       return {
-        kind: "restore",
-        strokes: c.strokes.map((st) => ({ x: h - 1 - st.y, y: st.x, r: st.r })),
+        kind: c.kind,
+        strokes: c.strokes.map((st) => ({
+          x: h - 1 - st.y, y: st.x, r: st.r,
+          shape: st.shape || "round",
+          hardness: (st.hardness == null) ? 100 : st.hardness,
+        })),
       };
     }
     return c;
@@ -703,6 +1037,9 @@ els.rotateBtn.addEventListener("click", () => {
   // Clear the active region overlay — its coords are also stale now.
   boundedRegion = null;
   updateActiveRegionOverlay();
+  // Drop the redo stack — preserving it would require rotating its
+  // entries too. Cheaper to forfeit redo across a rotate.
+  redoStack = [];
   applyMask();
   fitZoom();
   updateCanvasStat();
@@ -712,23 +1049,82 @@ els.rotateBtn.addEventListener("click", () => {
 // Tool switching
 // ─────────────────────────────────────────────────────────────────────────────
 
-els.toolRadios.forEach((r) => {
-  r.addEventListener("change", () => {
-    currentTool = r.value;
-    els.canvas.classList.toggle("tool-region", currentTool === "region");
-    // Switching tools mid-edit discards the in-progress shape so the user
-    // doesn't have to manually Cancel before drawing differently.
-    if (editingShape) cancelShapeEdit();
-    // The yellow region overlay is the "Click in region" tool's state.
-    // It would be confusing for it to linger after switching to e.g.
-    // polygon — clear it out.
-    if (currentTool !== "bounded") {
-      boundedRegion = null;
-      updateActiveRegionOverlay();
-    }
-    // Abandon any half-drawn brush stroke. The caller can't have
-    // mouseup'd yet (we'd already be done), so this is the safe drop.
-    brushStroke = null;
+els.toolBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    selectTool(btn.dataset.tool);
+  });
+});
+
+function selectTool(tool) {
+  if (!TOOL_LABELS[tool]) return;
+  currentTool = tool;
+  els.toolBtns.forEach((b) => b.classList.toggle("active", b.dataset.tool === tool));
+  els.activeToolLabel.textContent = TOOL_LABELS[tool];
+  els.toolOptionGroups.forEach((g) => {
+    const tools = (g.dataset.tools || "").split(/\s+/);
+    g.classList.toggle("hidden", !tools.includes(tool));
+  });
+  els.canvas.classList.toggle("tool-region", tool === "region");
+  // Switching tools mid-edit discards the in-progress shape so the user
+  // doesn't have to manually Cancel before drawing differently.
+  if (editingShape) cancelShapeEdit();
+  // The yellow region overlay is the "Click in region" tool's state.
+  // It would be confusing for it to linger after switching to e.g.
+  // polygon — clear it out.
+  if (tool !== "bounded") {
+    boundedRegion = null;
+    updateActiveRegionOverlay();
+  }
+  // Abandon any half-drawn brush stroke; hide the live brush cursor
+  // unless we're back on the restore tool with the mouse over canvas.
+  brushStroke = null;
+  const isBrush = (tool === "restore" || tool === "erase");
+  if (!isBrush) els.brushCursor.classList.remove("on");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live brush cursor — circle/square outline that follows the mouse over
+// the canvas while the restore-brush tool is active. Sized in CSS pixels
+// = 2 * brushSize * zoom, so it always matches the area a click would
+// actually affect. An inner dashed ring shows the hard-core radius at
+// the current Hardness slider value.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function syncBrushCursorSize() {
+  if (!els.brushCursor) return;
+  const r = clampInt(parseInt(els.brushSize.value, 10), 1, 200);
+  const hardness = clampInt(parseInt(els.brushHardness.value, 10), 0, 100);
+  const diameter = 2 * r * zoom;
+  els.brushCursor.style.width  = diameter + "px";
+  els.brushCursor.style.height = diameter + "px";
+  els.brushCursor.style.setProperty("--hard-ratio", (hardness / 100).toString());
+}
+
+function showBrushCursorAt(clientX, clientY) {
+  if (!originalData) return;
+  if (currentTool !== "restore" && currentTool !== "erase") return;
+  const rect = els.canvasHost.getBoundingClientRect();
+  els.brushCursor.style.left = (clientX - rect.left) + "px";
+  els.brushCursor.style.top  = (clientY - rect.top)  + "px";
+  els.brushCursor.classList.add("on");
+}
+
+function hideBrushCursor() {
+  els.brushCursor.classList.remove("on");
+}
+
+els.canvas.addEventListener("mouseenter", (e) => showBrushCursorAt(e.clientX, e.clientY));
+els.canvas.addEventListener("mousemove",  (e) => showBrushCursorAt(e.clientX, e.clientY));
+els.canvas.addEventListener("mouseleave", () => hideBrushCursor());
+
+// Brush-shape segmented buttons (Round / Square)
+els.brushShapeRow.querySelectorAll(".seg").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    brushShape = btn.dataset.shape;
+    els.brushShapeRow.querySelectorAll(".seg").forEach(
+      (b) => b.classList.toggle("active", b === btn));
+    els.brushCursor.classList.toggle("shape-square", brushShape === "square");
+    els.brushCursor.classList.toggle("shape-round",  brushShape === "round");
   });
 });
 
@@ -741,6 +1137,11 @@ els.threshold.addEventListener("input", () => {
 });
 els.brushSize.addEventListener("input", () => {
   els.brushSizeVal.textContent = els.brushSize.value;
+  syncBrushCursorSize();
+});
+els.brushHardness.addEventListener("input", () => {
+  els.brushHardnessVal.textContent = els.brushHardness.value;
+  syncBrushCursorSize();
 });
 els.threshold.addEventListener("change", () => {
   // Live-update the most-recent colour click (with or without region)
@@ -755,18 +1156,55 @@ els.threshold.addEventListener("change", () => {
 });
 els.feather.addEventListener("change", () => { if (originalData) applyMask(); });
 
+// Every new edit goes through this helper so the redo stack stays
+// coherent — once the user makes a fresh edit, the previous redo branch
+// is no longer reachable and would resurrect stale operations.
+function pushClick(c) {
+  clicks.push(c);
+  redoStack = [];
+}
+
 els.undoBtn.addEventListener("click", () => {
   if (clicks.length === 0) return;
-  clicks.pop();
+  redoStack.push(clicks.pop());
+  updateHistory();
+  applyMask();
+});
+els.redoBtn.addEventListener("click", () => {
+  if (redoStack.length === 0) return;
+  // Direct push — going through pushClick would wipe the redo stack
+  // and break the user's ability to redo multiple steps.
+  clicks.push(redoStack.pop());
   updateHistory();
   applyMask();
 });
 els.resetEdits.addEventListener("click", () => {
   if (clicks.length === 0) return;
   if (!confirm("Discard all edits and start from the loaded image?")) return;
-  clicks = [];
+  // Pushing everything to redoStack reversed so a single Redo brings back
+  // the most recent edit; full reverting is one click per entry.
+  while (clicks.length) redoStack.push(clicks.pop());
   updateHistory();
   applyMask();
+});
+
+// Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo. Ignored
+// while focus is on a text input so users can still type into hypothetical
+// future text fields.
+document.addEventListener("keydown", (e) => {
+  if (!originalData) return;
+  const tag = (e.target && e.target.tagName) || "";
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (!ctrl) return;
+  const k = e.key.toLowerCase();
+  if (k === "z" && !e.shiftKey) {
+    e.preventDefault();
+    els.undoBtn.click();
+  } else if ((k === "z" && e.shiftKey) || k === "y") {
+    e.preventDefault();
+    els.redoBtn.click();
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -790,7 +1228,7 @@ function clampY(y) { return Math.max(0, Math.min(els.canvas.height - 1, y)); }
 
 els.canvas.addEventListener("mousedown", (e) => {
   if (!originalData) return;
-  if (currentTool === "restore") {
+  if (currentTool === "restore" || currentTool === "erase") {
     const { x, y } = canvasPx(e);
     brushStroke = [];
     stampBrushAt(x, y);
@@ -899,7 +1337,8 @@ window.addEventListener("mouseup", () => {
   // so undo treats one drag as one operation.
   if (brushStroke) {
     if (brushStroke.length > 0) {
-      clicks.push({ kind: "restore", strokes: brushStroke });
+      const kind = (currentTool === "erase") ? "erase" : "restore";
+      pushClick({ kind, strokes: brushStroke });
       updateHistory();
       applyMask();   // re-apply with feather so the rim looks consistent
     }
@@ -952,7 +1391,7 @@ window.addEventListener("mouseup", () => {
     const b = originalData.data[i + 2];
     const a = originalData.data[i + 3];
     if (a === 0) return;
-    clicks.push({
+    pushClick({
       kind: "color", r, g, b,
       threshold: parseInt(els.threshold.value, 10),
       region: { ...boundedRegion },
@@ -971,7 +1410,7 @@ window.addEventListener("mouseup", () => {
   const x1 = Math.min(els.canvas.width  - 1, Math.max(a.x, b.x));
   const y1 = Math.min(els.canvas.height - 1, Math.max(a.y, b.y));
   if (x1 - x0 < 4 || y1 - y0 < 4) return;
-  clicks.push({ kind: "region", x0, y0, x1, y1 });
+  pushClick({ kind: "region", x0, y0, x1, y1 });
   updateHistory();
   applyMask();
 });
@@ -997,7 +1436,7 @@ els.canvas.addEventListener("click", (e) => {
   const b = originalData.data[i + 2];
   const a = originalData.data[i + 3];
   if (a === 0) return;
-  clicks.push({ kind: "color", r, g, b, threshold: parseInt(els.threshold.value, 10) });
+  pushClick({ kind: "color", r, g, b, threshold: parseInt(els.threshold.value, 10) });
   updateHistory();
   applyMask();
 });
@@ -1193,7 +1632,7 @@ els.shapeConfirm.addEventListener("click", () => {
     toast("Ellipse is too small.", "bad");
     return;
   }
-  clicks.push(editingShape);
+  pushClick(editingShape);
   cancelShapeEdit();
   updateHistory();
   applyMask();
@@ -1279,7 +1718,7 @@ function applyMask() {
         compiled[i] = { kind: "color", r: c.r, g: c.g, b: c.b,
                         t2: c.threshold * c.threshold,
                         region: c.region || null };
-      } else if (c.kind === "restore") {
+      } else if (c.kind === "restore" || c.kind === "erase") {
         let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
         for (let s = 0; s < c.strokes.length; s++) {
           const st = c.strokes[s];
@@ -1288,7 +1727,7 @@ function applyMask() {
           if (st.x + st.r > xMax) xMax = st.x + st.r;
           if (st.y + st.r > yMax) yMax = st.y + st.r;
         }
-        compiled[i] = { kind: "restore", strokes: c.strokes,
+        compiled[i] = { kind: c.kind, strokes: c.strokes,
                         bbox: { xMin, yMin, xMax, yMax } };
       } else {
         compiled[i] = c;
@@ -1319,16 +1758,46 @@ function applyMask() {
               const dy = (y - c.cy) / c.ry;
               if (dx * dx + dy * dy <= 1) alpha = 0;
             }
-          } else if (c.kind === "restore") {
+          } else if (c.kind === "restore" || c.kind === "erase") {
             if (x < c.bbox.xMin || x > c.bbox.xMax ||
                 y < c.bbox.yMin || y > c.bbox.yMax) continue;
+            // Find the maximum stamp factor across all stamps hitting
+            // this pixel — overlapping soft stamps then act as ONE big
+            // stamp at the strongest local factor, instead of each
+            // partial stamp cancelling the others.
+            let maxFactor = 0;
+            const origA = orig[p + 3];
             for (let s = 0; s < c.strokes.length; s++) {
               const st = c.strokes[s];
               const dx = x - st.x, dy = y - st.y;
-              if (dx * dx + dy * dy <= st.r * st.r) {
-                alpha = orig[p + 3];
-                break;
+              const r = st.r;
+              const hardness = (st.hardness == null) ? 100 : st.hardness;
+              let dist;
+              if (st.shape === "square") {
+                const ax = Math.abs(dx), ay = Math.abs(dy);
+                if (ax > r || ay > r) continue;
+                dist = ax > ay ? ax : ay;
+              } else {
+                const d2 = dx * dx + dy * dy;
+                if (d2 > r * r) continue;
+                dist = Math.sqrt(d2);
               }
+              const hardR = r * hardness / 100;
+              let factor = 1;
+              if (dist > hardR) factor = (r - dist) / Math.max(1e-3, r - hardR);
+              if (factor > maxFactor) maxFactor = factor;
+              if (maxFactor >= 1) break;
+            }
+            if (maxFactor <= 0) continue;
+            if (c.kind === "restore") {
+              const contrib = origA * maxFactor;
+              if (contrib > alpha) alpha = contrib;
+            } else {
+              // Erase: drive alpha down toward origA*(1-factor). min-merge
+              // so a hard center stays fully transparent even if later
+              // overlapping soft stamps would ramp it back up.
+              const target = origA * (1 - maxFactor);
+              if (target < alpha) alpha = target;
             }
           }
         }
@@ -1350,7 +1819,9 @@ function applyMask() {
 function stampBrushAt(cx, cy) {
   if (!originalData || !brushStroke) return;
   const r = clampInt(parseInt(els.brushSize.value, 10), 1, 200);
-  brushStroke.push({ x: clampX(cx), y: clampY(cy), r });
+  const hardness = clampInt(parseInt(els.brushHardness.value, 10), 0, 100);
+  const shape = brushShape;
+  brushStroke.push({ x: clampX(cx), y: clampY(cy), r, shape, hardness });
 
   const w = els.canvas.width, h = els.canvas.height;
   const xMin = Math.max(0, Math.floor(cx - r));
@@ -1362,17 +1833,48 @@ function stampBrushAt(cx, cy) {
   const img = ctx.getImageData(xMin, yMin, bw, bh);
   const buf = img.data;
   const orig = originalData.data;
-  const r2 = r * r;
+  // Hard-core radius — alpha is 100 % up to here, then ramps linearly to
+  // 0 at the outer radius. hardness=100 → hardR=r → no soft band (legacy
+  // behaviour). hardness=0 → hardR=0 → soft gradient all the way through.
+  const hardR = r * hardness / 100;
+  const softBand = Math.max(1e-3, r - hardR);
   for (let yy = 0; yy < bh; yy++) {
     const py = yMin + yy;
     const dy = py - cy;
     for (let xx = 0; xx < bw; xx++) {
       const px = xMin + xx;
       const dx = px - cx;
-      if (dx * dx + dy * dy > r2) continue;
+      let inside, dist;
+      if (shape === "square") {
+        const ax = Math.abs(dx), ay = Math.abs(dy);
+        inside = ax <= r && ay <= r;
+        // Chebyshev distance for square — same falloff model
+        dist = Math.max(ax, ay);
+      } else {
+        const d2 = dx * dx + dy * dy;
+        inside = d2 <= r * r;
+        dist = inside ? Math.sqrt(d2) : 0;
+      }
+      if (!inside) continue;
+      let factor = 1;
+      if (dist > hardR) factor = (r - dist) / softBand;
+      if (factor <= 0) continue;
       const localIdx = (yy * bw + xx) * 4;
       const origIdx  = (py * w + px) * 4;
-      buf[localIdx + 3] = orig[origIdx + 3];
+      const origA   = orig[origIdx + 3];
+      if (currentTool === "erase") {
+        // Erase mode: drive alpha DOWN towards (origA * (1 - factor)).
+        // min-merge so a soft edge can't re-add opacity that a previous
+        // hard stamp already removed.
+        const target = origA * (1 - factor);
+        if (target < buf[localIdx + 3]) buf[localIdx + 3] = target;
+      } else {
+        // Restore mode: bring alpha UP towards (origA * factor).
+        // Max-merge so overlapping soft stamps don't punch holes in
+        // each other's edges.
+        const target = origA * factor;
+        if (target > buf[localIdx + 3]) buf[localIdx + 3] = target;
+      }
     }
   }
   ctx.putImageData(img, xMin, yMin);
@@ -1544,6 +2046,7 @@ function setZoom(z) {
   // Re-render so handle radii stay near constant on-screen size.
   if (editingShape) renderShapeOverlay();
   updateActiveRegionOverlay();
+  syncBrushCursorSize();
 }
 
 function fitZoom() {
@@ -1614,11 +2117,16 @@ function updateHistory() {
       row.innerHTML =
         '<span class="swatch" style="background:#9d9"></span>' +
         '<span class="label">#' + (i + 1) + ' restore · ' + c.strokes.length + ' stamps</span>';
+    } else if (c.kind === "erase") {
+      row.innerHTML =
+        '<span class="swatch" style="background:#c66"></span>' +
+        '<span class="label">#' + (i + 1) + ' erase · ' + c.strokes.length + ' stamps</span>';
     }
     els.history.appendChild(row);
   });
   const has = clicks.length > 0;
   els.undoBtn.disabled    = !has;
+  els.redoBtn.disabled    = redoStack.length === 0;
   els.resetEdits.disabled = !has;
 }
 
@@ -1641,6 +2149,15 @@ function escapeHtml(s) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[ch]));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Initial UI state — apply the default tool's option visibility, prime the
+// brush cursor size, and render the (empty) merge slot placeholders so the
+// drop-target hint shows from the start.
+// ─────────────────────────────────────────────────────────────────────────────
+selectTool(currentTool);
+syncBrushCursorSize();
+updateMergeUI();
 </script>
 </body>
 </html>

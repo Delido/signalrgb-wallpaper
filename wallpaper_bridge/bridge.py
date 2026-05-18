@@ -162,7 +162,7 @@ class FullscreenWatcher:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.4.3"
+APP_VERSION = "0.4.5"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
