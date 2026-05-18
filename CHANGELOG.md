@@ -4,6 +4,33 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-05-18
+
+### Fixed
+
+- **Settings dialog buttons no longer disappear off the bottom of the
+  window.** Save / Close are now in a sticky bottom bar packed before
+  the notebook (`side="bottom"` first), so they remain anchored no
+  matter how the window is resized or how many sliders are visible on
+  a tab.
+
+### Changed
+
+- **Settings dialog UX overhaul.** Each setting now has a bold label,
+  the control, and a short help-text paragraph underneath explaining
+  what the knob actually does. The tab content is wrapped in a
+  scrollable canvas (mouse-wheel works while the pointer is over it),
+  so the per-screen panel fits any window size cleanly. Default window
+  size bumped to 740×720, resizable down to 620×540.
+- Global "SignalRGB device count" and "Auto-pause" sections each got
+  the same help-text treatment so it's obvious what each does.
+
+### Added (docs)
+
+- README **Gallery** section now shows four real screenshots: the
+  in-browser builder, the Lively library with branded tiles, the
+  SignalRGB device list, and the SignalRGB device-settings page.
+
 ## [0.4.2] - 2026-05-18
 
 ### Added

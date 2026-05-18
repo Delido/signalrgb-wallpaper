@@ -53,36 +53,18 @@ whatever colour your current effect is producing right now.
 
 ## Gallery
 
-> _Screenshots coming. The four captures planned for this section —
-> drop them into [`docs/images/`](docs/images/) with the filenames
-> below and uncomment the table to make them appear._
-
 <!-- markdownlint-disable MD013 -->
-<!--
-  When you have these PNGs in docs/images/, delete the block above and
-  uncomment the table below. Suggested captures, 1280 px wide, PNG:
 
-    docs/images/screenshot-desktop.png   — final wallpaper rendered with glow
-                                          (turn on the colour-cycle effect in
-                                          SignalRGB, take a desktop screenshot)
-    docs/images/screenshot-builder.png   — the in-browser builder mid-edit
-                                          (Tray → "Build Wallpaper…", load any
-                                          image, click a few areas transparent)
-    docs/images/screenshot-tray.png      — the tray Settings dialog with a
-                                          screen tab open
-    docs/images/screenshot-multi.png     — two monitors side-by-side both
-                                          showing the wallpaper
+| | |
+| :---: | :---: |
+| ![In-browser builder](docs/images/screenshot-builder.jpg) <br/> _**In-browser builder** — click colours to make them transparent, drag rectangles / polygons / ellipses, restore-brush over mistakes, save or apply straight to a screen_ | ![SignalRGB devices](docs/images/screenshot-signalrgb-devices.png) <br/> _**SignalRGB device list** — one virtual "Desktop Wallpaper" device per monitor, all under a single plugin_ |
+| ![Lively library tiles](docs/images/screenshot-lively-library.png) <br/> _**Lively library** — branded tile thumbnails so you can find the wallpapers among everything else you've imported_ | ![SignalRGB device settings](docs/images/screenshot-signalrgb-device-settings.png) <br/> _**SignalRGB device settings** — grid size, target FPS, bridge port; the canvas placement controls live in SignalRGB's Layouts view_ |
 
-  | | |
-  | :---: | :---: |
-  | ![Desktop with glow](docs/images/screenshot-desktop.png) <br/> _Final wallpaper rendering with cut-outs lit by the live effect_ | ![In-browser builder](docs/images/screenshot-builder.png) <br/> _The in-browser builder — click colours to make them transparent_ |
-  | ![Tray settings](docs/images/screenshot-tray.png) <br/> _Per-screen settings, applied live without re-import_ | ![Multi-monitor](docs/images/screenshot-multi.png) <br/> _Multiple monitors driven independently from one SignalRGB canvas_ |
--->
 <!-- markdownlint-enable MD013 -->
 
-A short demo video of the builder + a multi-monitor scene would also be
-ideal here — even a 15-second screen recording dropped as a GIF
-(`docs/images/demo.gif`) is enough.
+A short demo video of the builder + a multi-monitor scene would also
+be a nice add here — even a 15-second screen recording dropped as a
+GIF (`docs/images/demo.gif`) is enough.
 
 ## Requirements
 

@@ -162,7 +162,7 @@ class FullscreenWatcher:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.4.2"
+APP_VERSION = "0.4.3"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
@@ -822,161 +822,282 @@ class SettingsDialog:
     def show(self):
         self.root = tk.Tk()
         self.root.title("SignalRGB Wallpaper — Settings")
-        self.root.geometry("540x520")
-        self.root.minsize(500, 460)
+        self.root.geometry("740x720")
+        self.root.minsize(620, 540)
 
-        # Global section: how many screens to expose as SignalRGB devices.
-        # Lives ABOVE the per-screen notebook because it's a one-knob global
-        # setting, not a per-screen thing. The SignalRGB plugin polls the
-        # bridge's /config endpoint and adjusts its announced controller
-        # count to match this value.
+        # ── STICKY BOTTOM BUTTON BAR ───────────────────────────────────────
+        # Packed FIRST with side="bottom" so it stays anchored even when the
+        # notebook above scrolls or the window is resized small. Previous
+        # layout could push the buttons off-screen on shorter windows.
+        btn_bar = ttk.Frame(self.root)
+        btn_bar.pack(side="bottom", fill="x", padx=12, pady=10)
+        ttk.Button(btn_bar, text="Close", command=self._on_close).pack(side="right")
+        ttk.Button(btn_bar, text="Save",  command=self._on_save).pack(side="right", padx=(0, 8))
+        self._saved_label = ttk.Label(btn_bar, text="", foreground="#2a8a2a")
+        self._saved_label.pack(side="left")
+
+        # ── GLOBAL: SignalRGB device count ────────────────────────────────
         global_frame = ttk.LabelFrame(self.root, text="SignalRGB device count")
-        global_frame.pack(fill="x", padx=8, pady=(8, 4))
-        ttk.Label(global_frame, text="Number of screens:").pack(side="left", padx=(8, 6), pady=8)
+        global_frame.pack(fill="x", padx=12, pady=(12, 4))
+        row1 = ttk.Frame(global_frame)
+        row1.pack(fill="x", padx=10, pady=(10, 2))
+        ttk.Label(row1, text="Number of screens:",
+                  font=("Segoe UI", 9, "bold")).pack(side="left")
         sc_var = tk.IntVar(value=int(self.config.get("screenCount", 1)))
         self.global_vars["screenCount"] = sc_var
-        sc_combo = ttk.Combobox(global_frame, textvariable=sc_var, values=[1, 2, 3],
-                                state="readonly", width=4)
-        sc_combo.pack(side="left", pady=8)
-        ttk.Label(global_frame, text="(SignalRGB will show this many 'Desktop Wallpaper' devices)",
-                  foreground="#666").pack(side="left", padx=(8, 0), pady=8)
+        ttk.Combobox(row1, textvariable=sc_var, values=[1, 2, 3],
+                     state="readonly", width=4).pack(side="left", padx=(8, 0))
+        ttk.Label(
+            global_frame,
+            text="How many virtual 'Desktop Wallpaper' devices SignalRGB exposes. "
+                 "Each gets its own canvas slot in SignalRGB's Layouts view, so "
+                 "different monitors can be driven with different colours pulled "
+                 "from one SignalRGB effect.",
+            foreground="#666", font=("Segoe UI", 9), wraplength=680, justify="left",
+        ).pack(anchor="w", padx=10, pady=(0, 10))
 
-        # Auto-pause section — global flag, applies to all screens.
+        # ── GLOBAL: Auto-pause ────────────────────────────────────────────
         autopause_frame = ttk.LabelFrame(self.root, text="Auto-pause")
-        autopause_frame.pack(fill="x", padx=8, pady=(0, 4))
+        autopause_frame.pack(fill="x", padx=12, pady=(0, 4))
         fs_var = tk.BooleanVar(value=bool(self.config.get("fullscreenPause", True)))
         self.global_vars["fullscreenPause"] = fs_var
         ttk.Checkbutton(
             autopause_frame,
-            text="Pause glow when a fullscreen application is active "
-                 "(fullscreen game / video / RDP session)",
+            text="Pause glow when a fullscreen application is active",
             variable=fs_var,
-        ).pack(anchor="w", padx=8, pady=8)
+        ).pack(anchor="w", padx=10, pady=(10, 0))
+        ttk.Label(
+            autopause_frame,
+            text="Detects fullscreen games, video players, and RDP sessions. "
+                 "The glow freezes on its last drawn colours, CPU is saved, and "
+                 "playback resumes within ~1 second when you leave fullscreen.",
+            foreground="#666", font=("Segoe UI", 9), wraplength=680, justify="left",
+        ).pack(anchor="w", padx=30, pady=(0, 10))
 
+        # ── PER-SCREEN NOTEBOOK (each tab is independently scrollable) ───
         notebook = ttk.Notebook(self.root)
-        notebook.pack(fill="both", expand=True, padx=8, pady=(4, 0))
-
+        notebook.pack(fill="both", expand=True, padx=12, pady=(8, 0))
         for n in range(N_SCREENS):
             tab = ttk.Frame(notebook)
             notebook.add(tab, text=f"Screen {n+1}")
-            self.vars.append(self._build_tab(tab, n))
-
-        btn_row = ttk.Frame(self.root)
-        btn_row.pack(fill="x", padx=8, pady=8)
-        # Close just dismisses the window. Save persists + pushes but keeps
-        # the dialog open so the user can iterate / test / tweak the next
-        # screen tab without re-opening.
-        ttk.Button(btn_row, text="Close", command=self._on_close).pack(side="right")
-        ttk.Button(btn_row, text="Save",  command=self._on_save).pack(side="right", padx=(0, 6))
-        # Inline confirmation label, left-aligned. Empty until first save.
-        self._saved_label = ttk.Label(btn_row, text="", foreground="#2a8a2a")
-        self._saved_label.pack(side="left", padx=(2, 0))
+            scrollable = self._make_scrollable(tab)
+            self.vars.append(self._build_tab(scrollable, n))
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.mainloop()
 
-    # -- tab construction ---------------------------------------------------
+    # -- helpers -----------------------------------------------------------
 
-    def _build_tab(self, parent: ttk.Frame, screen: int) -> dict[str, tk.Variable]:
+    def _make_scrollable(self, parent: ttk.Frame) -> ttk.Frame:
+        """Wrap a notebook tab's content in a vertically-scrollable Canvas.
+        Returns the inner Frame to add controls into. The classic tk
+        scroll trick: Canvas + Scrollbar + Frame-in-create_window, with
+        <Configure> bindings to keep scrollregion and width in sync."""
+        canvas = tk.Canvas(parent, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner = ttk.Frame(canvas)
+        canvas_window = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        inner.bind("<Configure>",
+                   lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfig(canvas_window, width=e.width))
+
+        # Mouse wheel — bind only while the pointer is inside this canvas
+        # so other widgets on the page still get their own wheel events.
+        def _bind_wheel(_e):
+            canvas.bind_all("<MouseWheel>",
+                            lambda ev: canvas.yview_scroll(int(-1 * (ev.delta / 120)), "units"))
+        def _unbind_wheel(_e):
+            canvas.unbind_all("<MouseWheel>")
+        canvas.bind("<Enter>", _bind_wheel)
+        canvas.bind("<Leave>", _unbind_wheel)
+        inner.bind("<Enter>", _bind_wheel)
+        inner.bind("<Leave>", _unbind_wheel)
+
+        return inner
+
+    def _setting_block(self, parent, label: str, build_control, help_text: str | None = None):
+        """One vertically-stacked setting: bold label, control row, optional
+        dim help text. Each block packs into the scrollable parent, so the
+        whole tab flows naturally without grid-row arithmetic."""
+        block = ttk.Frame(parent)
+        block.pack(fill="x", padx=14, pady=(12, 0))
+        ttk.Label(block, text=label, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        ctrl = ttk.Frame(block)
+        ctrl.pack(fill="x", pady=(4, 2))
+        build_control(ctrl)
+        if help_text:
+            ttk.Label(
+                block, text=help_text, foreground="#666",
+                font=("Segoe UI", 9), wraplength=600, justify="left",
+            ).pack(anchor="w", pady=(0, 4))
+
+    def _slider_inline(self, parent, var: tk.IntVar, lo: int, hi: int):
+        scale = ttk.Scale(parent, from_=lo, to=hi, variable=var,
+                          command=lambda v: var.set(int(float(v))))
+        scale.pack(side="left", fill="x", expand=True)
+        ttk.Label(parent, textvariable=var, width=5, anchor="e"
+                 ).pack(side="right", padx=(8, 0))
+
+    # -- tab construction --------------------------------------------------
+
+    def _build_tab(self, parent, screen: int) -> dict[str, tk.Variable]:
         s = self.config["screens"][str(screen)]
         vars_: dict[str, tk.Variable] = {}
 
-        row = 0
         # Background image picker
-        ttk.Label(parent, text="Background image:").grid(row=row, column=0, sticky="w", padx=6, pady=(8, 2))
-        bg_var = tk.StringVar(value=s["bgImage"])
-        vars_["bgImage"] = bg_var
-        entry = ttk.Entry(parent, textvariable=bg_var)
-        entry.grid(row=row, column=1, sticky="we", padx=6, pady=(8, 2))
-        ttk.Button(parent, text="Browse…", command=lambda v=bg_var: self._pick_image(v)).grid(row=row, column=2, padx=6, pady=(8, 2))
-        row += 1
+        def _bg(p):
+            bg_var = tk.StringVar(value=s["bgImage"])
+            vars_["bgImage"] = bg_var
+            ttk.Entry(p, textvariable=bg_var).pack(side="left", fill="x", expand=True)
+            ttk.Button(p, text="Browse…",
+                       command=lambda: self._pick_image(bg_var)).pack(side="right", padx=(8, 0))
+        self._setting_block(
+            parent, "Background image", _bg,
+            "Image displayed behind the glow layer. Use a PNG with transparent "
+            "regions where you want the SignalRGB colours to shine through — JPG "
+            "and WebP also work for fully-opaque backgrounds. Tip: the "
+            "Build Wallpaper… tray menu can carve transparency out of any image.",
+        )
 
         # Image fit
-        ttk.Label(parent, text="Image fit:").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        fit_var = tk.StringVar(value=s["bgFit"] if s["bgFit"] in BG_FIT_CHOICES else "cover")
-        vars_["bgFit"] = fit_var
-        ttk.OptionMenu(parent, fit_var, fit_var.get(), *BG_FIT_CHOICES).grid(row=row, column=1, sticky="we", padx=6, pady=2)
-        row += 1
+        def _fit(p):
+            fit_var = tk.StringVar(value=s["bgFit"] if s["bgFit"] in BG_FIT_CHOICES else "cover")
+            vars_["bgFit"] = fit_var
+            ttk.OptionMenu(p, fit_var, fit_var.get(), *BG_FIT_CHOICES
+                          ).pack(side="left", fill="x", expand=True)
+        self._setting_block(
+            parent, "Image fit", _fit,
+            "How the background image fills the screen. 'cover' preserves aspect "
+            "ratio and crops the overflowing edges; 'contain' shows the whole "
+            "image with letterboxing; 'fill' stretches it to exactly the screen "
+            "dimensions (will distort).",
+        )
 
         # Image dim
-        ttk.Label(parent, text="Image dim (%):").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        dim_var = tk.IntVar(value=int(s["bgDim"]))
-        vars_["bgDim"] = dim_var
-        self._slider(parent, dim_var, 0, 100, row, column=1)
-        row += 1
+        def _dim(p):
+            dim_var = tk.IntVar(value=int(s["bgDim"]))
+            vars_["bgDim"] = dim_var
+            self._slider_inline(p, dim_var, 0, 100)
+        self._setting_block(
+            parent, "Image dim (%)", _dim,
+            "Darkens the background image. 0 = original brightness, 100 = fully "
+            "black. Useful when the wallpaper is bright and competes with the "
+            "glow — bumping dim to 30-50 makes the colours pop.",
+        )
 
-        # Layout
-        ttk.Label(parent, text="Glow layout:").grid(row=row, column=0, sticky="w", padx=6, pady=(12, 2))
-        layout_var = tk.StringVar(value=s["barLayout"])
-        vars_["barLayout"] = layout_var
-        layout_labels = [label for _key, label in LAYOUT_CHOICES]
-        label_to_key = {label: key for key, label in LAYOUT_CHOICES}
-        current_label = next((label for key, label in LAYOUT_CHOICES if key == layout_var.get()), layout_labels[0])
-        display_var = tk.StringVar(value=current_label)
-        def _on_layout_change(label: str):
-            layout_var.set(label_to_key.get(label, "lay-grid"))
-        ttk.OptionMenu(parent, display_var, current_label, *layout_labels, command=_on_layout_change).grid(row=row, column=1, sticky="we", padx=6, pady=(12, 2))
-        row += 1
+        # Glow layout
+        def _layout(p):
+            layout_var = tk.StringVar(value=s["barLayout"])
+            vars_["barLayout"] = layout_var
+            labels = [label for _key, label in LAYOUT_CHOICES]
+            label_to_key = {label: key for key, label in LAYOUT_CHOICES}
+            current_label = next(
+                (label for key, label in LAYOUT_CHOICES if key == layout_var.get()),
+                labels[0],
+            )
+            display_var = tk.StringVar(value=current_label)
+            def _on_change(lbl: str):
+                layout_var.set(label_to_key.get(lbl, "lay-grid"))
+            ttk.OptionMenu(p, display_var, current_label, *labels, command=_on_change
+                          ).pack(side="left", fill="x", expand=True)
+        self._setting_block(
+            parent, "Glow layout", _layout,
+            "How the colours from SignalRGB are rendered. Pixel Grid (2D) maps "
+            "the full N×N matrix, one cell per LED. Vertical/Horizontal Stripes "
+            "show wide bands across the screen. Centered Pills looks like a "
+            "sound visualiser. Hidden disables the glow (image-only).",
+        )
 
-        # Show glow toggle
-        ttk.Label(parent, text="Enable glow:").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        show_var = tk.BooleanVar(value=bool(s["showBars"]))
-        vars_["showBars"] = show_var
-        ttk.Checkbutton(parent, variable=show_var).grid(row=row, column=1, sticky="w", padx=6, pady=2)
-        row += 1
+        # Enable glow
+        def _show(p):
+            show_var = tk.BooleanVar(value=bool(s["showBars"]))
+            vars_["showBars"] = show_var
+            ttk.Checkbutton(p, text="Show the glow layer", variable=show_var
+                           ).pack(side="left")
+        self._setting_block(
+            parent, "Enable glow", _show,
+            "Master on/off. When off, only the background image is shown — useful "
+            "for previewing the image alone before adding the glow back.",
+        )
 
         # Glow strength
-        ttk.Label(parent, text="Glow strength:").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        gs_var = tk.IntVar(value=int(s["glowStrength"]))
-        vars_["glowStrength"] = gs_var
-        self._slider(parent, gs_var, 0, 200, row, column=1)
-        row += 1
+        def _gs(p):
+            gs_var = tk.IntVar(value=int(s["glowStrength"]))
+            vars_["glowStrength"] = gs_var
+            self._slider_inline(p, gs_var, 0, 200)
+        self._setting_block(
+            parent, "Glow strength (%)", _gs,
+            "Brightness multiplier on the glow layer. 100 = baseline, 200 = "
+            "double-bright (good for dark wallpapers / dim ambient light), "
+            "0 = invisible.",
+        )
 
         # Grid blur
-        ttk.Label(parent, text="Grid blur (px):").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        gb_var = tk.IntVar(value=int(s["gridBlur"]))
-        vars_["gridBlur"] = gb_var
-        self._slider(parent, gb_var, 0, 200, row, column=1)
-        row += 1
+        def _gb(p):
+            gb_var = tk.IntVar(value=int(s["gridBlur"]))
+            vars_["gridBlur"] = gb_var
+            self._slider_inline(p, gb_var, 0, 200)
+        self._setting_block(
+            parent, "Grid blur (px)", _gb,
+            "Softens the seams between adjacent grid cells. 0 = sharp pixel "
+            "grid (visible cells), 200 = creamy gradient across the screen. "
+            "Pixel Grid layout only.",
+        )
 
         # Stripes blur
-        ttk.Label(parent, text="Stripes blur (px):").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        sb_var = tk.IntVar(value=int(s["stripesBlur"]))
-        vars_["stripesBlur"] = sb_var
-        self._slider(parent, sb_var, 0, 200, row, column=1)
-        row += 1
+        def _sb(p):
+            sb_var = tk.IntVar(value=int(s["stripesBlur"]))
+            vars_["stripesBlur"] = sb_var
+            self._slider_inline(p, sb_var, 0, 200)
+        self._setting_block(
+            parent, "Stripes blur (px)", _sb,
+            "Softens the edges between stripes. Vertical/Horizontal Stripes "
+            "layouts only.",
+        )
 
-        # Bar height (pills layout only)
-        ttk.Label(parent, text="Bar height (% — pills):").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        bh_var = tk.IntVar(value=int(s["barHeight"]))
-        vars_["barHeight"] = bh_var
-        self._slider(parent, bh_var, 10, 100, row, column=1)
-        row += 1
+        # Bar height
+        def _bh(p):
+            bh_var = tk.IntVar(value=int(s["barHeight"]))
+            vars_["barHeight"] = bh_var
+            self._slider_inline(p, bh_var, 10, 100)
+        self._setting_block(
+            parent, "Bar height (% of screen)", _bh,
+            "Pill height as a percent of screen height. Centered Pills layout only.",
+        )
 
-        # Bar width (pills layout only)
-        ttk.Label(parent, text="Bar width (‰ — pills):").grid(row=row, column=0, sticky="w", padx=6, pady=2)
-        bw_var = tk.IntVar(value=int(s["barWidth"]))
-        vars_["barWidth"] = bw_var
-        self._slider(parent, bw_var, 1, 50, row, column=1)
-        row += 1
+        # Bar width
+        def _bw(p):
+            bw_var = tk.IntVar(value=int(s["barWidth"]))
+            vars_["barWidth"] = bw_var
+            self._slider_inline(p, bw_var, 1, 50)
+        self._setting_block(
+            parent, "Bar width (‰ of screen)", _bw,
+            "Pill width in per-mille (thousandths) of screen width. Centered "
+            "Pills layout only — keep low for thin bars, raise for chunky ones.",
+        )
 
         # Debug overlay
-        ttk.Label(parent, text="Show debug overlay:").grid(row=row, column=0, sticky="w", padx=6, pady=(12, 2))
-        ss_var = tk.BooleanVar(value=bool(s["showStatus"]))
-        vars_["showStatus"] = ss_var
-        ttk.Checkbutton(parent, variable=ss_var).grid(row=row, column=1, sticky="w", padx=6, pady=(12, 2))
-        row += 1
+        def _dbg(p):
+            ss_var = tk.BooleanVar(value=bool(s["showStatus"]))
+            vars_["showStatus"] = ss_var
+            ttk.Checkbutton(p, text="Show top-left status line", variable=ss_var
+                           ).pack(side="left")
+        self._setting_block(
+            parent, "Show debug overlay", _dbg,
+            "Tiny status line in the top-left of the wallpaper showing the "
+            "bridge connection state and current frame rate. Useful for "
+            "troubleshooting; leave off in normal use.",
+        )
 
-        parent.columnconfigure(1, weight=1)
+        # Bottom padding so the last block has breathing room when scrolled.
+        ttk.Frame(parent, height=12).pack(fill="x")
         return vars_
-
-    def _slider(self, parent, var: tk.IntVar, lo: int, hi: int, row: int, column: int):
-        frame = ttk.Frame(parent)
-        frame.grid(row=row, column=column, sticky="we", padx=6, pady=2)
-        scale = ttk.Scale(frame, from_=lo, to=hi, variable=var,
-                          command=lambda v: var.set(int(float(v))))
-        scale.pack(side="left", fill="x", expand=True)
-        ttk.Label(frame, textvariable=var, width=4, anchor="e").pack(side="right", padx=(6, 0))
 
     def _pick_image(self, var: tk.StringVar):
         path = filedialog.askopenfilename(
