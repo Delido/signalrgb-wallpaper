@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lively Pause Tester</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: #1a3a1a;     /* green by default → flips red on pause */
+    color: #fff;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    overflow: hidden;
+    transition: background 0.25s;
+  }
+  body.paused { background: #4a1a1a; }
+
+  .big {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14vw;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .panel {
+    position: absolute;
+    bottom: 24px; left: 24px;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 18px 22px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 720px;
+    backdrop-filter: blur(6px);
+  }
+  .panel h1 { margin: 0 0 8px 0; font-size: 18px; font-weight: 600; }
+  .panel table { border-collapse: collapse; }
+  .panel td { padding: 2px 12px 2px 0; }
+  .panel td:first-child { color: #aab; }
+  .ok { color: #9fef9f; }
+  .no { color: #ff9090; }
+</style>
+</head>
+<body>
+
+<div class="big" id="big">PLAYING</div>
+
+<div class="panel">
+  <h1>Lively Pause Tester</h1>
+  <p style="margin: 0 0 12px 0; color: #ccd;">
+    Watching three independent ways Lively might pause a Web wallpaper.
+    Whichever one fires, the background flips red. If none fire when you
+    click "Pause Wallpapers" in Lively's tray, your Lively build is not
+    delivering pause to this page at all.
+  </p>
+  <table>
+    <tr><td>livelyWallpaperPlaybackChanged hook:</td><td id="hook-state">never fired</td></tr>
+    <tr><td>document.visibilitychange:</td><td id="vis-state">never fired</td></tr>
+    <tr><td>requestAnimationFrame ticks last second:</td><td id="raf-state">—</td></tr>
+    <tr><td>Composite paused state:</td><td id="composite">PLAYING</td></tr>
+    <tr><td>Page lifetime:</td><td id="uptime">0 s</td></tr>
+  </table>
+</div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const bigEl = $("big"), bodyEl = document.body;
+const hookEl = $("hook-state"), visEl = $("vis-state"), rafEl = $("raf-state"), compEl = $("composite"), upEl = $("uptime");
+
+let hookFiredCount = 0;
+let visFiredCount  = 0;
+let rafTickCount   = 0;
+let lastRafReportAt = performance.now();
+let ticksInLastWindow = 0;
+
+let pausedHook = false;
+let pausedVis  = false;
+let pausedRaf  = false;
+
+function render() {
+  const composite = pausedHook || pausedVis || pausedRaf;
+  bigEl.textContent = composite ? "PAUSED" : "PLAYING";
+  bodyEl.classList.toggle("paused", composite);
+  compEl.textContent = composite ? "PAUSED" : "PLAYING";
+  compEl.className = composite ? "no" : "ok";
+}
+
+// 1) Lively's documented JS hook ──────────────────────────────────────
+window.livelyWallpaperPlaybackChanged = function (state) {
+  hookFiredCount++;
+  let parsed = state;
+  if (typeof state === "string") {
+    try { parsed = JSON.parse(state); } catch (_) {}
+  }
+  let isPaused;
+  if (typeof parsed === "boolean") {
+    isPaused = !parsed;
+  } else if (parsed && typeof parsed === "object") {
+    if      ("IsPaused"  in parsed) isPaused = !!parsed.IsPaused;
+    else if ("IsRunning" in parsed) isPaused = !parsed.IsRunning;
+    else if ("IsPlaying" in parsed) isPaused = !parsed.IsPlaying;
+    else isPaused = false;
+  } else {
+    isPaused = false;
+  }
+  pausedHook = isPaused;
+  hookEl.innerHTML =
+    "<span class='" + (isPaused ? "no" : "ok") + "'>" +
+    (isPaused ? "PAUSED" : "PLAYING") + "</span>  (fired " +
+    hookFiredCount + "×, raw: <code>" + escapeHtml(JSON.stringify(state)) + "</code>)";
+  render();
+};
+
+// 2) Standard HTML visibility API ─────────────────────────────────────
+document.addEventListener("visibilitychange", () => {
+  visFiredCount++;
+  pausedVis = document.hidden;
+  visEl.innerHTML =
+    "<span class='" + (pausedVis ? "no" : "ok") + "'>" +
+    (pausedVis ? "hidden" : "visible") + "</span>  (fired " +
+    visFiredCount + "×)";
+  render();
+});
+// initial state
+visEl.innerHTML = "<span class='ok'>visible</span>  (never fired yet)";
+
+// 3) rAF tick-rate probe — works even when neither of the above fires.
+//    requestAnimationFrame stops being called by the browser when the
+//    render process is suspended. setInterval keeps running. So if rAF
+//    doesn't tick during a 500 ms window, rendering is paused.
+(function rafLoop() {
+  rafTickCount++;
+  ticksInLastWindow++;
+  requestAnimationFrame(rafLoop);
+})();
+
+const startedAt = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  const elapsed = (now - lastRafReportAt) / 1000;
+  const ticksPerSec = ticksInLastWindow / Math.max(0.001, elapsed);
+  ticksInLastWindow = 0;
+  lastRafReportAt = now;
+  pausedRaf = (ticksPerSec < 2);  // less than 2 ticks/s = clearly suspended
+  rafEl.innerHTML =
+    "<span class='" + (pausedRaf ? "no" : "ok") + "'>" +
+    ticksPerSec.toFixed(1) + " ticks/s</span>  (total " + rafTickCount + ")";
+  upEl.textContent = ((now - startedAt) / 1000).toFixed(1) + " s";
+  render();
+}, 1000);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+</script>
+</body>
+</html>

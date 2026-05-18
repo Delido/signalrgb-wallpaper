@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import mimetypes
@@ -66,12 +68,101 @@ def _resource_path(rel: str) -> Path:
         return Path(base) / rel
     return Path(__file__).parent / rel
 
+
+# ============================================================================
+# Fullscreen detection (Win32)
+# ============================================================================
+
+_user32 = ctypes.windll.user32 if sys.platform == "win32" else None
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize",    wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork",    wintypes.RECT),
+        ("dwFlags",   wintypes.DWORD),
+    ]
+
+
+def _is_fullscreen_active() -> bool:
+    """True if the foreground window covers its entire monitor and isn't
+    the shell/desktop. Catches both exclusive fullscreen and borderless-
+    fullscreen games / video players. Cheap to call (a few syscalls)."""
+    if not _user32:
+        return False
+    try:
+        hwnd = _user32.GetForegroundWindow()
+        if not hwnd:
+            return False
+        shell = _user32.GetShellWindow()
+        if hwnd == shell:
+            return False
+        rect = wintypes.RECT()
+        if not _user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return False
+        hmon = _user32.MonitorFromWindow(hwnd, 2)  # MONITOR_DEFAULTTONEAREST
+        if not hmon:
+            return False
+        mi = _MONITORINFO()
+        mi.cbSize = ctypes.sizeof(mi)
+        if not _user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            return False
+        return (rect.left   == mi.rcMonitor.left  and
+                rect.top    == mi.rcMonitor.top   and
+                rect.right  == mi.rcMonitor.right and
+                rect.bottom == mi.rcMonitor.bottom)
+    except Exception:
+        return False
+
+
+class FullscreenWatcher:
+    """Polls _is_fullscreen_active() every second and fires a callback
+    when the boolean flips. Runs on its own daemon thread; respects an
+    `is_enabled` callable so the user's "pause on fullscreen" toggle in
+    the tray can disable the feature without restarting the bridge."""
+
+    def __init__(self, on_state_change, is_enabled):
+        self._on = on_state_change   # callable(active: bool)
+        self._enabled = is_enabled   # callable() -> bool
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="fullscreen-watcher")
+        self._last = False
+
+    def start(self):
+        if self._thread.is_alive():
+            return
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._last
+
+    def _run(self):
+        while not self._stop.wait(1.0):
+            try:
+                if not self._enabled():
+                    if self._last:
+                        self._last = False
+                        self._on(False)
+                    continue
+                current = _is_fullscreen_active()
+                if current != self._last:
+                    self._last = current
+                    self._on(current)
+            except Exception as e:
+                print(f"[fullscreen] watch error: {e}")
+
 # ============================================================================
 # Constants
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.4.1"
+APP_VERSION = "0.4.2"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
@@ -142,7 +233,8 @@ def screens_dir() -> Path:
 def default_config() -> dict:
     return {
         "version": CONFIG_VERSION,
-        "screenCount": 1,  # SignalRGB plugin polls /config and announces this many controllers
+        "screenCount": 1,        # plugin polls /config and announces this many controllers
+        "fullscreenPause": True, # auto-pause glow when a fullscreen app is active
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -168,6 +260,8 @@ def load_config() -> dict:
         cfg["screenCount"] = max(1, min(N_SCREENS, int(cfg["screenCount"])))
     except (TypeError, ValueError):
         cfg["screenCount"] = 1
+    cfg.setdefault("fullscreenPause", True)
+    cfg["fullscreenPause"] = bool(cfg.get("fullscreenPause", True))
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -307,11 +401,12 @@ class Broadcaster:
     cross-thread calls (e.g. tray->push_settings) use call_soon_threadsafe.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background):
+    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused):
         self.loop = loop
         self.get_settings = get_settings        # callable(screen:int)->dict
         self.get_screen_count = get_screen_count  # callable()->int (1..N_SCREENS)
         self.update_background = update_background  # callable(screen:int, png_bytes:bytes)->bool
+        self.get_paused = get_paused            # callable()->bool (fullscreen-induced pause)
         self.clients_by_screen: dict[int, set] = {}
         self._lock = asyncio.Lock()
 
@@ -329,6 +424,13 @@ class Broadcaster:
             writer.write(encode_text_frame(json.dumps({"type": "settings", "screen": screen, "data": settings})))
         except Exception as e:
             print(f"[ws] initial settings push failed: {e}")
+        # Also push the current paused state so a page that connects mid-
+        # game starts paused (rather than rendering a brief flash of glow
+        # before the next state change fires).
+        try:
+            writer.write(encode_text_frame(json.dumps({"type": "paused", "paused": bool(self.get_paused())})))
+        except Exception as e:
+            print(f"[ws] initial paused push failed: {e}")
 
     async def remove(self, writer):
         async with self._lock:
@@ -344,6 +446,14 @@ class Broadcaster:
     # ----- broadcasting (called from asyncio loop) -----
 
     async def broadcast_frame(self, screen: int, payload: bytes):
+        # Skip while paused — no point shipping per-frame UDP-derived
+        # bytes when the wallpaper page is going to drop them anyway. The
+        # plugin keeps sending, the bridge just absorbs.
+        try:
+            if self.get_paused():
+                return
+        except Exception:
+            pass
         async with self._lock:
             clients = list(self.clients_by_screen.get(screen, ()))
         if not clients:
@@ -357,6 +467,25 @@ class Broadcaster:
                 dead.append(w)
         for w in dead:
             await self.remove(w)
+
+    async def push_pause(self, paused: bool):
+        msg = json.dumps({"type": "paused", "paused": bool(paused)})
+        frame = encode_text_frame(msg)
+        async with self._lock:
+            all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
+        dead = []
+        for w in all_clients:
+            try:
+                w.write(frame)
+            except Exception:
+                dead.append(w)
+        for w in dead:
+            await self.remove(w)
+        if all_clients:
+            print(f"[push] paused={paused} -> {len(all_clients)} client(s)")
+
+    def push_pause_threadsafe(self, paused: bool):
+        asyncio.run_coroutine_threadsafe(self.push_pause(paused), self.loop)
 
     async def push_settings(self, screen: int, settings: dict):
         async with self._lock:
@@ -566,6 +695,11 @@ class BridgeRuntime:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.broadcaster: Broadcaster | None = None
         self._ready = threading.Event()
+        self._paused = False
+        self.fullscreen_watcher = FullscreenWatcher(
+            on_state_change=self._on_fullscreen_state,
+            is_enabled=self._is_fullscreen_pause_enabled,
+        )
 
     def _get_settings(self, screen: int) -> dict:
         with self.config_lock:
@@ -574,6 +708,19 @@ class BridgeRuntime:
     def _get_screen_count(self) -> int:
         with self.config_lock:
             return int(self.config.get("screenCount", 1))
+
+    def _is_paused(self) -> bool:
+        return self._paused
+
+    def _is_fullscreen_pause_enabled(self) -> bool:
+        with self.config_lock:
+            return bool(self.config.get("fullscreenPause", True))
+
+    def _on_fullscreen_state(self, paused: bool):
+        # Called from the watcher thread when fullscreen-active flips.
+        self._paused = bool(paused)
+        if self.broadcaster:
+            self.broadcaster.push_pause_threadsafe(self._paused)
 
     def _update_background(self, screen: int, png_bytes: bytes) -> bool:
         """Persist a builder-uploaded PNG and point the screen's bgImage
@@ -609,6 +756,9 @@ class BridgeRuntime:
     def start(self):
         threading.Thread(target=self._run, daemon=True, name="bridge-asyncio").start()
         self._ready.wait()
+        # Watcher runs on its own daemon thread; needs the asyncio loop
+        # ready first so push_pause_threadsafe has a target.
+        self.fullscreen_watcher.start()
 
     def _run(self):
         loop = asyncio.new_event_loop()
@@ -619,6 +769,7 @@ class BridgeRuntime:
             self._get_settings,
             self._get_screen_count,
             self._update_background,
+            self._is_paused,
         )
         try:
             loop.run_until_complete(self._serve())
@@ -689,6 +840,18 @@ class SettingsDialog:
         sc_combo.pack(side="left", pady=8)
         ttk.Label(global_frame, text="(SignalRGB will show this many 'Desktop Wallpaper' devices)",
                   foreground="#666").pack(side="left", padx=(8, 0), pady=8)
+
+        # Auto-pause section — global flag, applies to all screens.
+        autopause_frame = ttk.LabelFrame(self.root, text="Auto-pause")
+        autopause_frame.pack(fill="x", padx=8, pady=(0, 4))
+        fs_var = tk.BooleanVar(value=bool(self.config.get("fullscreenPause", True)))
+        self.global_vars["fullscreenPause"] = fs_var
+        ttk.Checkbutton(
+            autopause_frame,
+            text="Pause glow when a fullscreen application is active "
+                 "(fullscreen game / video / RDP session)",
+            variable=fs_var,
+        ).pack(anchor="w", padx=8, pady=8)
 
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill="both", expand=True, padx=8, pady=(4, 0))
@@ -834,6 +997,10 @@ class SettingsDialog:
             self.config["screenCount"] = max(1, min(N_SCREENS, int(self.global_vars["screenCount"].get())))
         except Exception:
             self.config["screenCount"] = 1
+        try:
+            self.config["fullscreenPause"] = bool(self.global_vars["fullscreenPause"].get())
+        except Exception:
+            self.config["fullscreenPause"] = True
         for n in range(N_SCREENS):
             settings = {k: var.get() for k, var in self.vars[n].items()}
             self.config["screens"][str(n)] = settings

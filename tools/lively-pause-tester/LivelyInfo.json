@@ -1,0 +1,14 @@
+{
+  "AppVersion": "2.0.7.0",
+  "Title": "SignalRGB — Lively Pause Tester",
+  "Thumbnail": null,
+  "Preview": null,
+  "Desc": "Diagnostic wallpaper. Shows whether Lively's pause mechanism reaches this page — via the official livelyWallpaperPlaybackChanged JS hook, the document visibilitychange event, AND a requestAnimationFrame tick-rate probe. Big screen-wide text turns red 'PAUSED' or green 'PLAYING' so you can see at a glance, plus a running counter for each detection path. Use this to verify your Lively build actually pauses Web wallpapers before reporting an issue against the SignalRGB Glow Wallpaper.",
+  "Author": "Delido",
+  "License": "MIT",
+  "Contact": "",
+  "Type": 1,
+  "FileName": "index.html",
+  "Arguments": "--pause-event true",
+  "IsAbsolutePath": false
+}

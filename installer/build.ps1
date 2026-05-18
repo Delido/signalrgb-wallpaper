@@ -33,13 +33,15 @@ if (-not $Version) {
 }
 Write-Host "Building installer for v$Version" -ForegroundColor Cyan
 
-# --- 1. Generate icon ---------------------------------------------------------
-Write-Host "[1/4] Generating icon.ico" -ForegroundColor Yellow
+# --- 1. Generate icon + thumbnail --------------------------------------------
+Write-Host "[1/5] Generating icon.ico + thumbnail.png" -ForegroundColor Yellow
 & python (Join-Path $installer "generate_icon.py")
 if ($LASTEXITCODE -ne 0) { throw "icon generation failed" }
+& python (Join-Path $installer "generate_thumbnail.py")
+if ($LASTEXITCODE -ne 0) { throw "thumbnail generation failed" }
 
 # --- 2. Rebuild SignalRGBBridge.exe ------------------------------------------
-Write-Host "[2/4] Rebuilding SignalRGBBridge.exe" -ForegroundColor Yellow
+Write-Host "[2/5] Rebuilding SignalRGBBridge.exe" -ForegroundColor Yellow
 Push-Location $bridgeDir
 try {
     Remove-Item "build_bridge", "dist_bridge", "*.spec" -Recurse -Force -ErrorAction SilentlyContinue
@@ -58,7 +60,7 @@ try {
 }
 
 # --- 3. Rebuild the 3 Lively zips --------------------------------------------
-Write-Host "[3/4] Rebuilding Lively wallpaper zips" -ForegroundColor Yellow
+Write-Host "[3/5] Rebuilding Lively wallpaper zips" -ForegroundColor Yellow
 $src   = Join-Path $bridgeDir "wallpaper"
 $stage = Join-Path $bridgeDir "dist_stage"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -77,8 +79,19 @@ foreach ($n in 0, 1, 2) {
 }
 Remove-Item $stage -Recurse -Force
 
-# --- 4. Compile Inno Setup ----------------------------------------------------
-Write-Host "[4/4] Compiling installer" -ForegroundColor Yellow
+# --- 4. Package the pause-tester diagnostic wallpaper -------------------------
+Write-Host "[4/5] Packaging Lively pause-tester" -ForegroundColor Yellow
+$testerSrc = Join-Path $repoRoot "tools\lively-pause-tester"
+$testerZip = Join-Path $bridgeDir "SignalRGB_LivelyPauseTester.zip"
+if (Test-Path $testerSrc) {
+    if (Test-Path $testerZip) { Remove-Item $testerZip -Force }
+    Compress-Archive -Path (Join-Path $testerSrc "*") -DestinationPath $testerZip -CompressionLevel Optimal
+} else {
+    Write-Host "  (tools\lively-pause-tester missing — skipping)" -ForegroundColor DarkGray
+}
+
+# --- 5. Compile Inno Setup ----------------------------------------------------
+Write-Host "[5/5] Compiling installer" -ForegroundColor Yellow
 $isccCandidates = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",

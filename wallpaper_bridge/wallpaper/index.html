@@ -230,10 +230,13 @@ function connect() {
       renderFrame(new Uint8Array(ev.data));
       return;
     }
-    // Text frame = settings push from the bridge tray-app. Format:
-    //   { "type": "settings", "screen": N, "data": { bgImage, bgFit, ... } }
-    // Every key maps 1:1 to an existing applyProperty() case below, so we
-    // just forward each (k, v) without translation.
+    // Text frame from the bridge. Two shapes:
+    //   { "type": "settings", "screen": N, "data": {...} }
+    //     -> forward each k/v to applyProperty()
+    //   { "type": "paused", "paused": true|false }
+    //     -> route through setPaused() — PAUSED badge appears, renderFrame
+    //        is short-circuited until resume. Bridge sends this when the
+    //        Win32 fullscreen-watcher flips state.
     if (typeof ev.data === "string") {
       try {
         const msg = JSON.parse(ev.data);
@@ -241,9 +244,11 @@ function connect() {
           for (const k of Object.keys(msg.data)) {
             applyProperty(k, msg.data[k]);
           }
+        } else if (msg && msg.type === "paused") {
+          setPaused(!!msg.paused);
         }
       } catch (e) {
-        console.error("[wallpaper] bad settings frame:", e);
+        console.error("[wallpaper] bad text frame:", e);
       }
     }
   };
@@ -451,6 +456,7 @@ function setPaused(p) {
   }
 }
 
+
 // Lively's wiki documents the payload as a JSON-stringified object with
 // an "IsPaused" boolean field. In practice different Lively builds pass
 // different shapes — raw object, raw bool, JSON-string of an object,
@@ -494,6 +500,35 @@ document.addEventListener("visibilitychange", () => {
   // screen etc. Treat as a pause; resume on visible.
   setPaused(document.hidden);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// rAF-tick-rate pause detection.
+//
+// Lively's "pause" works by suspending the WebView2 rendering process at the
+// OS level. Pages that animate via requestAnimationFrame freeze automatically
+// because rAF callbacks stop firing while rendering is suspended.
+//
+// We DON'T animate on rAF — we render reactively to incoming WebSocket
+// frames. WS messages keep arriving and our handlers keep updating the DOM
+// even while rendering is suspended; the user just sees a frozen image
+// because no paint happens. But our internal `isPaused` state doesn't track
+// the actual pause, and the PAUSED badge never appears.
+//
+// Fix: probe rAF tick rate. setInterval keeps running during render
+// suspension; rAF callbacks don't. If rAF hasn't ticked in 500 ms, the page
+// is in a paused / hidden state — flip setPaused(true). When ticks resume,
+// flip back. Catches every flavour of pause Lively/the OS might apply, no
+// reliance on Lively-specific hooks firing.
+let _lastRafTickMs = performance.now();
+(function probeRafLoop() {
+  _lastRafTickMs = performance.now();
+  requestAnimationFrame(probeRafLoop);
+})();
+setInterval(() => {
+  const stale = performance.now() - _lastRafTickMs;
+  const renderingPaused = stale > 500;
+  if (renderingPaused !== isPaused) setPaused(renderingPaused);
+}, 250);
 </script>
 </body>
 </html>

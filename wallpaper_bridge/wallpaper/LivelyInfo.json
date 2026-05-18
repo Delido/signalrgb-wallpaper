@@ -1,14 +1,14 @@
 {
   "AppVersion": "2.0.7.0",
   "Title": "SignalRGB Glow - Screen __SCREEN_LABEL__",
-  "Thumbnail": null,
-  "Preview": null,
+  "Thumbnail": "thumbnail.png",
+  "Preview": "thumbnail.png",
   "Desc": "RGB-driven Lively wallpaper for monitor #__SCREEN_LABEL__. Connects to the SignalRGB Wallpaper Bridge and renders the matching SignalRGB device's effect through transparent regions of a background image. Settings (background image, layout, glow, sliders) are configured through the bridge's tray icon — Lively's own Customise panel is intentionally disabled here.",
   "Author": "Delido",
   "License": "MIT",
   "Contact": "",
   "Type": 1,
   "FileName": "index.html",
-  "Arguments": "--pause-event true",
+  "Arguments": null,
   "IsAbsolutePath": false
 }
