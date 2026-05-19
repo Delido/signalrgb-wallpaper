@@ -55,13 +55,22 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "german";  MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
-Name: "autostart"; Description: "Start bridge automatically on logon"; \
-  GroupDescription: "Additional setup:"; Flags: checkedonce
-Name: "installplugin"; Description: "Install the SignalRGB Desktop Wallpaper plugin into the WhirlwindFX Plugins folder"; \
-  GroupDescription: "Additional setup:"; Flags: checkedonce
+; ── Wallpaper host: pick one or both. Each gates its own file copy,
+;    Start-menu shortcut, and end-of-install "Open folder" action so the
+;    user never sees a Lively prompt if they only picked WE (and vice versa).
+Name: "installlively"; \
+  Description: "Lively Wallpaper (free, recommended)"; \
+  GroupDescription: "Wallpaper host:"; Flags: checkedonce
 Name: "installwallpaperengine"; \
-  Description: "Install for Wallpaper Engine (requires Steam + Wallpaper Engine — auto-skipped if not detected)"; \
-  GroupDescription: "Additional setup:"; Flags: unchecked
+  Description: "Wallpaper Engine (Steam — auto-skipped if not detected)"; \
+  GroupDescription: "Wallpaper host:"; Flags: unchecked
+; ── Additional setup
+Name: "installplugin"; \
+  Description: "Install the SignalRGB Desktop Wallpaper plugin into the WhirlwindFX Plugins folder"; \
+  GroupDescription: "Additional setup:"; Flags: checkedonce
+Name: "autostart"; \
+  Description: "Start bridge automatically on logon"; \
+  GroupDescription: "Additional setup:"; Flags: checkedonce
 
 [Files]
 ; Bridge + tray
@@ -73,34 +82,41 @@ Source: "..\SignalRGB_Desktop_Wallpaper.js";  DestDir: "{userdocs}\WhirlwindFX\P
 Source: "..\SignalRGB_Desktop_Wallpaper.qml"; DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
   Flags: ignoreversion; Tasks: installplugin
 
-; Lively wallpaper zips (user drags into Lively after install)
-Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen1.zip"; DestDir: "{app}\Lively wallpapers"; Flags: ignoreversion
-Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen2.zip"; DestDir: "{app}\Lively wallpapers"; Flags: ignoreversion
-Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen3.zip"; DestDir: "{app}\Lively wallpapers"; Flags: ignoreversion
+; Lively wallpaper zips — only copied if the Lively task is selected.
+; User drags them into Lively after install (the post-install action
+; opens the folder).
+Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen1.zip"; DestDir: "{app}\Lively wallpapers"; \
+  Flags: ignoreversion; Tasks: installlively
+Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen2.zip"; DestDir: "{app}\Lively wallpapers"; \
+  Flags: ignoreversion; Tasks: installlively
+Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen3.zip"; DestDir: "{app}\Lively wallpapers"; \
+  Flags: ignoreversion; Tasks: installlively
 
-; Wallpaper Engine bundles — always staged under {app} for manual import,
-; PLUS copied directly into Steam's WE projects folder when the optional
-; task is checked AND a Wallpaper Engine install is detected.
+; Wallpaper Engine bundles — only copied if the WE task is selected.
+; Two destinations: (1) a manual-import staging folder under {app}, and
+; (2) — when Steam + Wallpaper Engine are detected — the live projects
+; folder Wallpaper Engine actually scans, so the wallpapers show up in
+; "My Wallpapers" without the user touching anything.
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen1\*"; \
   DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen1"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion
+  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen2\*"; \
   DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen2"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion
+  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen3\*"; \
   DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen3"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion
+  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen1\*"; \
   DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion external skipifsourcedoesntexist; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen2\*"; \
   DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen2"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion external skipifsourcedoesntexist; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen3\*"; \
   DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion external skipifsourcedoesntexist; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 
 ; Docs (so the user has a local copy)
@@ -110,8 +126,10 @@ Source: "..\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\SignalRGB Wallpaper Bridge"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Lively wallpapers folder";   Filename: "{app}\Lively wallpapers"
-Name: "{group}\Wallpaper Engine wallpapers folder"; Filename: "{app}\Wallpaper Engine wallpapers"
+Name: "{group}\Lively wallpapers folder";   Filename: "{app}\Lively wallpapers"; \
+  Tasks: installlively
+Name: "{group}\Wallpaper Engine wallpapers folder"; Filename: "{app}\Wallpaper Engine wallpapers"; \
+  Tasks: installwallpaperengine
 Name: "{group}\Documentation (README)";     Filename: "{app}\README.md"
 Name: "{group}\Uninstall SignalRGB Wallpaper"; Filename: "{uninstallexe}"
 
@@ -122,16 +140,26 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
   Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-; Open the Lively-wallpapers folder so the user can drag the zips into Lively
+; ── Lively-path: open the staging folder so the user can drag the zips
+;    onto Lively. Only shown if they picked Lively.
 Filename: "{app}\Lively wallpapers"; Verb: open; \
   Description: "Open the Lively wallpapers folder (drag the zips onto Lively)"; \
-  Flags: postinstall skipifsilent shellexec nowait
-; Open the WE-wallpapers folder so the user can drop them in by hand if the
-; auto-copy didn't run (no Steam detected, or task not selected)
+  Flags: postinstall skipifsilent shellexec nowait; Tasks: installlively
+; ── WE-path: if Wallpaper Engine was detected we already dropped the
+;    bundles into its projects folder — just nudge the user to open WE
+;    and pick them from "My Wallpapers". (Open the WE projects folder so
+;    they can visually confirm.)
+Filename: "{code:GetWallpaperEngineProjects}"; Verb: open; \
+  Description: "Open the Wallpaper Engine projects folder (wallpapers are already there — assign per monitor in WE)"; \
+  Flags: postinstall skipifsilent shellexec nowait; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+; ── WE-path fallback: if Steam wasn't found, point them at our local
+;    staging folder so they can drag the folders to WE manually.
 Filename: "{app}\Wallpaper Engine wallpapers"; Verb: open; \
-  Description: "Open the Wallpaper Engine bundles folder"; \
-  Flags: postinstall skipifsilent shellexec nowait unchecked
-; Start the bridge right away (only if user kept autostart)
+  Description: "Open the Wallpaper Engine bundles folder (drag the folders into Wallpaper Engine manually)"; \
+  Flags: postinstall skipifsilent shellexec nowait; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineNotDetected
+; ── Start the bridge right away (only if user kept autostart)
 Filename: "{app}\{#MyAppExeName}"; \
   Description: "Start the SignalRGB Wallpaper Bridge now"; \
   Flags: postinstall skipifsilent nowait; Tasks: autostart
@@ -274,4 +302,9 @@ end;
 function WallpaperEngineDetected(): Boolean;
 begin
   Result := (GetWallpaperEngineProjects('') <> '');
+end;
+
+function WallpaperEngineNotDetected(): Boolean;
+begin
+  Result := (GetWallpaperEngineProjects('') = '');
 end;

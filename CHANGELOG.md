@@ -4,6 +4,47 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3-beta] - 2026-05-19
+
+> Prerelease. Hotfix release for the v0.5.2-beta installer.
+
+### Fixed
+
+- **Wallpaper Engine bundles were not actually copied into Steam**
+  when the WE task was selected. The Inno Setup file entries for the
+  Steam-side copy carried an `external skipifsourcedoesntexist` flag
+  that I'd added without thinking. `external` in Inno Setup means
+  *"look for this file at install-time at the source path"* — i.e.
+  the file isn't bundled in the installer at all and was expected
+  to magically exist on the user's disk. Dropped both flags so the
+  bundles are now actually packed into the installer and the
+  `{code:GetWallpaperEngineProjects}` destination receives them.
+
+### Changed
+
+- **Installer wallpaper-host selection is now explicit.** Both Lively
+  and Wallpaper Engine are opt-in tasks grouped under a single
+  *"Wallpaper host:"* heading on the Tasks page. Lively stays checked
+  by default; Wallpaper Engine stays unchecked.
+- **Every follow-up action is gated on the chosen host:**
+  - Lively zips are only copied to `{InstallDir}\Lively wallpapers\`
+    if the Lively task is checked.
+  - WE bundles are only copied to `{InstallDir}\Wallpaper Engine
+    wallpapers\` (and the Steam-side projects folder, when detected)
+    if the WE task is checked.
+  - Start-menu shortcuts for each wallpaper folder only show for the
+    selected host(s).
+  - The end-of-install "Open folder" prompts only show for the
+    selected host(s) — a Lively-only user never sees a Wallpaper
+    Engine prompt and vice versa.
+- **Smarter post-install prompt for WE users.** If Steam +
+  Wallpaper Engine were detected, the prompt now opens *Steam's*
+  WE projects folder (where the bundles actually live, ready to
+  assign in WE → My Wallpapers). If WE wasn't detected, it falls
+  back to the local staging folder under `{InstallDir}` so the user
+  can drag the folders into WE manually. Different wording in each
+  case so the user knows what they're looking at.
+
 ## [0.5.2-beta] - 2026-05-19
 
 > Prerelease. Tray → **Updates** → **Allow beta versions** to receive

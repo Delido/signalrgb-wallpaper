@@ -302,7 +302,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.5.2-beta"
+APP_VERSION = "0.5.3-beta"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
