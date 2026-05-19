@@ -81,6 +81,42 @@ foreach ($n in 0, 1, 2) {
 }
 Remove-Item $stage -Recurse -Force
 
+# --- 3b. Stage Wallpaper Engine bundles --------------------------------------
+# WE projects are FOLDERS (not zips) with a project.json next to the index.html.
+# The installer either copies them straight into Steam's
+# `wallpaper_engine\projects\myprojects\` if it can detect a Steam install, or
+# drops them under `{app}\Wallpaper Engine wallpapers\` for manual import.
+Write-Host "[3b/5] Staging Wallpaper Engine bundles" -ForegroundColor Yellow
+$weStage = Join-Path $bridgeDir "we_bundles"
+if (Test-Path $weStage) { Remove-Item $weStage -Recurse -Force }
+New-Item -ItemType Directory -Path $weStage | Out-Null
+foreach ($n in 0, 1, 2) {
+    $label = ($n + 1).ToString()
+    $bundleDir = Join-Path $weStage ("SignalRGB_Glow_Screen{0}" -f $label)
+    Copy-Item -Path $src -Destination $bundleDir -Recurse
+    # Drop the Lively-only manifest from the WE bundle
+    $info = Join-Path $bundleDir "LivelyInfo.json"
+    if (Test-Path $info) { Remove-Item $info -Force }
+    # Patch the screen index meta tag (same trick as the Lively zips)
+    $idx = Join-Path $bundleDir "index.html"
+    (Get-Content $idx -Raw) -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', ('${1}' + $n + '${2}') |
+        Set-Content $idx -NoNewline
+    # Wallpaper Engine looks for project.json; the title disambiguates the
+    # three bundles in WE's "My Wallpapers" view.
+    $project = @{
+        title       = "SignalRGB Glow - Screen $label"
+        description = "Live SignalRGB-driven glow behind your wallpaper, fed by the SignalRGB Wallpaper Bridge running locally. Drag transparent regions out of any image with the in-bridge builder, then watch them shine. This bundle is for screen $label of up to 3 monitors."
+        type        = "Web"
+        file        = "index.html"
+        preview     = "thumbnail.png"
+        tags        = @("RGB","SignalRGB","Customizable","Lively","WebContent","Multi-Monitor")
+        contentrating = "Everyone"
+        version     = 8
+        general     = @{ properties = @{} }
+    } | ConvertTo-Json -Depth 5
+    Set-Content -Path (Join-Path $bundleDir "project.json") -Value $project -Encoding UTF8
+}
+
 # --- 4. Package the pause-tester diagnostic wallpaper -------------------------
 Write-Host "[4/5] Packaging Lively pause-tester" -ForegroundColor Yellow
 $testerSrc = Join-Path $repoRoot "tools\lively-pause-tester"

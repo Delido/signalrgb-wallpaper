@@ -4,6 +4,49 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2-beta] - 2026-05-19
+
+> Prerelease. Tray → **Updates** → **Allow beta versions** to receive
+> notifications about further beta drops; stable users are unaffected.
+
+### Added
+
+- **Wallpaper Engine support.** The wallpaper bundles are now produced
+  in two formats during build: the existing Lively `.zip` files **and**
+  a Wallpaper Engine `Web` project folder per screen (with a
+  `project.json` manifest). The page-side HTML already had Wallpaper
+  Engine's `wallpaperPropertyListener` shim, so no runtime changes were
+  needed — only packaging.
+- **Installer integration**. New opt-in task **"Install for Wallpaper
+  Engine"** (unchecked by default).
+  - When checked **and** a Wallpaper Engine install is detected, the
+    three bundles get copied straight into Steam's
+    `…\steamapps\common\wallpaper_engine\projects\myprojects\` —
+    after install you'll find them in Wallpaper Engine's *My
+    wallpapers* tab, ready to assign per monitor.
+  - When unchecked or Wallpaper Engine isn't detected, the bundles
+    still land under `{InstallDir}\Wallpaper Engine wallpapers\` so
+    you can drop them in by hand later.
+  - Steam install is detected via `HKCU\Software\Valve\Steam` →
+    `SteamPath`. Off-drive Steam libraries are picked up by parsing
+    `libraryfolders.vdf`, so Wallpaper Engine on a secondary drive
+    still works.
+- **Uninstall cleanup** removes the three Steam-side bundle folders
+  it placed (leaves any other Wallpaper Engine wallpapers alone).
+- A new Start-menu shortcut for the `Wallpaper Engine wallpapers`
+  folder, mirroring the existing Lively one.
+
+### Notes
+
+- This release adds Wallpaper Engine support *alongside* Lively, not
+  instead of it. Lively remains the recommended free host; Wallpaper
+  Engine is a paid Steam app (~€4) and only kicks in if you already
+  own it.
+- If the widget weather / quote fail to load inside Wallpaper Engine:
+  enable internet access for the wallpaper in Wallpaper Engine's
+  *Browser* settings (WE's CEF blocks outgoing requests by default
+  for some users; Lively is more permissive).
+
 ## [0.5.1-beta] - 2026-05-19
 
 > Marked as a prerelease on GitHub. Stable users won't be auto-notified

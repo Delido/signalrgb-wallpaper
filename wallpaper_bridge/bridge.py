@@ -302,7 +302,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.5.1-beta"
+APP_VERSION = "0.5.2-beta"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
@@ -1603,6 +1603,13 @@ class AboutDialog:
             "\n"
             "  • Lively Wallpaper — GPL 3.0\n"
             "    https://github.com/rocksdanister/lively\n"
+            "\n"
+            "  • Wallpaper Engine (Steam) — proprietary, paid. The wallpaper\n"
+            "    page targets Wallpaper Engine's Web wallpaper format too;\n"
+            "    the installer can copy the three bundles straight into\n"
+            "    Steam's wallpaper_engine\\projects\\myprojects folder when\n"
+            "    detected.\n"
+            "    https://www.wallpaperengine.io/\n"
             "\n"
             "  • SignalRGB — proprietary; this project uses their public plugin API.\n"
             "    https://signalrgb.com/  •  https://docs.signalrgb.com/\n"
