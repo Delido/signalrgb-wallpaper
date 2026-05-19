@@ -300,6 +300,116 @@
     display: flex; justify-content: flex-end; gap: 6px;
   }
 
+  /* ── Lock toggle ──────────────────────────────────────────────────── */
+  .lock-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: #181c23;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 14px;
+  }
+  .lock-bar.unlocked {
+    background: #1a2438;
+    border-color: var(--accent);
+  }
+  .lock-bar .lock-state {
+    flex: 1;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .lock-bar .lock-state .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #ff7575;
+    box-shadow: 0 0 8px rgba(255,117,117,0.5);
+  }
+  .lock-bar.unlocked .lock-state .dot {
+    background: #6ab0ff;
+    box-shadow: 0 0 8px rgba(106,176,255,0.6);
+  }
+  .lock-bar .lock-label {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .lock-bar .lock-hint {
+    color: var(--text-dim); font-size: 11.5px;
+  }
+  .lock-bar .btn.toggle {
+    min-width: 130px;
+  }
+  .lock-bar.unlocked .btn.toggle {
+    background: var(--accent-bg);
+    border-color: #3a6ba8;
+    color: #d8e6fc;
+  }
+
+  /* ── Layout preview canvas (drag-and-resize widgets) ──────────────── */
+  .layout-preview-wrap {
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 14px;
+  }
+  .layout-preview-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 11.5px; color: var(--text-dim);
+  }
+  .layout-preview {
+    position: relative;
+    background: #14171c;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    /* aspect-ratio set dynamically via inline style */
+  }
+  .layout-preview.locked { opacity: 0.85; }
+
+  .preview-widget {
+    position: absolute;
+    background: rgba(50, 80, 140, 0.65);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: #d8e6fc;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 4px 6px;
+    text-align: center; line-height: 1.15;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    user-select: none;
+    transition: transform 0.05s linear, background 0.12s, border-color 0.12s;
+  }
+  .layout-preview.unlocked .preview-widget {
+    cursor: move;
+    background: rgba(106, 176, 255, 0.28);
+  }
+  .layout-preview.unlocked .preview-widget:hover {
+    background: rgba(106, 176, 255, 0.42);
+    border-color: #8fc4ff;
+  }
+  .preview-widget.dragging {
+    background: rgba(106, 176, 255, 0.55) !important;
+    border-color: #8fc4ff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+    z-index: 10;
+  }
+  .preview-widget .resize-handle {
+    position: absolute; right: 0; bottom: 0;
+    width: 14px; height: 14px;
+    display: none;
+    background:
+      linear-gradient(135deg, transparent 60%, rgba(255,255,255,0.6) 60% 70%, transparent 70% 75%,
+                              rgba(255,255,255,0.6) 75% 85%, transparent 85% 90%,
+                              rgba(255,255,255,0.6) 90% 100%);
+    cursor: se-resize;
+  }
+  .layout-preview.unlocked .preview-widget .resize-handle { display: block; }
+
   /* Toast for transient status messages */
   #toast {
     position: fixed; bottom: 20px; right: 20px;
@@ -443,10 +553,26 @@
       <h2>Widgets</h2>
     </header>
     <div class="body">
-      <div class="check-row">
-        <input type="checkbox" id="widgets-edit">
-        <label for="widgets-edit">Enable on-wallpaper edit mode (drag · resize · ⚙ · ×)</label>
+
+      <div class="lock-bar" id="lock-bar">
+        <div class="lock-state">
+          <span class="dot"></span>
+          <div>
+            <div class="lock-label" id="lock-label">Widgets locked</div>
+            <div class="lock-hint" id="lock-hint">Drag and resize are off. Click to unlock.</div>
+          </div>
+        </div>
+        <button class="btn toggle" id="lock-toggle">Unlock to edit</button>
       </div>
+
+      <div class="layout-preview-wrap">
+        <div class="layout-preview-head">
+          <span>Layout preview · drag widgets to position</span>
+          <span id="preview-stat"></span>
+        </div>
+        <div class="layout-preview locked" id="layout-preview"></div>
+      </div>
+
       <div id="widget-list" class="widget-list"></div>
       <div style="font-size: 12px; color: var(--text-dim); margin: 12px 0 6px;">
         Add a widget:
@@ -639,7 +765,12 @@ const els = {
   ambientDensity: $("ambient-density"),
   ambientDensityVal: $("ambient-density-val"),
   pixelfxRow:     $("pixelfx-row"),
-  widgetsEdit:    $("widgets-edit"),
+  lockBar:        $("lock-bar"),
+  lockLabel:      $("lock-label"),
+  lockHint:       $("lock-hint"),
+  lockToggle:     $("lock-toggle"),
+  layoutPreview:  $("layout-preview"),
+  previewStat:    $("preview-stat"),
   widgetList:     $("widget-list"),
   addGrid:        $("add-grid"),
   modal:          $("modal"),
@@ -967,8 +1098,169 @@ function buildPixelfxRow() {
 // Widgets section
 // ─────────────────────────────────────────────────────────────────────────────
 
-els.widgetsEdit.addEventListener("change", () => {
-  sendCmd({ type: "widgets-lock", locked: !els.widgetsEdit.checked });
+// Lock toggle: single source of truth is settings.widgetsLocked, which gets
+// pushed back from the bridge so the preview + on-wallpaper edit mode stay
+// in lockstep. Clicking the button optimistically flips the local state
+// while the WS push round-trips.
+els.lockToggle.addEventListener("click", () => {
+  const nextLocked = settings.widgetsLocked === false ? true : false;
+  sendCmd({ type: "widgets-lock", locked: nextLocked });
+  settings.widgetsLocked = nextLocked;
+  renderLockBar();
+  renderLayoutPreview();
+});
+
+function renderLockBar() {
+  const unlocked = settings.widgetsLocked === false;
+  els.lockBar.classList.toggle("unlocked", unlocked);
+  els.lockLabel.textContent = unlocked ? "Widgets unlocked"             : "Widgets locked";
+  els.lockHint .textContent = unlocked
+    ? "Drag widgets in the preview below, or directly on the wallpaper. Click to lock."
+    : "Drag and resize are off. Click to unlock.";
+  els.lockToggle.textContent = unlocked ? "Lock widgets" : "Unlock to edit";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout preview — scaled rectangle representing the screen, with each widget
+// drawn as a draggable + resizable box. Position / size flow through the
+// same widget-update WS command the wallpaper page uses.
+//
+// Screen-resolution heuristic: the configurator never sees the actual
+// monitor size, so we fit to (max(1920, maxWidgetRight), max(1080,
+// maxWidgetBottom)) — that way ultrawide / 4K placements don't get clipped.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _previewScale = 1;
+let _previewW = 1920;
+let _previewH = 1080;
+
+function computePreviewCanvasSize() {
+  const list = settings.widgets || [];
+  let maxX = 1920, maxY = 1080;
+  for (const w of list) {
+    if (w.x + w.w > maxX) maxX = w.x + w.w;
+    if (w.y + w.h > maxY) maxY = w.y + w.h;
+  }
+  _previewW = maxX;
+  _previewH = maxY;
+}
+
+function applyPreviewSize() {
+  // Container has flexible width; height derived from aspect ratio.
+  const containerW = els.layoutPreview.parentElement.clientWidth - 22;  // padding
+  _previewScale = containerW / _previewW;
+  els.layoutPreview.style.width  = "100%";
+  els.layoutPreview.style.height = Math.round(_previewH * _previewScale) + "px";
+  els.previewStat.textContent =
+    "scaled to fit · canvas " + _previewW + " × " + _previewH + " px";
+}
+
+function renderLayoutPreview() {
+  const unlocked = settings.widgetsLocked === false;
+  els.layoutPreview.classList.toggle("unlocked", unlocked);
+  els.layoutPreview.classList.toggle("locked", !unlocked);
+  computePreviewCanvasSize();
+  applyPreviewSize();
+
+  const list = settings.widgets || [];
+  els.layoutPreview.innerHTML = "";
+  for (const w of list) {
+    const box = document.createElement("div");
+    box.className = "preview-widget";
+    box.dataset.id = w.id;
+    box.dataset.x = String(w.x);
+    box.dataset.y = String(w.y);
+    box.dataset.w = String(w.w);
+    box.dataset.h = String(w.h);
+    box.style.left   = (w.x * _previewScale) + "px";
+    box.style.top    = (w.y * _previewScale) + "px";
+    box.style.width  = (w.w * _previewScale) + "px";
+    box.style.height = (w.h * _previewScale) + "px";
+    const def = WIDGET_CATALOG[w.type];
+    box.textContent = def ? def.label : w.type;
+    const handle = document.createElement("div");
+    handle.className = "resize-handle";
+    box.appendChild(handle);
+    els.layoutPreview.appendChild(box);
+    bindPreviewDrag(box, w.id);
+    bindPreviewResize(box, handle, w.id);
+  }
+}
+
+function bindPreviewDrag(box, id) {
+  let startClientX, startClientY, originX, originY, captured = false;
+  box.addEventListener("pointerdown", (e) => {
+    if (settings.widgetsLocked !== false) return;
+    if (e.target.classList.contains("resize-handle")) return;
+    e.preventDefault();
+    box.setPointerCapture(e.pointerId);
+    captured = true;
+    startClientX = e.clientX; startClientY = e.clientY;
+    originX = parseFloat(box.dataset.x);
+    originY = parseFloat(box.dataset.y);
+    box.classList.add("dragging");
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!captured) return;
+    const dx = (e.clientX - startClientX) / _previewScale;
+    const dy = (e.clientY - startClientY) / _previewScale;
+    const nx = Math.max(0, Math.min(_previewW - parseFloat(box.dataset.w), originX + dx));
+    const ny = Math.max(0, Math.min(_previewH - parseFloat(box.dataset.h), originY + dy));
+    box.dataset.x = String(nx);
+    box.dataset.y = String(ny);
+    box.style.left = (nx * _previewScale) + "px";
+    box.style.top  = (ny * _previewScale) + "px";
+  });
+  const finish = (e) => {
+    if (!captured) return;
+    captured = false;
+    try { box.releasePointerCapture(e.pointerId); } catch (_) {}
+    box.classList.remove("dragging");
+    const x = Math.round(parseFloat(box.dataset.x));
+    const y = Math.round(parseFloat(box.dataset.y));
+    sendCmd({ type: "widget-update", id, x, y });
+  };
+  box.addEventListener("pointerup",     finish);
+  box.addEventListener("pointercancel", finish);
+}
+
+function bindPreviewResize(box, handle, id) {
+  let startClientX, startClientY, startW, startH, captured = false;
+  handle.addEventListener("pointerdown", (e) => {
+    if (settings.widgetsLocked !== false) return;
+    e.preventDefault(); e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    captured = true;
+    startClientX = e.clientX; startClientY = e.clientY;
+    startW = parseFloat(box.dataset.w);
+    startH = parseFloat(box.dataset.h);
+  });
+  handle.addEventListener("pointermove", (e) => {
+    if (!captured) return;
+    const dw = (e.clientX - startClientX) / _previewScale;
+    const dh = (e.clientY - startClientY) / _previewScale;
+    const nw = Math.max(60, startW + dw);
+    const nh = Math.max(60, startH + dh);
+    box.dataset.w = String(nw);
+    box.dataset.h = String(nh);
+    box.style.width  = (nw * _previewScale) + "px";
+    box.style.height = (nh * _previewScale) + "px";
+  });
+  const finish = (e) => {
+    if (!captured) return;
+    captured = false;
+    try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+    const w = Math.round(parseFloat(box.dataset.w));
+    const h = Math.round(parseFloat(box.dataset.h));
+    sendCmd({ type: "widget-update", id, w, h });
+  };
+  handle.addEventListener("pointerup",     finish);
+  handle.addEventListener("pointercancel", finish);
+}
+
+// Keep the preview proportional when the configurator window resizes.
+window.addEventListener("resize", () => {
+  if (els.layoutPreview.children.length > 0) renderLayoutPreview();
 });
 
 function buildAddGrid() {
@@ -1151,8 +1443,10 @@ function renderAll() {
   els.pixelfxRow.querySelectorAll(".seg").forEach((b) => {
     b.classList.toggle("active", b.dataset.value === pixel);
   });
-  // Widgets
-  els.widgetsEdit.checked = settings.widgetsLocked === false;
+  // Widgets — lock state drives both the lock-bar visuals AND the layout
+  // preview's draggability.
+  renderLockBar();
+  renderLayoutPreview();
   renderWidgetList();
 }
 

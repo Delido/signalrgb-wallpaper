@@ -53,7 +53,11 @@ bridgePort:readonly
 */
 
 const MAX_SCREENS  = 3;
-const MAX_GRID     = 32;
+// 36×36 is the largest square that fits SignalRGB's per-packet udp.send
+// cap of 4096 bytes (36*36*3 + 7-byte header = 3895 B). Going higher
+// requires chunking the frame across multiple datagrams — see the
+// CHANGELOG for v0.6.2-beta's failed bump to 64.
+const MAX_GRID     = 36;
 const BRIDGE_HOST  = "127.0.0.1";
 const BRIDGE_PORT  = 17320;
 const CONFIG_URL   = "http://" + BRIDGE_HOST + ":" + BRIDGE_PORT + "/config";
@@ -69,8 +73,8 @@ const CONFIG_URL   = "http://" + BRIDGE_HOST + ":" + BRIDGE_PORT + "/config";
 export function ControllableParameters() {
     return [
         {"property":"gridSize", "group":"settings", "label":"Glow Grid Size",
-         "description":"Square grid resolution sent per screen. 32 is smooth; pick lower for older machines.",
-         "type":"combobox", "values":["8","16","32"], "default":"32"},
+         "description":"Square grid resolution sent per screen. 36 is the finest that fits SignalRGB's 4 KB per-packet UDP cap; 32 is the previous default; lower values are kinder on older machines.",
+         "type":"combobox", "values":["8","16","32","36"], "default":"32"},
         {"property":"targetFps", "group":"settings", "label":"Target FPS",
          "description":"Frame rate the engine should call Render() at. 30 is plenty for ambient lighting; 60 is the engine's hard cap.",
          "type":"combobox", "values":["15","30","60"], "default":"30"},

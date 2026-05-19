@@ -4,6 +4,53 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2-beta] - 2026-05-19
+
+> Prerelease. Adds `36×36` as the finest packable grid; 64×64 was
+> tried and reverted because of a SignalRGB sandbox limit (see below).
+
+### Added
+
+- **Glow Grid Size combobox gains `36`** alongside `8 / 16 / 32`. 36×36
+  fits exactly under SignalRGB's per-packet UDP cap (36×36×3 + 7 B
+  header = 3 895 B); going any higher requires chunked transport.
+
+### Known limit
+
+- **SignalRGB's `udp.send()` is capped at 4 096 B per datagram**, well
+  below the IPv4 UDP-payload ceiling. We attempted 64×64 (= 12 295 B
+  per frame) and immediately saw
+  `udp.error - Buffer too large. Max size is 4096 bytes!` in the
+  SignalRGB log with no frames reaching the bridge. `MAX_GRID` in
+  `SignalRGB_Desktop_Wallpaper.js` is therefore 36. A future iteration
+  could split each frame across multiple datagrams (the bridge would
+  reassemble) for true 64+ grids.
+
+## [0.6.1-beta] - 2026-05-19
+
+> Prerelease. Configurator UX polish on top of 0.6.0-beta.
+
+### Changed
+
+- **Configurator: prominent lock / unlock toggle.** The widgetsLocked
+  switch was an easily-missed checkbox; it's now a full-width lock-bar
+  at the top of the Widgets section with a coloured status dot, a
+  big label ("Widgets locked" / "Widgets unlocked"), and a clear
+  action button ("Unlock to edit" / "Lock widgets"). Single source of
+  truth — flipping it pushes the same state to the live wallpaper.
+
+### Added
+
+- **Layout preview in the configurator.** New canvas under the lock-bar
+  showing the screen as a scaled rectangle (auto-fits to the bounding
+  box of all widgets or 1920×1080, whichever is bigger) with each
+  widget rendered as a draggable + resizable box. Pointer events drive
+  drag / resize; min size 60×60 px; positions clamp to the canvas.
+  On release, the configurator sends the same `widget-update` command
+  the wallpaper page uses, so the live wallpaper jumps to match. Drag
+  / resize only active when the lock-bar is unlocked — locked state
+  shows the layout as a static read-only view.
+
 ## [0.6.0-beta] - 2026-05-19
 
 > Prerelease. The three-phase effects roadmap landed in one drop,

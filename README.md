@@ -26,9 +26,13 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.4.3 — installer + multi-screen + in-browser builder
-> (polygon / ellipse / region / restore-brush) + apply-to-screen +
-> fullscreen auto-pause + redesigned per-screen settings dialog.
+> **Status:** v0.6.0-beta (prerelease) — full in-browser **configurator**
+> with drag-and-resize layout preview, 7+ widget types
+> (clock / calendar / weather / sticky note / countdown / picture / quote /
+> CPU / RAM / audio spectrum), full-canvas ambient effects
+> (snow / rain / sparks / aurora), cursor pixelfx (trail / hover-glow /
+> click-ripple), Wallpaper Engine packaging alongside Lively, and an
+> in-app GitHub update checker.
 
 ## Features
 
@@ -148,26 +152,59 @@ same WebSocket. Full architecture: [docs/architecture.md](docs/architecture.md).
 Loose, unordered list of things on the "would be nice" pile. No commitments
 on timing — pull requests and votes (👍 on the matching issue) welcome.
 
-- **Builder polish** — live brush cursor (circle preview at actual radius),
-  more brush shapes / hardness, additional pattern fills, drag-and-drop
-  image import, full undo/redo history
-- **Desktop widgets** — clock, calendar, weather, and small effect
-  modules that sit on top of the glow layer (opt-in per screen)
-- **Simpler install** — single bootstrapper that pulls Lively if missing,
-  imports the Lively zips automatically, and assigns them to the right
-  screens without manual drag-and-drop
-- **Reworked tray settings** — preview pane, search/jump for long lists,
-  preset slots (save a "background + glow + dim + blur" combo and switch
-  with one click)
-- **More than 3 monitors** — lift the current hard cap to N screens
-- **Localisation** — DE / EN at minimum, tray + builder + installer
+### Planned
+
+- **Chunked UDP transport** — SignalRGB's plugin sandbox caps `udp.send()`
+  at 4 096 bytes per datagram, which puts the per-screen glow grid ceiling
+  at 36 × 36. Splitting each frame across multiple packets (the bridge
+  would reassemble before broadcasting) would lift this to ~256 × 256
+  without protocol drama. Touches plugin + bridge; wallpaper page is
+  unchanged.
+- **Whole-screen audio-reactive glow layer** — the audio spectrum widget
+  shipped in 0.6.0-beta covers "audio visualiser in a box". A separate
+  ambient pulse / spectrum layer behind the whole wallpaper (driven by the
+  same Lively / WE FFT listener) is still open.
 - **Wallpaper preset library** — curated bundle of glow-ready backgrounds
   shipped with the installer or fetched on demand
-- **Audio-reactive glow mode** — optional layer that pulses with system
-  audio in addition to the SignalRGB colour feed
-- **Wallpaper Engine support** — package the wallpaper as a
-  [Wallpaper Engine](https://www.wallpaperengine.io/) Web project too, so
-  users on the Steam app can run the glow without needing Lively
+- **Simpler install** (remainder) — Lively isn't auto-imported yet;
+  Wallpaper Engine auto-copy already shipped in 0.5.2-beta. A single
+  bootstrapper that pulls Lively if missing and imports the zips would
+  remove most of the manual setup.
+- **Preset slots in the configurator** — save a
+  "background + glow + dim + blur" combo per screen and switch with one click
+- **More than 3 monitors** — lift the current `MAX_SCREENS = 3` cap to N
+- **Localisation** — DE / EN at minimum, tray + builder + configurator +
+  installer strings
+- **Pattern-fill brush in the builder** — halftone / dither / hatching
+  as an alternative to solid-colour transparent cuts (intentionally
+  skipped during the 0.4.5 builder polish, kept on the wish list)
+
+### Recently shipped
+
+- ✅ **In-browser configurator** with per-screen tabs, drag-and-resize
+  layout preview, prominent lock toggle, form-based widget options
+  (0.6.0-beta / 0.6.1-beta)
+- ✅ **Ambient effects** (snow / rain / sparks / aurora) with glow-tint
+  opt-in (0.6.0-beta)
+- ✅ **Pixelfx** — mouse trail, hover glow, click ripple via Lively's
+  cursor callback (0.6.0-beta)
+- ✅ **System-stat widgets** — CPU / RAM sparklines + audio spectrum,
+  fed by a `psutil` poller in the bridge (0.6.0-beta)
+- ✅ **In-app GitHub update checker** with prerelease-aware semver
+  filtering (0.5.1-beta)
+- ✅ **Wallpaper Engine support** — bundles built alongside Lively zips
+  and auto-copied to Steam's WE projects folder when detected
+  (0.5.2-beta / 0.5.3-beta)
+- ✅ **Widget framework** with 7+ built-in types (clock, calendar,
+  weather, sticky note, countdown, picture frame, quote, CPU, RAM,
+  audio) and an extensible registry (0.5.0 / 0.5.1-beta)
+- ✅ **Builder polish** — live brush cursor, hardness slider, round /
+  square brush shape, erase brush, drag-and-drop merge slots, full
+  undo / redo (0.4.5)
+- ✅ **GIMP-style builder layout** — icon toolbox + tool options +
+  canvas + files panel (0.4.5)
+- ✅ **Side-by-side image merge** in the builder (0.4.4 / 0.4.5)
+- ✅ **GPU-load drop** from ~20 % to ~3 % on the grid layout (0.5.1)
 
 Have a wish that isn't here?
 [Open an issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
