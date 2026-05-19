@@ -60,7 +60,12 @@
   }
   #bars.lay-grid .zone {
     background: var(--c, #111);
-    transition: background 0.08s linear;
+    /* No CSS transition on grid zones: at 60 FPS the bridge frames are
+       already smoother than the old 80 ms tween, and a transition on
+       N × M zones keeps the compositor juggling hundreds of in-flight
+       animations every frame — measurable GPU savings dropping it. The
+       pill / stripe layouts (far fewer zones) keep their transition. */
+    contain: strict;
   }
 
   /* ── Layout: Vertical Stripes ───────────────────────────────────────────── */
@@ -101,14 +106,297 @@
 
   #bars.lay-off,
   #bars.disabled { display: none !important; }
+
+  /* ── Widgets layer ──────────────────────────────────────────────────────
+     Sits above the dim layer and below the debug HUD. Pointer-events flip
+     between none (locked / normal use — clicks fall through to Lively's
+     interaction passthrough) and auto (edit mode — drag/resize). */
+  #widgets-container {
+    position: fixed; inset: 0; z-index: 5;
+    pointer-events: none;
+  }
+  #widgets-container.edit-mode { pointer-events: none; }
+  /* Edit-mode banner — fixed top so the user can find the lock toggle. */
+  #widgets-banner {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 6;
+    padding: 6px 14px; border-radius: 999px;
+    background: rgba(20, 30, 60, 0.85);
+    color: #d8e6fc;
+    border: 1px solid #3a6ba8;
+    font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
+    font-size: 12px;
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    pointer-events: none;
+    user-select: none;
+  }
+  #widgets-banner.on { display: block; }
+
+  .widget {
+    position: absolute;
+    box-sizing: border-box;
+    padding: 8px;
+    color: #fff;
+    font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    user-select: none;
+    pointer-events: none;     /* per-widget; flipped in edit mode */
+    touch-action: none;       /* required by interact.js */
+    overflow: hidden;
+  }
+  .edit-mode .widget {
+    pointer-events: auto;
+    background: rgba(0,0,0,0.30);
+    border: 1px dashed rgba(255,255,255,0.55);
+    border-radius: 6px;
+    cursor: move;
+  }
+  .edit-mode .widget:hover {
+    border-color: rgba(106,176,255,0.85);
+    background: rgba(15,28,55,0.40);
+  }
+  .widget .widget-handle {
+    position: absolute; right: 0; bottom: 0;
+    width: 14px; height: 14px;
+    background:
+      linear-gradient(135deg, transparent 60%, rgba(255,255,255,0.65) 60% 70%, transparent 70% 75%,
+                              rgba(255,255,255,0.65) 75% 85%, transparent 85% 90%,
+                              rgba(255,255,255,0.65) 90% 100%);
+    cursor: se-resize;
+    display: none;
+  }
+  .edit-mode .widget .widget-handle { display: block; }
+  .widget .widget-remove {
+    position: absolute; top: 2px; right: 2px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: rgba(180, 40, 40, 0.85);
+    color: #fff;
+    font-size: 14px;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+  }
+  .edit-mode .widget .widget-remove { display: block; }
+  .widget .widget-remove:hover { background: rgba(220, 70, 70, 0.95); }
+
+  /* ── Clock widget ── */
+  .widget-clock { display: flex; align-items: center; justify-content: center; }
+  .widget-clock svg { width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
+  .widget-clock .hand-h, .widget-clock .hand-m, .widget-clock .hand-s,
+  .widget-clock .face,   .widget-clock .tick   { stroke: #fff; fill: none; stroke-linecap: round; }
+  .widget-clock .face { stroke-width: 2; }
+  .widget-clock .tick { stroke-width: 1.5; }
+  .widget-clock .hand-h { stroke-width: 4; }
+  .widget-clock .hand-m { stroke-width: 3; }
+  .widget-clock .hand-s { stroke: #ff7575; stroke-width: 1.5; }
+  .widget-clock.tinted .hand-s { stroke: var(--w-tint, #ff7575); }
+  .widget-clock.tinted .face   { stroke: var(--w-tint, #fff);    }
+  .widget-clock .digital-time {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: clamp(22px, 28%, 64px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .widget-clock .digital-date {
+    font-size: clamp(11px, 12%, 22px);
+    color: rgba(255,255,255,0.78);
+    margin-top: 4px;
+  }
+  .widget-clock.tinted .digital-time { color: var(--w-tint, #fff); }
+
+  /* ── Calendar widget ── */
+  .widget-calendar { display: flex; flex-direction: column; }
+  .widget-calendar .cal-head {
+    text-align: center; font-weight: 600; font-size: 13px;
+    margin-bottom: 4px; letter-spacing: 0.05em;
+  }
+  .widget-calendar.tinted .cal-head { color: var(--w-tint, #fff); }
+  .widget-calendar table {
+    width: 100%; height: 100%;
+    border-collapse: collapse;
+    font-size: clamp(9px, 1.5vw, 13px);
+  }
+  .widget-calendar th, .widget-calendar td {
+    text-align: center; padding: 1px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .widget-calendar th { color: rgba(255,255,255,0.55); font-weight: 600; }
+  .widget-calendar td.dim { color: rgba(255,255,255,0.30); }
+  .widget-calendar td.today {
+    background: rgba(106,176,255,0.30);
+    border-radius: 4px;
+    font-weight: 700;
+  }
+  .widget-calendar.tinted td.today {
+    background: color-mix(in srgb, var(--w-tint, #6ab0ff) 35%, transparent);
+  }
+
+  /* ── Weather widget ── */
+  .widget-weather { display: flex; flex-direction: column; }
+  .widget-weather .wx-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; color: rgba(255,255,255,0.75);
+  }
+  .widget-weather .wx-temp {
+    font-size: clamp(28px, 40%, 64px);
+    font-weight: 600; letter-spacing: -0.02em;
+  }
+  .widget-weather.tinted .wx-temp { color: var(--w-tint, #fff); }
+  .widget-weather .wx-cond { font-size: 13px; opacity: 0.85; }
+  .widget-weather .wx-foot { margin-top: auto; font-size: 11px; opacity: 0.55; }
+
+  /* ── Sticky note widget ── */
+  .widget-sticky-note {
+    background: rgba(255, 232, 110, 0.85) !important;
+    color: #2a2410 !important;
+    text-shadow: none !important;
+    padding: 10px !important;
+    border: 1px solid rgba(0,0,0,0.18) !important;
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  }
+  .widget-sticky-note.color-blue   { background: rgba(150, 200, 255, 0.88) !important; }
+  .widget-sticky-note.color-pink   { background: rgba(255, 175, 215, 0.88) !important; }
+  .widget-sticky-note.color-green  { background: rgba(170, 230, 160, 0.88) !important; }
+  .widget-sticky-note .sticky-body {
+    width: 100%; height: 100%;
+    font-size: 14px; line-height: 1.4;
+    outline: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
+  }
+  .widget-sticky-note .sticky-body[contenteditable="true"] {
+    background: rgba(255,255,255,0.45);
+    cursor: text;
+  }
+
+  /* ── Countdown widget ── */
+  .widget-countdown {
+    display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px;
+  }
+  .widget-countdown .cd-label {
+    font-size: 11px; opacity: 0.75; letter-spacing: 0.08em; text-transform: uppercase;
+    text-align: center;
+  }
+  .widget-countdown .cd-time {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: clamp(20px, 26%, 48px);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .widget-countdown.tinted .cd-time { color: var(--w-tint, #fff); }
+
+  /* ── Picture-frame widget ── */
+  .widget-picture-frame { padding: 0 !important; overflow: hidden; }
+  .widget-picture-frame.rounded { border-radius: 12px; }
+  .widget-picture-frame .pic-img { width: 100%; height: 100%; display: block; }
+  .widget-picture-frame .pic-placeholder {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #1a2438, #0a0a14);
+    color: rgba(255,255,255,0.55);
+    font-size: 12px; padding: 10px; text-align: center;
+  }
+
+  /* ── Quote widget ── */
+  .widget-quote { display: flex; flex-direction: column; justify-content: center; padding: 14px !important; }
+  .widget-quote .q-text {
+    font-size: clamp(13px, 14%, 18px);
+    font-style: italic;
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+  .widget-quote .q-author { font-size: 11px; opacity: 0.7; text-align: right; }
+  .widget-quote.tinted .q-author { color: var(--w-tint, rgba(255,255,255,0.85)); }
+  .widget-quote .q-foot { font-size: 10px; opacity: 0.45; text-align: right; margin-top: 4px; }
+
+  /* ── Per-widget settings button (gear) ── */
+  .widget .widget-settings {
+    position: absolute; top: 2px; right: 26px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: rgba(60, 90, 140, 0.85);
+    color: #fff;
+    font-size: 12px; line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    display: none;
+    user-select: none;
+  }
+  .edit-mode .widget .widget-settings { display: block; }
+  .widget .widget-settings:hover { background: rgba(106, 176, 255, 0.95); }
+
+  /* ── Widget picker (floating card, edit mode only) ── */
+  #widget-picker {
+    position: fixed;
+    bottom: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 6;
+    display: none;
+    padding: 10px 14px;
+    background: rgba(15, 20, 30, 0.92);
+    border: 1px solid #3a6ba8;
+    border-radius: 10px;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+    pointer-events: auto;
+    user-select: none;
+    font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
+    color: #d8e6fc;
+  }
+  #widget-picker.on { display: block; }
+  #widget-picker .picker-title {
+    font-size: 10.5px; color: rgba(255,255,255,0.55);
+    text-transform: uppercase; letter-spacing: 0.10em;
+    margin-bottom: 6px; text-align: center;
+  }
+  #widget-picker .picker-grid {
+    display: flex; gap: 6px; flex-wrap: wrap; max-width: 560px; justify-content: center;
+  }
+  #widget-picker .picker-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 8px; min-width: 62px;
+    background: rgba(40, 50, 70, 0.6);
+    border: 1px solid #3a6ba8;
+    border-radius: 6px;
+    color: #d8e6fc;
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  #widget-picker .picker-btn:hover {
+    background: rgba(60, 90, 140, 0.85);
+    border-color: #6ab0ff;
+  }
+  #widget-picker .picker-btn svg {
+    width: 22px; height: 22px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #widget-picker .picker-btn-label { font-size: 10.5px; }
+  #widget-picker .picker-hint {
+    margin-top: 6px;
+    font-size: 10.5px; color: rgba(255,255,255,0.45);
+    text-align: center;
+  }
 </style>
 </head>
 <body>
 <div id="bars" class="lay-grid"></div>
 <img id="bg" alt="">
 <div id="dim"></div>
+<div id="widgets-container"></div>
+<div id="widget-picker">
+  <div class="picker-title">Add widget</div>
+  <div class="picker-grid"></div>
+  <div class="picker-hint">drag · resize · ⚙ configure · × remove · lock in tray when done</div>
+</div>
 <div id="status" class="bad hidden">starting…</div>
 <div id="paused-badge">⏸ PAUSED</div>
+<script src="interact.min.js"></script>
 <script>
 "use strict";
 
@@ -174,18 +462,30 @@ function renderFrame(buf) {
   ensureZones(w, h);
 
   let off = 7;
+  // Capture a thin slice of RGB samples for widget tinting — done once per
+  // frame so we don't re-walk the buffer in updateTintFromFrame. Skipped
+  // entirely when nothing on this screen has opted in.
+  const tintSamples = _anyTintedWidget() ? [] : null;
+  // Direct style.background instead of style.setProperty("--c", ...) — one
+  // less CSS-variable indirection per zone-per-frame, adds up across a
+  // 16×9 grid at 60 fps (≈ 8 600 fewer property accesses/sec).
   if (isGridLayout()) {
     const total = w * h;
     for (let i = 0; i < total; i++) {
-      zoneEls[i].style.setProperty("--c", rgbCss(buf[off], buf[off + 1], buf[off + 2]));
+      const r = buf[off], g = buf[off + 1], b = buf[off + 2];
+      zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+      if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
       off += 3;
     }
   } else {
     for (let i = 0; i < w; i++) {
-      zoneEls[i].style.setProperty("--c", rgbCss(buf[off], buf[off + 1], buf[off + 2]));
+      const r = buf[off], g = buf[off + 1], b = buf[off + 2];
+      zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+      if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
       off += 3;
     }
   }
+  if (tintSamples) updateTintFromFrame(tintSamples);
 
   frames++;
   const now = performance.now();
@@ -392,6 +692,12 @@ function applyProperty(name, val) {
       // the user just turned it off mid-flash.
       if (!val && _flashTimer) { clearTimeout(_flashTimer); _flashTimer = null; flashUntil = 0; }
       break;
+    case "widgets":
+      setWidgets(Array.isArray(val) ? val : []);
+      break;
+    case "widgetsLocked":
+      setWidgetsLocked(!!val);
+      break;
   }
 }
 
@@ -529,6 +835,617 @@ setInterval(() => {
   const renderingPaused = stale > 500;
   if (renderingPaused !== isPaused) setPaused(renderingPaused);
 }, 250);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Widgets — placeable HTML modules. The WIDGET_REGISTRY below is the single
+// source of truth: adding a new widget type = one entry here + a matching
+// entry in bridge.py's WIDGET_DEFAULTS, and the in-page picker + tray "Add…"
+// submenu both pick it up automatically.
+//
+// Each registry entry declares:
+//   label        Human-readable name shown in the picker
+//   icon         Inline SVG string for the picker button
+//   markup       () -> initial inner HTML for the widget body
+//   mount        (rec) -> optional one-shot binder run after the widget is
+//                appended (used for things like sticky-note double-click
+//                inline editing — handlers that need to be attached once)
+//   tick         (rec) -> called every second and whenever options change.
+//                rec.opts is the live options blob from the server.
+//   editOptions  (rec) -> optional UX for tweaking options. Today: prompt-
+//                driven (browser native). A nicer floating editor can drop
+//                in later without changing the contract.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WIDGET_REGISTRY = {
+
+  // ── Clock ──────────────────────────────────────────────────────────────
+  clock: {
+    label: "Clock",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/>' +
+          '<line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg>',
+    markup: () => (
+      '<svg class="analog" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="display:none">' +
+        '<circle class="face" cx="50" cy="50" r="46"/>' +
+        Array.from({length: 12}, (_, i) => {
+          const a = (i / 12) * Math.PI * 2 - Math.PI/2;
+          const x1 = 50 + 42 * Math.cos(a);
+          const y1 = 50 + 42 * Math.sin(a);
+          const x2 = 50 + 46 * Math.cos(a);
+          const y2 = 50 + 46 * Math.sin(a);
+          return '<line class="tick" x1="'+x1.toFixed(2)+'" y1="'+y1.toFixed(2)+
+                 '" x2="'+x2.toFixed(2)+'" y2="'+y2.toFixed(2)+'"/>';
+        }).join("") +
+        '<line class="hand-h" x1="50" y1="50" x2="50" y2="28"/>' +
+        '<line class="hand-m" x1="50" y1="50" x2="50" y2="18"/>' +
+        '<line class="hand-s" x1="50" y1="50" x2="50" y2="14"/>' +
+        '<circle cx="50" cy="50" r="2" fill="#fff"/>' +
+      '</svg>' +
+      '<div class="digital" style="display:none; text-align:center;">' +
+        '<div class="digital-time">--:--</div>' +
+        '<div class="digital-date">— — —</div>' +
+      '</div>'
+    ),
+    tick: (rec) => {
+      const style = (rec.opts && rec.opts.style) || "analog";
+      const analog  = rec.el.querySelector(".analog");
+      const digital = rec.el.querySelector(".digital");
+      analog.style.display  = style === "analog"  ? "" : "none";
+      digital.style.display = style === "digital" ? "" : "none";
+      const now = new Date();
+      if (style === "analog") {
+        const h = (now.getHours() % 12) + now.getMinutes() / 60;
+        const m = now.getMinutes() + now.getSeconds() / 60;
+        const s = now.getSeconds() + now.getMilliseconds() / 1000;
+        const rot = (deg) => "rotate(" + deg + ", 50, 50)";
+        analog.querySelector(".hand-h").setAttribute("transform", rot((h / 12) * 360));
+        analog.querySelector(".hand-m").setAttribute("transform", rot((m / 60) * 360));
+        analog.querySelector(".hand-s").setAttribute("transform", rot((s / 60) * 360));
+      } else {
+        const fmt24 = rec.opts.format24h !== false;
+        const hh = fmt24 ? String(now.getHours()).padStart(2, "0")
+                         : String(((now.getHours() + 11) % 12) + 1);
+        const mm = String(now.getMinutes()).padStart(2, "0");
+        const ss = String(now.getSeconds()).padStart(2, "0");
+        const ampm = fmt24 ? "" : (now.getHours() < 12 ? " AM" : " PM");
+        digital.querySelector(".digital-time").textContent = hh + ":" + mm + ":" + ss + ampm;
+        digital.querySelector(".digital-date").textContent =
+          now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+      }
+    },
+    editOptions: (rec) => {
+      const cur = (rec.opts && rec.opts.style) || "analog";
+      const v = prompt("Clock style — 'analog' or 'digital':", cur);
+      if (v === null) return;
+      const style = (v.trim().toLowerCase() === "digital") ? "digital" : "analog";
+      let fmt24 = rec.opts.format24h !== false;
+      if (style === "digital") {
+        const f = prompt("24-hour format? (yes / no)", fmt24 ? "yes" : "no");
+        if (f === null) return;
+        fmt24 = /^y/i.test(f.trim());
+      }
+      sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                      options: { style, format24h: fmt24 } });
+    },
+  },
+
+  // ── Calendar ───────────────────────────────────────────────────────────
+  calendar: {
+    label: "Calendar",
+    icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1.5"/>' +
+          '<line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="3" x2="8" y2="6"/>' +
+          '<line x1="16" y1="3" x2="16" y2="6"/></svg>',
+    markup: () => '<div class="cal-head"></div><table><thead><tr></tr></thead><tbody></tbody></table>',
+    tick: (rec) => {
+      const weekStart = (rec.opts && rec.opts.weekStart === 0) ? 0 : 1;
+      const now    = new Date();
+      const year   = now.getFullYear();
+      const month  = now.getMonth();
+      const today  = now.getDate();
+      rec.el.querySelector(".cal-head").textContent =
+        now.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      const baseSun = new Date(2024, 5, 2);
+      const dayNames = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(baseSun);
+        d.setDate(baseSun.getDate() + i + weekStart);
+        dayNames.push(d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2));
+      }
+      rec.el.querySelector("thead tr").innerHTML =
+        dayNames.map((n) => "<th>" + n + "</th>").join("");
+      const startOffset  = (new Date(year, month, 1).getDay() - weekStart + 7) % 7;
+      const daysInMonth  = new Date(year, month + 1, 0).getDate();
+      const cells = [];
+      for (let i = 0; i < startOffset; i++) {
+        const d = new Date(year, month, 1 - (startOffset - i));
+        cells.push({ day: d.getDate(), dim: true });
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        cells.push({ day: d, dim: false, today: d === today });
+      }
+      while (cells.length % 7 !== 0) {
+        const d = new Date(year, month + 1, cells.length - startOffset - daysInMonth + 1);
+        cells.push({ day: d.getDate(), dim: true });
+      }
+      const rows = [];
+      for (let i = 0; i < cells.length; i += 7) {
+        rows.push("<tr>" + cells.slice(i, i + 7).map((c) =>
+          "<td" + (c.today ? ' class="today"' : c.dim ? ' class="dim"' : "") + ">" + c.day + "</td>"
+        ).join("") + "</tr>");
+      }
+      rec.el.querySelector("tbody").innerHTML = rows.join("");
+    },
+    editOptions: (rec) => {
+      const cur = rec.opts.weekStart === 0 ? "0" : "1";
+      const v = prompt("Week start — 0 = Sunday, 1 = Monday:", cur);
+      if (v === null) return;
+      const weekStart = v.trim() === "0" ? 0 : 1;
+      sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                      options: { weekStart } });
+    },
+  },
+
+  // ── Weather ────────────────────────────────────────────────────────────
+  weather: {
+    label: "Weather",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="10" r="4"/>' +
+          '<path d="M14 14h4a3 3 0 0 0 0-6 5 5 0 0 0-9.5-1.5"/></svg>',
+    markup: () => '<div class="wx-head"></div><div class="wx-temp">—</div>' +
+                  '<div class="wx-cond">…</div><div class="wx-foot">loading</div>',
+    tick: (rec) => {
+      const now = Date.now();
+      if (rec.cache) renderWeatherCache(rec);
+      const REFRESH = 30 * 60 * 1000;
+      if (!rec.lastFetch || now - rec.lastFetch > REFRESH) {
+        rec.lastFetch = now;
+        fetchWeather(rec);
+      }
+    },
+    editOptions: (rec) => {
+      const label = prompt("Location label:", rec.opts.label || "Berlin");
+      if (label === null) return;
+      const latStr = prompt("Latitude:", String(rec.opts.lat ?? 52.52));
+      if (latStr === null) return;
+      const lat = parseFloat(latStr);
+      if (!Number.isFinite(lat)) { alert("Invalid latitude"); return; }
+      const lonStr = prompt("Longitude:", String(rec.opts.lon ?? 13.405));
+      if (lonStr === null) return;
+      const lon = parseFloat(lonStr);
+      if (!Number.isFinite(lon)) { alert("Invalid longitude"); return; }
+      const u = prompt("Units — 'metric' or 'imperial':", rec.opts.units || "metric");
+      const units = (u && u.trim().toLowerCase() === "imperial") ? "imperial" : "metric";
+      rec.cache = null; rec.lastFetch = 0;   // force a fresh fetch
+      sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                      options: { label, lat, lon, units } });
+    },
+  },
+
+  // ── Sticky note ────────────────────────────────────────────────────────
+  "sticky-note": {
+    label: "Note",
+    icon: '<svg viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/>' +
+          '<line x1="16" y1="4" x2="16" y2="8"/><line x1="16" y1="8" x2="20" y2="8"/>' +
+          '<line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="13" y2="17"/></svg>',
+    markup: () => '<div class="sticky-body"></div>',
+    mount: (rec) => {
+      const body = rec.el.querySelector(".sticky-body");
+      body.contentEditable = "false";
+      rec.el.addEventListener("dblclick", () => {
+        if (widgetsLocked) return;
+        body.contentEditable = "true";
+        body.focus();
+        const range = document.createRange();
+        range.selectNodeContents(body);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+      body.addEventListener("blur", () => {
+        if (body.contentEditable !== "true") return;
+        body.contentEditable = "false";
+        sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                        options: { text: body.textContent } });
+      });
+    },
+    tick: (rec) => {
+      const body = rec.el.querySelector(".sticky-body");
+      if (body.contentEditable === "true") return;   // don't clobber mid-edit
+      const text = (rec.opts && rec.opts.text) || "";
+      if (body.textContent !== text) body.textContent = text;
+      const COLORS = ["yellow", "blue", "pink", "green"];
+      const color = COLORS.includes(rec.opts.color) ? rec.opts.color : "yellow";
+      for (const c of COLORS) rec.el.classList.toggle("color-" + c, c === color);
+    },
+    editOptions: (rec) => {
+      const c = prompt("Note colour — yellow / blue / pink / green:",
+                       rec.opts.color || "yellow");
+      if (c === null) return;
+      const v = (c || "").trim().toLowerCase();
+      const color = ["yellow","blue","pink","green"].includes(v) ? v : "yellow";
+      sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                      options: { color } });
+    },
+  },
+
+  // ── Countdown ──────────────────────────────────────────────────────────
+  countdown: {
+    label: "Countdown",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/>' +
+          '<line x1="12" y1="13" x2="12" y2="8"/><line x1="12" y1="13" x2="15" y2="14"/>' +
+          '<line x1="9" y1="3" x2="15" y2="3"/></svg>',
+    markup: () => '<div class="cd-label">Event</div><div class="cd-time">— —</div>',
+    tick: (rec) => {
+      let target = rec.opts.target;
+      if (!target) {
+        const d = new Date(); d.setDate(d.getDate() + 30); d.setHours(0,0,0,0);
+        target = d.toISOString();
+      }
+      const t = new Date(target);
+      rec.el.querySelector(".cd-label").textContent = rec.opts.label || "Event";
+      const time = rec.el.querySelector(".cd-time");
+      if (isNaN(t.getTime())) { time.textContent = "invalid"; return; }
+      time.textContent = formatCountdown(t.getTime() - Date.now(), rec.opts.units || "smart");
+    },
+    editOptions: (rec) => {
+      const tgt = prompt("Target date (YYYY-MM-DD or full ISO):",
+                         rec.opts.target || "");
+      if (tgt === null) return;
+      const lbl = prompt("Label:", rec.opts.label || "Event");
+      if (lbl === null) return;
+      sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                      options: { target: tgt.trim(), label: lbl } });
+    },
+  },
+
+  // ── Picture frame ──────────────────────────────────────────────────────
+  "picture-frame": {
+    label: "Picture",
+    icon: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/>' +
+          '<circle cx="9" cy="9" r="1.6"/><path d="M5 17l5-5 4 3 5-6 0 8z"/></svg>',
+    markup: () => '<img class="pic-img" style="display:none">' +
+                  '<div class="pic-placeholder">Click ⚙ to set image URL</div>',
+    tick: (rec) => {
+      const img = rec.el.querySelector(".pic-img");
+      const ph  = rec.el.querySelector(".pic-placeholder");
+      const raw = (rec.opts && rec.opts.url) || "";
+      const url = raw ? normalizeImagePath(raw) : "";
+      if (url) {
+        if (img.getAttribute("src") !== url) img.src = url;
+        img.style.display = "block"; ph.style.display = "none";
+        img.style.objectFit = rec.opts.fit || "cover";
+      } else {
+        img.style.display = "none"; ph.style.display = "flex";
+      }
+      rec.el.classList.toggle("rounded", rec.opts.rounded !== false);
+    },
+    editOptions: (rec) => {
+      const url = prompt("Image URL (https://…) or absolute file path:",
+                         rec.opts.url || "");
+      if (url === null) return;
+      const fit = prompt("Fit — cover / contain / fill:", rec.opts.fit || "cover");
+      const fv  = (fit || "").trim().toLowerCase();
+      const fitVal = ["cover","contain","fill"].includes(fv) ? fv : "cover";
+      sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
+                      options: { url: url.trim(), fit: fitVal } });
+    },
+  },
+
+  // ── Quote of the day ───────────────────────────────────────────────────
+  quote: {
+    label: "Quote",
+    icon: '<svg viewBox="0 0 24 24"><path d="M6 7c-2 1-3 3-3 6v4h6v-6H6c0-1 1-3 3-4z"/>' +
+          '<path d="M16 7c-2 1-3 3-3 6v4h6v-6h-3c0-1 1-3 3-4z"/></svg>',
+    markup: () => '<div class="q-text">…</div><div class="q-author">—</div>' +
+                  '<div class="q-foot">via Quotable</div>',
+    tick: (rec) => {
+      const now = Date.now();
+      if (rec.cache) renderQuoteCache(rec);
+      const REFRESH = 24 * 60 * 60 * 1000;
+      if (!rec.lastFetch || now - rec.lastFetch > REFRESH) {
+        rec.lastFetch = now;
+        fetchQuote(rec);
+      }
+    },
+    editOptions: null,
+  },
+};
+
+// ── Cross-widget state ─────────────────────────────────────────────────────
+const widgetsContainer = document.getElementById("widgets-container");
+const widgetPicker     = document.getElementById("widget-picker");
+const widgetNodes      = new Map();
+let   widgetsLocked    = true;
+let   currentTintCss   = "#6ab0ff";
+
+function setWidgetsLocked(locked) {
+  widgetsLocked = !!locked;
+  widgetsContainer.classList.toggle("edit-mode", !locked);
+  widgetPicker.classList.toggle("on", !locked);
+}
+
+function setWidgets(list) {
+  const wantIds = new Set(list.map((w) => w.id));
+  for (const [id, rec] of [...widgetNodes.entries()]) {
+    if (!wantIds.has(id)) {
+      rec.el.remove();
+      widgetNodes.delete(id);
+    }
+  }
+  for (const w of list) {
+    let rec = widgetNodes.get(w.id);
+    if (!rec) {
+      rec = createWidget(w);
+      if (!rec) continue;
+      widgetNodes.set(w.id, rec);
+      widgetsContainer.appendChild(rec.el);
+      bindInteract(rec);
+      if (rec.reg.mount) {
+        try { rec.reg.mount(rec); } catch (e) { console.warn("[widget mount]", e); }
+      }
+    }
+    applyWidgetPosition(rec, w);
+    applyWidgetOptions(rec, w);
+  }
+}
+
+function createWidget(w) {
+  const reg = WIDGET_REGISTRY[w.type];
+  if (!reg) { console.warn("[widget] unknown type:", w.type); return null; }
+  const el = document.createElement("div");
+  el.className = "widget widget-" + w.type;
+  el.dataset.id = w.id;
+  el.innerHTML = reg.markup() +
+    '<div class="widget-handle"></div>' +
+    (reg.editOptions ? '<div class="widget-settings" title="Configure">⚙</div>' : '') +
+    '<div class="widget-remove" title="Remove widget">×</div>';
+  el.querySelector(".widget-remove").addEventListener("click", (e) => {
+    e.stopPropagation();
+    sendWidgetCmd({ type: "widget-remove", id: w.id });
+  });
+  const rec = { el, type: w.type, reg, opts: {}, last: { x: 0, y: 0, w: 0, h: 0 } };
+  if (reg.editOptions) {
+    el.querySelector(".widget-settings").addEventListener("click", (e) => {
+      e.stopPropagation();
+      try { reg.editOptions(rec); } catch (err) { console.warn("[widget editOptions]", err); }
+    });
+  }
+  rec.tick = () => reg.tick(rec);
+  return rec;
+}
+
+function applyWidgetPosition(rec, w) {
+  const next = { x: w.x | 0, y: w.y | 0, w: w.w | 0, h: w.h | 0 };
+  if (next.x === rec.last.x && next.y === rec.last.y &&
+      next.w === rec.last.w && next.h === rec.last.h) return;
+  rec.el.style.transform = "translate(" + next.x + "px, " + next.y + "px)";
+  rec.el.style.width  = next.w + "px";
+  rec.el.style.height = next.h + "px";
+  // interact.js convention — keep the x/y on the dataset so its move handler
+  // can resume from current state instead of starting at 0,0.
+  rec.el.dataset.x = String(next.x);
+  rec.el.dataset.y = String(next.y);
+  rec.last = next;
+}
+
+function applyWidgetOptions(rec, w) {
+  rec.opts = w.options || {};
+  rec.el.classList.toggle("tinted", !!rec.opts.tintFromGlow);
+  if (rec.opts.tintFromGlow) {
+    rec.el.style.setProperty("--w-tint", currentTintCss);
+  } else {
+    rec.el.style.removeProperty("--w-tint");
+  }
+  if (rec.tick) rec.tick();
+}
+
+function bindInteract(rec) {
+  if (typeof interact === "undefined") return;
+  const send = () => sendWidgetCmd({
+    type: "widget-update", id: rec.el.dataset.id,
+    x: parseInt(rec.el.dataset.x, 10) | 0,
+    y: parseInt(rec.el.dataset.y, 10) | 0,
+    w: rec.el.offsetWidth | 0,
+    h: rec.el.offsetHeight | 0,
+  });
+  interact(rec.el)
+    .draggable({
+      inertia: false,
+      modifiers: [
+        interact.modifiers.restrictRect({ restriction: "parent", endOnly: false }),
+      ],
+      // Don't start a drag when the user clicks the widget's own buttons or
+      // is mid-edit on a sticky note — otherwise typing inside the note
+      // would also drag the whole widget around.
+      ignoreFrom: '.widget-settings, .widget-remove, [contenteditable="true"]',
+      listeners: {
+        move(event) {
+          const x = (parseFloat(event.target.dataset.x) || 0) + event.dx;
+          const y = (parseFloat(event.target.dataset.y) || 0) + event.dy;
+          event.target.style.transform = "translate(" + x + "px, " + y + "px)";
+          event.target.dataset.x = x;
+          event.target.dataset.y = y;
+        },
+        end: send,
+      },
+    })
+    .resizable({
+      edges: { left: false, right: true, bottom: true, top: false },
+      modifiers: [
+        interact.modifiers.restrictSize({ min: { width: 80, height: 80 } }),
+      ],
+      listeners: {
+        move(event) {
+          event.target.style.width  = event.rect.width  + "px";
+          event.target.style.height = event.rect.height + "px";
+        },
+        end: send,
+      },
+    });
+}
+
+function sendWidgetCmd(msg) {
+  if (!ws || ws.readyState !== 1) return;
+  try { ws.send(JSON.stringify(msg)); } catch (e) { console.warn("[widget] send failed:", e); }
+}
+
+// ── In-page picker — generated once from WIDGET_REGISTRY ────────────────────
+function buildWidgetPicker() {
+  const grid = widgetPicker.querySelector(".picker-grid");
+  grid.innerHTML = "";
+  for (const [type, reg] of Object.entries(WIDGET_REGISTRY)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "picker-btn";
+    btn.title = "Add " + reg.label;
+    btn.innerHTML = reg.icon +
+                    '<div class="picker-btn-label">' + escapeHtml(reg.label) + '</div>';
+    btn.addEventListener("click", () => {
+      sendWidgetCmd({ type: "widget-add", widgetType: type });
+    });
+    grid.appendChild(btn);
+  }
+}
+buildWidgetPicker();
+
+// ── Shared helpers used by registry entries ─────────────────────────────────
+
+function formatCountdown(ms, units) {
+  if (ms <= 0) return "now";
+  const s    = Math.floor(ms / 1000);
+  const days = Math.floor(s / 86400);
+  const hrs  = Math.floor((s % 86400) / 3600);
+  const min  = Math.floor((s % 3600) / 60);
+  const sec  = s % 60;
+  const pad2 = (n) => String(n).padStart(2, "0");
+  if (units === "days") return days + "d";
+  if (units === "hms")  return pad2(hrs) + ":" + pad2(min) + ":" + pad2(sec);
+  // smart: scale to the most-meaningful unit
+  if (days >= 2) return days + "d " + hrs + "h";
+  if (days >= 1) return days + "d " + hrs + "h " + min + "m";
+  return pad2(hrs) + ":" + pad2(min) + ":" + pad2(sec);
+}
+
+const WMO_CODES = {
+  0:"Clear", 1:"Mainly clear", 2:"Partly cloudy", 3:"Overcast",
+  45:"Fog", 48:"Rime fog",
+  51:"Light drizzle", 53:"Drizzle", 55:"Heavy drizzle",
+  61:"Light rain", 63:"Rain", 65:"Heavy rain",
+  71:"Light snow", 73:"Snow", 75:"Heavy snow", 77:"Snow grains",
+  80:"Rain showers", 81:"Heavy showers", 82:"Violent showers",
+  85:"Snow showers", 86:"Heavy snow showers",
+  95:"Thunderstorm", 96:"Storm w/ hail", 99:"Storm w/ heavy hail",
+};
+
+function fetchWeather(rec) {
+  const lat   = parseFloat(rec.opts.lat);
+  const lon   = parseFloat(rec.opts.lon);
+  const label = rec.opts.label || "";
+  const units = rec.opts.units === "imperial" ? "fahrenheit" : "celsius";
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    rec.el.querySelector(".wx-foot").textContent = "no location set";
+    return;
+  }
+  const url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat +
+              "&longitude=" + lon + "&current=temperature_2m,weather_code,wind_speed_10m" +
+              "&temperature_unit=" + units + "&timezone=auto";
+  fetch(url).then((r) => r.json()).then((j) => {
+    rec.cache = {
+      label, temp: j && j.current && j.current.temperature_2m,
+      code:        j && j.current && j.current.weather_code,
+      wind:        j && j.current && j.current.wind_speed_10m,
+      units, ts: Date.now(),
+    };
+    renderWeatherCache(rec);
+  }).catch((e) => {
+    rec.el.querySelector(".wx-foot").textContent = "fetch failed";
+    console.warn("[widget weather]", e);
+  });
+}
+
+function renderWeatherCache(rec) {
+  const c = rec.cache;
+  if (!c) return;
+  const unitSym = c.units === "fahrenheit" ? "°F" : "°C";
+  rec.el.querySelector(".wx-head").innerHTML =
+    "<span>" + escapeHtml(c.label || "Weather") + "</span><span></span>";
+  rec.el.querySelector(".wx-temp").textContent =
+    (c.temp == null ? "—" : Math.round(c.temp)) + unitSym;
+  rec.el.querySelector(".wx-cond").textContent = WMO_CODES[c.code] || "—";
+  const minsAgo = Math.max(0, Math.round((Date.now() - c.ts) / 60000));
+  // Open-Meteo data is CC-BY — the attribution stays in the footer
+  // whenever the widget has real data to show.
+  rec.el.querySelector(".wx-foot").textContent =
+    "updated " + (minsAgo === 0 ? "just now" : minsAgo + " min ago") + " · via Open-Meteo";
+}
+
+function fetchQuote(rec) {
+  // Quotable.io — free, CC BY-SA, no API key. One random quote per fetch.
+  fetch("https://api.quotable.io/random")
+    .then((r) => r.json())
+    .then((j) => {
+      rec.cache = { content: j.content, author: j.author, ts: Date.now() };
+      renderQuoteCache(rec);
+    })
+    .catch((e) => {
+      rec.el.querySelector(".q-text").textContent   = "couldn't fetch a quote";
+      rec.el.querySelector(".q-author").textContent = "";
+      console.warn("[widget quote]", e);
+    });
+}
+
+function renderQuoteCache(rec) {
+  const c = rec.cache;
+  if (!c) return;
+  rec.el.querySelector(".q-text").textContent   = "“" + (c.content || "—") + "”";
+  rec.el.querySelector(".q-author").textContent = "— " + (c.author || "anonymous");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+// Drive all widgets from a single rAF-friendly interval. Clock needs second-
+// resolution; calendar and weather coast on minute-resolution but a 1 s tick
+// is cheap and keeps things simple.
+setInterval(() => {
+  if (isPaused) return;
+  for (const rec of widgetNodes.values()) {
+    if (rec.tick) {
+      try { rec.tick(); } catch (e) { console.warn("[widget tick]", e); }
+    }
+  }
+}, 1000);
+
+// Tint update from the live colour stream — called from renderFrame() with the
+// already-decoded zone colours, so it doesn't add a second parse pass. Picks
+// the average of the first few zones; widgets that opted in pick this up via
+// the --w-tint CSS variable on the next applyOptions cycle (also any tick).
+function _anyTintedWidget() {
+  for (const rec of widgetNodes.values()) {
+    if (rec.opts && rec.opts.tintFromGlow) return true;
+  }
+  return false;
+}
+
+function updateTintFromFrame(zoneColors) {
+  if (!zoneColors || !zoneColors.length) return;
+  // Sample up to 16 zones; cheap mean of RGB.
+  const N = Math.min(16, zoneColors.length);
+  let r = 0, g = 0, b = 0;
+  for (let i = 0; i < N; i++) {
+    r += zoneColors[i][0];
+    g += zoneColors[i][1];
+    b += zoneColors[i][2];
+  }
+  r = (r / N) | 0; g = (g / N) | 0; b = (b / N) | 0;
+  currentTintCss = "rgb(" + r + "," + g + "," + b + ")";
+  for (const rec of widgetNodes.values()) {
+    if (rec.opts && rec.opts.tintFromGlow) {
+      rec.el.style.setProperty("--w-tint", currentTintCss);
+    }
+  }
+}
 </script>
 </body>
 </html>

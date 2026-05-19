@@ -44,12 +44,15 @@ import hashlib
 import json
 import mimetypes
 import os
+import re
 import struct
 import sys
 import threading
 import time
 import tkinter as tk
+import urllib.error
 import urllib.parse
+import urllib.request
 import webbrowser
 from io import BytesIO
 from pathlib import Path
@@ -158,11 +161,148 @@ class FullscreenWatcher:
                 print(f"[fullscreen] watch error: {e}")
 
 # ============================================================================
+# Update checker
+# ============================================================================
+
+UPDATE_API_URL          = "https://api.github.com/repos/Delido/signalrgb-wallpaper/releases"
+UPDATE_RELEASES_HTML    = "https://github.com/Delido/signalrgb-wallpaper/releases"
+UPDATE_CHECK_INTERVAL_S = 24 * 3600    # daily background poll
+UPDATE_STARTUP_DELAY_S  = 12           # let the bridge settle before the first call
+
+
+def _parse_version(s: str) -> tuple:
+    """Parse 'v0.5.1', '0.5.1' or '0.5.1-beta' into a sortable tuple.
+
+    Stable releases sort *after* any prerelease of the same MAJOR.MINOR.PATCH,
+    which matches semver semantics ('1.0.0-beta' < '1.0.0'). Returns
+    (major, minor, patch, channel, pre_label) where channel is 1 for stable
+    and 0 for prerelease. Garbage strings sort to (0,0,0,…) so they never
+    trigger a false-positive 'newer than current' result for a real version.
+    """
+    s = (s or "").strip().lstrip("vV")
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:[-+](.+))?$", s)
+    if not m:
+        return (0, 0, 0, 0, "")
+    major, minor, patch, pre = m.groups()
+    return (int(major), int(minor), int(patch), 0 if pre else 1, pre or "")
+
+
+class UpdateChecker:
+    """Polls the GitHub releases API once on startup (after a short delay)
+    and once a day thereafter. Honours config flags:
+      - updateCheckEnabled: master switch
+      - allowBetas:         include prerelease tags in the comparison
+    On detection of a newer version, calls on_update_available(tag, html_url).
+    The tray menu queries available()/latest_url() between polls; check_now()
+    triggers an immediate retry from the 'Check for updates now' menu entry."""
+
+    def __init__(self, config: dict, config_lock: threading.Lock, on_update_available, on_check_done):
+        self.config = config
+        self.config_lock = config_lock
+        self.on_update_available = on_update_available  # callable(tag, html_url)
+        self.on_check_done = on_check_done              # callable(found: bool, error: str|None)
+        self._stop = threading.Event()
+        self._available_tag: str | None = None
+        self._available_url: str | None = None
+        self._last_checked_ts: float = 0.0
+        self._last_error: str | None = None
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True, name="update-checker").start()
+
+    def stop(self):
+        self._stop.set()
+
+    # ── queried by the tray menu ────────────────────────────────────────
+    def available(self) -> tuple[str, str] | None:
+        if self._available_tag:
+            return (self._available_tag, self._available_url or UPDATE_RELEASES_HTML)
+        return None
+
+    def last_checked(self) -> float:
+        return self._last_checked_ts
+
+    def last_error(self) -> str | None:
+        return self._last_error
+
+    def check_now(self):
+        threading.Thread(target=self._safe_check, daemon=True, name="update-check-now").start()
+
+    # ── internals ───────────────────────────────────────────────────────
+    def _enabled(self) -> bool:
+        with self.config_lock:
+            return bool(self.config.get("updateCheckEnabled", True))
+
+    def _allow_betas(self) -> bool:
+        with self.config_lock:
+            return bool(self.config.get("allowBetas", False))
+
+    def _run(self):
+        if self._stop.wait(UPDATE_STARTUP_DELAY_S):
+            return
+        while not self._stop.is_set():
+            if self._enabled():
+                self._safe_check()
+            if self._stop.wait(UPDATE_CHECK_INTERVAL_S):
+                return
+
+    def _safe_check(self):
+        try:
+            self._check()
+            self._last_error = None
+            self.on_check_done(self._available_tag is not None, None)
+        except Exception as e:
+            self._last_error = str(e)
+            print(f"[update] check failed: {e}")
+            self.on_check_done(False, str(e))
+
+    def _check(self):
+        self._last_checked_ts = time.time()
+        req = urllib.request.Request(UPDATE_API_URL, headers={
+            "Accept":     "application/vnd.github+json",
+            "User-Agent": f"SignalRGBWallpaper-Updater/{APP_VERSION}",
+        })
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        if not isinstance(data, list):
+            raise RuntimeError("releases endpoint returned non-list payload")
+        allow_betas = self._allow_betas()
+        current = _parse_version(APP_VERSION)
+        best: tuple = current
+        best_tag = ""
+        best_url = ""
+        for rel in data:
+            if not isinstance(rel, dict) or rel.get("draft"):
+                continue
+            if rel.get("prerelease") and not allow_betas:
+                continue
+            tag = rel.get("tag_name") or ""
+            v = _parse_version(tag)
+            if v > best:
+                best = v
+                best_tag = tag
+                best_url = rel.get("html_url") or UPDATE_RELEASES_HTML
+        if best > current:
+            prev = self._available_tag
+            self._available_tag = best_tag
+            self._available_url = best_url
+            if prev != best_tag:    # only fire on first detection / new bump
+                print(f"[update] newer release available: {best_tag} (current {APP_VERSION})")
+                try: self.on_update_available(best_tag, best_url)
+                except Exception as e: print(f"[update] notify failed: {e}")
+        else:
+            self._available_tag = None
+            self._available_url = None
+            print(f"[update] no newer release; current {APP_VERSION} is up to date "
+                  f"(allow_betas={allow_betas})")
+
+
+# ============================================================================
 # Constants
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.4.5"
+APP_VERSION = "0.5.1-beta"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
@@ -193,7 +333,70 @@ DEFAULT_SCREEN_SETTINGS = {
     "barHeight":    38,
     "barWidth":     14,
     "showStatus":   False,
+    # Placeable HTML widgets (clock / calendar / weather, more coming).
+    # Each entry: {"id":"w_<int>", "type":"clock|calendar|weather",
+    #              "x":int, "y":int, "w":int, "h":int,
+    #              "options": {…}}. Positions are CSS pixels relative to
+    #              the wallpaper page's viewport.
+    "widgets":         [],
+    # When True the wallpaper renders widgets read-only. When False the
+    # wallpaper attaches drag/resize handles (via interact.js) and pushes
+    # position updates back over the WS as widget-update messages.
+    "widgetsLocked":   True,
 }
+
+# Server-side schemas for widget option defaults — keep in sync with the
+# wallpaper-page renderers. Tray "Add widget" uses these to seed a fresh
+# entry; client-side options editor (later) writes back through the same
+# WS protocol.
+# Each entry: position + size at spawn, the type-specific options blob, and
+# a tray-menu label. The wallpaper page mirrors the keys in its WIDGET_REGISTRY
+# so the in-page picker and the tray "Add…" submenu both stay in sync.
+WIDGET_DEFAULTS = {
+    "clock": {
+        "label":   "Clock",
+        "x": 60, "y": 60, "w": 220, "h": 220,
+        "options": {"style": "analog", "format24h": True, "tintFromGlow": False},
+    },
+    "calendar": {
+        "label":   "Calendar",
+        "x": 60, "y": 320, "w": 260, "h": 240,
+        "options": {"tintFromGlow": False, "weekStart": 1},   # 0=Sun, 1=Mon
+    },
+    "weather": {
+        "label":   "Weather",
+        "x": 60, "y": 600, "w": 240, "h": 140,
+        "options": {"lat": 52.52, "lon": 13.405, "label": "Berlin",
+                    "units": "metric", "tintFromGlow": False},
+    },
+    "sticky-note": {
+        "label":   "Sticky note",
+        "x": 340, "y": 60, "w": 220, "h": 180,
+        "options": {"text": "Double-click in edit mode to write a note.",
+                    "color": "yellow", "tintFromGlow": False},
+    },
+    "countdown": {
+        "label":   "Countdown",
+        "x": 340, "y": 280, "w": 240, "h": 140,
+        # Target gets seeded by the wallpaper page on first render (we
+        # can't sensibly hardcode a date in this Python file). Empty
+        # string here means "use today + 30 days as default".
+        "options": {"target": "", "label": "Event",
+                    "units": "smart", "tintFromGlow": False},
+    },
+    "picture-frame": {
+        "label":   "Picture frame",
+        "x": 340, "y": 460, "w": 260, "h": 200,
+        "options": {"url": "", "fit": "cover", "rounded": True,
+                    "tintFromGlow": False},
+    },
+    "quote": {
+        "label":   "Quote of the day",
+        "x": 600, "y": 60,  "w": 320, "h": 180,
+        "options": {"source": "quotable", "tintFromGlow": False},
+    },
+}
+WIDGET_TYPES = list(WIDGET_DEFAULTS.keys())
 
 # Choices that must match the wallpaper HTML / CSS class names.
 BG_FIT_CHOICES   = ["cover", "contain", "fill"]
@@ -233,8 +436,10 @@ def screens_dir() -> Path:
 def default_config() -> dict:
     return {
         "version": CONFIG_VERSION,
-        "screenCount": 1,        # plugin polls /config and announces this many controllers
-        "fullscreenPause": True, # auto-pause glow when a fullscreen app is active
+        "screenCount": 1,         # plugin polls /config and announces this many controllers
+        "fullscreenPause": True,  # auto-pause glow when a fullscreen app is active
+        "updateCheckEnabled": True,
+        "allowBetas":         False,   # include GitHub prerelease tags in update checks
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -262,6 +467,10 @@ def load_config() -> dict:
         cfg["screenCount"] = 1
     cfg.setdefault("fullscreenPause", True)
     cfg["fullscreenPause"] = bool(cfg.get("fullscreenPause", True))
+    cfg.setdefault("updateCheckEnabled", True)
+    cfg["updateCheckEnabled"] = bool(cfg.get("updateCheckEnabled", True))
+    cfg.setdefault("allowBetas", False)
+    cfg["allowBetas"] = bool(cfg.get("allowBetas", False))
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -327,6 +536,46 @@ def encode_binary_frame(payload: bytes) -> bytes:
 
 def encode_text_frame(text: str) -> bytes:
     return _encode_frame(0x1, text.encode("utf-8"))
+
+
+async def read_client_text_frame(reader) -> str | None:
+    """Read one masked client→server WS frame; return its decoded text body
+    if it's a text frame, None on close/control/error. Skips ping/pong and
+    binary frames silently — the wallpaper page only ever sends JSON text
+    messages back to the bridge."""
+    try:
+        header = await reader.readexactly(2)
+    except (asyncio.IncompleteReadError, ConnectionError):
+        return None
+    b1, b2 = header[0], header[1]
+    fin = (b1 & 0x80) != 0
+    opcode = b1 & 0x0f
+    masked = (b2 & 0x80) != 0
+    n = b2 & 0x7f
+    if n == 126:
+        n = struct.unpack(">H", await reader.readexactly(2))[0]
+    elif n == 127:
+        n = struct.unpack(">Q", await reader.readexactly(8))[0]
+    # Browser → server frames MUST be masked per RFC 6455. Reject anything
+    # else (defensive — should never happen with real browser clients).
+    mask = await reader.readexactly(4) if masked else b"\x00\x00\x00\x00"
+    payload = await reader.readexactly(n) if n else b""
+    if masked:
+        payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+    if opcode == 0x8:    # close
+        return None
+    if opcode == 0x9:    # ping — bridge ignores (no pong sent; browsers
+        return ""        # don't currently ping us anyway)
+    if opcode != 0x1:    # not text → caller skips
+        return ""
+    if not fin:
+        # Wallpaper-page messages are tiny single-frame JSON blobs. Anything
+        # fragmented gets dropped rather than reassembled.
+        return ""
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError:
+        return ""
 
 
 # ============================================================================
@@ -401,14 +650,28 @@ class Broadcaster:
     cross-thread calls (e.g. tray->push_settings) use call_soon_threadsafe.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused):
+    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused, on_widget_command):
         self.loop = loop
         self.get_settings = get_settings        # callable(screen:int)->dict
         self.get_screen_count = get_screen_count  # callable()->int (1..N_SCREENS)
         self.update_background = update_background  # callable(screen:int, png_bytes:bytes)->bool
         self.get_paused = get_paused            # callable()->bool (fullscreen-induced pause)
+        self.on_widget_command = on_widget_command  # callable(screen:int, msg:dict)->None
         self.clients_by_screen: dict[int, set] = {}
         self._lock = asyncio.Lock()
+
+    def handle_client_message(self, screen: int, msg: dict):
+        """Route a decoded JSON message from a wallpaper page. All widget
+        mutations live here; future client→server messages slot in next to
+        them. Runs on the asyncio loop thread."""
+        t = msg.get("type")
+        if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock"):
+            try:
+                self.on_widget_command(screen, msg)
+            except Exception as e:
+                print(f"[ws] widget command failed: {e}")
+        # Unknown types are silently dropped — clients on a newer protocol
+        # version shouldn't crash an older bridge.
 
     # ----- client lifecycle -----
 
@@ -653,9 +916,16 @@ class Broadcaster:
         await self.add(writer, screen)
         try:
             while not writer.is_closing():
-                chunk = await reader.read(4096)
-                if not chunk:
+                text = await read_client_text_frame(reader)
+                if text is None:    # close / EOF
                     break
+                if not text:        # ignored frame type (binary, control, fragmented)
+                    continue
+                try:
+                    msg = json.loads(text)
+                except Exception:
+                    continue
+                self.handle_client_message(screen, msg)
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, OSError):
             pass
         finally:
@@ -753,6 +1023,114 @@ class BridgeRuntime:
         if self.broadcaster:
             self.broadcaster.push_settings_threadsafe(screen, settings)
 
+    # ── Widget CRUD ──────────────────────────────────────────────────────
+    # All four entry points share the same shape: mutate the in-memory
+    # config under config_lock, write it to disk, then push the fresh
+    # settings to every WS client on the affected screen so the wallpaper
+    # page re-renders. Tray controls and wallpaper-page drag both flow
+    # through these.
+
+    def _mutate_screen(self, screen: int, mutator) -> dict | None:
+        """Apply `mutator(screen_dict)` under lock, persist, return a snapshot
+        of the new screen settings. Returns None if the screen index is bad."""
+        with self.config_lock:
+            screens = self.config.get("screens", {})
+            s = screens.get(str(screen))
+            if s is None:
+                return None
+            mutator(s)
+            snapshot   = json.loads(json.dumps(s))
+            full_snap  = json.loads(json.dumps(self.config))
+        try:
+            save_config(full_snap)
+        except Exception as e:
+            print(f"[widgets] save_config failed: {e}")
+        return snapshot
+
+    def add_widget(self, screen: int, widget_type: str, x: int | None = None, y: int | None = None) -> dict | None:
+        if widget_type not in WIDGET_DEFAULTS:
+            print(f"[widgets] unknown type: {widget_type!r}")
+            return None
+        defaults = WIDGET_DEFAULTS[widget_type]
+
+        def mutate(s):
+            existing = s.setdefault("widgets", [])
+            # Compose a new id deterministic-ish from current count + ms time
+            # so two rapid clicks don't collide.
+            new_id = f"w_{int(time.time() * 1000) % 10_000_000}_{len(existing)}"
+            entry = {
+                "id":      new_id,
+                "type":    widget_type,
+                "x":       defaults["x"] if x is None else int(x),
+                "y":       defaults["y"] if y is None else int(y),
+                "w":       defaults["w"],
+                "h":       defaults["h"],
+                "options": dict(defaults["options"]),
+            }
+            existing.append(entry)
+            # Adding a widget also implicitly puts the page in edit mode —
+            # otherwise the user can't find/move the freshly-added one.
+            s["widgetsLocked"] = False
+
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+        return snap
+
+    def remove_widget(self, screen: int, widget_id: str) -> dict | None:
+        def mutate(s):
+            s["widgets"] = [w for w in s.get("widgets", []) if w.get("id") != widget_id]
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+        return snap
+
+    def update_widget(self, screen: int, widget_id: str, fields: dict) -> dict | None:
+        # Whitelist mutable fields — never let a wallpaper-page bug bleed
+        # arbitrary keys into our config file.
+        allowed = {"x", "y", "w", "h", "options"}
+        def mutate(s):
+            for entry in s.get("widgets", []):
+                if entry.get("id") != widget_id:
+                    continue
+                for k in allowed:
+                    if k not in fields:
+                        continue
+                    if k == "options" and isinstance(fields[k], dict):
+                        entry.setdefault("options", {}).update(fields[k])
+                    else:
+                        entry[k] = fields[k]
+                break
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+        return snap
+
+    def set_widgets_locked(self, screen: int, locked: bool) -> dict | None:
+        def mutate(s):
+            s["widgetsLocked"] = bool(locked)
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+        return snap
+
+    def _on_widget_command(self, screen: int, msg: dict):
+        """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
+        defer the actual persistence + rebroadcast to a thread so the WS
+        read loop never blocks on the config-file write."""
+        def run():
+            t = msg.get("type")
+            if   t == "widget-update":
+                fields = {k: msg[k] for k in ("x", "y", "w", "h", "options") if k in msg}
+                self.update_widget(screen, str(msg.get("id", "")), fields)
+            elif t == "widget-add":
+                self.add_widget(screen, str(msg.get("widgetType", "")))
+            elif t == "widget-remove":
+                self.remove_widget(screen, str(msg.get("id", "")))
+            elif t == "widgets-lock":
+                self.set_widgets_locked(screen, bool(msg.get("locked", True)))
+        threading.Thread(target=run, daemon=True, name="widget-mutate").start()
+
     def start(self):
         threading.Thread(target=self._run, daemon=True, name="bridge-asyncio").start()
         self._ready.wait()
@@ -770,6 +1148,7 @@ class BridgeRuntime:
             self._get_screen_count,
             self._update_background,
             self._is_paused,
+            self._on_widget_command,
         )
         try:
             loop.run_until_complete(self._serve())
@@ -1204,6 +1583,22 @@ class AboutDialog:
             "    requested via CSS font-family fallback chains — not\n"
             "    bundled or redistributed.\n"
             "\n"
+            "Bundled into each Lively wallpaper zip (the page that renders\n"
+            "the glow on your desktop):\n"
+            "\n"
+            "  • interact.js (drag / resize for placeable widgets) — MIT.\n"
+            "    Full licence text shipped alongside the .js as\n"
+            "    interact.LICENSE.txt in the same zip.\n"
+            "    https://github.com/taye/interact.js\n"
+            "\n"
+            "Live web service queried at runtime (not bundled, only used\n"
+            "by the optional Weather widget):\n"
+            "\n"
+            "  • Open-Meteo — free weather API, no account needed.\n"
+            "    Data is CC-BY 4.0; the widget surfaces an 'Open-Meteo'\n"
+            "    attribution in its footer when active.\n"
+            "    https://open-meteo.com/\n"
+            "\n"
             "Hosts the wallpaper plays inside (not bundled):\n"
             "\n"
             "  • Lively Wallpaper — GPL 3.0\n"
@@ -1266,23 +1661,49 @@ class TrayApp:
         self.config = config
         self.config_lock = config_lock
         self.icon: pystray.Icon | None = None
+        # Background update checker — polls GitHub releases daily + on demand.
+        # Callbacks refresh the tray menu so the "Update available" entry
+        # and "last checked" timestamps stay live without a restart.
+        self.update_checker = UpdateChecker(
+            config, config_lock,
+            on_update_available=self._on_update_available,
+            on_check_done=self._on_update_check_done,
+        )
 
     def run(self):
-        menu = pystray.Menu(
-            pystray.MenuItem("Settings…",         self._open_settings, default=True),
-            pystray.MenuItem("Build Wallpaper…",  self._open_builder),
-            pystray.MenuItem("Reload config",     self._reload_config),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("About…",            self._open_about),
-            pystray.MenuItem("Quit",              self._quit),
-        )
+        # Top-level menu is dynamic so the "Update available…" entry can
+        # appear / disappear based on the checker's state without
+        # rebuilding the Icon.
+        menu = pystray.Menu(self._build_top_menu)
         self.icon = pystray.Icon(
             name="SignalRGBWallpaper",
             icon=build_tray_image(),
             title="SignalRGB Wallpaper Bridge",
             menu=menu,
         )
+        self.update_checker.start()
         self.icon.run()
+
+    def _build_top_menu(self):
+        items = []
+        avail = self.update_checker.available()
+        if avail:
+            tag, _ = avail
+            items.append(pystray.MenuItem(
+                f"⬆  Update available: {tag} — open release page",
+                self._open_update_page))
+            items.append(pystray.Menu.SEPARATOR)
+        items.extend([
+            pystray.MenuItem("Settings…",         self._open_settings, default=True),
+            pystray.MenuItem("Build Wallpaper…",  self._open_builder),
+            pystray.MenuItem("Widgets",           pystray.Menu(self._widget_menu_items)),
+            pystray.MenuItem("Updates",           pystray.Menu(self._update_menu_items)),
+            pystray.MenuItem("Reload config",     self._reload_config),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("About…",            self._open_about),
+            pystray.MenuItem("Quit",              self._quit),
+        ])
+        return items
 
     # -- menu callbacks (fire on pystray's worker thread) -------------------
 
@@ -1337,6 +1758,162 @@ class TrayApp:
             webbrowser.open(url, new=2)
         except Exception as e:
             print(f"[tray] failed to open browser: {e}")
+
+    # ── Updates submenu ────────────────────────────────────────────────
+    # Manual trigger + the two toggles + a status line ("up-to-date /
+    # last error / pending"). Rebuilt on every open so the status reflects
+    # the latest poll without any push from the checker side.
+
+    def _update_menu_items(self):
+        with self.config_lock:
+            enabled = bool(self.config.get("updateCheckEnabled", True))
+            beta    = bool(self.config.get("allowBetas", False))
+        avail   = self.update_checker.available()
+        last_t  = self.update_checker.last_checked()
+        err     = self.update_checker.last_error()
+        items = [
+            pystray.MenuItem("Check for updates now", self._check_updates_now),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Enable update checks",  self._toggle_update_enabled,
+                             checked=lambda _it, _e=enabled: _e),
+            pystray.MenuItem("Allow beta versions",   self._toggle_allow_betas,
+                             checked=lambda _it, _b=beta: _b),
+            pystray.Menu.SEPARATOR,
+        ]
+        if avail:
+            tag, _ = avail
+            items.append(pystray.MenuItem(
+                f"Latest: {tag} — open release page",
+                self._open_update_page))
+        elif err:
+            short = (err[:48] + "…") if len(err) > 48 else err
+            items.append(pystray.MenuItem(f"Last check failed: {short}",
+                                          None, enabled=False))
+        elif last_t > 0:
+            ago = max(0, int(time.time() - last_t))
+            if   ago < 60:   ago_s = f"{ago}s ago"
+            elif ago < 3600: ago_s = f"{ago // 60}m ago"
+            else:            ago_s = f"{ago // 3600}h ago"
+            items.append(pystray.MenuItem(f"Up to date — last checked {ago_s}",
+                                          None, enabled=False))
+        else:
+            items.append(pystray.MenuItem("Not yet checked",
+                                          None, enabled=False))
+        items.append(pystray.MenuItem(f"Installed: v{APP_VERSION}",
+                                      None, enabled=False))
+        return items
+
+    def _check_updates_now(self, icon, item):
+        self.update_checker.check_now()
+
+    def _open_update_page(self, icon, item):
+        avail = self.update_checker.available()
+        url = avail[1] if avail else UPDATE_RELEASES_HTML
+        try: webbrowser.open(url, new=2)
+        except Exception as e: print(f"[tray] open release page failed: {e}")
+
+    def _toggle_update_enabled(self, icon, item):
+        with self.config_lock:
+            cur = bool(self.config.get("updateCheckEnabled", True))
+            self.config["updateCheckEnabled"] = not cur
+            snap = json.loads(json.dumps(self.config))
+        try: save_config(snap)
+        except Exception as e: print(f"[tray] save_config failed: {e}")
+        if not cur:    # we just enabled it → check now
+            self.update_checker.check_now()
+
+    def _toggle_allow_betas(self, icon, item):
+        with self.config_lock:
+            cur = bool(self.config.get("allowBetas", False))
+            self.config["allowBetas"] = not cur
+            snap = json.loads(json.dumps(self.config))
+        try: save_config(snap)
+        except Exception as e: print(f"[tray] save_config failed: {e}")
+        # Re-check immediately so the user sees the effect of flipping
+        # the prerelease filter without waiting a day.
+        self.update_checker.check_now()
+
+    def _on_update_available(self, tag: str, url: str):
+        # Balloon notification — fires once per detected version bump.
+        try:
+            if self.icon:
+                self.icon.notify(
+                    f"Version {tag} is available. Open the tray menu to view "
+                    f"the release page.",
+                    "SignalRGB Wallpaper update",
+                )
+        except Exception as e:
+            print(f"[tray] notify failed: {e}")
+        # Force a menu rebuild so the "Update available" entry appears.
+        try:
+            if self.icon: self.icon.update_menu()
+        except Exception: pass
+
+    def _on_update_check_done(self, found: bool, error: str | None):
+        # Refresh menu so the "last checked …s ago" status updates.
+        try:
+            if self.icon: self.icon.update_menu()
+        except Exception: pass
+
+    # ── Widgets submenu ────────────────────────────────────────────────
+    # Two layers of dynamic menus: outer = one entry per active screen
+    # (driven by current screenCount), inner = Edit-toggle + per-type
+    # Add items. Both rebuild on every menu open so screenCount changes
+    # land without restarting the tray.
+
+    def _widget_menu_items(self):
+        with self.config_lock:
+            n = max(1, min(N_SCREENS, int(self.config.get("screenCount", 1))))
+        items = []
+        for i in range(n):
+            items.append(pystray.MenuItem(
+                f"Screen {i + 1}",
+                pystray.Menu(self._widget_screen_items_factory(i)),
+            ))
+        return items
+
+    def _widget_screen_items_factory(self, screen: int):
+        def items():
+            with self.config_lock:
+                s = self.config["screens"].get(str(screen), {})
+                locked = bool(s.get("widgetsLocked", True))
+                count  = len(s.get("widgets", []))
+            menu = [
+                pystray.MenuItem(
+                    f"Edit widgets on this screen  ({'locked' if locked else 'EDIT MODE'})",
+                    self._toggle_widgets_lock_factory(screen),
+                    checked=lambda _it, _locked=locked: not _locked,
+                ),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem(f"Currently placed: {count}",
+                                 None, enabled=False),
+                pystray.Menu.SEPARATOR,
+            ]
+            # Generate one "Add <Label>" entry per registered widget type.
+            # Order follows WIDGET_DEFAULTS insertion order so adding a new
+            # type is one dict entry in this file + one registry entry in
+            # the wallpaper page.
+            for wtype, cfg in WIDGET_DEFAULTS.items():
+                label = cfg.get("label", wtype.title())
+                menu.append(pystray.MenuItem(f"Add {label}",
+                                             self._add_widget_factory(screen, wtype)))
+            return menu
+        return items
+
+    def _toggle_widgets_lock_factory(self, screen: int):
+        def handler(icon, item):
+            with self.config_lock:
+                s = self.config["screens"].get(str(screen), {})
+                new_locked = not bool(s.get("widgetsLocked", True))
+            self.bridge.set_widgets_locked(screen, new_locked)
+            print(f"[tray] screen={screen} widgetsLocked → {new_locked}")
+        return handler
+
+    def _add_widget_factory(self, screen: int, widget_type: str):
+        def handler(icon, item):
+            self.bridge.add_widget(screen, widget_type)
+            print(f"[tray] screen={screen} added widget: {widget_type}")
+        return handler
 
     def _reload_config(self, icon, item):
         try:

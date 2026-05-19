@@ -4,6 +4,126 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1-beta] - 2026-05-19
+
+> Marked as a prerelease on GitHub. Stable users won't be auto-notified
+> about this build; toggle **Allow beta versions** in the tray's Updates
+> submenu to opt in.
+
+### 🚀 Performance
+
+- **GPU load on the grid layout: ~20 % → ~3 %.** A real measurement on
+  the v0.5.0 → v0.5.1 jump, ≈ 85 % reduction. The big win was killing
+  the `transition: background 0.08s linear` on individual grid zones
+  — at 60 fps the bridge already delivers smoother colour changes than
+  the tween could, and the compositor was juggling hundreds of in-flight
+  animations every frame. Also: per-zone style writes go through
+  `style.background` directly instead of `style.setProperty("--c", …)`,
+  and grid zones got `contain: strict` so style recalcs don't ripple
+  out of their cell. Stripes / pills layouts are unchanged (few enough
+  zones that the original transitions don't show up in the profile).
+
+### Added
+
+- **In-app update checker** in the tray. Polls
+  `https://api.github.com/repos/Delido/signalrgb-wallpaper/releases`
+  on startup (after a 12 s settle) and once a day thereafter. When a
+  newer release is published, the tray shows a balloon notification
+  and an `⬆ Update available: vX.Y.Z — open release page` entry
+  appears at the top of the tray menu. Click → release page in your
+  default browser; download + run the new installer yourself (no
+  unattended auto-update — keeps antivirus quiet, gives you the choice).
+- **Updates submenu** in the tray:
+  - **Check for updates now** — manual trigger.
+  - **Enable update checks** — master switch (default on).
+  - **Allow beta versions** — include GitHub prereleases in the
+    comparison (default off). Toggling triggers an immediate re-check
+    so you see the new candidate without waiting.
+  - Status line: *"Up to date — last checked …"*, *"Last check failed: …"*
+    or *"Not yet checked"*. Plus an *"Installed: vX.Y.Z"* line.
+- Semver-aware version comparison (`MAJOR.MINOR.PATCH` plus optional
+  `-prerelease` suffix). Prereleases sort *before* the matching stable
+  per semver, so `0.5.1-beta < 0.5.1` — stable users won't be nagged
+  about betas.
+- Two new top-level config keys: `updateCheckEnabled` (default `true`)
+  and `allowBetas` (default `false`). Backfilled on existing configs.
+
+- **Four more widget types** (continuing the 0.5 series):
+  **Sticky note** (double-click in edit mode to type inline; four
+  colour variants), **Countdown** (target date + label, smart unit
+  pick), **Picture frame** (URL or local path, three fit modes,
+  optional rounded corners), **Quote of the day** (fetched daily
+  from [Quotable](https://quotable.io/), CC BY-SA — attribution in
+  the widget footer).
+- **In-page widget picker** — floating card at the bottom of the
+  wallpaper in edit mode; lists every registered widget type as an
+  icon button. Generated from the same registry the renderers use.
+- **Per-widget options editor** — each widget that takes settings
+  shows a ⚙ button in edit mode (next to the ×). Prompt-driven config
+  for clock style, calendar week start, weather location/units, note
+  colour, countdown target/label, picture URL/fit.
+- **Extensible widget registry** in `wallpaper/index.html` — one map
+  with `{label, icon, markup, mount?, tick, editOptions?}` per type.
+  Adding a widget = one entry here + one default in `bridge.py`'s
+  `WIDGET_DEFAULTS`. Tray "Add…" submenu and the in-page picker both
+  auto-iterate.
+
+### Changed
+
+- **Bridge tray "Widgets" submenu** generated from `WIDGET_DEFAULTS`
+  instead of hard-coded `clock / calendar / weather` entries.
+- **Edit-mode banner replaced by the picker**, which carries the
+  bedienanleitung too ("drag · resize · ⚙ configure · × remove · lock
+  in tray").
+- **Drag-from-button filter** — `interact.js` ignores drags that
+  start on the gear / × buttons or inside a `[contenteditable="true"]`
+  region, so typing inside a sticky note doesn't move the widget.
+
+## [0.5.0] - 2026-05-19
+
+### Added
+
+- **Placeable widgets on the wallpaper.** First slice of the v0.5
+  widgets roadmap. Three built-in types ship in this release:
+  - **Clock** — analog (SVG, 12 ticks, smooth-sweep seconds) or
+    digital (HH:MM:SS + long weekday/date), 24 h or 12 h.
+  - **Calendar** — current month grid, today highlighted, week-start
+    configurable (Mon / Sun).
+  - **Weather** — fetched from [Open-Meteo](https://open-meteo.com/)
+    (free, no API key). Temperature, condition (WMO code → label),
+    "updated N min ago" footer. Defaults to Berlin; per-instance
+    lat/lon configurable.
+- **Drag-and-resize widget editor on the live wallpaper.** Tray menu
+  gains a per-screen **Widgets** submenu: pick "Edit widgets on this
+  screen" to enter edit mode (handles + delete buttons appear, banner
+  tells you what to do), pick again to lock. Add widgets via "Add
+  clock / calendar / weather" — they spawn at default positions and
+  immediately unlock edit mode so you can place them. Drag-and-resize
+  uses [interact.js](https://github.com/taye/interact.js) 1.10 (MIT),
+  bundled into the Lively zip — no CDN dependency at runtime.
+- **Glow-tinted widgets** (opt-in per widget via `options.tintFromGlow`).
+  When enabled, the widget picks up an average of the current
+  SignalRGB glow colours and applies it through a `--w-tint` CSS
+  variable (analog seconds hand, digital time, today-cell highlight,
+  temperature). Off by default.
+- **Two-way WebSocket protocol.** The bridge now decodes masked
+  text frames from the wallpaper page and routes the four widget
+  mutation commands (`widget-add`, `widget-remove`, `widget-update`,
+  `widgets-lock`) into a thread-safe `BridgeRuntime` API that mutates
+  `settings.json` and re-broadcasts. Same pipe used today for
+  settings push from bridge → page; just opens the return direction.
+- New per-screen settings fields:
+  - `widgets`: array of `{id, type, x, y, w, h, options}` entries.
+  - `widgetsLocked`: `True` (default) or `False`. Drag/resize is
+    disabled while locked; the wallpaper renders widgets read-only.
+
+### Changed
+
+- `Broadcaster.__init__` takes a new `on_widget_command` callback that
+  forwards parsed widget commands to the runtime; the constructor
+  signature change is internal but worth noting if you embedded the
+  bridge.
+
 ## [0.4.5] - 2026-05-18
 
 ### Changed
