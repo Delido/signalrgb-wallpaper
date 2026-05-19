@@ -42,6 +42,7 @@ import ctypes
 from ctypes import wintypes
 import hashlib
 import json
+import locale
 import mimetypes
 import os
 import re
@@ -59,7 +60,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 
 # psutil is optional at import time so a dev `python bridge.py` on a box
 # without it still boots. When missing, the SysStats broadcaster simply
@@ -312,9 +313,13 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.6.2-beta"
-APP_AUTHOR  = "Delido"
-APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
+APP_VERSION = "0.7.0"
+APP_AUTHOR  = "Sebastian Mendyka"
+APP_GITHUB_USER = "Delido"
+APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
+APP_AUTHOR_URL = f"https://github.com/{APP_GITHUB_USER}"
+APP_CREDITS_URL = f"{APP_REPO}/blob/main/docs/credits.md"
+APP_DONATE_URL  = "https://paypal.me/SMendyka"
 
 UDP_HOST = "127.0.0.1"
 UDP_PORT = 17320
@@ -368,6 +373,18 @@ DEFAULT_SCREEN_SETTINGS = {
     # trail works even with click-through enabled; ripples need real clicks
     # (Lively interaction must be on).
     "pixelfx":         "off",
+    # Parallax 3D — when > 0 the background image translates a fraction
+    # of the cursor offset (smooth lerp), creating a fake-depth effect.
+    # Value is the maximum displacement in CSS pixels at the cursor's
+    # most extreme corner. 0 = off (default). 30 is gentle, 80 is strong.
+    "parallax3d":      0,
+    # Last known viewport reported by the wallpaper page itself (in CSS
+    # pixels). The bridge can't ask Windows directly because each page
+    # lives on whichever monitor Lively / WE assigns it; the page knows.
+    # Used by the configurator's layout-preview to scale to the real
+    # screen instead of guessing FullHD. 0 = not yet reported.
+    "viewportW":       0,
+    "viewportH":       0,
 }
 
 # Server-side schemas for widget option defaults — keep in sync with the
@@ -480,8 +497,144 @@ def default_config() -> dict:
         "fullscreenPause": True,  # auto-pause glow when a fullscreen app is active
         "updateCheckEnabled": True,
         "allowBetas":         False,   # include GitHub prerelease tags in update checks
+        "language":           "auto",  # "auto" | "en" | "de" — UI language
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
+
+
+# ============================================================================
+# Localisation (DE / EN)
+# ============================================================================
+#
+# Single-file string table. `tr(key)` returns the localised string for the
+# active language; format parameters get spliced in via str.format. Falls
+# back to English then to the key itself, so an untranslated string never
+# crashes — it just shows up as the dotted-key, which makes missing entries
+# obvious during dev.
+#
+# Coverage is intentional, not exhaustive: tray menu, About dialog, and the
+# Configurator's main labels. The Builder window keeps English-only for now
+# (its strings are a separate ~80-entry job — tracked on the roadmap).
+# ----------------------------------------------------------------------------
+
+TRANSLATIONS = {
+    # ── Tray menu ────────────────────────────────────────────────────
+    "tray.configurator":        {"en": "Configurator…",           "de": "Konfigurator…"},
+    "tray.builder":             {"en": "Build Wallpaper…",        "de": "Wallpaper bauen…"},
+    "tray.lock_all":            {"en": "🔓 Lock widgets (all screens)",
+                                 "de": "🔓 Widgets sperren (alle Bildschirme)"},
+    "tray.unlock_all":          {"en": "🔒 Unlock widgets (all screens)",
+                                 "de": "🔒 Widgets entsperren (alle Bildschirme)"},
+    "tray.advanced":            {"en": "Advanced",                "de": "Erweitert"},
+    "tray.legacy_settings":     {"en": "Legacy Settings dialog…",
+                                 "de": "Klassischer Settings-Dialog…"},
+    "tray.quick_add_widget":    {"en": "Quick add widget",        "de": "Widget schnell hinzufügen"},
+    "tray.quick_effects":       {"en": "Quick effects",           "de": "Effekte (Schnellzugriff)"},
+    "tray.reload_config":       {"en": "Reload config",           "de": "Konfig neu laden"},
+    "tray.updates":             {"en": "Updates",                 "de": "Updates"},
+    "tray.about":               {"en": "About…",                  "de": "Über…"},
+    "tray.quit":                {"en": "Quit",                    "de": "Beenden"},
+    "tray.screen_n":            {"en": "Screen {n}",              "de": "Bildschirm {n}"},
+    # ── Updates submenu ─────────────────────────────────────────────
+    "updates.check_now":        {"en": "Check for updates now",   "de": "Jetzt nach Updates suchen"},
+    "updates.enable":           {"en": "Enable update checks",    "de": "Update-Suche aktivieren"},
+    "updates.allow_beta":       {"en": "Allow beta versions",     "de": "Beta-Versionen erlauben"},
+    "updates.latest":           {"en": "Latest: {tag} — open release page",
+                                 "de": "Verfügbar: {tag} — Release-Seite öffnen"},
+    "updates.up_to_date":       {"en": "Up to date — last checked {ago}",
+                                 "de": "Aktuell — zuletzt geprüft {ago}"},
+    "updates.not_checked":      {"en": "Not yet checked",         "de": "Noch nicht geprüft"},
+    "updates.last_failed":      {"en": "Last check failed: {err}",
+                                 "de": "Letzte Prüfung fehlgeschlagen: {err}"},
+    "updates.available_top":    {"en": "⬆  Update available: {tag} — open release page",
+                                 "de": "⬆  Update verfügbar: {tag} — Release-Seite öffnen"},
+    "updates.installed":        {"en": "Installed: v{ver}",       "de": "Installiert: v{ver}"},
+    "updates.balloon_title":    {"en": "SignalRGB Wallpaper update",
+                                 "de": "SignalRGB-Wallpaper-Update"},
+    "updates.balloon_msg":      {"en": "Version {tag} is available. Open the tray menu to view the release page.",
+                                 "de": "Version {tag} ist verfügbar. Öffne das Tray-Menü um die Release-Seite zu öffnen."},
+    # ── Effects submenu ─────────────────────────────────────────────
+    "effects.ambient_label":    {"en": "Ambient effect",          "de": "Umgebungseffekt"},
+    "effects.pixelfx_label":    {"en": "Pixelfx (cursor)",        "de": "Pixelfx (Cursor)"},
+    "effects.tint_with_glow":   {"en": "Tint particles with glow colour",
+                                 "de": "Partikel mit Glow-Farbe einfärben"},
+    "ambient.off":              {"en": "Off",                     "de": "Aus"},
+    "ambient.snow":             {"en": "Snow",                    "de": "Schnee"},
+    "ambient.rain":             {"en": "Rain",                    "de": "Regen"},
+    "ambient.sparks":           {"en": "Sparks",                  "de": "Funken"},
+    "ambient.aurora":           {"en": "Aurora",                  "de": "Aurora"},
+    "pixelfx.off":              {"en": "Off",                     "de": "Aus"},
+    "pixelfx.trail":            {"en": "Mouse trail",             "de": "Mausspur"},
+    "pixelfx.glow":             {"en": "Hover glow",              "de": "Cursor-Glow"},
+    "pixelfx.ripple":           {"en": "Click ripple (needs Lively interaction)",
+                                 "de": "Klick-Welle (benötigt Lively-Interaktion)"},
+    "pixelfx.all":              {"en": "All combined",            "de": "Alle kombiniert"},
+    # ── Widgets submenu ─────────────────────────────────────────────
+    "widgets.edit_toggle":      {"en": "Edit widgets on this screen  ({state})",
+                                 "de": "Widgets bearbeiten  ({state})"},
+    "widgets.state.locked":     {"en": "locked",                  "de": "gesperrt"},
+    "widgets.state.edit":       {"en": "EDIT MODE",               "de": "BEARBEITUNGSMODUS"},
+    "widgets.placed_count":     {"en": "Currently placed: {n}",   "de": "Aktuell platziert: {n}"},
+    "widgets.add_x":            {"en": "Add {label}",             "de": "{label} hinzufügen"},
+    # ── About dialog ────────────────────────────────────────────────
+    "about.title":              {"en": "About {app}",             "de": "Über {app}"},
+    "about.version":            {"en": "Version {ver}",           "de": "Version {ver}"},
+    "about.github_handle":      {"en": "@{user} on GitHub",       "de": "@{user} auf GitHub"},
+    "about.copyright":          {"en": "© 2026 {author} · MIT Licensed",
+                                 "de": "© 2026 {author} · MIT-Lizenz"},
+    "about.tagline":            {"en": "Live SignalRGB-driven glow behind your wallpaper, with placeable widgets, ambient effects and a one-shot installer.",
+                                 "de": "Live SignalRGB-gesteuertes Glow hinter deinem Wallpaper, mit platzierbaren Widgets, Umgebungseffekten und einem Ein-Klick-Installer."},
+    "about.btn.github":         {"en": "Project on GitHub",       "de": "Projekt auf GitHub"},
+    "about.btn.license":        {"en": "MIT License",             "de": "MIT-Lizenz"},
+    "about.btn.credits":        {"en": "Open-source credits",     "de": "Open-Source-Credits"},
+    "about.btn.donate":         {"en": "☕  Buy me a coffee (PayPal)",
+                                 "de": "☕  Spendier mir einen Kaffee (PayPal)"},
+    "about.btn.close":          {"en": "Close",                   "de": "Schließen"},
+    # ── Relative-time helpers used by tray ──────────────────────────
+    "ago.s":                    {"en": "{n}s ago",                "de": "vor {n}s"},
+    "ago.m":                    {"en": "{n}m ago",                "de": "vor {n}min"},
+    "ago.h":                    {"en": "{n}h ago",                "de": "vor {n}h"},
+}
+
+_CURRENT_LANG = "en"
+
+
+def _detect_default_lang() -> str:
+    """Return 'de' if the system locale starts with German, else 'en'."""
+    try:
+        loc = locale.getlocale()[0] or locale.getdefaultlocale()[0] or ""
+        if loc.lower().startswith("de"):
+            return "de"
+    except Exception:
+        pass
+    env = (os.environ.get("LANG", "") or os.environ.get("LANGUAGE", "")).lower()
+    if env.startswith("de"):
+        return "de"
+    return "en"
+
+
+def init_language(config: dict) -> None:
+    """Resolve the active language from config + system locale and stash it."""
+    global _CURRENT_LANG
+    pref = (config.get("language") or "auto").lower()
+    if pref in ("en", "de"):
+        _CURRENT_LANG = pref
+    else:
+        _CURRENT_LANG = _detect_default_lang()
+    print(f"[i18n] language = {_CURRENT_LANG}")
+
+
+def tr(key: str, **kwargs) -> str:
+    entry = TRANSLATIONS.get(key)
+    if not entry:
+        return key
+    text = entry.get(_CURRENT_LANG) or entry.get("en") or key
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+    return text
 
 
 def load_config() -> dict:
@@ -511,6 +664,9 @@ def load_config() -> dict:
     cfg["updateCheckEnabled"] = bool(cfg.get("updateCheckEnabled", True))
     cfg.setdefault("allowBetas", False)
     cfg["allowBetas"] = bool(cfg.get("allowBetas", False))
+    cfg.setdefault("language", "auto")
+    if cfg.get("language") not in ("auto", "en", "de"):
+        cfg["language"] = "auto"
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -706,7 +862,7 @@ class Broadcaster:
         them. Runs on the asyncio loop thread."""
         t = msg.get("type")
         if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
-                 "setting-update"):
+                 "setting-update", "viewport"):
             try:
                 self.on_widget_command(screen, msg)
             except Exception as e:
@@ -725,7 +881,10 @@ class Broadcaster:
         # right background / layout before the first frame arrives.
         try:
             settings = self.get_settings(screen)
-            writer.write(encode_text_frame(json.dumps({"type": "settings", "screen": screen, "data": settings})))
+            writer.write(encode_text_frame(json.dumps({
+                "type": "settings", "screen": screen,
+                "data": settings, "language": _CURRENT_LANG,
+            })))
         except Exception as e:
             print(f"[ws] initial settings push failed: {e}")
         # Also push the current paused state so a page that connects mid-
@@ -796,7 +955,10 @@ class Broadcaster:
             clients = list(self.clients_by_screen.get(screen, ()))
         if not clients:
             return
-        msg = json.dumps({"type": "settings", "screen": screen, "data": settings})
+        # Surface the active UI language alongside the per-screen data so
+        # the Configurator can localise itself off a single push.
+        msg = json.dumps({"type": "settings", "screen": screen,
+                          "data": settings, "language": _CURRENT_LANG})
         frame = encode_text_frame(msg)
         dead = []
         for w in clients:
@@ -1091,23 +1253,130 @@ class SysStatsPoller:
 
 
 class UdpReceiver(asyncio.DatagramProtocol):
+    """Accepts two wire formats from the SignalRGB plugin:
+
+      • Single-packet  "SR" — original 7-byte header + full RGB payload.
+                       Forwarded verbatim. Used when the frame fits in
+                       SignalRGB's per-packet UDP cap (≤ 36×36).
+      • Chunked        "SC" — 12-byte header carrying frameId/chunkIdx/
+                       chunkCount/dims/pixelOffset. Bridge buffers chunks
+                       per (screen, frameId) and only forwards once every
+                       chunk has arrived. Stale partials (different frameId
+                       or older than 200 ms) are evicted lazily as new
+                       chunks come in.
+    """
+
+    # Partials keyed by (screen, frameId). Each entry tracks dims, expected
+    # chunk count, the RGB bytes accumulator, and the per-chunk arrival
+    # bitmap so we know when reassembly is complete.
+    _STALE_AFTER_S = 0.2
+
     def __init__(self, broadcaster: Broadcaster, loop: asyncio.AbstractEventLoop):
         self.broadcaster = broadcaster
         self.loop = loop
         self.count = 0
         self.warned_bad = 0
+        self.partials: dict[tuple[int, int], dict] = {}
+        self._chunk_count = 0
 
     def datagram_received(self, data: bytes, addr):
-        if len(data) < 7 or data[0] != 0x53 or data[1] != 0x52:
+        if len(data) < 7 or data[0] != 0x53:
             if self.warned_bad < 3:
                 self.warned_bad += 1
                 print(f"[udp] malformed datagram from {addr}: len={len(data)} head={data[:8].hex()}")
             return
-        screen = data[2]
-        self.count += 1
-        if self.count == 1 or self.count % 600 == 0:
-            print(f"[udp] {self.count} packets (last: screen={screen}, {len(data)} bytes)")
-        self.loop.create_task(self.broadcaster.broadcast_frame(screen, data))
+        magic1 = data[1]
+        if magic1 == 0x52:           # 'R' — original single-packet frame
+            screen = data[2]
+            self.count += 1
+            if self.count == 1 or self.count % 600 == 0:
+                print(f"[udp] {self.count} single-packet frames "
+                      f"(last: screen={screen}, {len(data)} bytes)")
+            self.loop.create_task(self.broadcaster.broadcast_frame(screen, data))
+            return
+        if magic1 == 0x43:           # 'C' — chunked frame
+            self._handle_chunked(data, addr)
+            return
+        if self.warned_bad < 3:
+            self.warned_bad += 1
+            print(f"[udp] unknown magic from {addr}: head={data[:4].hex()}")
+
+    def _handle_chunked(self, data: bytes, addr):
+        if len(data) < 12:
+            return
+        screen      = data[2]
+        frame_id    = data[3]
+        chunk_idx   = data[4]
+        chunk_count = data[5]
+        w = (data[6]  << 8) | data[7]
+        h = (data[8]  << 8) | data[9]
+        pixel_off = (data[10] << 8) | data[11]
+        payload   = data[12:]
+        expected_payload_bytes = len(payload)
+        if chunk_count == 0 or chunk_idx >= chunk_count:
+            return
+        if w * h <= 0 or w * h > 1 << 18:        # sanity ceiling (~262 K pixels)
+            return
+        key = (screen, frame_id)
+        part = self.partials.get(key)
+        # Different (screen, frameId) → fresh entry. We also evict any other
+        # partials for this screen whose frame_id differs and that's older
+        # than STALE_AFTER_S: out-of-order packets after a frame switch
+        # would otherwise pile up.
+        now = self.loop.time()
+        if part is None:
+            # Allocate the assembled RGB buffer up front
+            try:
+                part = {
+                    "w": w, "h": h,
+                    "count": chunk_count,
+                    "rgb": bytearray(w * h * 3),
+                    "got": [False] * chunk_count,
+                    "got_count": 0,
+                    "started": now,
+                }
+            except (MemoryError, OverflowError):
+                return
+            self.partials[key] = part
+            self._evict_stale(now, exclude=key)
+        # Sanity: dims must match the partial. If a misbehaving sender
+        # changes dims mid-frame we drop the whole partial and start over.
+        if part["w"] != w or part["h"] != h or part["count"] != chunk_count:
+            del self.partials[key]
+            return
+        # Bounds-check the payload against the partial's RGB buffer.
+        rgb_off = pixel_off * 3
+        if rgb_off + expected_payload_bytes > len(part["rgb"]):
+            del self.partials[key]
+            return
+        if part["got"][chunk_idx]:
+            return                                # duplicate chunk — ignore
+        part["rgb"][rgb_off:rgb_off + expected_payload_bytes] = payload
+        part["got"][chunk_idx] = True
+        part["got_count"] += 1
+        self._chunk_count += 1
+        if part["got_count"] >= chunk_count:
+            # Reassembled — synthesise an SR frame so downstream code stays
+            # unchanged. 7-byte header + the RGB blob we just filled.
+            frame = bytearray(7 + len(part["rgb"]))
+            frame[0] = 0x53; frame[1] = 0x52
+            frame[2] = screen
+            frame[3] = (w >> 8) & 0xff; frame[4] = w & 0xff
+            frame[5] = (h >> 8) & 0xff; frame[6] = h & 0xff
+            frame[7:] = part["rgb"]
+            del self.partials[key]
+            self.count += 1
+            if self.count == 1 or self.count % 600 == 0:
+                print(f"[udp] {self.count} chunked frames assembled "
+                      f"(last: screen={screen}, {w}x{h}, {chunk_count} chunks)")
+            self.loop.create_task(self.broadcaster.broadcast_frame(screen, bytes(frame)))
+
+    def _evict_stale(self, now: float, exclude: tuple[int, int] | None = None):
+        for k, p in list(self.partials.items()):
+            if k == exclude:
+                continue
+            if now - p["started"] > self._STALE_AFTER_S:
+                del self.partials[k]
 
 
 # ============================================================================
@@ -1282,7 +1551,7 @@ class BridgeRuntime:
         "gridBlur", "stripesBlur", "barHeight", "barWidth",
         "showStatus",
         "ambientEffect", "ambientTint", "ambientDensity",
-        "pixelfx",
+        "pixelfx", "parallax3d",
         "widgetsLocked",
     }
 
@@ -1315,7 +1584,36 @@ class BridgeRuntime:
             elif t == "setting-update":
                 self.update_screen_setting(screen, str(msg.get("key", "")),
                                            msg.get("value"))
+            elif t == "viewport":
+                self.update_viewport(screen, msg.get("w"), msg.get("h"))
         threading.Thread(target=run, daemon=True, name="widget-mutate").start()
+
+    def update_viewport(self, screen: int, w, h) -> dict | None:
+        """Stash the wallpaper page's actual viewport size so the configurator
+        can scale its layout preview to the real monitor. Skipped silently
+        when the size already matches the persisted value so a stable
+        connection doesn't write the config file every reconnect."""
+        try:
+            w = int(w)
+            h = int(h)
+        except (TypeError, ValueError):
+            return None
+        if w <= 0 or h <= 0:
+            return None
+        with self.config_lock:
+            s = self.config["screens"].get(str(screen))
+            if s is None:
+                return None
+            if s.get("viewportW") == w and s.get("viewportH") == h:
+                return None
+        def mutate(s):
+            s["viewportW"] = w
+            s["viewportH"] = h
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            print(f"[viewport] screen={screen} {w}x{h}")
+        return snap
 
     def start(self):
         threading.Thread(target=self._run, daemon=True, name="bridge-asyncio").start()
@@ -1711,124 +2009,99 @@ class SettingsDialog:
 # ============================================================================
 
 class AboutDialog:
-    """Standalone Tk window with version info, repo link, and open-source
-    attribution. Spawned per click on the tray's About item, on its own
-    daemon thread, so it doesn't conflict with the Settings dialog or
-    block the tray message pump."""
+    """Standalone Tk window with version info, author block + avatar, and
+    quick links. The full open-source attributions live in docs/credits.md
+    on GitHub now — the dialog links to them instead of embedding the wall
+    of text. Spawned per tray click, on its own daemon thread."""
+
+    # Class-level cache so a second About-open during the same process
+    # doesn't re-hit GitHub for the avatar.
+    _avatar_pil_cached: "Image.Image | None" = None
+
+    def _get_avatar(self) -> "Image.Image | None":
+        if AboutDialog._avatar_pil_cached is not None:
+            return AboutDialog._avatar_pil_cached
+        try:
+            req = urllib.request.Request(
+                f"https://github.com/{APP_GITHUB_USER}.png?size=128",
+                headers={"User-Agent": f"SignalRGBWallpaper-About/{APP_VERSION}"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = r.read()
+            img = Image.open(BytesIO(data)).convert("RGBA")
+            img.thumbnail((96, 96), Image.LANCZOS)
+            AboutDialog._avatar_pil_cached = img
+            return img
+        except Exception as e:
+            print(f"[about] avatar fetch failed: {e}")
+            return None
 
     def show(self):
         root = tk.Tk()
-        root.title(f"About {APP_NAME}")
-        root.geometry("560x520")
-        root.minsize(520, 480)
+        root.title(tr("about.title", app=APP_NAME))
+        root.geometry("520x420")
+        root.minsize(480, 380)
 
-        # Header
+        # Title block
         ttk.Label(root, text=APP_NAME,
-                  font=("Segoe UI", 13, "bold")).pack(anchor="w", padx=16, pady=(16, 0))
-        ttk.Label(root, text=f"Version {APP_VERSION}",
-                  foreground="#666").pack(anchor="w", padx=16)
-        ttk.Label(root, text=f"© 2026 {APP_AUTHOR}. MIT Licensed.",
-                  foreground="#666").pack(anchor="w", padx=16, pady=(8, 0))
+                  font=("Segoe UI", 14, "bold")).pack(anchor="w", padx=18, pady=(18, 0))
+        ttk.Label(root, text=tr("about.version", ver=APP_VERSION),
+                  foreground="#666").pack(anchor="w", padx=18, pady=(0, 12))
+
+        # Author card: avatar (left) + name + GitHub handle + copyright (right)
+        author = ttk.Frame(root)
+        author.pack(fill="x", padx=18, pady=(0, 6))
+
+        avatar_img = self._get_avatar()
+        if avatar_img is not None:
+            try:
+                photo = ImageTk.PhotoImage(avatar_img, master=root)
+                avatar_lbl = ttk.Label(author, image=photo)
+                avatar_lbl.image = photo   # keep a ref so Tk doesn't GC it
+                avatar_lbl.pack(side="left", padx=(0, 14))
+            except Exception as e:
+                print(f"[about] tk image failed: {e}")
+
+        text_col = ttk.Frame(author)
+        text_col.pack(side="left", fill="x", expand=True)
+        ttk.Label(text_col, text=APP_AUTHOR,
+                  font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        handle_text = tr("about.github_handle", user=APP_GITHUB_USER)
+        handle_lbl = ttk.Label(text_col, text=handle_text,
+                               foreground="#3a6ba8", cursor="hand2")
+        handle_lbl.pack(anchor="w")
+        handle_lbl.bind("<Button-1>", lambda _e: webbrowser.open(APP_AUTHOR_URL))
+        ttk.Label(text_col,
+                  text=tr("about.copyright", author=APP_AUTHOR),
+                  foreground="#666").pack(anchor="w", pady=(8, 0))
+
+        # One-line tagline
+        ttk.Separator(root).pack(fill="x", padx=18, pady=(14, 12))
+        ttk.Label(root, text=tr("about.tagline"),
+                  wraplength=460, foreground="#444"
+                  ).pack(anchor="w", padx=18, pady=(0, 14))
 
         # Quick links
         links = ttk.Frame(root)
-        links.pack(fill="x", padx=16, pady=10)
-        ttk.Button(links, text="Open on GitHub",
+        links.pack(fill="x", padx=18, pady=(0, 6))
+        ttk.Button(links, text=tr("about.btn.github"),
                    command=lambda: webbrowser.open(APP_REPO)).pack(side="left")
-        ttk.Button(links, text="MIT License",
+        ttk.Button(links, text=tr("about.btn.license"),
                    command=lambda: webbrowser.open(APP_REPO + "/blob/main/LICENSE")
                    ).pack(side="left", padx=(6, 0))
+        ttk.Button(links, text=tr("about.btn.credits"),
+                   command=lambda: webbrowser.open(APP_CREDITS_URL)
+                   ).pack(side="left", padx=(6, 0))
 
-        ttk.Separator(root).pack(fill="x", padx=16, pady=(4, 8))
-        ttk.Label(root, text="Open-source software used by this app",
-                  font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=16)
+        donate = ttk.Frame(root)
+        donate.pack(fill="x", padx=18, pady=(2, 6))
+        ttk.Button(donate, text=tr("about.btn.donate"),
+                   command=lambda: webbrowser.open(APP_DONATE_URL)).pack(side="left")
 
-        oss_text = (
-            "Bundled in SignalRGBBridge.exe:\n"
-            "\n"
-            "  • Python 3 — PSF License\n"
-            "    https://www.python.org/  •  https://docs.python.org/3/license.html\n"
-            "\n"
-            "  • Python stdlib used at runtime: asyncio, http.server building\n"
-            "    blocks, hashlib, base64, struct, urllib, json, mimetypes,\n"
-            "    threading, webbrowser, tkinter (Settings & About dialogs)\n"
-            "    — all under PSF License.\n"
-            "\n"
-            "  • pystray (system tray icon) — LGPL 3.0\n"
-            "    https://github.com/moses-palmer/pystray\n"
-            "\n"
-            "  • Pillow / PIL (image library, tray-icon rendering) — MIT-CMU (HPND)\n"
-            "    https://github.com/python-pillow/Pillow\n"
-            "\n"
-            "  • psutil (cross-platform process / system stats) — BSD-3-Clause.\n"
-            "    Used by the SysStats poller for the CPU / RAM / Network widgets.\n"
-            "    https://github.com/giampaolo/psutil\n"
-            "\n"
-            "  • PyInstaller (single-file packager — used at build time, the\n"
-            "    bootloader stub it embeds ships with this exe) — GPL 2.0+\n"
-            "    with linking exception (commercial / closed-source apps OK).\n"
-            "    https://github.com/pyinstaller/pyinstaller\n"
-            "\n"
-            "  • builder.html (the in-browser wallpaper editor served at\n"
-            "    /builder) — vanilla HTML5 / CSS / JS, no third-party JS\n"
-            "    or CSS frameworks. Uses only native browser APIs (Canvas,\n"
-            "    FileReader, Fetch, Blob, URL.createObjectURL). System\n"
-            "    fonts (Segoe UI, Roboto, ui-sans-serif, Consolas) are\n"
-            "    requested via CSS font-family fallback chains — not\n"
-            "    bundled or redistributed.\n"
-            "\n"
-            "Bundled into each Lively wallpaper zip (the page that renders\n"
-            "the glow on your desktop):\n"
-            "\n"
-            "  • interact.js (drag / resize for placeable widgets) — MIT.\n"
-            "    Full licence text shipped alongside the .js as\n"
-            "    interact.LICENSE.txt in the same zip.\n"
-            "    https://github.com/taye/interact.js\n"
-            "\n"
-            "Live web service queried at runtime (not bundled, only used\n"
-            "by the optional Weather widget):\n"
-            "\n"
-            "  • Open-Meteo — free weather API, no account needed.\n"
-            "    Data is CC-BY 4.0; the widget surfaces an 'Open-Meteo'\n"
-            "    attribution in its footer when active.\n"
-            "    https://open-meteo.com/\n"
-            "\n"
-            "Hosts the wallpaper plays inside (not bundled):\n"
-            "\n"
-            "  • Lively Wallpaper — GPL 3.0\n"
-            "    https://github.com/rocksdanister/lively\n"
-            "\n"
-            "  • Wallpaper Engine (Steam) — proprietary, paid. The wallpaper\n"
-            "    page targets Wallpaper Engine's Web wallpaper format too;\n"
-            "    the installer can copy the three bundles straight into\n"
-            "    Steam's wallpaper_engine\\projects\\myprojects folder when\n"
-            "    detected.\n"
-            "    https://www.wallpaperengine.io/\n"
-            "\n"
-            "  • SignalRGB — proprietary; this project uses their public plugin API.\n"
-            "    https://signalrgb.com/  •  https://docs.signalrgb.com/\n"
-            "\n"
-            "Build tooling (not shipped, used only to produce the binary\n"
-            "and release artifacts):\n"
-            "\n"
-            "  • GitHub CLI (releases), git, winget, Inno Setup (planned).\n"
-        )
-
-        text_frame = ttk.Frame(root)
-        text_frame.pack(fill="both", expand=True, padx=16, pady=(4, 4))
-        sb = ttk.Scrollbar(text_frame, orient="vertical")
-        sb.pack(side="right", fill="y")
-        text = tk.Text(text_frame, wrap="word", relief="flat",
-                       background=root.cget("background"),
-                       font=("Consolas", 9), yscrollcommand=sb.set)
-        text.insert("1.0", oss_text)
-        text.config(state="disabled")
-        text.pack(side="left", fill="both", expand=True)
-        sb.config(command=text.yview)
-
+        # Footer / close
         btn_row = ttk.Frame(root)
-        btn_row.pack(fill="x", padx=16, pady=12)
-        ttk.Button(btn_row, text="Close", command=root.destroy).pack(side="right")
+        btn_row.pack(fill="x", padx=18, pady=(16, 14), side="bottom")
+        ttk.Button(btn_row, text=tr("about.btn.close"),
+                   command=root.destroy).pack(side="right")
 
         root.protocol("WM_DELETE_WINDOW", root.destroy)
         root.mainloop()
@@ -1891,23 +2164,29 @@ class TrayApp:
         if avail:
             tag, _ = avail
             items.append(pystray.MenuItem(
-                f"⬆  Update available: {tag} — open release page",
+                tr("updates.available_top", tag=tag),
                 self._open_update_page))
             items.append(pystray.Menu.SEPARATOR)
+        # Cheap snapshot of the lock state across active screens so the
+        # Lock/Unlock entry can switch label without opening a submenu.
+        any_unlocked = self._any_screen_unlocked()
         items.extend([
-            pystray.MenuItem("Configurator…",      self._open_configurator, default=True),
-            pystray.MenuItem("Build Wallpaper…",   self._open_builder),
+            pystray.MenuItem(tr("tray.configurator"), self._open_configurator, default=True),
+            pystray.MenuItem(tr("tray.builder"),      self._open_builder),
+            pystray.MenuItem(
+                tr("tray.lock_all") if any_unlocked else tr("tray.unlock_all"),
+                self._toggle_widgets_lock_all),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Advanced",           pystray.Menu(
-                pystray.MenuItem("Legacy Settings dialog…", self._open_settings),
-                pystray.MenuItem("Quick add widget", pystray.Menu(self._widget_menu_items)),
-                pystray.MenuItem("Quick effects",    pystray.Menu(self._effects_menu_items)),
-                pystray.MenuItem("Reload config",    self._reload_config),
+            pystray.MenuItem(tr("tray.advanced"), pystray.Menu(
+                pystray.MenuItem(tr("tray.legacy_settings"),  self._open_settings),
+                pystray.MenuItem(tr("tray.quick_add_widget"), pystray.Menu(self._widget_menu_items)),
+                pystray.MenuItem(tr("tray.quick_effects"),    pystray.Menu(self._effects_menu_items)),
+                pystray.MenuItem(tr("tray.reload_config"),    self._reload_config),
             )),
-            pystray.MenuItem("Updates",            pystray.Menu(self._update_menu_items)),
+            pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("About…",             self._open_about),
-            pystray.MenuItem("Quit",               self._quit),
+            pystray.MenuItem(tr("tray.about"), self._open_about),
+            pystray.MenuItem(tr("tray.quit"),  self._quit),
         ])
         return items
 
@@ -1915,6 +2194,29 @@ class TrayApp:
         url = f"http://{WS_HOST}:{WS_PORT}/configurator"
         try: webbrowser.open(url, new=2)
         except Exception as e: print(f"[tray] open configurator failed: {e}")
+
+    # ── Top-level Lock / Unlock toggle ─────────────────────────────────
+    # Picks the dominant state across all active screens — if any screen
+    # is currently unlocked, the toggle locks them all; otherwise unlocks
+    # them all. Keeps the per-screen Configurator + tray-Advanced flow
+    # intact for users who need fine-grained control.
+
+    def _any_screen_unlocked(self) -> bool:
+        with self.config_lock:
+            n = max(1, min(N_SCREENS, int(self.config.get("screenCount", 1))))
+            for i in range(n):
+                s = self.config["screens"].get(str(i), {})
+                if s.get("widgetsLocked") is False:
+                    return True
+        return False
+
+    def _toggle_widgets_lock_all(self, icon, item):
+        target_locked = self._any_screen_unlocked()    # if any unlocked → lock everything
+        with self.config_lock:
+            n = max(1, min(N_SCREENS, int(self.config.get("screenCount", 1))))
+        for i in range(n):
+            self.bridge.set_widgets_locked(i, target_locked)
+        print(f"[tray] all screens widgetsLocked → {target_locked}")
 
     # -- menu callbacks (fire on pystray's worker thread) -------------------
 
@@ -1983,34 +2285,34 @@ class TrayApp:
         last_t  = self.update_checker.last_checked()
         err     = self.update_checker.last_error()
         items = [
-            pystray.MenuItem("Check for updates now", self._check_updates_now),
+            pystray.MenuItem(tr("updates.check_now"),  self._check_updates_now),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Enable update checks",  self._toggle_update_enabled,
+            pystray.MenuItem(tr("updates.enable"),     self._toggle_update_enabled,
                              checked=lambda _it, _e=enabled: _e),
-            pystray.MenuItem("Allow beta versions",   self._toggle_allow_betas,
+            pystray.MenuItem(tr("updates.allow_beta"), self._toggle_allow_betas,
                              checked=lambda _it, _b=beta: _b),
             pystray.Menu.SEPARATOR,
         ]
         if avail:
             tag, _ = avail
             items.append(pystray.MenuItem(
-                f"Latest: {tag} — open release page",
+                tr("updates.latest", tag=tag),
                 self._open_update_page))
         elif err:
             short = (err[:48] + "…") if len(err) > 48 else err
-            items.append(pystray.MenuItem(f"Last check failed: {short}",
+            items.append(pystray.MenuItem(tr("updates.last_failed", err=short),
                                           None, enabled=False))
         elif last_t > 0:
             ago = max(0, int(time.time() - last_t))
-            if   ago < 60:   ago_s = f"{ago}s ago"
-            elif ago < 3600: ago_s = f"{ago // 60}m ago"
-            else:            ago_s = f"{ago // 3600}h ago"
-            items.append(pystray.MenuItem(f"Up to date — last checked {ago_s}",
+            if   ago < 60:   ago_s = tr("ago.s", n=ago)
+            elif ago < 3600: ago_s = tr("ago.m", n=ago // 60)
+            else:            ago_s = tr("ago.h", n=ago // 3600)
+            items.append(pystray.MenuItem(tr("updates.up_to_date", ago=ago_s),
                                           None, enabled=False))
         else:
-            items.append(pystray.MenuItem("Not yet checked",
+            items.append(pystray.MenuItem(tr("updates.not_checked"),
                                           None, enabled=False))
-        items.append(pystray.MenuItem(f"Installed: v{APP_VERSION}",
+        items.append(pystray.MenuItem(tr("updates.installed", ver=APP_VERSION),
                                       None, enabled=False))
         return items
 
@@ -2049,9 +2351,8 @@ class TrayApp:
         try:
             if self.icon:
                 self.icon.notify(
-                    f"Version {tag} is available. Open the tray menu to view "
-                    f"the release page.",
-                    "SignalRGB Wallpaper update",
+                    tr("updates.balloon_msg", tag=tag),
+                    tr("updates.balloon_title"),
                 )
         except Exception as e:
             print(f"[tray] notify failed: {e}")
@@ -2070,26 +2371,29 @@ class TrayApp:
     # Per-screen ambient preset / pixelfx mode / tint toggle. Live-pushed
     # to the wallpaper via the existing settings-broadcast pipeline.
 
+    # i18n keys instead of raw labels — the actual text comes from tr() at
+    # menu-build time, so a language change after first render reflects on
+    # the next open.
     AMBIENT_PRESETS_TRAY = [
-        ("off",    "Off"),
-        ("snow",   "Snow"),
-        ("rain",   "Rain"),
-        ("sparks", "Sparks"),
-        ("aurora", "Aurora"),
+        ("off",    "ambient.off"),
+        ("snow",   "ambient.snow"),
+        ("rain",   "ambient.rain"),
+        ("sparks", "ambient.sparks"),
+        ("aurora", "ambient.aurora"),
     ]
     PIXELFX_MODES_TRAY = [
-        ("off",    "Off"),
-        ("trail",  "Mouse trail"),
-        ("glow",   "Hover glow"),
-        ("ripple", "Click ripple (needs Lively interaction)"),
-        ("all",    "All combined"),
+        ("off",    "pixelfx.off"),
+        ("trail",  "pixelfx.trail"),
+        ("glow",   "pixelfx.glow"),
+        ("ripple", "pixelfx.ripple"),
+        ("all",    "pixelfx.all"),
     ]
 
     def _effects_menu_items(self):
         with self.config_lock:
             n = max(1, min(N_SCREENS, int(self.config.get("screenCount", 1))))
         return [
-            pystray.MenuItem(f"Screen {i + 1}",
+            pystray.MenuItem(tr("tray.screen_n", n=i + 1),
                              pystray.Menu(self._effects_screen_items_factory(i)))
             for i in range(n)
         ]
@@ -2103,27 +2407,27 @@ class TrayApp:
                 current_pixelfx = s.get("pixelfx", "off")
             menu = []
             # Ambient preset radio list
-            menu.append(pystray.MenuItem("Ambient effect",
+            menu.append(pystray.MenuItem(tr("effects.ambient_label"),
                                          None, enabled=False))
-            for value, label in self.AMBIENT_PRESETS_TRAY:
+            for value, key in self.AMBIENT_PRESETS_TRAY:
                 menu.append(pystray.MenuItem(
-                    "  " + label,
+                    "  " + tr(key),
                     self._set_ambient_factory(screen, value),
                     checked=lambda _it, _v=value, _c=current_ambient: _v == _c,
                     radio=True,
                 ))
             menu.append(pystray.Menu.SEPARATOR)
             menu.append(pystray.MenuItem(
-                "Tint particles with glow colour",
+                tr("effects.tint_with_glow"),
                 self._toggle_ambient_tint_factory(screen),
                 checked=lambda _it, _t=tint: _t,
             ))
             menu.append(pystray.Menu.SEPARATOR)
-            menu.append(pystray.MenuItem("Pixelfx (cursor)",
+            menu.append(pystray.MenuItem(tr("effects.pixelfx_label"),
                                          None, enabled=False))
-            for value, label in self.PIXELFX_MODES_TRAY:
+            for value, key in self.PIXELFX_MODES_TRAY:
                 menu.append(pystray.MenuItem(
-                    "  " + label,
+                    "  " + tr(key),
                     self._set_pixelfx_factory(screen, value),
                     checked=lambda _it, _v=value, _c=current_pixelfx: _v == _c,
                     radio=True,
@@ -2182,7 +2486,7 @@ class TrayApp:
         items = []
         for i in range(n):
             items.append(pystray.MenuItem(
-                f"Screen {i + 1}",
+                tr("tray.screen_n", n=i + 1),
                 pystray.Menu(self._widget_screen_items_factory(i)),
             ))
         return items
@@ -2193,24 +2497,25 @@ class TrayApp:
                 s = self.config["screens"].get(str(screen), {})
                 locked = bool(s.get("widgetsLocked", True))
                 count  = len(s.get("widgets", []))
+            state = tr("widgets.state.locked") if locked else tr("widgets.state.edit")
             menu = [
                 pystray.MenuItem(
-                    f"Edit widgets on this screen  ({'locked' if locked else 'EDIT MODE'})",
+                    tr("widgets.edit_toggle", state=state),
                     self._toggle_widgets_lock_factory(screen),
                     checked=lambda _it, _locked=locked: not _locked,
                 ),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem(f"Currently placed: {count}",
+                pystray.MenuItem(tr("widgets.placed_count", n=count),
                                  None, enabled=False),
                 pystray.Menu.SEPARATOR,
             ]
             # Generate one "Add <Label>" entry per registered widget type.
-            # Order follows WIDGET_DEFAULTS insertion order so adding a new
-            # type is one dict entry in this file + one registry entry in
-            # the wallpaper page.
+            # Widget labels stay in English for now — they're proper nouns
+            # ("Clock", "Calendar", …) and changing them per locale would
+            # diverge from the labels shown in the in-browser picker.
             for wtype, cfg in WIDGET_DEFAULTS.items():
                 label = cfg.get("label", wtype.title())
-                menu.append(pystray.MenuItem(f"Add {label}",
+                menu.append(pystray.MenuItem(tr("widgets.add_x", label=label),
                                              self._add_widget_factory(screen, wtype)))
             return menu
         return items
@@ -2262,6 +2567,7 @@ class TrayApp:
 
 def main():
     config = load_config()
+    init_language(config)
     config_lock = threading.Lock()
 
     bridge = BridgeRuntime(config, config_lock)

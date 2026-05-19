@@ -53,11 +53,19 @@ bridgePort:readonly
 */
 
 const MAX_SCREENS  = 3;
-// 36×36 is the largest square that fits SignalRGB's per-packet udp.send
-// cap of 4096 bytes (36*36*3 + 7-byte header = 3895 B). Going higher
-// requires chunking the frame across multiple datagrams — see the
-// CHANGELOG for v0.6.2-beta's failed bump to 64.
-const MAX_GRID     = 36;
+// Per-packet UDP cap inside SignalRGB's plugin sandbox. Real fixed limit
+// is 4096 B; we shave off 4 bytes of headroom so we never tickle the
+// boundary if the engine validates strictly.
+const UDP_MAX_PAYLOAD = 4092;
+// 36×36 still fits the cap in a single packet via the original "SR" wire
+// format (36*36*3 + 7 = 3895 B). Anything larger uses the chunked "SC"
+// format below — each datagram carries a piece of the frame, the bridge
+// reassembles before broadcasting to wallpaper pages.
+const MAX_GRID     = 128;
+// SC chunk header: 12 bytes. See the bridge for the layout. With
+// 4092-byte UDP budget that leaves 4080 bytes = 1360 pixels per chunk.
+const SC_HEADER_BYTES   = 12;
+const SC_MAX_CHUNK_PX   = Math.floor((UDP_MAX_PAYLOAD - SC_HEADER_BYTES) / 3);
 const BRIDGE_HOST  = "127.0.0.1";
 const BRIDGE_PORT  = 17320;
 const CONFIG_URL   = "http://" + BRIDGE_HOST + ":" + BRIDGE_PORT + "/config";
@@ -73,8 +81,8 @@ const CONFIG_URL   = "http://" + BRIDGE_HOST + ":" + BRIDGE_PORT + "/config";
 export function ControllableParameters() {
     return [
         {"property":"gridSize", "group":"settings", "label":"Glow Grid Size",
-         "description":"Square grid resolution sent per screen. 36 is the finest that fits SignalRGB's 4 KB per-packet UDP cap; 32 is the previous default; lower values are kinder on older machines.",
-         "type":"combobox", "values":["8","16","32","36"], "default":"32"},
+         "description":"Square grid resolution sent per screen. 36 is the largest that fits SignalRGB's 4 KB UDP cap in a single packet; 64 / 96 / 128 use the bridge's chunked transport (each frame split across multiple datagrams, reassembled before reaching the wallpaper). Bigger = finer glow gradient + more browser work.",
+         "type":"combobox", "values":["8","16","32","36","64","96","128"], "default":"32"},
         {"property":"targetFps", "group":"settings", "label":"Target FPS",
          "description":"Frame rate the engine should call Render() at. 30 is plenty for ambient lighting; 60 is the engine's hard cap.",
          "type":"combobox", "values":["15","30","60"], "default":"30"},
@@ -133,7 +141,11 @@ function getState() {
     let s = stateByScreen.get(idx);
     if (!s) {
         s = { sock: null, cols: 32, rows: 32, leds: 32 * 32, frameBuf: null,
-              renderCount: 0, renderLogAt: 0 };
+              renderCount: 0, renderLogAt: 0,
+              // Chunked-frame transport: frameId cycles 0..255 so the bridge
+              // can identify which chunks belong together when packets arrive
+              // out-of-order, and discard partial frames from a stale id.
+              frameId: 0 };
         stateByScreen.set(idx, s);
     }
     return s;
@@ -227,20 +239,70 @@ export function Render() {
             s.frameBuf[off++] = c[2];
         }
     }
+
+    const totalSize = 7 + s.leds * 3;
     try {
-        s.sock.send(s.frameBuf);
+        if (totalSize <= UDP_MAX_PAYLOAD) {
+            // Fits in one packet → original "SR" wire format, unchanged. The
+            // bridge still recognises this and forwards it verbatim.
+            s.sock.send(s.frameBuf);
+        } else {
+            // Too big for a single datagram → use the chunked "SC" format.
+            sendChunkedFrame(s);
+        }
         s.renderCount++;
         const now = Date.now();
         if (s.renderCount === 1 || now - s.renderLogAt > 5000) {
             s.renderLogAt = now;
+            const tag = (totalSize <= UDP_MAX_PAYLOAD) ? "single" : "chunked";
             device.log("[DesktopWallpaper] screen " + currentScreenIndex()
                 + " frame #" + s.renderCount + " grid=" + s.cols + "x" + s.rows
-                + " first_rgb=[" + s.frameBuf[7] + "," + s.frameBuf[8] + "," + s.frameBuf[9] + "]");
+                + " (" + tag + ", " + totalSize + " B)");
         }
     } catch (e) {
         device.log("[DesktopWallpaper] UDP send failed: " + e);
     }
     device.pause(1);
+}
+
+// Split the frame buffer across multiple datagrams using the SC wire format.
+// Each chunk is ≤ UDP_MAX_PAYLOAD bytes and carries:
+//   [0x53][0x43][screen][frameId][chunkIdx][chunkCount]
+//   [wH][wL][hH][hL][pixelOffsetH][pixelOffsetL]   (12 bytes total)
+//   [rgb …]
+// The bridge buffers chunks by (screen, frameId) and only forwards once
+// every chunkIdx 0..chunkCount-1 has arrived.
+function sendChunkedFrame(s) {
+    s.frameId = (s.frameId + 1) & 0xff;
+    const totalPixels    = s.leds;
+    const pixelsPerChunk = SC_MAX_CHUNK_PX;
+    const chunkCount     = Math.ceil(totalPixels / pixelsPerChunk);
+    const screenIdx      = currentScreenIndex() & 0xff;
+    for (let c = 0; c < chunkCount; c++) {
+        const pixelOffset   = c * pixelsPerChunk;
+        const pixelsInChunk = Math.min(pixelsPerChunk, totalPixels - pixelOffset);
+        const payloadBytes  = pixelsInChunk * 3;
+        const pkt = new Array(SC_HEADER_BYTES + payloadBytes);
+        pkt[0]  = 0x53; // 'S'
+        pkt[1]  = 0x43; // 'C' — chunked magic
+        pkt[2]  = screenIdx;
+        pkt[3]  = s.frameId;
+        pkt[4]  = c;
+        pkt[5]  = chunkCount;
+        pkt[6]  = (s.cols >> 8) & 0xff;
+        pkt[7]  =  s.cols       & 0xff;
+        pkt[8]  = (s.rows >> 8) & 0xff;
+        pkt[9]  =  s.rows       & 0xff;
+        pkt[10] = (pixelOffset >> 8) & 0xff;
+        pkt[11] =  pixelOffset       & 0xff;
+        // Splice the RGB slice out of s.frameBuf (which still has the old
+        // 7-byte SR header, so source starts at byte 7 + pixelOffset*3).
+        const srcStart = 7 + pixelOffset * 3;
+        for (let i = 0; i < payloadBytes; i++) {
+            pkt[SC_HEADER_BYTES + i] = s.frameBuf[srcStart + i];
+        }
+        s.sock.send(pkt);
+    }
 }
 
 export function Shutdown(suspend) {

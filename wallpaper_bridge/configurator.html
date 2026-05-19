@@ -368,6 +368,15 @@
     /* aspect-ratio set dynamically via inline style */
   }
   .layout-preview.locked { opacity: 0.85; }
+  /* Snap-to-grid overlay — replaces the decorative 40 px grid with one
+     that tracks the configured snap step in preview pixels, so users
+     visually see the cells their widgets will land on. */
+  .layout-preview.snap-on {
+    background-image:
+      linear-gradient(rgba(106,176,255,0.20) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(106,176,255,0.20) 1px, transparent 1px);
+    background-size: var(--snap-px, 40px) var(--snap-px, 40px);
+  }
 
   .preview-widget {
     position: absolute;
@@ -428,10 +437,10 @@
 <body>
 
 <header>
-  <h1>SignalRGB Wallpaper Configurator</h1>
+  <h1 data-i18n="header.title">SignalRGB Wallpaper Configurator</h1>
   <span class="spacer"></span>
-  <span class="conn bad" id="conn">connecting…</span>
-  <a class="btn" href="/builder" target="_blank">Open Builder…</a>
+  <span class="conn bad" id="conn" data-i18n="conn.connecting">connecting…</span>
+  <a class="btn" href="/builder" target="_blank" data-i18n="header.open_builder">Open Builder…</a>
 </header>
 
 <nav class="tabs" id="tabs"></nav>
@@ -442,30 +451,31 @@
   <section class="card" id="card-bg">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
-      <h2>Background</h2>
+      <h2 data-i18n="section.bg">Background</h2>
     </header>
     <div class="body">
       <div class="row">
-        <label for="bg-image">Image path</label>
+        <label for="bg-image" data-i18n="bg.path">Image path</label>
         <input type="text" id="bg-image" placeholder="paste a URL or absolute path">
       </div>
       <div class="row">
         <label>&nbsp;</label>
-        <label class="btn" style="flex:0 0 auto" for="bg-file">Choose image…</label>
+        <label class="btn" style="flex:0 0 auto" for="bg-file" data-i18n="bg.choose">Choose image…</label>
         <input type="file" id="bg-file" accept="image/*" style="display:none">
-        <a class="btn" href="/builder" target="_blank" style="flex:0 0 auto">Open Builder…</a>
+        <a class="btn" href="/builder" target="_blank" style="flex:0 0 auto"
+           data-i18n="bg.open_builder">Open Builder…</a>
         <span class="val" id="bg-upload-stat" style="flex:1; text-align:left; padding-left:8px;"></span>
       </div>
       <div class="row">
-        <label for="bg-fit">Fit</label>
+        <label for="bg-fit" data-i18n="bg.fit">Fit</label>
         <select id="bg-fit">
-          <option value="cover">cover (crop to fill)</option>
-          <option value="contain">contain (letterbox)</option>
-          <option value="fill">fill (stretch)</option>
+          <option value="cover"   data-i18n="bg.fit.cover">cover (crop to fill)</option>
+          <option value="contain" data-i18n="bg.fit.contain">contain (letterbox)</option>
+          <option value="fill"    data-i18n="bg.fit.fill">fill (stretch)</option>
         </select>
       </div>
       <div class="row">
-        <label for="bg-dim">Dim</label>
+        <label for="bg-dim" data-i18n="bg.dim">Dim</label>
         <input type="range" id="bg-dim" min="0" max="100" step="1">
         <span class="val" id="bg-dim-val">0 %</span>
       </div>
@@ -476,15 +486,15 @@
   <section class="card" id="card-glow">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
-      <h2>Glow</h2>
+      <h2 data-i18n="section.glow">Glow</h2>
     </header>
     <div class="body">
       <div class="check-row">
         <input type="checkbox" id="glow-bars">
-        <label for="glow-bars">Show glow layer</label>
+        <label for="glow-bars" data-i18n="glow.show">Show glow layer</label>
       </div>
       <div class="row">
-        <label for="glow-layout">Layout</label>
+        <label for="glow-layout" data-i18n="glow.layout">Layout</label>
         <select id="glow-layout">
           <option value="lay-grid">Pixel grid (2D)</option>
           <option value="lay-vstripes">Vertical stripes</option>
@@ -494,17 +504,17 @@
         </select>
       </div>
       <div class="row">
-        <label for="glow-strength">Strength</label>
+        <label for="glow-strength" data-i18n="glow.strength">Strength</label>
         <input type="range" id="glow-strength" min="0" max="200" step="1">
         <span class="val" id="glow-strength-val">100 %</span>
       </div>
       <div class="row">
-        <label for="grid-blur">Grid blur</label>
+        <label for="grid-blur" data-i18n="glow.grid_blur">Grid blur</label>
         <input type="range" id="grid-blur" min="0" max="120" step="1">
         <span class="val" id="grid-blur-val">30 px</span>
       </div>
       <div class="row">
-        <label for="stripes-blur">Stripes blur</label>
+        <label for="stripes-blur" data-i18n="glow.stripes_blur">Stripes blur</label>
         <input type="range" id="stripes-blur" min="0" max="200" step="1">
         <span class="val" id="stripes-blur-val">60 px</span>
       </div>
@@ -515,19 +525,19 @@
   <section class="card" id="card-effects">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
-      <h2>Effects</h2>
+      <h2 data-i18n="section.effects">Effects</h2>
     </header>
     <div class="body">
       <div class="row" style="margin-bottom: 4px;">
-        <label style="flex:0 0 auto;">Ambient preset</label>
+        <label style="flex:0 0 auto;" data-i18n="effects.ambient">Ambient preset</label>
       </div>
       <div class="ambient-tiles" id="ambient-tiles"></div>
       <div class="check-row" style="margin-top: 6px;">
         <input type="checkbox" id="ambient-tint">
-        <label for="ambient-tint">Tint particles with the live glow colour</label>
+        <label for="ambient-tint" data-i18n="effects.tint">Tint particles with the live glow colour</label>
       </div>
       <div class="row">
-        <label for="ambient-density">Density</label>
+        <label for="ambient-density" data-i18n="effects.density">Density</label>
         <input type="range" id="ambient-density" min="1" max="100" step="1">
         <span class="val" id="ambient-density-val">60</span>
       </div>
@@ -535,13 +545,26 @@
       <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
 
       <div class="row" style="margin-bottom: 4px;">
-        <label style="flex:0 0 auto;">Pixelfx (cursor)</label>
+        <label style="flex:0 0 auto;" data-i18n="effects.pixelfx">Pixelfx (cursor)</label>
       </div>
       <div class="seg-row" id="pixelfx-row"></div>
-      <div class="hint" style="margin-top: 8px;">
+      <div class="hint" style="margin-top: 8px;" data-i18n="effects.hint_pixelfx" data-i18n-html>
         Trail and hover-glow work with Lively click-through enabled (position is
         pushed by the host). Click ripple needs real mouse events — toggle
         <em>Wallpaper interaction</em> in Lively to see it.
+      </div>
+
+      <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
+
+      <div class="row">
+        <label for="parallax3d" data-i18n="effects.parallax">3D parallax</label>
+        <input type="range" id="parallax3d" min="0" max="120" step="2">
+        <span class="val" id="parallax3d-val">0 px</span>
+      </div>
+      <div class="hint" data-i18n="effects.hint_parallax">
+        Slides the background image against your cursor for a fake-depth
+        effect. 0 = off. 30 is subtle, 80 is dramatic. Uses Lively's
+        cursor-position callback, so it works under click-through.
       </div>
     </div>
   </section>
@@ -550,7 +573,7 @@
   <section class="card" id="card-widgets">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
-      <h2>Widgets</h2>
+      <h2 data-i18n="section.widgets">Widgets</h2>
     </header>
     <div class="body">
 
@@ -567,14 +590,27 @@
 
       <div class="layout-preview-wrap">
         <div class="layout-preview-head">
-          <span>Layout preview · drag widgets to position</span>
-          <span id="preview-stat"></span>
+          <span data-i18n="widgets.preview.head">Layout preview · drag widgets to position</span>
+          <span style="display:flex; align-items:center; gap:10px;">
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none;">
+              <input type="checkbox" id="snap-toggle">
+              <span data-i18n="widgets.preview.snap">Snap to grid</span>
+            </label>
+            <select id="snap-step" title="Grid step (CSS pixels)">
+              <option value="10">10 px</option>
+              <option value="20" selected>20 px</option>
+              <option value="40">40 px</option>
+              <option value="80">80 px</option>
+            </select>
+            <span id="preview-stat"></span>
+          </span>
         </div>
         <div class="layout-preview locked" id="layout-preview"></div>
       </div>
 
       <div id="widget-list" class="widget-list"></div>
-      <div style="font-size: 12px; color: var(--text-dim); margin: 12px 0 6px;">
+      <div style="font-size: 12px; color: var(--text-dim); margin: 12px 0 6px;"
+           data-i18n="widgets.add_label">
         Add a widget:
       </div>
       <div class="add-grid" id="add-grid"></div>
@@ -588,8 +624,8 @@
     <header><h2 id="modal-title">Configure widget</h2></header>
     <div class="body" id="modal-body"></div>
     <div class="actions">
-      <button class="btn" id="modal-cancel">Cancel</button>
-      <button class="btn primary" id="modal-save">Save</button>
+      <button class="btn" id="modal-cancel" data-i18n="modal.btn.cancel">Cancel</button>
+      <button class="btn primary" id="modal-save" data-i18n="modal.btn.save">Save</button>
     </div>
   </div>
 </div>
@@ -598,6 +634,109 @@
 
 <script>
 "use strict";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Localisation (DE / EN)
+//
+// Active language comes from the bridge's settings push (`language` field
+// at the top level), set by init_language() in bridge.py from config +
+// system locale. We re-translate any element with a `data-i18n` attribute,
+// and dynamic strings call `t(key)` inline.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TRANSLATIONS = {
+  "header.title":           { en: "SignalRGB Wallpaper Configurator", de: "SignalRGB-Wallpaper-Konfigurator" },
+  "header.open_builder":    { en: "Open Builder…",        de: "Builder öffnen…" },
+  "conn.connecting":        { en: "connecting…",          de: "verbinde…" },
+  "conn.disconnected":      { en: "disconnected — retrying…", de: "getrennt — versuche erneut…" },
+
+  "section.bg":             { en: "Background",           de: "Hintergrund" },
+  "section.glow":           { en: "Glow",                 de: "Glow" },
+  "section.effects":        { en: "Effects",              de: "Effekte" },
+  "section.widgets":        { en: "Widgets",              de: "Widgets" },
+
+  "bg.path":                { en: "Image path",           de: "Bildpfad" },
+  "bg.choose":              { en: "Choose image…",        de: "Bild auswählen…" },
+  "bg.open_builder":        { en: "Open Builder…",        de: "Builder öffnen…" },
+  "bg.fit":                 { en: "Fit",                  de: "Anpassen" },
+  "bg.fit.cover":           { en: "cover (crop to fill)", de: "cover (auf Bildschirm zuschneiden)" },
+  "bg.fit.contain":         { en: "contain (letterbox)",  de: "contain (mit Rand)" },
+  "bg.fit.fill":            { en: "fill (stretch)",       de: "fill (stretchen)" },
+  "bg.dim":                 { en: "Dim",                  de: "Abdunkeln" },
+
+  "glow.show":              { en: "Show glow layer",      de: "Glow-Schicht anzeigen" },
+  "glow.layout":            { en: "Layout",               de: "Layout" },
+  "glow.strength":          { en: "Strength",             de: "Stärke" },
+  "glow.grid_blur":         { en: "Grid blur",            de: "Grid-Unschärfe" },
+  "glow.stripes_blur":      { en: "Stripes blur",         de: "Streifen-Unschärfe" },
+
+  "effects.ambient":        { en: "Ambient preset",       de: "Umgebungseffekt" },
+  "effects.tint":           { en: "Tint particles with the live glow colour",
+                              de: "Partikel mit live Glow-Farbe einfärben" },
+  "effects.density":        { en: "Density",              de: "Dichte" },
+  "effects.pixelfx":        { en: "Pixelfx (cursor)",     de: "Pixelfx (Cursor)" },
+  "effects.parallax":       { en: "3D parallax",          de: "3D-Parallax" },
+  "effects.hint_pixelfx":   {
+    en: "Trail and hover-glow work with Lively click-through enabled (position is pushed by the host). Click ripple needs real mouse events — toggle <em>Wallpaper interaction</em> in Lively to see it.",
+    de: "Mausspur und Hover-Glow funktionieren auch mit Lively-Click-Through (Position kommt vom Host). Klick-Welle braucht echte Mausevents — <em>Wallpaper interaction</em> in Lively aktivieren um's zu sehen."
+  },
+  "effects.hint_parallax":  {
+    en: "Slides the background image against your cursor for a fake-depth effect. 0 = off. 30 is subtle, 80 is dramatic.",
+    de: "Verschiebt das Hintergrundbild gegen den Cursor für einen Fake-3D-Effekt. 0 = aus. 30 ist dezent, 80 dramatisch."
+  },
+
+  "widgets.lock.locked":      { en: "Widgets locked",     de: "Widgets gesperrt" },
+  "widgets.lock.unlocked":    { en: "Widgets unlocked",   de: "Widgets entsperrt" },
+  "widgets.lock.hint.locked": { en: "Drag and resize are off. Click to unlock.",
+                                de: "Verschieben und Resize aus. Klick zum Entsperren." },
+  "widgets.lock.hint.unlocked": {
+    en: "Drag widgets in the preview below, or directly on the wallpaper. Click to lock.",
+    de: "Widgets in der Vorschau unten oder direkt auf der Wallpaper ziehen. Klick zum Sperren."
+  },
+  "widgets.btn.unlock":     { en: "Unlock to edit",       de: "Zum Bearbeiten entsperren" },
+  "widgets.btn.lock":       { en: "Lock widgets",         de: "Widgets sperren" },
+  "widgets.preview.head":   { en: "Layout preview · drag widgets to position",
+                              de: "Layout-Vorschau · Widgets zum Positionieren ziehen" },
+  "widgets.preview.snap":   { en: "Snap to grid",         de: "Am Raster ausrichten" },
+  "widgets.add_label":      { en: "Add a widget:",        de: "Widget hinzufügen:" },
+  "widgets.empty":          { en: "No widgets on this screen yet — pick one below to add.",
+                              de: "Noch keine Widgets auf diesem Bildschirm — unten eines auswählen." },
+  "widget.btn.configure":   { en: "Configure",            de: "Konfigurieren" },
+  "widget.btn.remove":      { en: "Remove",               de: "Entfernen" },
+
+  "modal.btn.save":         { en: "Save",                 de: "Speichern" },
+  "modal.btn.cancel":       { en: "Cancel",               de: "Abbrechen" },
+  "modal.configure":        { en: "Configure: {label}",   de: "Konfigurieren: {label}" },
+};
+
+let _lang = "en";
+function t(key, params) {
+  const entry = TRANSLATIONS[key];
+  if (!entry) return key;
+  let text = entry[_lang] || entry.en || key;
+  if (params) {
+    for (const k of Object.keys(params)) {
+      text = text.replace("{" + k + "}", params[k]);
+    }
+  }
+  return text;
+}
+function applyI18n() {
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key = el.getAttribute("data-i18n");
+    const html = el.hasAttribute("data-i18n-html");
+    const txt = t(key);
+    if (html) el.innerHTML = txt; else el.textContent = txt;
+  }
+  document.title = t("header.title");
+}
+function setLanguage(lang) {
+  if (lang === _lang) return;
+  if (lang !== "en" && lang !== "de") return;
+  _lang = lang;
+  applyI18n();
+  renderAll();   // refresh dynamic strings too
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Widget catalog — label + icon SVG + option schema per type.
@@ -765,12 +904,16 @@ const els = {
   ambientDensity: $("ambient-density"),
   ambientDensityVal: $("ambient-density-val"),
   pixelfxRow:     $("pixelfx-row"),
+  parallax3d:     $("parallax3d"),
+  parallax3dVal:  $("parallax3d-val"),
   lockBar:        $("lock-bar"),
   lockLabel:      $("lock-label"),
   lockHint:       $("lock-hint"),
   lockToggle:     $("lock-toggle"),
   layoutPreview:  $("layout-preview"),
   previewStat:    $("preview-stat"),
+  snapToggle:     $("snap-toggle"),
+  snapStep:       $("snap-step"),
   widgetList:     $("widget-list"),
   addGrid:        $("add-grid"),
   modal:          $("modal"),
@@ -824,18 +967,18 @@ document.querySelectorAll("section.card > header.section-head[data-toggle]").for
 function connect() {
   const url = "ws://" + location.hostname + ":" + (location.port || 17320) +
               "/?screen=" + activeScreen;
-  els.conn.textContent = "connecting…";
+  els.conn.textContent = t("conn.connecting");
   els.conn.className = "conn bad";
   try { ws = new WebSocket(url); }
   catch (e) { els.conn.textContent = "ws error"; setTimeout(connect, 1500); return; }
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
-    els.conn.textContent = "connected · screen " + (activeScreen + 1);
+    els.conn.textContent = "connected · " + t("tray.screen_n", { n: activeScreen + 1 });
     els.conn.className = "conn ok";
   };
   ws.onerror = () => {};
   ws.onclose = () => {
-    els.conn.textContent = "disconnected — retrying…";
+    els.conn.textContent = t("conn.disconnected");
     els.conn.className = "conn bad";
     setTimeout(() => { if (ws === null || ws.readyState === 3) connect(); }, 1500);
   };
@@ -847,6 +990,7 @@ function connect() {
       const msg = JSON.parse(ev.data);
       if (msg && msg.type === "settings" && msg.data) {
         settings = msg.data;
+        if (msg.language) setLanguage(msg.language);
         renderAll();
       }
     } catch (_) {}
@@ -929,6 +1073,7 @@ bindRangeChange(els.glowStrength,   els.glowStrengthVal,   "glowStrength", " %")
 bindRangeChange(els.gridBlur,       els.gridBlurVal,       "gridBlur",     " px");
 bindRangeChange(els.stripesBlur,    els.stripesBlurVal,    "stripesBlur",  " px");
 bindRangeChange(els.ambientDensity, els.ambientDensityVal, "ambientDensity", "");
+bindRangeChange(els.parallax3d,     els.parallax3dVal,     "parallax3d",     " px");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Effects section
@@ -1113,11 +1258,9 @@ els.lockToggle.addEventListener("click", () => {
 function renderLockBar() {
   const unlocked = settings.widgetsLocked === false;
   els.lockBar.classList.toggle("unlocked", unlocked);
-  els.lockLabel.textContent = unlocked ? "Widgets unlocked"             : "Widgets locked";
-  els.lockHint .textContent = unlocked
-    ? "Drag widgets in the preview below, or directly on the wallpaper. Click to lock."
-    : "Drag and resize are off. Click to unlock.";
-  els.lockToggle.textContent = unlocked ? "Lock widgets" : "Unlock to edit";
+  els.lockLabel.textContent  = t(unlocked ? "widgets.lock.unlocked"      : "widgets.lock.locked");
+  els.lockHint .textContent  = t(unlocked ? "widgets.lock.hint.unlocked" : "widgets.lock.hint.locked");
+  els.lockToggle.textContent = t(unlocked ? "widgets.btn.lock"           : "widgets.btn.unlock");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1133,10 +1276,53 @@ function renderLockBar() {
 let _previewScale = 1;
 let _previewW = 1920;
 let _previewH = 1080;
+// Snap-to-grid lives in localStorage so it survives reloads / tab swaps.
+// Step is in screen-CSS pixels — visualised in the preview at step * scale.
+let _snapEnabled = (localStorage.getItem("cfg.snapEnabled") === "1");
+let _snapStep    = parseInt(localStorage.getItem("cfg.snapStep") || "20", 10) || 20;
+
+function snapValue(v) {
+  if (!_snapEnabled || _snapStep <= 1) return v;
+  return Math.round(v / _snapStep) * _snapStep;
+}
+
+function refreshSnapVisual() {
+  els.layoutPreview.classList.toggle("snap-on", _snapEnabled);
+  if (_snapEnabled) {
+    const visualPx = Math.max(4, _snapStep * _previewScale);
+    els.layoutPreview.style.setProperty("--snap-px", visualPx + "px");
+  }
+}
+
+// Initial control state from persisted value
+setTimeout(() => {
+  if (els.snapToggle) {
+    els.snapToggle.checked = _snapEnabled;
+    els.snapStep.value     = String(_snapStep);
+    els.snapToggle.addEventListener("change", () => {
+      _snapEnabled = els.snapToggle.checked;
+      localStorage.setItem("cfg.snapEnabled", _snapEnabled ? "1" : "0");
+      refreshSnapVisual();
+    });
+    els.snapStep.addEventListener("change", () => {
+      const v = parseInt(els.snapStep.value, 10);
+      if (isFinite(v) && v > 0) {
+        _snapStep = v;
+        localStorage.setItem("cfg.snapStep", String(_snapStep));
+        refreshSnapVisual();
+      }
+    });
+  }
+}, 0);
 
 function computePreviewCanvasSize() {
   const list = settings.widgets || [];
-  let maxX = 1920, maxY = 1080;
+  // Prefer the actual viewport reported by the wallpaper page (so 4K
+  // monitors show the real canvas instead of a guess). Fall back to
+  // FullHD when the wallpaper hasn't connected yet, and extend the
+  // canvas if any widget is placed beyond either bound.
+  let maxX = settings.viewportW || 1920;
+  let maxY = settings.viewportH || 1080;
   for (const w of list) {
     if (w.x + w.w > maxX) maxX = w.x + w.w;
     if (w.y + w.h > maxY) maxY = w.y + w.h;
@@ -1151,8 +1337,11 @@ function applyPreviewSize() {
   _previewScale = containerW / _previewW;
   els.layoutPreview.style.width  = "100%";
   els.layoutPreview.style.height = Math.round(_previewH * _previewScale) + "px";
+  const source = (settings.viewportW && settings.viewportH)
+    ? ("monitor · " + settings.viewportW + " × " + settings.viewportH + " px")
+    : "no wallpaper connected — assuming 1920 × 1080";
   els.previewStat.textContent =
-    "scaled to fit · canvas " + _previewW + " × " + _previewH + " px";
+    "scaled to fit · canvas " + _previewW + " × " + _previewH + " px · " + source;
 }
 
 function renderLayoutPreview() {
@@ -1161,6 +1350,7 @@ function renderLayoutPreview() {
   els.layoutPreview.classList.toggle("locked", !unlocked);
   computePreviewCanvasSize();
   applyPreviewSize();
+  refreshSnapVisual();
 
   const list = settings.widgets || [];
   els.layoutPreview.innerHTML = "";
@@ -1204,8 +1394,12 @@ function bindPreviewDrag(box, id) {
     if (!captured) return;
     const dx = (e.clientX - startClientX) / _previewScale;
     const dy = (e.clientY - startClientY) / _previewScale;
-    const nx = Math.max(0, Math.min(_previewW - parseFloat(box.dataset.w), originX + dx));
-    const ny = Math.max(0, Math.min(_previewH - parseFloat(box.dataset.h), originY + dy));
+    let nx = Math.max(0, Math.min(_previewW - parseFloat(box.dataset.w), originX + dx));
+    let ny = Math.max(0, Math.min(_previewH - parseFloat(box.dataset.h), originY + dy));
+    // Snap to grid (screen-pixel step). Visual & persisted values both
+    // snap so the drag feels "clicky" against the grid.
+    nx = snapValue(nx);
+    ny = snapValue(ny);
     box.dataset.x = String(nx);
     box.dataset.y = String(ny);
     box.style.left = (nx * _previewScale) + "px";
@@ -1239,8 +1433,10 @@ function bindPreviewResize(box, handle, id) {
     if (!captured) return;
     const dw = (e.clientX - startClientX) / _previewScale;
     const dh = (e.clientY - startClientY) / _previewScale;
-    const nw = Math.max(60, startW + dw);
-    const nh = Math.max(60, startH + dh);
+    let nw = Math.max(60, startW + dw);
+    let nh = Math.max(60, startH + dh);
+    nw = Math.max(60, snapValue(nw));
+    nh = Math.max(60, snapValue(nh));
     box.dataset.w = String(nw);
     box.dataset.h = String(nh);
     box.style.width  = (nw * _previewScale) + "px";
@@ -1284,7 +1480,7 @@ function renderWidgetList() {
   if (list.length === 0) {
     const e = document.createElement("div");
     e.className = "empty-widgets";
-    e.textContent = "No widgets on this screen yet — pick one below to add.";
+    e.textContent = t("widgets.empty");
     els.widgetList.appendChild(e);
     return;
   }
@@ -1308,12 +1504,12 @@ function renderWidgetList() {
     acts.className = "w-actions";
     const configure = document.createElement("button");
     configure.className = "btn";
-    configure.textContent = "Configure";
+    configure.textContent = t("widget.btn.configure");
     configure.disabled = !def || def.schema.length === 0;
     configure.addEventListener("click", () => openOptionsModal(w));
     const remove = document.createElement("button");
     remove.className = "btn danger";
-    remove.textContent = "Remove";
+    remove.textContent = t("widget.btn.remove");
     remove.addEventListener("click", () => {
       sendCmd({ type: "widget-remove", id: w.id });
       toast("Removed " + (def ? def.label : w.type), "good");
@@ -1334,7 +1530,7 @@ function openOptionsModal(widget) {
   const def = WIDGET_CATALOG[widget.type];
   if (!def) return;
   modalState = { id: widget.id, options: { ...(widget.options || {}) } };
-  els.modalTitle.textContent = "Configure: " + def.label;
+  els.modalTitle.textContent = t("modal.configure", { label: def.label });
   els.modalBody.innerHTML = "";
   for (const field of def.schema) {
     const row = document.createElement("div");
@@ -1439,6 +1635,8 @@ function renderAll() {
   els.ambientTint.checked = !!settings.ambientTint;
   els.ambientDensity.value = String(settings.ambientDensity ?? 60);
   els.ambientDensityVal.textContent = String(settings.ambientDensity ?? 60);
+  els.parallax3d.value = String(settings.parallax3d ?? 0);
+  els.parallax3dVal.textContent = (settings.parallax3d ?? 0) + " px";
   const pixel = settings.pixelfx || "off";
   els.pixelfxRow.querySelectorAll(".seg").forEach((b) => {
     b.classList.toggle("active", b.dataset.value === pixel);

@@ -4,6 +4,86 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-19
+
+> First stable release after a long beta cycle (0.5.0 → 0.6.2-beta).
+> Rolls in everything from the beta line plus the polish iteration on
+> top of 0.6.2-beta: auto-import into Lively, chunked UDP transport
+> (real 128 × 128 grids), DE / EN localisation, About-dialog overhaul,
+> snap-to-grid in the configurator, 3D parallax, and a convenience
+> top-level Lock/Unlock entry in the tray.
+
+### Added
+
+- **Wallpaper reports its real viewport to the bridge.** Page sends
+  `{type:"viewport", w, h}` on WS open + on `window.resize`
+  (debounced). Bridge persists per-screen `viewportW` / `viewportH`.
+  Configurator's layout-preview scales to the actual monitor — 4K
+  users now see a real 3840 × 2160 canvas instead of a guessed
+  FullHD rectangle, and the preview header reports the source
+  (`monitor · 3840 × 2160 px` vs `no wallpaper connected — assuming
+  1920 × 1080`). Disk-write is skipped when the size matches the
+  persisted value.
+- **Top-level Lock / Unlock widgets in the tray.** Single entry above
+  the *Advanced* submenu that toggles `widgetsLocked` across every
+  active screen at once. Label flips (`🔓 Lock widgets (all screens)`
+  / `🔒 Unlock widgets (all screens)`) based on current state.
+- **Snap-to-grid in the Configurator's layout preview.** Toggle +
+  step picker (10 / 20 / 40 / 80 px); the preview canvas overlays
+  the snap grid in accent blue when enabled. Drag and resize both
+  snap to the chosen step. State persists in `localStorage` so it
+  survives reloads.
+- **About dialog overhaul.** Now shows the maintainer's real name
+  (Sebastian Mendyka) with a clickable `@Delido on GitHub` line and
+  the avatar fetched from `https://github.com/Delido.png` (5 s
+  timeout, cached). The wall-of-OSS text has been moved to
+  `docs/credits.md` on GitHub — the dialog now links there instead.
+  Added a *"Buy me a coffee"* PayPal button.
+- **3D parallax** (`parallax3d`, CSS px max-displacement, 0..120).
+  When > 0 the background image lerps a fraction of the cursor
+  offset for a fake-depth effect. Two cursor inputs cover both
+  Lively modes: `LivelyInfo.Arguments = "--system-cursor true"`
+  enables Lively's `livelyCurrentCursorPos` callback under
+  click-through, and a DOM `mousemove` listener catches real events
+  when *Wallpaper interaction* is enabled. Scale-up of the bg image
+  is computed per frame so the worst-case translate doesn't reveal
+  edges, with 2 % headroom for jitter. Smooth RAF lerp; disabled
+  (no rAF cost) when off. Slider lives in the Configurator's
+  *Effects* section. Same dual cursor feed also covers Pixelfx.
+- **Chunked UDP transport.** The SignalRGB plugin sandbox caps
+  `udp.send()` at 4 096 B per datagram, which had pinned us at
+  36 × 36 grids. The plugin now sends frames > 4 KB as multiple
+  datagrams with a new `SC` magic (`[0x53][0x43][screen][frameId]
+  [chunkIdx][chunkCount][w₂][h₂][pixelOffset₂][rgb…]`); the bridge
+  buffers chunks per `(screen, frameId)` and reassembles before
+  forwarding to the wallpaper page. Stale partials (different
+  frame-id or > 200 ms old) are evicted. Wallpaper-side renderer is
+  unchanged. `MAX_GRID` raised from 36 to **128**; combobox gains
+  `64 / 96 / 128`. Backwards-compatible — anything ≤ 36 × 36 still
+  uses the original single-packet `SR` format.
+- **Installer auto-imports Lively wallpapers.** New opt-in sub-task
+  *"Auto-import into Lively (skip the manual drag-and-drop step)"*.
+  When checked and a Lively install is detected — GitHub build
+  (`%LOCALAPPDATA%\Lively Wallpaper\…`) or MSIX build
+  (`%LOCALAPPDATA%\Packages\rocksdanister.LivelyWallpaper_*\…`) —
+  the three bundles get extracted directly into Lively's
+  `Library\wallpapers\signalrgb-glow-screen-{1,2,3}\`. Deterministic
+  folder names mean every subsequent installer run **overwrites in
+  place**, killing the "delete + re-import after every update"
+  caveat that bit every release until now. Uninstall removes the
+  three folders, leaves other Lively wallpapers alone.
+- **Localisation — DE / EN.** New top-level config flag
+  `language: "auto" | "en" | "de"` (default `"auto"` — picks from
+  Windows locale / `$LANG`). Bridge exposes a `tr(key, **kwargs)`
+  helper backed by a single in-file translation table; tray menu,
+  Updates submenu, Effects submenu, Widgets submenu, About dialog
+  and balloon notifications are all translated. Configurator
+  mirrors the same pattern (`data-i18n` attributes + `t()` helper);
+  the active language arrives with every settings push from the
+  bridge so the page localises on first frame. Builder window
+  stays English — its ~80 strings are tracked as a separate
+  follow-up.
+
 ## [0.6.2-beta] - 2026-05-19
 
 > Prerelease. Adds `36×36` as the finest packable grid; 64×64 was

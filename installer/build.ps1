@@ -63,25 +63,32 @@ try {
     Pop-Location
 }
 
-# --- 3. Rebuild the 3 Lively zips --------------------------------------------
-Write-Host "[3/5] Rebuilding Lively wallpaper zips" -ForegroundColor Yellow
-$src   = Join-Path $bridgeDir "wallpaper"
-$stage = Join-Path $bridgeDir "dist_stage"
-if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-New-Item -ItemType Directory -Path $stage | Out-Null
+# --- 3. Stage Lively wallpapers (folders + zips) -----------------------------
+# We need two formats:
+#   • Folders under  wallpaper_bridge\lively_bundles\signalrgb-glow-screen-N\
+#     — fed straight into Lively's Library by the installer when the
+#     "Auto-import into Lively" task is checked, deterministic folder
+#     names so re-installs / updates overwrite in place.
+#   • Zips         wallpaper_bridge\SignalRGB_Glow_ScreenN.zip
+#     — kept for the GitHub release page (manual-import users) and as a
+#     fallback when the installer's auto-import is unchecked.
+Write-Host "[3/5] Staging Lively wallpaper folders + zips" -ForegroundColor Yellow
+$src      = Join-Path $bridgeDir "wallpaper"
+$livStage = Join-Path $bridgeDir "lively_bundles"
+if (Test-Path $livStage) { Remove-Item $livStage -Recurse -Force }
+New-Item -ItemType Directory -Path $livStage | Out-Null
 foreach ($n in 0, 1, 2) {
     $label = ($n + 1).ToString()
-    $st = Join-Path $stage ("stage_screen{0}" -f $n)
-    Copy-Item -Path $src -Destination $st -Recurse
-    $idx  = Join-Path $st "index.html"
-    $info = Join-Path $st "LivelyInfo.json"
+    $bundleDir = Join-Path $livStage ("signalrgb-glow-screen-{0}" -f $label)
+    Copy-Item -Path $src -Destination $bundleDir -Recurse
+    $idx  = Join-Path $bundleDir "index.html"
+    $info = Join-Path $bundleDir "LivelyInfo.json"
     (Get-Content $idx  -Raw) -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', ('${1}' + $n + '${2}') | Set-Content $idx  -NoNewline
     (Get-Content $info -Raw) -replace '__SCREEN_LABEL__', $label | Set-Content $info -NoNewline
     $zip = Join-Path $bridgeDir ("SignalRGB_Glow_Screen{0}.zip" -f $label)
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    Compress-Archive -Path (Join-Path $st "*") -DestinationPath $zip -CompressionLevel Optimal
+    Compress-Archive -Path (Join-Path $bundleDir "*") -DestinationPath $zip -CompressionLevel Optimal
 }
-Remove-Item $stage -Recurse -Force
 
 # --- 3b. Stage Wallpaper Engine bundles --------------------------------------
 # WE projects are FOLDERS (not zips) with a project.json next to the index.html.

@@ -61,6 +61,9 @@ Name: "german";  MessagesFile: "compiler:Languages\German.isl"
 Name: "installlively"; \
   Description: "Lively Wallpaper (free, recommended)"; \
   GroupDescription: "Wallpaper host:"; Flags: checkedonce
+Name: "installlively/autoimport"; \
+  Description: "Auto-import into Lively (skip the manual drag-and-drop step)"; \
+  GroupDescription: "Wallpaper host:"; Flags: checkedonce
 Name: "installwallpaperengine"; \
   Description: "Wallpaper Engine (Steam — auto-skipped if not detected)"; \
   GroupDescription: "Wallpaper host:"; Flags: unchecked
@@ -82,15 +85,33 @@ Source: "..\SignalRGB_Desktop_Wallpaper.js";  DestDir: "{userdocs}\WhirlwindFX\P
 Source: "..\SignalRGB_Desktop_Wallpaper.qml"; DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
   Flags: ignoreversion; Tasks: installplugin
 
-; Lively wallpaper zips — only copied if the Lively task is selected.
-; User drags them into Lively after install (the post-install action
-; opens the folder).
+; Lively wallpaper zips — kept under {app} as a manual-import fallback,
+; regardless of whether auto-import below runs.
 Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen1.zip"; DestDir: "{app}\Lively wallpapers"; \
   Flags: ignoreversion; Tasks: installlively
 Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen2.zip"; DestDir: "{app}\Lively wallpapers"; \
   Flags: ignoreversion; Tasks: installlively
 Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen3.zip"; DestDir: "{app}\Lively wallpapers"; \
   Flags: ignoreversion; Tasks: installlively
+
+; Direct auto-import into Lively's library — deterministic folder names so
+; subsequent installer runs overwrite in place, killing the "delete +
+; re-import after every update" caveat. Only fires when:
+;   • the Lively task is checked, AND
+;   • its sub-task "autoimport" is checked, AND
+;   • a Lively install was detected (GitHub or MSIX build)
+Source: "..\wallpaper_bridge\lively_bundles\signalrgb-glow-screen-1\*"; \
+  DestDir: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-1"; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
+  Tasks: installlively/autoimport; Check: LivelyDetected
+Source: "..\wallpaper_bridge\lively_bundles\signalrgb-glow-screen-2\*"; \
+  DestDir: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-2"; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
+  Tasks: installlively/autoimport; Check: LivelyDetected
+Source: "..\wallpaper_bridge\lively_bundles\signalrgb-glow-screen-3\*"; \
+  DestDir: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-3"; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
+  Tasks: installlively/autoimport; Check: LivelyDetected
 
 ; Wallpaper Engine bundles — only copied if the WE task is selected.
 ; Two destinations: (1) a manual-import staging folder under {app}, and
@@ -141,10 +162,13 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
 
 [Run]
 ; ── Lively-path: open the staging folder so the user can drag the zips
-;    onto Lively. Only shown if they picked Lively.
+;    onto Lively. Only shown if (a) Lively was picked and (b) auto-import
+;    did NOT already place the bundles in Lively's library — otherwise the
+;    folder open is just clutter.
 Filename: "{app}\Lively wallpapers"; Verb: open; \
   Description: "Open the Lively wallpapers folder (drag the zips onto Lively)"; \
-  Flags: postinstall skipifsilent shellexec nowait; Tasks: installlively
+  Flags: postinstall skipifsilent shellexec nowait; \
+  Tasks: installlively; Check: NotLivelyAutoImported
 ; ── WE-path: if Wallpaper Engine was detected we already dropped the
 ;    bundles into its projects folder — just nudge the user to open WE
 ;    and pick them from "My Wallpapers". (Open the WE projects folder so
@@ -170,6 +194,12 @@ Filename: "{app}\{#MyAppExeName}"; \
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen2"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"
+; Clean the auto-imported Lively bundles. Deterministic folder names mean
+; we know exactly which subfolders belong to us — Lively's other wallpapers
+; under the same Library\wallpapers\ tree are left alone.
+Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-1"
+Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-2"
+Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-3"
 
 [UninstallRun]
 ; Make sure the running bridge releases its file handles before uninstall
@@ -307,4 +337,91 @@ end;
 function WallpaperEngineNotDetected(): Boolean;
 begin
   Result := (GetWallpaperEngineProjects('') = '');
+end;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lively Wallpaper detection.
+//
+// GitHub-installer build keeps its library under
+//   %LOCALAPPDATA%\Lively Wallpaper\Library\wallpapers
+// The MSIX (Microsoft Store) build hides it inside the sandboxed package
+//   %LOCALAPPDATA%\Packages\rocksdanister.LivelyWallpaper_*\LocalState\Library\wallpapers
+// We probe both, GitHub build first because that's what we recommend.
+//
+// Cached on first call so the per-file [Files] checks don't re-probe the
+// disk hundreds of times during install.
+// ─────────────────────────────────────────────────────────────────────────────
+
+var
+  CachedLivelyPath: String;
+  CachedLivelyPathInitialised: Boolean;
+
+function TryLivelyPath(Base: String): String;
+begin
+  Result := '';
+  if Base = '' then exit;
+  if DirExists(Base) then begin
+    // Library subfolder may not exist yet on a fresh Lively install, but
+    // ForceDirectories will create it; Lively scans this folder on startup.
+    Result := AddBackslash(Base) + 'Library\wallpapers';
+    if not DirExists(Result) then ForceDirectories(Result);
+  end;
+end;
+
+function GetLivelyLibraryPath(Param: String): String;
+var
+  LocalApp: String;
+  FR: TFindRec;
+  CandidateBase: String;
+  CandidatePath: String;
+begin
+  if CachedLivelyPathInitialised then begin
+    Result := CachedLivelyPath;
+    exit;
+  end;
+  Result := '';
+  LocalApp := ExpandConstant('{localappdata}');
+  // 1. GitHub-installer build
+  CandidateBase := AddBackslash(LocalApp) + 'Lively Wallpaper';
+  CandidatePath := TryLivelyPath(CandidateBase);
+  if CandidatePath <> '' then begin
+    Result := CandidatePath;
+    CachedLivelyPath := Result;
+    CachedLivelyPathInitialised := True;
+    exit;
+  end;
+  // 2. MSIX build — walk Packages\rocksdanister.LivelyWallpaper_* matches
+  if FindFirst(AddBackslash(LocalApp) + 'Packages\rocksdanister.LivelyWallpaper_*', FR) then begin
+    try
+      repeat
+        if (FR.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin
+          if (FR.Name <> '.') and (FR.Name <> '..') then begin
+            CandidateBase := AddBackslash(LocalApp) + 'Packages\' + FR.Name + '\LocalState';
+            CandidatePath := TryLivelyPath(CandidateBase);
+            if CandidatePath <> '' then begin
+              Result := CandidatePath;
+              Break;
+            end;
+          end;
+        end;
+      until not FindNext(FR);
+    finally
+      FindClose(FR);
+    end;
+  end;
+  CachedLivelyPath := Result;
+  CachedLivelyPathInitialised := True;
+end;
+
+function LivelyDetected(): Boolean;
+begin
+  Result := (GetLivelyLibraryPath('') <> '');
+end;
+
+function NotLivelyAutoImported(): Boolean;
+begin
+  // True when the user opted out of auto-import OR Lively wasn't detected.
+  // In that case we still want to point them at the staging folder so they
+  // can drag the zips by hand.
+  Result := not (IsTaskSelected('installlively/autoimport') and LivelyDetected());
 end;

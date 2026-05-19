@@ -26,13 +26,17 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.6.0-beta (prerelease) — full in-browser **configurator**
-> with drag-and-resize layout preview, 7+ widget types
+> **Status:** v0.7.0 — first stable after the 0.5 / 0.6 beta cycle.
+> Brings the full in-browser **configurator** (per-screen tabs,
+> drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
 > CPU / RAM / audio spectrum), full-canvas ambient effects
 > (snow / rain / sparks / aurora), cursor pixelfx (trail / hover-glow /
-> click-ripple), Wallpaper Engine packaging alongside Lively, and an
-> in-app GitHub update checker.
+> click-ripple), **3D parallax** on the background image, **DE / EN**
+> localisation, Wallpaper Engine packaging alongside Lively, an
+> **auto-importing** installer (no more manual zip-drag after updates),
+> **chunked UDP** for 64 × 64 / 128 × 128 grids, and an in-app GitHub
+> update checker.
 
 ## Features
 
@@ -117,10 +121,9 @@ GIF (`docs/images/demo.gif`) is enough.
    on an ambient effect, etc.
 6. In SignalRGB: place the **Desktop Wallpaper - Screen N** devices
    on SignalRGB's canvas at the positions you want colours sampled
-   from. (Layouts → drag the devices.) Optionally raise *Glow Grid
-   Size* in the plugin settings to `36` for a finer feed (current
-   ceiling — see the roadmap for a chunked transport that would lift
-   this).
+   from. (Layouts → drag the devices.) Optionally raise _Glow Grid
+   Size_ in the plugin settings up to `128` — anything > 36 uses the
+   bridge's new chunked-UDP transport automatically.
 
 Uninstall via Windows Settings → Apps, or run `unins000.exe` in the
 install folder. The uninstaller also removes the three Steam-side WE

@@ -15,6 +15,11 @@ wallpaper_bridge/SignalRGBBridge*.exe
 wallpaper_bridge/we_bundles/
 wallpaper_bridge/SignalRGB_Glow_WallpaperEngine.zip
 
+# Lively wallpaper folders — staged by installer/build.ps1 for the
+# installer's auto-import task; the standalone Screen{1,2,3}.zip files
+# are the release-page artefacts.
+wallpaper_bridge/lively_bundles/
+
 # Inno Setup output + generated icon — released as assets, not committed
 installer_out/
 installer/icon.ico

@@ -572,6 +572,27 @@ function renderFrame(buf) {
 }
 
 let ws = null;
+let _lastReportedViewport = "";
+
+// Tell the bridge what our actual CSS-px viewport is, so the configurator's
+// layout preview can scale to the real monitor instead of guessing FullHD.
+// Debounced via _lastReportedViewport so a flurry of resize events during
+// a window-arrangement change collapses to one send per distinct size.
+function reportViewport() {
+  if (!ws || ws.readyState !== 1) return;
+  const w = window.innerWidth | 0;
+  const h = window.innerHeight | 0;
+  const key = w + "x" + h;
+  if (key === _lastReportedViewport) return;
+  _lastReportedViewport = key;
+  try {
+    ws.send(JSON.stringify({ type: "viewport", w, h }));
+  } catch (e) {
+    console.warn("[viewport] send failed:", e);
+  }
+}
+window.addEventListener("resize", reportViewport);
+
 function connect() {
   statusEl.textContent = "connecting " + WS_URL + "…";
   statusEl.classList.remove("ok");
@@ -587,6 +608,7 @@ function connect() {
     statusEl.textContent = "connected " + WS_URL;
     statusEl.classList.remove("bad");
     statusEl.classList.add("ok");
+    reportViewport();
   };
   ws.onerror = () => {};
   ws.onclose = () => {
@@ -784,6 +806,9 @@ function applyProperty(name, val) {
       break;
     case "pixelfx":
       pixelfx.setMode(typeof val === "string" ? val : "off");
+      break;
+    case "parallax3d":
+      parallax.setStrength(parseInt(val, 10) | 0);
       break;
   }
 }
@@ -1881,8 +1906,82 @@ const pixelfx = (function () {
   };
 })();
 
-// Lively pushes per-frame cursor coords here — works under click-through.
-window.livelyCurrentCursorPos = function (x, y) { pixelfx.setCursor(x, y); };
+// Lively pushes per-frame cursor coords via this callback when the
+// wallpaper's LivelyInfo.json has `Arguments: "--system-cursor true"`,
+// which works even with click-through enabled. Forwarded to both
+// pixelfx (trail / glow / ripple) and parallax (3D background sway).
+window.livelyCurrentCursorPos = function (x, y) {
+  pixelfx.setCursor(x, y);
+  parallax.setCursor(x, y);
+};
+
+// DOM mousemove fallback — fires when Lively's "Wallpaper interaction"
+// is enabled (no click-through), or when the wallpaper is otherwise
+// reachable by real mouse events (e.g. in the Builder/Configurator
+// preview, or in a normal browser tab during development). Together
+// with --system-cursor above this covers both interaction modes.
+document.addEventListener("mousemove", (e) => {
+  pixelfx.setCursor(e.clientX, e.clientY);
+  parallax.setCursor(e.clientX, e.clientY);
+}, { passive: true });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3D parallax — the background image translates a fraction of the cursor
+// offset (relative to viewport centre), creating a fake-depth effect. Uses
+// the same livelyCurrentCursorPos feed pixelfx already drains, so it works
+// under Lively's click-through. Smooth lerp on a single RAF loop; disabled
+// when strength is 0 to keep the rAF cost off the budget.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const parallax = (function () {
+  let strength = 0;
+  let curX = 0, curY = 0;        // smoothed offset (CSS px)
+  let cursorX = -1, cursorY = -1;
+  let raf = null;
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function tick() {
+    raf = requestAnimationFrame(tick);
+    if (isPaused || strength <= 0) return;
+    const w = window.innerWidth  || 1920;
+    const h = window.innerHeight || 1080;
+    // Normalised cursor offset from centre, clamped to [-1, 1].
+    const nx = (cursorX < 0) ? 0 : Math.max(-1, Math.min(1, (cursorX - w * 0.5) / (w * 0.5)));
+    const ny = (cursorY < 0) ? 0 : Math.max(-1, Math.min(1, (cursorY - h * 0.5) / (h * 0.5)));
+    // Background translates AGAINST the cursor direction for the
+    // "I'm looking around a 3D scene" feel. Negative sign on purpose.
+    const targetX = -nx * strength;
+    const targetY = -ny * strength;
+    curX = lerp(curX, targetX, 0.08);
+    curY = lerp(curY, targetY, 0.08);
+    // Scale-up just enough that the worst-case translate (= ±strength on
+    // either axis) doesn't reveal background past the image edges. Plus a
+    // 2 % headroom for sub-pixel jitter. Computed once per frame so a
+    // viewport resize re-scales correctly on the next tick.
+    const ratio = Math.max(strength / (w * 0.5), strength / (h * 0.5));
+    const scale = 1 + ratio + 0.02;
+    bgEl.style.transform = "translate(" + curX.toFixed(1) + "px, " +
+                                          curY.toFixed(1) + "px) scale(" +
+                                          scale.toFixed(3) + ")";
+  }
+
+  function start() { if (!raf) raf = requestAnimationFrame(tick); }
+  function stop()  {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    bgEl.style.transform = "";    // snap back to no-offset
+    curX = 0; curY = 0;
+  }
+
+  return {
+    setStrength(v) {
+      v = isFinite(v) ? v : 0;
+      strength = Math.max(0, Math.min(200, v));
+      if (strength > 0) start(); else stop();
+    },
+    setCursor(x, y) { cursorX = x; cursorY = y; },
+  };
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sys-stat + audio widget types — appended to WIDGET_REGISTRY so the
