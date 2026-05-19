@@ -74,34 +74,65 @@ GIF (`docs/images/demo.gif`) is enough.
 
 - Windows 10/11
 - [SignalRGB](https://www.signalrgb.com/) installed and running
-- [Lively Wallpaper](https://www.rocksdanister.com/lively/) — **GitHub
-  installer build** (the Microsoft Store / MSIX build is fine too for
-  Web-type wallpapers, but we recommend the GitHub build)
+- **A wallpaper host** — pick at least one (the installer asks):
+  - [Lively Wallpaper](https://www.rocksdanister.com/lively/) (free,
+    recommended) — **GitHub installer build** preferred; the Microsoft
+    Store / MSIX build also works for Web-type wallpapers
+  - [Wallpaper Engine](https://www.wallpaperengine.io/) (paid, on Steam)
+    — auto-detected by the installer; the three glow bundles get
+    dropped straight into Steam's `wallpaper_engine\projects\myprojects`
 
 ## Quick start
 
-### Easy path: installer (since v0.4.0)
+### Easy path: installer
 
 1. Grab `SignalRGBWallpaperSetup-<version>.exe` from
    [Releases](https://github.com/Delido/signalrgb-wallpaper/releases).
 2. Run it. No admin needed — installs per-user into
-   `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`. Keep both opt-in
-   tasks checked: it installs the SignalRGB plugin into your
-   `Documents\WhirlwindFX\Plugins\` folder and registers the bridge to
-   start on logon.
-3. The installer opens the "Lively wallpapers" subfolder at the end —
-   drag `SignalRGB_Glow_Screen1.zip` (and Screen2/Screen3 if you have
-   multiple monitors) onto Lively to import them.
-4. In SignalRGB: right-click the bridge's tray icon → **Settings…** →
-   "Number of screens" = how many monitors you want to drive.
-5. Place the "Desktop Wallpaper - Screen N" devices on SignalRGB's
-   canvas at the positions you want colours sampled from.
-6. Activate the matching Lively wallpaper on each monitor. Pick
-   background images in the tray Settings → per-screen tabs, or use
-   the built-in **Build Wallpaper…** tool in the tray menu.
+   `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`. On the Tasks page:
+   - **Wallpaper host:** check **Lively** (default) and/or **Wallpaper
+     Engine**. Lively-only and WE-only setups both work; only the
+     selected host's files get copied.
+   - **Install SignalRGB plugin** (recommended) — drops the plugin
+     into `Documents\WhirlwindFX\Plugins\` so SignalRGB can drive the
+     bridge.
+   - **Start bridge automatically on logon** (recommended).
+3. **Lively users**: the installer opens the _Lively wallpapers_
+   folder at the end — drag `SignalRGB_Glow_Screen1.zip` (and
+   `Screen2.zip` / `Screen3.zip` for additional monitors) onto Lively
+   to import them, then right-click → _Set as wallpaper_ on each
+   monitor.
+4. **Wallpaper Engine users**: if Steam + Wallpaper Engine were
+   detected the bundles are already in WE's library — open Wallpaper
+   Engine, find **SignalRGB Glow - Screen 1 / 2 / 3** under _My
+   Wallpapers_, and assign one per monitor. If Steam wasn't detected
+   the installer opens the _Wallpaper Engine wallpapers_ staging
+   folder; drop the three folders into Steam's
+   `…\steamapps\common\wallpaper_engine\projects\myprojects\` by hand.
+5. Right-click the bridge's tray icon → **Configurator…** (the default
+   action). In the browser: per-screen tabs at the top → set the
+   number of screens to drive in the _Advanced → Legacy Settings_
+   dialog if more than 1, then pick a background image, tweak the
+   glow layout / strength, place widgets via drag-and-resize, switch
+   on an ambient effect, etc.
+6. In SignalRGB: place the **Desktop Wallpaper - Screen N** devices
+   on SignalRGB's canvas at the positions you want colours sampled
+   from. (Layouts → drag the devices.) Optionally raise *Glow Grid
+   Size* in the plugin settings to `36` for a finer feed (current
+   ceiling — see the roadmap for a chunked transport that would lift
+   this).
 
 Uninstall via Windows Settings → Apps, or run `unins000.exe` in the
-install folder.
+install folder. The uninstaller also removes the three Steam-side WE
+bundle folders it placed (leaves any other Wallpaper Engine wallpapers
+alone).
+
+> 💡 After updating to a new version, **re-import the Lively zips**
+> in Lively (right-click the wallpaper in Lively's Library →
+> _Customise / Delete_, then drag the new zip onto Lively). Lively
+> caches the extracted HTML from your first import and won't pick up
+> new widget / effect code otherwise. Wallpaper Engine just sees the
+> new files automatically on next refresh.
 
 ### Manual path
 
@@ -112,9 +143,12 @@ from the same release page and place them yourself:
 | --- | --- |
 | `SignalRGBBridge.exe` | Anywhere stable (e.g. `C:\Tools\SignalRGBWallpaper\`) |
 | `SignalRGB_Desktop_Wallpaper.js` + `.qml` | `Documents\WhirlwindFX\Plugins\` |
-| `SignalRGB_Glow_Screen{1,2,3}.zip` | Drag into Lively |
+| `SignalRGB_Glow_Screen{1,2,3}.zip` _(Lively)_ | Drag the zip(s) into Lively |
+| `SignalRGB_Glow_WallpaperEngine.zip` _(WE)_ | Extract; drop each of the three `SignalRGB_Glow_ScreenN/` folders into `…\steamapps\common\wallpaper_engine\projects\myprojects\` |
 
-Then run `SignalRGBBridge.exe` and proceed with steps 4–6 above.
+Then run `SignalRGBBridge.exe` and proceed with steps 5–6 above
+(open the Configurator from the tray, place SignalRGB devices on
+the canvas).
 Full step-by-step with screenshots: [docs/installation.md](docs/installation.md).
 
 ## Documentation
