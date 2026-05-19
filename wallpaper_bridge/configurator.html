@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SignalRGB Wallpaper Configurator</title>
+<style>
+  :root {
+    --bg: #14171c;
+    --panel: #1d2128;
+    --panel-2: #262b34;
+    --border: #2f3641;
+    --text: #e7e9ec;
+    --text-dim: #9aa1ad;
+    --accent: #6ab0ff;
+    --accent-bg: #1f3a5a;
+    --accent-bg-hover: #25456a;
+    --good: #4caf50;
+    --danger: #ff7575;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 22px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .spacer { flex: 1; }
+  header .conn {
+    font-size: 12px; padding: 3px 9px;
+    border-radius: 999px; border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  header .conn.ok  { color: #9bd49a; border-color: #2f5a35; }
+  header .conn.bad { color: var(--danger); border-color: #5a2a2a; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 7px 12px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font: inherit; cursor: pointer; user-select: none;
+    transition: background 0.15s, border-color 0.15s;
+    line-height: 1.2;
+  }
+  .btn:hover { background: #2c323d; }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc; }
+  .btn.primary:hover { background: var(--accent-bg-hover); }
+  .btn.danger  { color: var(--danger); border-color: #5a2a2a; background: #2a1a1c; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+  /* ── Screen tabs ───────────────────────────────────────────────────── */
+  .tabs {
+    display: flex; gap: 4px;
+    padding: 0 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky; top: 53px; z-index: 9;
+  }
+  .tab {
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer; font: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  main {
+    max-width: 920px; margin: 0 auto;
+    padding: 22px;
+  }
+
+  section.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+  section.card > header.section-head {
+    position: static;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+    border-top: none;
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    user-select: none;
+  }
+  section.card > header.section-head h2 {
+    margin: 0; font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  section.card > header.section-head .chev {
+    transition: transform 0.18s;
+    color: var(--text-dim);
+  }
+  section.card.collapsed > header.section-head .chev { transform: rotate(-90deg); }
+  section.card > .body { padding: 16px; }
+  section.card.collapsed > .body { display: none; }
+
+  /* ── Common form bits ─────────────────────────────────────────────── */
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .row > label { flex: 0 0 130px; color: var(--text-dim); font-size: 12px; }
+  .row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .row input[type=text],
+  .row input[type=number],
+  .row select {
+    flex: 1; min-width: 0;
+    padding: 6px 9px; border-radius: 5px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); font: inherit;
+  }
+  .row textarea {
+    flex: 1; min-width: 0;
+    padding: 6px 9px; border-radius: 5px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); font: inherit;
+    resize: vertical;
+  }
+  .row .val {
+    flex: 0 0 50px; text-align: right;
+    font-variant-numeric: tabular-nums; color: var(--text-dim);
+  }
+  .check-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .check-row input { accent-color: var(--accent); }
+  .check-row label { color: var(--text-dim); }
+  .hint {
+    background: #1a2230; border: 1px solid #2a3a52; border-radius: 5px;
+    padding: 8px 10px; font-size: 12px; color: #b8c3d3; line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  /* ── Ambient preset tiles ─────────────────────────────────────────── */
+  .ambient-tiles {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .ambient-tile {
+    position: relative;
+    padding: 0;
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    overflow: hidden;
+    aspect-ratio: 16 / 10;
+    color: var(--text-dim);
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .ambient-tile:hover { color: var(--text); border-color: #3a6ba8; }
+  .ambient-tile.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(106,176,255,0.25) inset;
+    color: #d8e6fc;
+  }
+  .ambient-tile canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+  .ambient-tile .tile-label {
+    position: absolute; bottom: 4px; left: 0; right: 0;
+    text-align: center;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em;
+    background: linear-gradient(transparent, rgba(0,0,0,0.55));
+    padding: 12px 0 3px;
+  }
+
+  /* ── Pixelfx radios ───────────────────────────────────────────────── */
+  .seg-row {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    margin: 6px 0 4px;
+  }
+  .seg {
+    padding: 6px 10px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .seg:hover { color: var(--text); }
+  .seg.active {
+    background: var(--accent-bg);
+    border-color: #3a6ba8;
+    color: #d8e6fc;
+  }
+
+  /* ── Widget list ──────────────────────────────────────────────────── */
+  .widget-list {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 10px;
+  }
+  .widget-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    background: #181c23;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .widget-item .w-icon {
+    width: 26px; height: 26px;
+    flex: 0 0 auto;
+    color: var(--text-dim);
+  }
+  .widget-item .w-icon svg {
+    width: 100%; height: 100%;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .widget-item .w-meta { flex: 1; min-width: 0; }
+  .widget-item .w-title { font-weight: 600; }
+  .widget-item .w-sub   {
+    font-size: 11px; color: var(--text-dim);
+    margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .widget-item .w-actions { display: flex; gap: 4px; }
+  .empty-widgets {
+    color: var(--text-dim); font-style: italic;
+    padding: 14px; text-align: center;
+    border: 1px dashed var(--border); border-radius: 6px;
+    margin-bottom: 10px;
+  }
+
+  /* ── Add-widget picker ────────────────────────────────────────────── */
+  .add-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .add-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .add-btn:hover { background: #2c323d; border-color: var(--accent); }
+  .add-btn svg {
+    width: 22px; height: 22px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .add-btn-label { font-size: 11.5px; }
+
+  /* ── Options modal ────────────────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.55);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-backdrop.on { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    max-width: 480px; width: 100%;
+  }
+  .modal header {
+    position: static;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+    border-radius: 10px 10px 0 0;
+  }
+  .modal header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .modal .body { padding: 16px; }
+  .modal .actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 6px;
+  }
+
+  /* Toast for transient status messages */
+  #toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 10px 14px; border-radius: 6px;
+    font-size: 12.5px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    display: none; max-width: 380px;
+    z-index: 200;
+  }
+  #toast.good { border-color: #2f5a35; color: #b8efb8; }
+  #toast.bad  { border-color: #6a2828; color: #ffb8b8; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SignalRGB Wallpaper Configurator</h1>
+  <span class="spacer"></span>
+  <span class="conn bad" id="conn">connecting…</span>
+  <a class="btn" href="/builder" target="_blank">Open Builder…</a>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+
+  <!-- ── Background ─────────────────────────────────────────────────── -->
+  <section class="card" id="card-bg">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2>Background</h2>
+    </header>
+    <div class="body">
+      <div class="row">
+        <label for="bg-image">Image path</label>
+        <input type="text" id="bg-image" placeholder="paste a URL or absolute path">
+      </div>
+      <div class="row">
+        <label>&nbsp;</label>
+        <label class="btn" style="flex:0 0 auto" for="bg-file">Choose image…</label>
+        <input type="file" id="bg-file" accept="image/*" style="display:none">
+        <a class="btn" href="/builder" target="_blank" style="flex:0 0 auto">Open Builder…</a>
+        <span class="val" id="bg-upload-stat" style="flex:1; text-align:left; padding-left:8px;"></span>
+      </div>
+      <div class="row">
+        <label for="bg-fit">Fit</label>
+        <select id="bg-fit">
+          <option value="cover">cover (crop to fill)</option>
+          <option value="contain">contain (letterbox)</option>
+          <option value="fill">fill (stretch)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="bg-dim">Dim</label>
+        <input type="range" id="bg-dim" min="0" max="100" step="1">
+        <span class="val" id="bg-dim-val">0 %</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Glow ───────────────────────────────────────────────────────── -->
+  <section class="card" id="card-glow">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2>Glow</h2>
+    </header>
+    <div class="body">
+      <div class="check-row">
+        <input type="checkbox" id="glow-bars">
+        <label for="glow-bars">Show glow layer</label>
+      </div>
+      <div class="row">
+        <label for="glow-layout">Layout</label>
+        <select id="glow-layout">
+          <option value="lay-grid">Pixel grid (2D)</option>
+          <option value="lay-vstripes">Vertical stripes</option>
+          <option value="lay-hstripes">Horizontal stripes</option>
+          <option value="lay-pills">Centered pills</option>
+          <option value="lay-off">Hidden</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="glow-strength">Strength</label>
+        <input type="range" id="glow-strength" min="0" max="200" step="1">
+        <span class="val" id="glow-strength-val">100 %</span>
+      </div>
+      <div class="row">
+        <label for="grid-blur">Grid blur</label>
+        <input type="range" id="grid-blur" min="0" max="120" step="1">
+        <span class="val" id="grid-blur-val">30 px</span>
+      </div>
+      <div class="row">
+        <label for="stripes-blur">Stripes blur</label>
+        <input type="range" id="stripes-blur" min="0" max="200" step="1">
+        <span class="val" id="stripes-blur-val">60 px</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Effects ────────────────────────────────────────────────────── -->
+  <section class="card" id="card-effects">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2>Effects</h2>
+    </header>
+    <div class="body">
+      <div class="row" style="margin-bottom: 4px;">
+        <label style="flex:0 0 auto;">Ambient preset</label>
+      </div>
+      <div class="ambient-tiles" id="ambient-tiles"></div>
+      <div class="check-row" style="margin-top: 6px;">
+        <input type="checkbox" id="ambient-tint">
+        <label for="ambient-tint">Tint particles with the live glow colour</label>
+      </div>
+      <div class="row">
+        <label for="ambient-density">Density</label>
+        <input type="range" id="ambient-density" min="1" max="100" step="1">
+        <span class="val" id="ambient-density-val">60</span>
+      </div>
+
+      <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
+
+      <div class="row" style="margin-bottom: 4px;">
+        <label style="flex:0 0 auto;">Pixelfx (cursor)</label>
+      </div>
+      <div class="seg-row" id="pixelfx-row"></div>
+      <div class="hint" style="margin-top: 8px;">
+        Trail and hover-glow work with Lively click-through enabled (position is
+        pushed by the host). Click ripple needs real mouse events — toggle
+        <em>Wallpaper interaction</em> in Lively to see it.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Widgets ────────────────────────────────────────────────────── -->
+  <section class="card" id="card-widgets">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2>Widgets</h2>
+    </header>
+    <div class="body">
+      <div class="check-row">
+        <input type="checkbox" id="widgets-edit">
+        <label for="widgets-edit">Enable on-wallpaper edit mode (drag · resize · ⚙ · ×)</label>
+      </div>
+      <div id="widget-list" class="widget-list"></div>
+      <div style="font-size: 12px; color: var(--text-dim); margin: 12px 0 6px;">
+        Add a widget:
+      </div>
+      <div class="add-grid" id="add-grid"></div>
+    </div>
+  </section>
+
+</main>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <header><h2 id="modal-title">Configure widget</h2></header>
+    <div class="body" id="modal-body"></div>
+    <div class="actions">
+      <button class="btn" id="modal-cancel">Cancel</button>
+      <button class="btn primary" id="modal-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Widget catalog — label + icon SVG + option schema per type.
+// Mirrors WIDGET_DEFAULTS in bridge.py and WIDGET_REGISTRY in the wallpaper
+// page. Adding a new widget = one entry here + matching ones server-side
+// and on the wallpaper page.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WIDGET_CATALOG = {
+  "clock": {
+    label: "Clock",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/>' +
+          '<line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg>',
+    schema: [
+      { key: "style",        label: "Style",                type: "select",
+        options: [{value:"analog",label:"Analog"},{value:"digital",label:"Digital"}] },
+      { key: "format24h",    label: "24-hour format",       type: "boolean" },
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: (o) => (o.style || "analog") + (o.format24h === false ? " · 12h" : ""),
+  },
+  "calendar": {
+    label: "Calendar",
+    icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1.5"/>' +
+          '<line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="3" x2="8" y2="6"/>' +
+          '<line x1="16" y1="3" x2="16" y2="6"/></svg>',
+    schema: [
+      { key: "weekStart",    label: "Week start",            type: "select",
+        options: [{value:0,label:"Sunday"},{value:1,label:"Monday"}] },
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: (o) => "week starts " + (o.weekStart === 0 ? "Sunday" : "Monday"),
+  },
+  "weather": {
+    label: "Weather",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="10" r="4"/>' +
+          '<path d="M14 14h4a3 3 0 0 0 0-6 5 5 0 0 0-9.5-1.5"/></svg>',
+    schema: [
+      { key: "label",        label: "Location label",        type: "text" },
+      { key: "lat",          label: "Latitude",              type: "number" },
+      { key: "lon",          label: "Longitude",             type: "number" },
+      { key: "units",        label: "Units",                 type: "select",
+        options: [{value:"metric",label:"°C"},{value:"imperial",label:"°F"}] },
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: (o) => (o.label || "—") + " (" + (o.units === "imperial" ? "°F" : "°C") + ")",
+  },
+  "sticky-note": {
+    label: "Sticky note",
+    icon: '<svg viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/>' +
+          '<line x1="16" y1="4" x2="16" y2="8"/><line x1="16" y1="8" x2="20" y2="8"/>' +
+          '<line x1="7" y1="13" x2="15" y2="13"/><line x1="7" y1="17" x2="13" y2="17"/></svg>',
+    schema: [
+      { key: "text",  label: "Note text",   type: "textarea" },
+      { key: "color", label: "Colour",      type: "select",
+        options: [{value:"yellow",label:"Yellow"},{value:"blue",label:"Blue"},
+                  {value:"pink",label:"Pink"},{value:"green",label:"Green"}] },
+    ],
+    describe: (o) => {
+      const t = (o.text || "").trim();
+      return t.length > 60 ? t.slice(0, 60) + "…" : (t || "—");
+    },
+  },
+  "countdown": {
+    label: "Countdown",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/>' +
+          '<line x1="12" y1="13" x2="12" y2="8"/><line x1="12" y1="13" x2="15" y2="14"/>' +
+          '<line x1="9" y1="3" x2="15" y2="3"/></svg>',
+    schema: [
+      { key: "label",        label: "Label",                 type: "text" },
+      { key: "target",       label: "Target (YYYY-MM-DD or ISO)", type: "text" },
+      { key: "units",        label: "Format",                type: "select",
+        options: [{value:"smart",label:"Smart"},{value:"days",label:"Days only"},
+                  {value:"hms",label:"HH:MM:SS"}] },
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: (o) => (o.label || "Event") + " → " + (o.target || "(default +30d)"),
+  },
+  "picture-frame": {
+    label: "Picture",
+    icon: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/>' +
+          '<circle cx="9" cy="9" r="1.6"/><path d="M5 17l5-5 4 3 5-6 0 8z"/></svg>',
+    schema: [
+      { key: "url",          label: "URL / path",            type: "text" },
+      { key: "fit",          label: "Fit",                   type: "select",
+        options: [{value:"cover",label:"cover"},{value:"contain",label:"contain"},
+                  {value:"fill",label:"fill"}] },
+      { key: "rounded",      label: "Rounded corners",       type: "boolean" },
+    ],
+    describe: (o) => (o.url || "(no image)").split(/[\\/]/).pop(),
+  },
+  "quote": {
+    label: "Quote",
+    icon: '<svg viewBox="0 0 24 24"><path d="M6 7c-2 1-3 3-3 6v4h6v-6H6c0-1 1-3 3-4z"/>' +
+          '<path d="M16 7c-2 1-3 3-3 6v4h6v-6h-3c0-1 1-3 3-4z"/></svg>',
+    schema: [
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: () => "via Quotable",
+  },
+  "cpu-meter": {
+    label: "CPU",
+    icon: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/>' +
+          '<line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/>' +
+          '<line x1="9" y1="18" x2="9" y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>' +
+          '<line x1="2" y1="9" x2="6" y2="9"/><line x1="2" y1="15" x2="6" y2="15"/>' +
+          '<line x1="18" y1="9" x2="22" y2="9"/><line x1="18" y1="15" x2="22" y2="15"/></svg>',
+    schema: [
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: () => "1 Hz sparkline",
+  },
+  "ram-meter": {
+    label: "RAM",
+    icon: '<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="1"/>' +
+          '<line x1="6" y1="8" x2="6" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>' +
+          '<line x1="14" y1="8" x2="14" y2="16"/><line x1="18" y1="8" x2="18" y2="16"/></svg>',
+    schema: [
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: () => "1 Hz sparkline",
+  },
+  "audio-spectrum": {
+    label: "Audio",
+    icon: '<svg viewBox="0 0 24 24"><line x1="4"  y1="8"  x2="4"  y2="16"/>' +
+          '<line x1="8"  y1="5"  x2="8"  y2="19"/><line x1="12" y1="9"  x2="12" y2="15"/>' +
+          '<line x1="16" y1="3"  x2="16" y2="21"/><line x1="20" y1="10" x2="20" y2="14"/></svg>',
+    schema: [
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: () => "Lively/WE audio FFT",
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Connection state — one WS per active screen tab. Switching tabs closes
+// the old socket and opens a new one with ?screen=N.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const N_SCREENS  = 3;
+let activeScreen = 0;
+let ws = null;
+let settings = {};       // last received per-active-screen settings
+
+const $  = (id) => document.getElementById(id);
+const els = {
+  conn:           $("conn"),
+  tabs:           $("tabs"),
+  bgImage:        $("bg-image"),
+  bgFile:         $("bg-file"),
+  bgUploadStat:   $("bg-upload-stat"),
+  bgFit:          $("bg-fit"),
+  bgDim:          $("bg-dim"),
+  bgDimVal:       $("bg-dim-val"),
+  glowBars:       $("glow-bars"),
+  glowLayout:     $("glow-layout"),
+  glowStrength:   $("glow-strength"),
+  glowStrengthVal:$("glow-strength-val"),
+  gridBlur:       $("grid-blur"),
+  gridBlurVal:    $("grid-blur-val"),
+  stripesBlur:    $("stripes-blur"),
+  stripesBlurVal: $("stripes-blur-val"),
+  ambientTiles:   $("ambient-tiles"),
+  ambientTint:    $("ambient-tint"),
+  ambientDensity: $("ambient-density"),
+  ambientDensityVal: $("ambient-density-val"),
+  pixelfxRow:     $("pixelfx-row"),
+  widgetsEdit:    $("widgets-edit"),
+  widgetList:     $("widget-list"),
+  addGrid:        $("add-grid"),
+  modal:          $("modal"),
+  modalTitle:     $("modal-title"),
+  modalBody:      $("modal-body"),
+  modalCancel:    $("modal-cancel"),
+  modalSave:      $("modal-save"),
+  toast:          $("toast"),
+};
+
+let _toastTimer = null;
+function toast(msg, kind) {
+  els.toast.textContent = msg;
+  els.toast.className = kind || "";
+  els.toast.style.display = "block";
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { els.toast.style.display = "none"; }, 3500);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tabs
+// ─────────────────────────────────────────────────────────────────────────────
+for (let i = 0; i < N_SCREENS; i++) {
+  const t = document.createElement("button");
+  t.className = "tab" + (i === 0 ? " active" : "");
+  t.dataset.screen = i;
+  t.textContent = "Screen " + (i + 1);
+  t.addEventListener("click", () => switchScreen(i));
+  els.tabs.appendChild(t);
+}
+function switchScreen(n) {
+  if (n === activeScreen) return;
+  activeScreen = n;
+  document.querySelectorAll(".tab").forEach((t) => {
+    t.classList.toggle("active", parseInt(t.dataset.screen, 10) === n);
+  });
+  if (ws) { try { ws.close(); } catch (_) {} ws = null; }
+  connect();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Collapsible sections
+// ─────────────────────────────────────────────────────────────────────────────
+document.querySelectorAll("section.card > header.section-head[data-toggle]").forEach((h) => {
+  h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed"));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket
+// ─────────────────────────────────────────────────────────────────────────────
+function connect() {
+  const url = "ws://" + location.hostname + ":" + (location.port || 17320) +
+              "/?screen=" + activeScreen;
+  els.conn.textContent = "connecting…";
+  els.conn.className = "conn bad";
+  try { ws = new WebSocket(url); }
+  catch (e) { els.conn.textContent = "ws error"; setTimeout(connect, 1500); return; }
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => {
+    els.conn.textContent = "connected · screen " + (activeScreen + 1);
+    els.conn.className = "conn ok";
+  };
+  ws.onerror = () => {};
+  ws.onclose = () => {
+    els.conn.textContent = "disconnected — retrying…";
+    els.conn.className = "conn bad";
+    setTimeout(() => { if (ws === null || ws.readyState === 3) connect(); }, 1500);
+  };
+  ws.onmessage = (ev) => {
+    // The bridge also pushes binary glow frames + sysstats here. We only care
+    // about the settings push.
+    if (typeof ev.data !== "string") return;
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg && msg.type === "settings" && msg.data) {
+        settings = msg.data;
+        renderAll();
+      }
+    } catch (_) {}
+  };
+}
+
+function sendCmd(obj) {
+  if (!ws || ws.readyState !== 1) { toast("Not connected", "bad"); return; }
+  try { ws.send(JSON.stringify(obj)); }
+  catch (e) { console.warn("[ws] send failed:", e); }
+}
+function setSetting(key, value) {
+  // Optimistic local update so the UI stays responsive even before the
+  // bridge echoes the settings push back.
+  settings[key] = value;
+  sendCmd({ type: "setting-update", key, value });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Background section
+// ─────────────────────────────────────────────────────────────────────────────
+els.bgImage.addEventListener("change", () => setSetting("bgImage", els.bgImage.value));
+els.bgFit  .addEventListener("change", () => setSetting("bgFit",   els.bgFit.value));
+els.bgDim  .addEventListener("input",  () => {
+  els.bgDimVal.textContent = els.bgDim.value + " %";
+});
+els.bgDim  .addEventListener("change", () => setSetting("bgDim", parseInt(els.bgDim.value, 10)));
+
+// File picker: convert any image to PNG via canvas, POST to the bridge's
+// existing /screen/N/background endpoint (same one the builder uses for
+// "Apply to screen"). Bridge writes it to disk, updates bgImage, and pushes
+// the new settings — the bgImage field re-fills automatically on the echo.
+els.bgFile.addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  els.bgUploadStat.textContent = "uploading…";
+  try {
+    const blob = await fileToPngBlob(f);
+    const res = await fetch("/screen/" + activeScreen + "/background", {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: blob,
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    els.bgUploadStat.textContent = "applied · " + (blob.size / 1024).toFixed(0) + " KB";
+    toast("Background applied to screen " + (activeScreen + 1), "good");
+  } catch (err) {
+    console.error(err);
+    els.bgUploadStat.textContent = "upload failed";
+    toast("Upload failed: " + err.message, "bad");
+  } finally {
+    e.target.value = "";
+  }
+});
+
+function fileToPngBlob(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext("2d").drawImage(img, 0, 0);
+      c.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
+    };
+    img.onerror = () => reject(new Error("Failed to decode image"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Glow section
+// ─────────────────────────────────────────────────────────────────────────────
+els.glowBars   .addEventListener("change", () => setSetting("showBars",     els.glowBars.checked));
+els.glowLayout .addEventListener("change", () => setSetting("barLayout",    els.glowLayout.value));
+function bindRangeChange(rangeEl, valEl, key, suffix) {
+  rangeEl.addEventListener("input",  () => { valEl.textContent = rangeEl.value + suffix; });
+  rangeEl.addEventListener("change", () => setSetting(key, parseInt(rangeEl.value, 10)));
+}
+bindRangeChange(els.glowStrength,   els.glowStrengthVal,   "glowStrength", " %");
+bindRangeChange(els.gridBlur,       els.gridBlurVal,       "gridBlur",     " px");
+bindRangeChange(els.stripesBlur,    els.stripesBlurVal,    "stripesBlur",  " px");
+bindRangeChange(els.ambientDensity, els.ambientDensityVal, "ambientDensity", "");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Effects section
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora"];
+const PIXELFX_MODES   = [
+  { value: "off",    label: "Off" },
+  { value: "trail",  label: "Trail" },
+  { value: "glow",   label: "Hover glow" },
+  { value: "ripple", label: "Click ripple" },
+  { value: "all",    label: "All" },
+];
+
+// Build the preset tiles. Each gets a small canvas with a few seed particles
+// running so the user sees a mini-preview.
+function buildAmbientTiles() {
+  els.ambientTiles.innerHTML = "";
+  for (const preset of AMBIENT_PRESETS) {
+    const tile = document.createElement("button");
+    tile.className = "ambient-tile";
+    tile.dataset.preset = preset;
+    tile.title = preset;
+    const canvas = document.createElement("canvas");
+    const label = document.createElement("span");
+    label.className = "tile-label";
+    label.textContent = preset === "off" ? "Off" : preset[0].toUpperCase() + preset.slice(1);
+    tile.appendChild(canvas);
+    tile.appendChild(label);
+    tile.addEventListener("click", () => setSetting("ambientEffect", preset));
+    els.ambientTiles.appendChild(tile);
+    if (preset !== "off") startTilePreview(canvas, preset);
+  }
+}
+
+// Tiny standalone preset preview — same shapes as the wallpaper engine but
+// with fewer particles + smaller canvas. Re-uses the same per-frame
+// "spawn / step / render" loop pattern.
+function startTilePreview(canvas, preset) {
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = canvas.clientWidth  * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    canvas.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  setTimeout(resize, 0);
+  window.addEventListener("resize", resize);
+  const ctx = canvas.getContext("2d");
+  let particles = [];
+  let lastT = performance.now();
+  function tick(now) {
+    requestAnimationFrame(tick);
+    const dt = Math.min(0.1, (now - lastT) / 1000);
+    lastT = now;
+    const w = canvas.clientWidth || 160;
+    const h = canvas.clientHeight || 100;
+    const def = TILE_PRESETS[preset];
+    if (!def) return;
+    const target = def.targetCount(w, h);
+    while (particles.length < target) particles.push(def.spawn(w, h));
+    for (let i = particles.length - 1; i >= 0; i--) {
+      if (!def.step(particles[i], dt, w, h)) particles.splice(i, 1);
+    }
+    ctx.clearRect(0, 0, w, h);
+    for (const p of particles) def.render(ctx, p);
+  }
+  requestAnimationFrame(tick);
+}
+
+const TILE_PRESETS = {
+  snow: {
+    targetCount: (w, h) => Math.round(w * h / 1500),
+    spawn: (w, h) => ({ x: Math.random()*w, y: -3, vy: 0.5 + Math.random()*1.0,
+                        r: 0.8 + Math.random()*1.5, a: 0.5 + Math.random()*0.3,
+                        wobble: Math.random() * Math.PI * 2 }),
+    step: (p, dt, w, h) => {
+      p.wobble += dt * 2;
+      p.y += p.vy * dt * 40;
+      p.x += Math.sin(p.wobble) * 0.4;
+      return p.y < h + 5;
+    },
+    render: (ctx, p) => {
+      ctx.fillStyle = "rgba(255,255,255," + p.a + ")";
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    },
+  },
+  rain: {
+    targetCount: (w, h) => Math.round(w * h / 400),
+    spawn: (w, h) => ({ x: Math.random()*w*1.2, y: -5, vy: 12 + Math.random()*4,
+                        length: 6 + Math.random()*4, a: 0.3 + Math.random()*0.3 }),
+    step: (p, dt, w, h) => {
+      p.y += p.vy * dt * 40;
+      p.x -= 1.5;
+      return p.y < h + 10 && p.x > -10;
+    },
+    render: (ctx, p) => {
+      ctx.strokeStyle = "rgba(180,200,255," + p.a + ")";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + 1, p.y - p.length); ctx.stroke();
+    },
+  },
+  sparks: {
+    targetCount: (w, h) => Math.round(w * h / 2000),
+    spawn: (w, h) => ({ x: Math.random()*w, y: h + 5,
+                        vx: (Math.random()-0.5)*0.4, vy: -(0.5 + Math.random()*1.0),
+                        r: 0.8 + Math.random()*1.0, hue: 30 + Math.random()*30,
+                        life: 0, maxLife: 3 + Math.random()*3 }),
+    step: (p, dt, w, h) => {
+      p.life += dt;
+      p.x += p.vx * dt * 40; p.y += p.vy * dt * 40;
+      return p.life < p.maxLife && p.y > -5;
+    },
+    render: (ctx, p) => {
+      const fadeIn  = Math.min(1, p.life / 0.4);
+      const fadeOut = Math.min(1, (p.maxLife - p.life) / 0.8);
+      const a = Math.min(fadeIn, fadeOut);
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r*4);
+      grad.addColorStop(0, "rgba(255,255,255," + a + ")");
+      grad.addColorStop(0.4, "hsla(" + p.hue + ", 95%, 60%, " + (a*0.6) + ")");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - p.r*4, p.y - p.r*4, p.r*8, p.r*8);
+    },
+  },
+  aurora: {
+    targetCount: () => 4,
+    spawn: (w, h) => ({ x: Math.random()*w, y: h*(0.2 + Math.random()*0.5),
+                        vx: (Math.random()-0.5)*0.4,
+                        r: 30 + Math.random()*30, hue: 130 + Math.random()*140,
+                        life: 0, maxLife: 12 + Math.random()*10 }),
+    step: (p, dt, w) => {
+      p.life += dt;
+      p.x += p.vx * dt * 25;
+      if (p.x < -p.r) p.x = w + p.r;
+      if (p.x > w + p.r) p.x = -p.r;
+      return p.life < p.maxLife;
+    },
+    render: (ctx, p) => {
+      const fadeIn  = Math.min(1, p.life / 2);
+      const fadeOut = Math.min(1, (p.maxLife - p.life) / 2);
+      const a = 0.4 * Math.min(fadeIn, fadeOut);
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      grad.addColorStop(0,   "hsla(" + p.hue + ", 80%, 60%, " + a + ")");
+      grad.addColorStop(1,   "hsla(" + p.hue + ", 80%, 60%, 0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
+    },
+  },
+};
+
+els.ambientTint.addEventListener("change", () => setSetting("ambientTint", els.ambientTint.checked));
+
+// Build pixelfx segmented buttons
+function buildPixelfxRow() {
+  els.pixelfxRow.innerHTML = "";
+  for (const opt of PIXELFX_MODES) {
+    const b = document.createElement("button");
+    b.className = "seg";
+    b.textContent = opt.label;
+    b.dataset.value = opt.value;
+    b.addEventListener("click", () => setSetting("pixelfx", opt.value));
+    els.pixelfxRow.appendChild(b);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Widgets section
+// ─────────────────────────────────────────────────────────────────────────────
+
+els.widgetsEdit.addEventListener("change", () => {
+  sendCmd({ type: "widgets-lock", locked: !els.widgetsEdit.checked });
+});
+
+function buildAddGrid() {
+  els.addGrid.innerHTML = "";
+  for (const [type, def] of Object.entries(WIDGET_CATALOG)) {
+    const b = document.createElement("button");
+    b.className = "add-btn";
+    b.title = "Add " + def.label;
+    b.innerHTML = def.icon + '<span class="add-btn-label">' + escapeHtml(def.label) + '</span>';
+    b.addEventListener("click", () => {
+      sendCmd({ type: "widget-add", widgetType: type });
+      toast("Added " + def.label, "good");
+    });
+    els.addGrid.appendChild(b);
+  }
+}
+
+function renderWidgetList() {
+  els.widgetList.innerHTML = "";
+  const list = settings.widgets || [];
+  if (list.length === 0) {
+    const e = document.createElement("div");
+    e.className = "empty-widgets";
+    e.textContent = "No widgets on this screen yet — pick one below to add.";
+    els.widgetList.appendChild(e);
+    return;
+  }
+  for (const w of list) {
+    const def = WIDGET_CATALOG[w.type];
+    const row = document.createElement("div");
+    row.className = "widget-item";
+    const icon = document.createElement("div");
+    icon.className = "w-icon";
+    icon.innerHTML = def ? def.icon : "?";
+    const meta = document.createElement("div");
+    meta.className = "w-meta";
+    const title = document.createElement("div");
+    title.className = "w-title";
+    title.textContent = def ? def.label : w.type;
+    const sub = document.createElement("div");
+    sub.className = "w-sub";
+    sub.textContent = (def && def.describe) ? def.describe(w.options || {}) : "";
+    meta.appendChild(title); meta.appendChild(sub);
+    const acts = document.createElement("div");
+    acts.className = "w-actions";
+    const configure = document.createElement("button");
+    configure.className = "btn";
+    configure.textContent = "Configure";
+    configure.disabled = !def || def.schema.length === 0;
+    configure.addEventListener("click", () => openOptionsModal(w));
+    const remove = document.createElement("button");
+    remove.className = "btn danger";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      sendCmd({ type: "widget-remove", id: w.id });
+      toast("Removed " + (def ? def.label : w.type), "good");
+    });
+    acts.appendChild(configure); acts.appendChild(remove);
+    row.appendChild(icon); row.appendChild(meta); row.appendChild(acts);
+    els.widgetList.appendChild(row);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Options modal — builds a form from the widget type's schema.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let modalState = null;   // { id, options: {…edited fields} }
+
+function openOptionsModal(widget) {
+  const def = WIDGET_CATALOG[widget.type];
+  if (!def) return;
+  modalState = { id: widget.id, options: { ...(widget.options || {}) } };
+  els.modalTitle.textContent = "Configure: " + def.label;
+  els.modalBody.innerHTML = "";
+  for (const field of def.schema) {
+    const row = document.createElement("div");
+    if (field.type === "boolean") {
+      row.className = "check-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.id = "f-" + field.key;
+      cb.checked = !!modalState.options[field.key];
+      cb.addEventListener("change", () => { modalState.options[field.key] = cb.checked; });
+      const lbl = document.createElement("label");
+      lbl.htmlFor = "f-" + field.key;
+      lbl.textContent = field.label;
+      row.appendChild(cb); row.appendChild(lbl);
+    } else {
+      row.className = "row";
+      const lbl = document.createElement("label");
+      lbl.htmlFor = "f-" + field.key;
+      lbl.textContent = field.label;
+      row.appendChild(lbl);
+      let input;
+      if (field.type === "select") {
+        input = document.createElement("select");
+        for (const opt of field.options) {
+          const o = document.createElement("option");
+          if (typeof opt === "string") { o.value = opt; o.textContent = opt; }
+          else { o.value = String(opt.value); o.textContent = opt.label; }
+          input.appendChild(o);
+        }
+        input.value = String(modalState.options[field.key] ?? "");
+        input.addEventListener("change", () => {
+          let v = input.value;
+          // coerce numeric option values back to numbers
+          if (field.options.some((o) => typeof o === "object" && typeof o.value === "number")) {
+            v = parseFloat(v);
+          }
+          modalState.options[field.key] = v;
+        });
+      } else if (field.type === "textarea") {
+        input = document.createElement("textarea");
+        input.rows = 3;
+        input.value = modalState.options[field.key] || "";
+        input.addEventListener("input", () => { modalState.options[field.key] = input.value; });
+      } else if (field.type === "number") {
+        input = document.createElement("input");
+        input.type = "number";
+        input.step = "any";
+        input.value = String(modalState.options[field.key] ?? "");
+        input.addEventListener("change", () => {
+          const v = parseFloat(input.value);
+          modalState.options[field.key] = isFinite(v) ? v : input.value;
+        });
+      } else {
+        input = document.createElement("input");
+        input.type = "text";
+        input.value = modalState.options[field.key] || "";
+        input.addEventListener("input", () => { modalState.options[field.key] = input.value; });
+      }
+      input.id = "f-" + field.key;
+      row.appendChild(input);
+    }
+    els.modalBody.appendChild(row);
+  }
+  els.modal.classList.add("on");
+}
+
+els.modalCancel.addEventListener("click", () => { els.modal.classList.remove("on"); modalState = null; });
+els.modalSave  .addEventListener("click", () => {
+  if (!modalState) return;
+  sendCmd({ type: "widget-update", id: modalState.id, options: modalState.options });
+  els.modal.classList.remove("on");
+  modalState = null;
+  toast("Saved widget options", "good");
+});
+els.modal.addEventListener("click", (e) => {
+  if (e.target === els.modal) { els.modal.classList.remove("on"); modalState = null; }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Render — pull settings into the form controls.
+// ─────────────────────────────────────────────────────────────────────────────
+function renderAll() {
+  // Background
+  els.bgImage.value = settings.bgImage || "";
+  els.bgFit.value   = settings.bgFit   || "cover";
+  els.bgDim.value   = String(settings.bgDim ?? 0);
+  els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";
+  // Glow
+  els.glowBars.checked   = settings.showBars !== false;
+  els.glowLayout.value   = settings.barLayout || "lay-grid";
+  els.glowStrength.value = String(settings.glowStrength ?? 100);
+  els.glowStrengthVal.textContent = (settings.glowStrength ?? 100) + " %";
+  els.gridBlur.value     = String(settings.gridBlur ?? 30);
+  els.gridBlurVal.textContent     = (settings.gridBlur ?? 30) + " px";
+  els.stripesBlur.value  = String(settings.stripesBlur ?? 60);
+  els.stripesBlurVal.textContent  = (settings.stripesBlur ?? 60) + " px";
+  // Effects
+  const ambient = settings.ambientEffect || "off";
+  els.ambientTiles.querySelectorAll(".ambient-tile").forEach((t) => {
+    t.classList.toggle("active", t.dataset.preset === ambient);
+  });
+  els.ambientTint.checked = !!settings.ambientTint;
+  els.ambientDensity.value = String(settings.ambientDensity ?? 60);
+  els.ambientDensityVal.textContent = String(settings.ambientDensity ?? 60);
+  const pixel = settings.pixelfx || "off";
+  els.pixelfxRow.querySelectorAll(".seg").forEach((b) => {
+    b.classList.toggle("active", b.dataset.value === pixel);
+  });
+  // Widgets
+  els.widgetsEdit.checked = settings.widgetsLocked === false;
+  renderWidgetList();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+// Boot
+buildAmbientTiles();
+buildPixelfxRow();
+buildAddGrid();
+connect();
+</script>
+
+</body>
+</html>

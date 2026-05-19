@@ -9,6 +9,12 @@ wallpaper_bridge/SignalRGB_Glow_Screen*.zip
 wallpaper_bridge/SignalRGB_LivelyPauseTester.zip
 wallpaper_bridge/SignalRGBBridge*.exe
 
+# Wallpaper Engine bundles — built by installer/build.ps1, released as
+# the SignalRGB_Glow_WallpaperEngine.zip asset; we_bundles/ is the staging
+# folder Inno Setup packages from.
+wallpaper_bridge/we_bundles/
+wallpaper_bridge/SignalRGB_Glow_WallpaperEngine.zip
+
 # Inno Setup output + generated icon — released as assets, not committed
 installer_out/
 installer/icon.ico

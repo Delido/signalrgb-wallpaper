@@ -4,6 +4,121 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0-beta] - 2026-05-19
+
+> Prerelease. The three-phase effects roadmap landed in one drop,
+> plus a brand-new in-browser configurator. Tray → **Updates** →
+> **Allow beta versions** to opt in.
+
+### 🎛️ Added — In-browser configurator
+
+New page at `http://127.0.0.1:17320/configurator`, opened by the
+tray's primary **Configurator…** action. Replaces the per-screen
+Widgets / Effects right-click submenus (which had become an
+unusable maze of radio submenus) with a single tabbed UI:
+
+- **Per-screen tabs** at the top, one WebSocket per active tab.
+- **Background section** — image path field, file-picker (re-uses
+  the builder's PNG-via-canvas upload to the bridge's existing
+  `POST /screen/N/background` endpoint), Fit dropdown, Dim slider.
+- **Glow section** — layout dropdown, strength / grid-blur /
+  stripes-blur sliders, show-bars toggle.
+- **Effects section** — five **live mini-canvas tiles** for the
+  ambient presets (snow / rain / sparks / aurora actually animate
+  inside the tile so you see what each preset looks like before
+  applying), tint toggle, density slider, pixelfx segmented
+  buttons.
+- **Widgets section** — list of all placed widgets per screen with
+  icon + label + short description; **Configure** opens a real
+  form-based modal (no more `prompt()` chains) built from a
+  per-type option schema; Remove button per row; an "Add"
+  picker-grid with all registered widget types.
+- New WebSocket command `setting-update` so the page can drive
+  any non-widget per-screen setting. Server-side whitelisted to
+  prevent random config keys from being mutated.
+
+Tray menu was simplified to: **Configurator…** (default click) ·
+**Build Wallpaper…** · **Advanced** submenu (legacy Settings,
+quick-add widget / effect submenus, reload config) · **Updates** ·
+**About** · **Quit**.
+
+### 🎆 Added — Ambient effects (Phase 2)
+
+Four full-canvas particle presets that run behind the widgets:
+
+- **Snow** — soft drifting flakes with sideways wobble
+- **Rain** — diagonal lines, density-driven
+- **Sparks** — warm hot-core embers floating up
+- **Aurora** — large soft hue-shifting blobs drifting across the screen
+
+Hand-rolled canvas engine (no extra JS dependency — the existing
+`interact.js` is enough). All four presets honour an opt-in
+**"Tint particles with glow colour"** toggle that pulls the
+already-computed glow average and recolours the particles.
+
+Tray → **Effects** → **Screen N** → pick the preset (radio), toggle
+tint, and adjust density (1..100; defaults to 60). Live-pushed —
+toggling visibly changes the wallpaper without reconnecting anything.
+
+### 📊 Added — System-stat widgets (Phase 3)
+
+Four new widget types appended to the registry:
+
+- **CPU meter** — current %, plus a 120-second sparkline
+- **RAM meter** — same shape for memory pressure
+- **Network graph** — current ↓ / ↑ rates (human-formatted B/s · KB/s ·
+  MB/s) over a dual-line chart, auto-scaled to the rolling max
+- **Audio spectrum** — bar visualizer driven by Lively's
+  `livelyAudioListener` (and Wallpaper Engine's
+  `wallpaperRegisterAudioListener`). 64-bar FFT, scales with widget
+  size; falls back to *"waiting for audio…"* when nothing is playing
+
+CPU / RAM / Net stats come from a new `SysStatsPoller` thread in the
+bridge — uses `psutil` (BSD-3-Clause, bundled into the PyInstaller
+exe via `--collect-all psutil`), polls at 1 Hz, pushes a single
+WebSocket frame `{type:"sysstats", data:{cpu, ram, netDown, netUp,
+uptime, ts}}` to every connected wallpaper. The bridge gracefully
+no-ops if `psutil` is missing at import time (dev `python bridge.py`
+on a box without the module still boots; widgets render "n/a").
+
+Audio doesn't need a bridge hop — Lively / WE inject FFT directly
+into the wallpaper page.
+
+### ✨ Added — Pixelfx (Phase 4)
+
+Cursor-following eye-candy on its own canvas layer above the widgets:
+
+- **Mouse trail** — a fading line of tinted dots
+- **Hover glow** — a soft radial gradient that follows the cursor
+- **Click ripple** — concentric circle on each click
+- **All** — combine the three
+
+Position arrives via Lively's `livelyCurrentCursorPos(x, y)` callback,
+so trail + glow work under click-through too. Ripples need real
+clicks, which means Lively / WE wallpaper-interaction has to be
+enabled — flagged in the tray menu entry's label.
+
+### Added — Tray plumbing
+
+- **Effects** submenu with per-screen radio lists for ambient preset
+  and pixelfx mode + tint toggle. Auto-generated from
+  `AMBIENT_PRESETS_TRAY` / `PIXELFX_MODES_TRAY` constants, so adding
+  another preset later is one tuple in each list.
+
+### Removed
+
+- **Network widget** pulled from this release after testing — the
+  dual-line chart layout needed more work and the rate readings were
+  flaky on some Windows network-interface combos. The bridge still
+  pushes `netDown` / `netUp` in the sysstats frame, so a future
+  iteration can bring the widget back without a protocol change.
+
+### Changed
+
+- About dialog now credits `psutil` (BSD-3-Clause).
+- New top-level per-screen settings: `ambientEffect`, `ambientTint`,
+  `ambientDensity`, `pixelfx`. Backfilled on existing configs.
+
 ## [0.5.3-beta] - 2026-05-19
 
 > Prerelease. Hotfix release for the v0.5.2-beta installer.

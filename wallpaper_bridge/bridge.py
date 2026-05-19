@@ -61,6 +61,16 @@ from tkinter import filedialog, ttk
 import pystray
 from PIL import Image, ImageDraw
 
+# psutil is optional at import time so a dev `python bridge.py` on a box
+# without it still boots. When missing, the SysStats broadcaster simply
+# stays disabled and the CPU / RAM / Net widgets render "n/a".
+try:
+    import psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    psutil = None
+    _HAS_PSUTIL = False
+
 
 def _resource_path(rel: str) -> Path:
     """Resolve a path that works both in dev runs and PyInstaller --onefile
@@ -302,7 +312,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.5.3-beta"
+APP_VERSION = "0.6.0-beta"
 APP_AUTHOR  = "Delido"
 APP_REPO    = "https://github.com/Delido/signalrgb-wallpaper"
 
@@ -343,6 +353,21 @@ DEFAULT_SCREEN_SETTINGS = {
     # wallpaper attaches drag/resize handles (via interact.js) and pushes
     # position updates back over the WS as widget-update messages.
     "widgetsLocked":   True,
+    # Full-canvas ambient effect (Phase 2). One of:
+    #   "off" | "snow" | "rain" | "sparks" | "aurora"
+    "ambientEffect":   "off",
+    # When True the ambient effect samples the live glow colour and tints
+    # particles accordingly (snow → wallpaper-coloured, etc.). Off by default
+    # so snow stays white / rain stays bluish.
+    "ambientTint":     False,
+    # 1..100 — relative particle count / saturation knob.
+    "ambientDensity":  60,
+    # Cursor / click eye-candy (Phase 4). One of:
+    #   "off" | "trail" | "glow" | "ripple" | "all"
+    # Position arrives via Lively's livelyCurrentCursorPos callback so the
+    # trail works even with click-through enabled; ripples need real clicks
+    # (Lively interaction must be on).
+    "pixelfx":         "off",
 }
 
 # Server-side schemas for widget option defaults — keep in sync with the
@@ -394,6 +419,21 @@ WIDGET_DEFAULTS = {
         "label":   "Quote of the day",
         "x": 600, "y": 60,  "w": 320, "h": 180,
         "options": {"source": "quotable", "tintFromGlow": False},
+    },
+    "cpu-meter": {
+        "label":   "CPU meter",
+        "x": 600, "y": 260, "w": 200, "h": 140,
+        "options": {"tintFromGlow": False},
+    },
+    "ram-meter": {
+        "label":   "RAM meter",
+        "x": 600, "y": 420, "w": 200, "h": 140,
+        "options": {"tintFromGlow": False},
+    },
+    "audio-spectrum": {
+        "label":   "Audio spectrum",
+        "x": 820, "y": 440, "w": 280, "h": 120,
+        "options": {"tintFromGlow": False},
     },
 }
 WIDGET_TYPES = list(WIDGET_DEFAULTS.keys())
@@ -665,11 +705,12 @@ class Broadcaster:
         mutations live here; future client→server messages slot in next to
         them. Runs on the asyncio loop thread."""
         t = msg.get("type")
-        if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock"):
+        if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
+                 "setting-update"):
             try:
                 self.on_widget_command(screen, msg)
             except Exception as e:
-                print(f"[ws] widget command failed: {e}")
+                print(f"[ws] command failed: {e}")
         # Unknown types are silently dropped — clients on a newer protocol
         # version shouldn't crash an older bridge.
 
@@ -772,6 +813,25 @@ class Broadcaster:
     def push_settings_threadsafe(self, screen: int, settings: dict):
         asyncio.run_coroutine_threadsafe(self.push_settings(screen, settings), self.loop)
 
+    async def push_sysstats(self, snapshot: dict):
+        """Broadcast a single sysstats payload to every connected client.
+        snapshot keys: cpu (0..100), ram (0..100), netDown / netUp (bytes/s),
+        uptime (seconds), and 'ts' (epoch ms).
+        """
+        msg = json.dumps({"type": "sysstats", "data": snapshot})
+        frame = encode_text_frame(msg)
+        async with self._lock:
+            all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
+        dead = []
+        for w in all_clients:
+            try: w.write(frame)
+            except Exception: dead.append(w)
+        for w in dead:
+            await self.remove(w)
+
+    def push_sysstats_threadsafe(self, snapshot: dict):
+        asyncio.run_coroutine_threadsafe(self.push_sysstats(snapshot), self.loop)
+
     # ----- TCP accept handler (HTTP or WS upgrade) -----
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -805,7 +865,10 @@ class Broadcaster:
         # The SignalRGB plugin XHRs here on every Update() tick to learn how
         # many controllers to announce. Plugin sandbox has no service-level
         # settings UI, so the bridge owns this knob — change it via tray.
-        if method == "GET" and target.startswith("/config"):
+        # Match `/config` exactly (with optional query string) — `startswith`
+        # would otherwise eat `/configurator` and silently serve JSON in its
+        # place.
+        if method == "GET" and target.split("?", 1)[0] in ("/config", "/config/"):
             try:
                 payload = json.dumps({"screenCount": int(self.get_screen_count())}).encode("utf-8")
                 head = (
@@ -899,6 +962,31 @@ class Broadcaster:
             except Exception: pass
             return
 
+        # In-browser configurator — replaces the tray's per-screen widget /
+        # effect submenus with a rich tabbed UI. Same WS protocol as the
+        # wallpaper page; sends `setting-update` / `widget-*` commands.
+        if method == "GET" and target.split("?", 1)[0] in ("/configurator", "/configurator/"):
+            try:
+                cfg_path = _resource_path("configurator.html")
+                data = cfg_path.read_bytes()
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(data)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + data)
+            except FileNotFoundError:
+                http_error(writer, 500, "configurator.html not bundled with this build")
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
         http_error(writer, 404, "not found")
         try: await writer.drain()
         except Exception: pass
@@ -930,6 +1018,76 @@ class Broadcaster:
             pass
         finally:
             await self.remove(writer)
+
+
+class SysStatsPoller:
+    """Polls CPU / RAM / network counters via psutil once per second on its
+    own daemon thread and pushes a snapshot through Broadcaster.push_sysstats.
+    Disables itself (no-op) when psutil isn't available so the rest of the
+    bridge still runs."""
+
+    def __init__(self, broadcaster: 'Broadcaster'):
+        self.broadcaster = broadcaster
+        self._stop = threading.Event()
+        self._last_net = None       # (sent, recv) from previous tick
+        self._last_net_ts = 0.0
+        self._boot_time = time.time()
+        if _HAS_PSUTIL:
+            try:
+                self._boot_time = psutil.boot_time()
+            except Exception:
+                pass
+
+    def start(self):
+        if not _HAS_PSUTIL:
+            print("[sysstats] psutil missing — CPU / RAM / Net widgets will show 'n/a'")
+            return
+        threading.Thread(target=self._run, daemon=True, name="sysstats-poll").start()
+        print("[sysstats] poller running (1 Hz)")
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        # Seed the per-CPU sampler so the first reading isn't a misleading 0
+        # (psutil.cpu_percent compares against a previous probe).
+        try: psutil.cpu_percent(interval=None)
+        except Exception: pass
+        while not self._stop.is_set():
+            try:
+                snap = self._collect()
+                self.broadcaster.push_sysstats_threadsafe(snap)
+            except Exception as e:
+                print(f"[sysstats] tick failed: {e}")
+            if self._stop.wait(1.0):
+                return
+
+    def _collect(self) -> dict:
+        cpu = float(psutil.cpu_percent(interval=None))
+        mem = psutil.virtual_memory()
+        ram = float(mem.percent)
+        # net_io_counters is monotonically increasing; derive a rate by
+        # diffing against the previous sample. First call yields 0 since
+        # we have no baseline yet.
+        now = time.monotonic()
+        net = psutil.net_io_counters()
+        if self._last_net and self._last_net_ts:
+            dt = max(1e-3, now - self._last_net_ts)
+            net_down = max(0.0, (net.bytes_recv - self._last_net[0]) / dt)
+            net_up   = max(0.0, (net.bytes_sent - self._last_net[1]) / dt)
+        else:
+            net_down = 0.0
+            net_up   = 0.0
+        self._last_net    = (net.bytes_recv, net.bytes_sent)
+        self._last_net_ts = now
+        return {
+            "cpu":     round(cpu, 1),
+            "ram":     round(ram, 1),
+            "netDown": round(net_down, 0),
+            "netUp":   round(net_up, 0),
+            "uptime":  int(time.time() - self._boot_time),
+            "ts":      int(time.time() * 1000),
+        }
 
 
 class UdpReceiver(asyncio.DatagramProtocol):
@@ -1114,6 +1272,31 @@ class BridgeRuntime:
             self.push_settings(screen, snap)
         return snap
 
+    # Keys the wallpaper page / configurator are allowed to set via the
+    # generic `setting-update` WS command. Whitelisted so a buggy page
+    # can't write arbitrary garbage into config.json — anything not on
+    # this list is silently dropped (with a console warning).
+    _SETTABLE_SCREEN_KEYS = {
+        "bgImage", "bgImageUrl", "bgFit", "bgDim",
+        "barLayout", "showBars", "glowStrength",
+        "gridBlur", "stripesBlur", "barHeight", "barWidth",
+        "showStatus",
+        "ambientEffect", "ambientTint", "ambientDensity",
+        "pixelfx",
+        "widgetsLocked",
+    }
+
+    def update_screen_setting(self, screen: int, key: str, value) -> dict | None:
+        if key not in self._SETTABLE_SCREEN_KEYS:
+            print(f"[settings] ignoring non-whitelisted key: {key!r}")
+            return None
+        def mutate(s):
+            s[key] = value
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+        return snap
+
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
         defer the actual persistence + rebroadcast to a thread so the WS
@@ -1129,6 +1312,9 @@ class BridgeRuntime:
                 self.remove_widget(screen, str(msg.get("id", "")))
             elif t == "widgets-lock":
                 self.set_widgets_locked(screen, bool(msg.get("locked", True)))
+            elif t == "setting-update":
+                self.update_screen_setting(screen, str(msg.get("key", "")),
+                                           msg.get("value"))
         threading.Thread(target=run, daemon=True, name="widget-mutate").start()
 
     def start(self):
@@ -1150,6 +1336,10 @@ class BridgeRuntime:
             self._is_paused,
             self._on_widget_command,
         )
+        # System-stats poller pushes 1 Hz snapshots over the WS once the
+        # broadcaster is up. No-op if psutil wasn't bundled into this build.
+        self.sysstats = SysStatsPoller(self.broadcaster)
+        self.sysstats.start()
         try:
             loop.run_until_complete(self._serve())
         except Exception as e:
@@ -1570,6 +1760,10 @@ class AboutDialog:
             "  • Pillow / PIL (image library, tray-icon rendering) — MIT-CMU (HPND)\n"
             "    https://github.com/python-pillow/Pillow\n"
             "\n"
+            "  • psutil (cross-platform process / system stats) — BSD-3-Clause.\n"
+            "    Used by the SysStats poller for the CPU / RAM / Network widgets.\n"
+            "    https://github.com/giampaolo/psutil\n"
+            "\n"
             "  • PyInstaller (single-file packager — used at build time, the\n"
             "    bootloader stub it embeds ships with this exe) — GPL 2.0+\n"
             "    with linking exception (commercial / closed-source apps OK).\n"
@@ -1701,16 +1895,26 @@ class TrayApp:
                 self._open_update_page))
             items.append(pystray.Menu.SEPARATOR)
         items.extend([
-            pystray.MenuItem("Settings…",         self._open_settings, default=True),
-            pystray.MenuItem("Build Wallpaper…",  self._open_builder),
-            pystray.MenuItem("Widgets",           pystray.Menu(self._widget_menu_items)),
-            pystray.MenuItem("Updates",           pystray.Menu(self._update_menu_items)),
-            pystray.MenuItem("Reload config",     self._reload_config),
+            pystray.MenuItem("Configurator…",      self._open_configurator, default=True),
+            pystray.MenuItem("Build Wallpaper…",   self._open_builder),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("About…",            self._open_about),
-            pystray.MenuItem("Quit",              self._quit),
+            pystray.MenuItem("Advanced",           pystray.Menu(
+                pystray.MenuItem("Legacy Settings dialog…", self._open_settings),
+                pystray.MenuItem("Quick add widget", pystray.Menu(self._widget_menu_items)),
+                pystray.MenuItem("Quick effects",    pystray.Menu(self._effects_menu_items)),
+                pystray.MenuItem("Reload config",    self._reload_config),
+            )),
+            pystray.MenuItem("Updates",            pystray.Menu(self._update_menu_items)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("About…",             self._open_about),
+            pystray.MenuItem("Quit",               self._quit),
         ])
         return items
+
+    def _open_configurator(self, icon, item):
+        url = f"http://{WS_HOST}:{WS_PORT}/configurator"
+        try: webbrowser.open(url, new=2)
+        except Exception as e: print(f"[tray] open configurator failed: {e}")
 
     # -- menu callbacks (fire on pystray's worker thread) -------------------
 
@@ -1861,6 +2065,110 @@ class TrayApp:
         try:
             if self.icon: self.icon.update_menu()
         except Exception: pass
+
+    # ── Effects submenu ────────────────────────────────────────────────
+    # Per-screen ambient preset / pixelfx mode / tint toggle. Live-pushed
+    # to the wallpaper via the existing settings-broadcast pipeline.
+
+    AMBIENT_PRESETS_TRAY = [
+        ("off",    "Off"),
+        ("snow",   "Snow"),
+        ("rain",   "Rain"),
+        ("sparks", "Sparks"),
+        ("aurora", "Aurora"),
+    ]
+    PIXELFX_MODES_TRAY = [
+        ("off",    "Off"),
+        ("trail",  "Mouse trail"),
+        ("glow",   "Hover glow"),
+        ("ripple", "Click ripple (needs Lively interaction)"),
+        ("all",    "All combined"),
+    ]
+
+    def _effects_menu_items(self):
+        with self.config_lock:
+            n = max(1, min(N_SCREENS, int(self.config.get("screenCount", 1))))
+        return [
+            pystray.MenuItem(f"Screen {i + 1}",
+                             pystray.Menu(self._effects_screen_items_factory(i)))
+            for i in range(n)
+        ]
+
+    def _effects_screen_items_factory(self, screen: int):
+        def items():
+            with self.config_lock:
+                s = self.config["screens"].get(str(screen), {})
+                current_ambient = s.get("ambientEffect", "off")
+                tint            = bool(s.get("ambientTint", False))
+                current_pixelfx = s.get("pixelfx", "off")
+            menu = []
+            # Ambient preset radio list
+            menu.append(pystray.MenuItem("Ambient effect",
+                                         None, enabled=False))
+            for value, label in self.AMBIENT_PRESETS_TRAY:
+                menu.append(pystray.MenuItem(
+                    "  " + label,
+                    self._set_ambient_factory(screen, value),
+                    checked=lambda _it, _v=value, _c=current_ambient: _v == _c,
+                    radio=True,
+                ))
+            menu.append(pystray.Menu.SEPARATOR)
+            menu.append(pystray.MenuItem(
+                "Tint particles with glow colour",
+                self._toggle_ambient_tint_factory(screen),
+                checked=lambda _it, _t=tint: _t,
+            ))
+            menu.append(pystray.Menu.SEPARATOR)
+            menu.append(pystray.MenuItem("Pixelfx (cursor)",
+                                         None, enabled=False))
+            for value, label in self.PIXELFX_MODES_TRAY:
+                menu.append(pystray.MenuItem(
+                    "  " + label,
+                    self._set_pixelfx_factory(screen, value),
+                    checked=lambda _it, _v=value, _c=current_pixelfx: _v == _c,
+                    radio=True,
+                ))
+            return menu
+        return items
+
+    def _set_ambient_factory(self, screen: int, value: str):
+        def handler(icon, item):
+            with self.config_lock:
+                s = self.config["screens"].setdefault(str(screen), {})
+                s["ambientEffect"] = value
+                snap = json.loads(json.dumps(s))
+                full_snap = json.loads(json.dumps(self.config))
+            try: save_config(full_snap)
+            except Exception as e: print(f"[tray] save_config failed: {e}")
+            self.bridge.push_settings(screen, snap)
+            print(f"[tray] screen={screen} ambientEffect → {value}")
+        return handler
+
+    def _set_pixelfx_factory(self, screen: int, value: str):
+        def handler(icon, item):
+            with self.config_lock:
+                s = self.config["screens"].setdefault(str(screen), {})
+                s["pixelfx"] = value
+                snap = json.loads(json.dumps(s))
+                full_snap = json.loads(json.dumps(self.config))
+            try: save_config(full_snap)
+            except Exception as e: print(f"[tray] save_config failed: {e}")
+            self.bridge.push_settings(screen, snap)
+            print(f"[tray] screen={screen} pixelfx → {value}")
+        return handler
+
+    def _toggle_ambient_tint_factory(self, screen: int):
+        def handler(icon, item):
+            with self.config_lock:
+                s = self.config["screens"].setdefault(str(screen), {})
+                s["ambientTint"] = not bool(s.get("ambientTint", False))
+                snap = json.loads(json.dumps(s))
+                full_snap = json.loads(json.dumps(self.config))
+            try: save_config(full_snap)
+            except Exception as e: print(f"[tray] save_config failed: {e}")
+            self.bridge.push_settings(screen, snap)
+            print(f"[tray] screen={screen} ambientTint → {s['ambientTint']}")
+        return handler
 
     # ── Widgets submenu ────────────────────────────────────────────────
     # Two layers of dynamic menus: outer = one entry per active screen

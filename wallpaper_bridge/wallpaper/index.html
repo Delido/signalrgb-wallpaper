@@ -107,6 +107,30 @@
   #bars.lay-off,
   #bars.disabled { display: none !important; }
 
+  /* ── Ambient effects (snow / rain / sparks / aurora) ────────────────────
+     Full-viewport canvas above the dim layer but BEHIND widgets so the
+     widgets stay readable. pointer-events:none — clicks fall through. */
+  #ambient-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 4;
+    pointer-events: none;
+    display: none;
+  }
+  #ambient-canvas.on { display: block; }
+
+  /* ── Pixelfx (mouse trail / hover glow / click ripple) ──────────────────
+     ABOVE widgets so the trail draws on top. Still pointer-events:none —
+     we read mouse position from Lively's callback, not real events. */
+  #pixelfx-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 7;
+    pointer-events: none;
+    display: none;
+  }
+  #pixelfx-canvas.on { display: block; }
+
   /* ── Widgets layer ──────────────────────────────────────────────────────
      Sits above the dim layer and below the debug HUD. Pointer-events flip
      between none (locked / normal use — clicks fall through to Lively's
@@ -315,6 +339,51 @@
   .widget-quote.tinted .q-author { color: var(--w-tint, rgba(255,255,255,0.85)); }
   .widget-quote .q-foot { font-size: 10px; opacity: 0.45; text-align: right; margin-top: 4px; }
 
+  /* ── System-stat widgets (CPU / RAM / Net) — sparkline + label ── */
+  .widget-cpu-meter, .widget-ram-meter, .widget-net-graph {
+    display: flex; flex-direction: column; padding: 10px !important;
+  }
+  .widget-cpu-meter .stat-head,
+  .widget-ram-meter .stat-head,
+  .widget-net-graph .stat-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .widget-cpu-meter .stat-value,
+  .widget-ram-meter .stat-value {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: clamp(22px, 28%, 48px);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin: 4px 0 6px;
+  }
+  .widget-cpu-meter.tinted .stat-value,
+  .widget-ram-meter.tinted .stat-value { color: var(--w-tint, #fff); }
+  .widget-cpu-meter canvas,
+  .widget-ram-meter canvas,
+  .widget-net-graph canvas {
+    width: 100%; flex: 1 1 auto; min-height: 30px; display: block;
+  }
+  .widget-net-graph .stat-pair {
+    display: flex; gap: 12px; justify-content: space-between;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: clamp(11px, 13%, 16px);
+    margin: 4px 0 6px;
+  }
+  .widget-net-graph .stat-pair > div { display: flex; flex-direction: column; line-height: 1.1; }
+  .widget-net-graph .stat-pair .lbl { font-size: 10px; opacity: 0.6; }
+  .widget-net-graph .stat-pair .up   .val { color: #ff9a55; }
+  .widget-net-graph .stat-pair .down .val { color: #6ab0ff; }
+  .widget-net-graph.tinted .stat-pair .up   .val,
+  .widget-net-graph.tinted .stat-pair .down .val { color: var(--w-tint, #fff); }
+
+  /* ── Audio-spectrum widget — bar visualizer from Lively's audio API ── */
+  .widget-audio-spectrum { padding: 0 !important; }
+  .widget-audio-spectrum canvas {
+    width: 100%; height: 100%; display: block;
+  }
+
   /* ── Per-widget settings button (gear) ── */
   .widget .widget-settings {
     position: absolute; top: 2px; right: 26px;
@@ -388,7 +457,9 @@
 <div id="bars" class="lay-grid"></div>
 <img id="bg" alt="">
 <div id="dim"></div>
+<canvas id="ambient-canvas"></canvas>
 <div id="widgets-container"></div>
+<canvas id="pixelfx-canvas"></canvas>
 <div id="widget-picker">
   <div class="picker-title">Add widget</div>
   <div class="picker-grid"></div>
@@ -546,6 +617,10 @@ function connect() {
           }
         } else if (msg && msg.type === "paused") {
           setPaused(!!msg.paused);
+        } else if (msg && msg.type === "sysstats" && msg.data) {
+          lastSysStats = msg.data;
+          sysstatsHistory.push(msg.data);
+          if (sysstatsHistory.length > 120) sysstatsHistory.shift();
         }
       } catch (e) {
         console.error("[wallpaper] bad text frame:", e);
@@ -697,6 +772,18 @@ function applyProperty(name, val) {
       break;
     case "widgetsLocked":
       setWidgetsLocked(!!val);
+      break;
+    case "ambientEffect":
+      ambient.setPreset(typeof val === "string" ? val : "off");
+      break;
+    case "ambientTint":
+      ambient.setTinted(!!val);
+      break;
+    case "ambientDensity":
+      ambient.setDensity(parseInt(val, 10));
+      break;
+    case "pixelfx":
+      pixelfx.setMode(typeof val === "string" ? val : "off");
       break;
   }
 }
@@ -1445,6 +1532,509 @@ function updateTintFromFrame(zoneColors) {
       rec.el.style.setProperty("--w-tint", currentTintCss);
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SysStats + audio buses
+//
+// Bridge pushes `{type:"sysstats", data:{cpu, ram, netDown, netUp, uptime,
+// ts}}` once a second. We keep the latest snapshot plus a rolling 120-sample
+// history (≈ 2 min) so sparkline widgets render from one shared source.
+//
+// Lively pushes an FFT array into `livelyAudioListener`. Wallpaper Engine
+// uses `wallpaperRegisterAudioListener(fn)`; we register for both so the
+// audio-spectrum widget works on either host.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let lastSysStats = null;
+const sysstatsHistory = [];
+let lastAudio = null;
+
+window.livelyAudioListener = function (audioArray) {
+  lastAudio = audioArray;
+};
+if (typeof window.wallpaperRegisterAudioListener === "function") {
+  try { window.wallpaperRegisterAudioListener((arr) => { lastAudio = arr; }); }
+  catch (_) {}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ambient effects — hand-rolled canvas particles with four presets.
+//
+// One generic engine; each preset declares targetCount / spawn / step /
+// render. The engine ticks via requestAnimationFrame, scales the canvas
+// to the viewport, and re-spawns up to the target count each frame.
+// Tint pulls from currentTintCss (the glow-feed average that widgets
+// already share) when the user enables it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ambient = (function () {
+  const canvas = document.getElementById("ambient-canvas");
+  const ctx = canvas.getContext("2d");
+  let particles = [];
+  let preset = "off";
+  let tintEnabled = false;
+  let density = 60;
+  let raf = null;
+  let lastT = 0;
+  let viewW = 0, viewH = 0;
+
+  function resize() {
+    viewW = window.innerWidth;
+    viewH = window.innerHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.round(viewW * dpr);
+    canvas.height = Math.round(viewH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", () => { if (preset !== "off") resize(); });
+
+  function start() {
+    if (raf) return;
+    resize();
+    lastT = performance.now();
+    raf = requestAnimationFrame(tick);
+  }
+  function stop() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    particles = [];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function tick(now) {
+    raf = requestAnimationFrame(tick);
+    if (isPaused) return;
+    const dt = Math.min(0.1, (now - lastT) / 1000);
+    lastT = now;
+    const def = AMBIENT_PRESETS[preset];
+    if (!def) return;
+    const target = def.targetCount(density, viewW, viewH);
+    while (particles.length < target) particles.push(def.spawn(viewW, viewH));
+    for (let i = particles.length - 1; i >= 0; i--) {
+      if (!def.step(particles[i], dt, viewW, viewH)) particles.splice(i, 1);
+    }
+    ctx.clearRect(0, 0, viewW, viewH);
+    const tint = tintEnabled ? currentTintCss : null;
+    for (const p of particles) def.render(ctx, p, tint);
+  }
+
+  return {
+    setPreset(p) {
+      if (!AMBIENT_PRESETS[p] && p !== "off") p = "off";
+      if (p === preset) return;
+      preset = p;
+      if (p === "off") { canvas.classList.remove("on"); stop(); }
+      else             { canvas.classList.add("on"); particles = []; start(); }
+    },
+    setTinted(on) { tintEnabled = !!on; },
+    setDensity(d) {
+      d = isFinite(d) ? d : 60;
+      density = Math.max(1, Math.min(100, d));
+    },
+  };
+})();
+
+// rgbToRgba("rgb(R,G,B)", a) → "rgba(R,G,B,a)" — used by ambient renderers
+// to fade particle colours without parsing the rgb() back into components.
+function rgbToRgba(rgb, a) {
+  return rgb.replace("rgb(", "rgba(").replace(")", "," + a + ")");
+}
+
+const AMBIENT_PRESETS = {
+  snow: {
+    targetCount: (d, w, h) => Math.round((w * h) / 12000 * (d / 60)),
+    spawn: (w, h) => ({
+      x: Math.random() * w, y: -10 + Math.random() * -h * 0.3,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: 0.3 + Math.random() * 0.7,
+      r:  1.2 + Math.random() * 2.5,
+      alpha: 0.45 + Math.random() * 0.45,
+      wobble: Math.random() * Math.PI * 2,
+    }),
+    step: (p, dt, w, h) => {
+      p.wobble += dt * 1.5;
+      p.x += (p.vx + Math.sin(p.wobble) * 0.4) * dt * 60;
+      p.y += p.vy * dt * 60;
+      if (p.y > h + 10) return false;
+      if (p.x < -10)    p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      return true;
+    },
+    render: (ctx, p, tint) => {
+      ctx.fillStyle = tint ? rgbToRgba(tint, p.alpha)
+                           : "rgba(255,255,255," + p.alpha + ")";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  },
+
+  rain: {
+    targetCount: (d, w, h) => Math.round((w * h) / 5000 * (d / 60)),
+    spawn: (w, h) => ({
+      x: Math.random() * w * 1.2,
+      y: -20 - Math.random() * h * 0.4,
+      vx: -1.4,
+      vy: 9 + Math.random() * 6,
+      length: 10 + Math.random() * 10,
+      alpha: 0.25 + Math.random() * 0.35,
+    }),
+    step: (p, dt, w, h) => {
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      return (p.y < h + 30 && p.x > -30);
+    },
+    render: (ctx, p, tint) => {
+      ctx.strokeStyle = tint ? rgbToRgba(tint, p.alpha)
+                             : "rgba(180,200,255," + p.alpha + ")";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.vx * p.length * 0.08, p.y - p.length);
+      ctx.stroke();
+    },
+  },
+
+  sparks: {
+    targetCount: (d, w, h) => Math.round((w * h) / 18000 * (d / 60)),
+    spawn: (w, h) => ({
+      x: Math.random() * w,
+      y: h + 10,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: -(0.4 + Math.random() * 1.0),
+      r: 1 + Math.random() * 1.8,
+      hue: 30 + Math.random() * 30,
+      alpha: 0.8 + Math.random() * 0.2,
+      life: 0,
+      maxLife: 4 + Math.random() * 6,
+    }),
+    step: (p, dt) => {
+      p.life += dt;
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      p.vy -= dt * 0.05;
+      return p.life < p.maxLife && p.y > -10;
+    },
+    render: (ctx, p, tint) => {
+      const fadeIn  = Math.min(1, p.life / 0.5);
+      const fadeOut = Math.min(1, (p.maxLife - p.life) / 1.5);
+      const a = p.alpha * Math.min(fadeIn, fadeOut);
+      // Bright hot core + warm halo. Tint, if any, replaces the warm halo
+      // while the core stays neutral white so sparks still pop visually.
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
+      grad.addColorStop(0, "rgba(255,255,255," + a + ")");
+      const halo = tint
+        ? rgbToRgba(tint, a * 0.6)
+        : "hsla(" + p.hue + ", 95%, 60%, " + (a * 0.6) + ")";
+      grad.addColorStop(0.45, halo);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - p.r * 5, p.y - p.r * 5, p.r * 10, p.r * 10);
+    },
+  },
+
+  aurora: {
+    targetCount: (d) => Math.max(3, Math.round(3 + d / 25)),
+    spawn: (w, h) => ({
+      x: Math.random() * w,
+      y: h * (0.2 + Math.random() * 0.5),
+      vx: (Math.random() - 0.5) * 0.3,
+      r: 180 + Math.random() * 160,
+      hue: 130 + Math.random() * 140,
+      life: 0,
+      maxLife: 20 + Math.random() * 25,
+    }),
+    step: (p, dt, w) => {
+      p.life += dt;
+      p.x += p.vx * dt * 60;
+      if (p.x < -p.r)     p.x = w + p.r;
+      if (p.x > w + p.r)  p.x = -p.r;
+      return p.life < p.maxLife;
+    },
+    render: (ctx, p) => {
+      const fadeIn  = Math.min(1, p.life / 4);
+      const fadeOut = Math.min(1, (p.maxLife - p.life) / 4);
+      const a = 0.14 * Math.min(fadeIn, fadeOut);
+      const hue = p.hue;
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      grad.addColorStop(0,   "hsla(" + hue + ", 80%, 60%, " + a + ")");
+      grad.addColorStop(0.5, "hsla(" + hue + ", 80%, 60%, " + (a * 0.4) + ")");
+      grad.addColorStop(1,   "hsla(" + hue + ", 80%, 60%, 0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+    },
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pixelfx — mouse trail / hover glow / click ripple.
+//
+// Mouse position arrives via Lively's livelyCurrentCursorPos callback so
+// the trail + glow work under click-through. Real click events (needed for
+// ripples) only fire when the wallpaper has interaction enabled in
+// Lively / WE.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const pixelfx = (function () {
+  const canvas = document.getElementById("pixelfx-canvas");
+  const ctx = canvas.getContext("2d");
+  let mode = "off";
+  let raf = null;
+  let cursorX = -200, cursorY = -200;
+  let trail = [];
+  let ripples = [];
+  let viewW = 0, viewH = 0;
+  let lastT = 0;
+
+  function resize() {
+    viewW = window.innerWidth;
+    viewH = window.innerHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.round(viewW * dpr);
+    canvas.height = Math.round(viewH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", () => { if (mode !== "off") resize(); });
+
+  const active       = () => mode !== "off";
+  const wantsTrail   = () => mode === "trail"  || mode === "all";
+  const wantsGlow    = () => mode === "glow"   || mode === "all";
+  const wantsRipple  = () => mode === "ripple" || mode === "all";
+
+  function start() {
+    if (raf) return;
+    resize();
+    lastT = performance.now();
+    raf = requestAnimationFrame(tick);
+  }
+  function stop() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    trail = []; ripples = [];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function tick(now) {
+    raf = requestAnimationFrame(tick);
+    if (isPaused || !active()) return;
+    const dt = Math.min(0.1, (now - lastT) / 1000);
+    lastT = now;
+    if (wantsTrail() && cursorX > -50 && cursorY > -50) {
+      trail.push({ x: cursorX, y: cursorY, life: 0 });
+      while (trail.length > 60) trail.shift();
+    }
+    for (let i = trail.length - 1; i >= 0; i--) {
+      trail[i].life += dt;
+      if (trail[i].life > 0.8) trail.splice(i, 1);
+    }
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      ripples[i].life += dt;
+      if (ripples[i].life > 1.1) ripples.splice(i, 1);
+    }
+    ctx.clearRect(0, 0, viewW, viewH);
+    const tintCss = currentTintCss;
+    if (wantsTrail()) {
+      for (const t of trail) {
+        const a = (1 - t.life / 0.8) * 0.55;
+        ctx.fillStyle = rgbToRgba(tintCss, a);
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 4 + (1 - t.life / 0.8) * 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (wantsGlow() && cursorX > -50) {
+      const r = 110;
+      const grad = ctx.createRadialGradient(cursorX, cursorY, 0, cursorX, cursorY, r);
+      grad.addColorStop(0,   rgbToRgba(tintCss, 0.35));
+      grad.addColorStop(0.5, rgbToRgba(tintCss, 0.10));
+      grad.addColorStop(1,   rgbToRgba(tintCss, 0));
+      ctx.fillStyle = grad;
+      ctx.fillRect(cursorX - r, cursorY - r, r * 2, r * 2);
+    }
+    if (wantsRipple()) {
+      for (const r of ripples) {
+        const radius = r.life * 220;
+        const a = (1 - r.life / 1.1) * 0.55;
+        ctx.strokeStyle = rgbToRgba(tintCss, a);
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!wantsRipple()) return;
+    ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
+  });
+
+  return {
+    setMode(m) {
+      const allowed = ["off","trail","glow","ripple","all"];
+      if (allowed.indexOf(m) < 0) m = "off";
+      if (m === mode) return;
+      mode = m;
+      if (mode === "off") { canvas.classList.remove("on"); stop(); }
+      else                { canvas.classList.add("on");    start(); }
+    },
+    setCursor(x, y) { cursorX = x; cursorY = y; },
+  };
+})();
+
+// Lively pushes per-frame cursor coords here — works under click-through.
+window.livelyCurrentCursorPos = function (x, y) { pixelfx.setCursor(x, y); };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sys-stat + audio widget types — appended to WIDGET_REGISTRY so the
+// picker and tray-Add submenu pick them up without further wiring. Keep
+// the keys in sync with WIDGET_DEFAULTS in bridge.py.
+// ─────────────────────────────────────────────────────────────────────────────
+
+WIDGET_REGISTRY["cpu-meter"] = {
+  label: "CPU",
+  icon: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/>' +
+        '<line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/>' +
+        '<line x1="9" y1="18" x2="9" y2="22"/><line x1="15" y1="18" x2="15" y2="22"/>' +
+        '<line x1="2" y1="9" x2="6" y2="9"/><line x1="2" y1="15" x2="6" y2="15"/>' +
+        '<line x1="18" y1="9" x2="22" y2="9"/><line x1="18" y1="15" x2="22" y2="15"/></svg>',
+  markup: () => '<div class="stat-head"><span>CPU</span><span></span></div>' +
+                '<div class="stat-value">—</div><canvas></canvas>',
+  tick: (rec) => {
+    rec.el.querySelector(".stat-value").textContent =
+      lastSysStats ? lastSysStats.cpu.toFixed(0) + "%" : "—";
+    drawSparkline(rec.el.querySelector("canvas"),
+                  sysstatsHistory.map((s) => s.cpu),
+                  rec.opts.tintFromGlow ? currentTintCss : "rgb(106,176,255)",
+                  100);
+  },
+  editOptions: null,
+};
+
+WIDGET_REGISTRY["ram-meter"] = {
+  label: "RAM",
+  icon: '<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="1"/>' +
+        '<line x1="6" y1="8" x2="6" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>' +
+        '<line x1="14" y1="8" x2="14" y2="16"/><line x1="18" y1="8" x2="18" y2="16"/></svg>',
+  markup: () => '<div class="stat-head"><span>RAM</span><span></span></div>' +
+                '<div class="stat-value">—</div><canvas></canvas>',
+  tick: (rec) => {
+    rec.el.querySelector(".stat-value").textContent =
+      lastSysStats ? lastSysStats.ram.toFixed(0) + "%" : "—";
+    drawSparkline(rec.el.querySelector("canvas"),
+                  sysstatsHistory.map((s) => s.ram),
+                  rec.opts.tintFromGlow ? currentTintCss : "rgb(157,221,153)",
+                  100);
+  },
+  editOptions: null,
+};
+
+// Note: Network widget removed before v0.6.0-beta release after testing —
+// flaky readings on some Windows network-interface combos and the dual-line
+// chart layout needed more work. The bridge still pushes netDown / netUp in
+// the sysstats frame so a future iteration can bring it back without a
+// protocol change.
+
+WIDGET_REGISTRY["audio-spectrum"] = {
+  label: "Audio",
+  icon: '<svg viewBox="0 0 24 24"><line x1="4"  y1="8"  x2="4"  y2="16"/>' +
+        '<line x1="8"  y1="5"  x2="8"  y2="19"/><line x1="12" y1="9"  x2="12" y2="15"/>' +
+        '<line x1="16" y1="3"  x2="16" y2="21"/><line x1="20" y1="10" x2="20" y2="14"/></svg>',
+  markup: () => '<canvas></canvas>',
+  tick: (rec) => {
+    drawSpectrum(rec.el.querySelector("canvas"),
+                 lastAudio,
+                 rec.opts.tintFromGlow ? currentTintCss : "rgb(106,176,255)");
+  },
+  editOptions: null,
+};
+
+// Rebuild the picker after we mutated the registry so the new types
+// appear as buttons. buildWidgetPicker ran once on load against the
+// initial registry; calling it again is idempotent.
+buildWidgetPicker();
+
+// ── Drawing helpers shared by the four widget renderers ────────────────────
+
+function sizeCanvasToCss(canvas) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth  * dpr;
+  const h = canvas.clientHeight * dpr;
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+  }
+  return { w: canvas.clientWidth, h: canvas.clientHeight, dpr };
+}
+
+function drawSparkline(canvas, values, stroke, maxV) {
+  const { w, h, dpr } = sizeCanvasToCss(canvas);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!values || values.length < 2) return;
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = stroke;
+  ctx.beginPath();
+  for (let i = 0; i < values.length; i++) {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - (values[i] / maxV) * h;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  // Soft fill under the line.
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fillStyle = rgbToRgba(stroke, 0.18);
+  ctx.fill();
+}
+
+function drawDualLine(canvas, downValues, upValues, maxV) {
+  const { w, h, dpr } = sizeCanvasToCss(canvas);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const draw = (vals, stroke) => {
+    if (!vals || vals.length < 2) return;
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = stroke;
+    ctx.beginPath();
+    for (let i = 0; i < vals.length; i++) {
+      const x = (i / (vals.length - 1)) * w;
+      const y = h - (vals[i] / maxV) * h;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+  draw(downValues, "rgb(106,176,255)");
+  draw(upValues,   "rgb(255,154,85)");
+}
+
+function drawSpectrum(canvas, audio, color) {
+  const { w, h, dpr } = sizeCanvasToCss(canvas);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!audio || !audio.length) {
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.font = "11px ui-sans-serif, sans-serif";
+    ctx.fillText("waiting for audio…", 8, h - 8);
+    return;
+  }
+  const bars = Math.min(audio.length, 64);
+  const gap  = 1;
+  const bw   = (w - gap * (bars - 1)) / bars;
+  for (let i = 0; i < bars; i++) {
+    const v  = Math.max(0, Math.min(1, audio[i] || 0));
+    const bh = v * h;
+    ctx.fillStyle = color;
+    ctx.fillRect(i * (bw + gap), h - bh, bw, bh);
+  }
+}
+
+function humanRate(bytesPerSec) {
+  if (bytesPerSec < 1024) return Math.round(bytesPerSec) + " B/s";
+  if (bytesPerSec < 1024 * 1024) return (bytesPerSec / 1024).toFixed(1) + " KB/s";
+  return (bytesPerSec / (1024 * 1024)).toFixed(2) + " MB/s";
 }
 </script>
 </body>

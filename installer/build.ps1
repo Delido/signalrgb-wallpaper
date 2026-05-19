@@ -53,7 +53,9 @@ try {
         --hidden-import pystray._win32 `
         --collect-all pystray `
         --collect-submodules PIL `
+        --collect-all psutil `
         --add-data "builder.html;." `
+        --add-data "configurator.html;." `
         --distpath dist_bridge --workpath build_bridge `
         bridge.py
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
