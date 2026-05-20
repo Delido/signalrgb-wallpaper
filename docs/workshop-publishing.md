@@ -112,24 +112,14 @@ Engine — **only if you republish the Workshop item**.
 Subscribers don't need to do anything; Steam pulls the new files in
 the background.
 
-## Legacy per-screen Workshop items
+## A note on the legacy per-screen design
 
-Builds before v0.7.2-beta produced four per-screen items
-(*SignalRGB Glow - Screen 1 / 2 / 3 / 4*). If you'd already published
-those, you can either:
-
-- **Leave them up** and add a "Now superseded by the single item"
-  note in the description, linking to the new combined item.
-- **Mark them as Friends-only or Unlisted** so new subscribers find
-  the combined item instead. Existing subscribers keep their copy
-  working.
-- **Take them down** entirely. Subscribers lose access — only do
-  this if the new item has been live long enough to fully replace
-  the old ones in your user base.
-
-The single-bundle approach is the cleaner story going forward; the
-per-screen items were the v0.5.2-beta → v0.7.1-beta workaround for
-not having user properties wired up yet.
+Builds v0.5.2-beta → v0.7.1-beta produced four per-screen WE bundles
+(*SignalRGB Glow - Screen 1 / 2 / 3 / 4*) — that was the workaround
+before user properties were wired up. Those items were never actually
+published to the Steam Workshop, so there's nothing to retire in the
+Workshop UI. The single-bundle approach below is the only thing that
+ever needs to live on Workshop.
 
 ## What's automated, what's not
 

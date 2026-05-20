@@ -313,7 +313,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.2-beta"
+APP_VERSION = "0.7.3-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"

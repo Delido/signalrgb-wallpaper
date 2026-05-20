@@ -142,6 +142,31 @@ Source: "..\LICENSE";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md";    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 
+[InstallDelete]
+; Upgrade cleanup: builds before v0.7.2-beta shipped four per-screen WE
+; folders (SignalRGB_Glow_Screen1..4). The combined "signalrgb-glow"
+; bundle from step 3a replaces all four, so wipe the legacy folders
+; from both destinations BEFORE the new [Files] copy runs. Gated on the
+; WE task so we don't touch anything if the user opted out of WE.
+; (The per-screen items were never published to Steam Workshop, so the
+; installer is the only path that ever placed these folders.)
+Type: filesandordirs; Name: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen1"; \
+  Tasks: installwallpaperengine
+Type: filesandordirs; Name: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen2"; \
+  Tasks: installwallpaperengine
+Type: filesandordirs; Name: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen3"; \
+  Tasks: installwallpaperengine
+Type: filesandordirs; Name: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen4"; \
+  Tasks: installwallpaperengine
+Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen2"; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen4"; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+
 [Icons]
 Name: "{group}\SignalRGB Wallpaper Bridge"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Lively wallpapers folder";   Filename: "{app}\Lively wallpapers"; \

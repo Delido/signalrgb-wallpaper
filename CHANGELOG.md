@@ -4,6 +4,25 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3-beta] - 2026-05-20
+
+> Adds auto-cleanup of the legacy per-screen Wallpaper Engine folders
+> on upgrade — previously you had to delete them manually. Same
+> packaging as v0.7.2-beta otherwise (single combined WE bundle with
+> a *Screen index* property).
+
+### Changed
+
+- **Installer wipes legacy WE folders before copying the new bundle.**
+  Inno Setup's `[InstallDelete]` removes
+  `SignalRGB_Glow_Screen{1..4}/` from both the install staging folder
+  (`{app}\Wallpaper Engine wallpapers\`) and — when Steam is
+  detected — Steam's `…\projects\myprojects\`, gated on the WE task.
+  Pre-v0.7.2-beta users upgrading via the new installer get a clean
+  WE library automatically. The per-screen items were never published
+  to Steam Workshop, so the installer is the only path that ever
+  placed those folders.
+
 ## [0.7.2-beta] - 2026-05-20
 
 > Wallpaper Engine packaging consolidation: one Workshop item with a
