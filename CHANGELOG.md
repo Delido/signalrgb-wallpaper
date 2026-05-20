@@ -4,6 +4,19 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9-beta] - 2026-05-20
+
+### Fixed
+
+- **Audio still dead in Wallpaper Engine.** v0.7.8-beta fixed Lively
+  via `LivelyInfo.Arguments = "--audio"`, but WE has an analogous
+  opt-in: `project.json` must declare
+  `"supportsaudioprocessing": true` or the engine ignores every
+  `wallpaperRegisterAudioListener` callback. Our `project.json`
+  didn't set it, so the audio-glow layer + audio-spectrum widget
+  saw no FFT samples on WE. Added to the build's combined-bundle
+  manifest generator.
+
 ## [0.7.8-beta] - 2026-05-20
 
 > Sweep of user-reported papercuts plus the last open roadmap item.
