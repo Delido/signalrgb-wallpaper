@@ -4,6 +4,31 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5-beta] - 2026-05-20
+
+> Ships the long-standing roadmap item *Whole-screen audio-reactive
+> glow layer*. The audio-spectrum widget covered "audio visualiser
+> in a box" since 0.6.0-beta; this adds a full-canvas counterpart.
+
+### Added
+
+- **Audio-reactive glow layer** behind the wallpaper. Reuses the same
+  FFT feed the audio-spectrum widget already drains (Lively's
+  `livelyAudioListener` / WE's `wallpaperRegisterAudioListener`), so
+  no second registration is needed. Three modes:
+  - *Pulse* — overall amplitude drives a smoothed radial halo
+    breathing outward from the centre.
+  - *Spectrum bars* — 64 bars rising from the bottom edge.
+  - *Waveform* — symmetric line through the screen's centre,
+    amplitude-modulated.
+  Configurator's *Effects* section gains a *Audio glow* dropdown +
+  *Intensity* slider + *Tint with the live glow colour* toggle.
+  Canvas uses `mix-blend-mode: screen` so it adds light over the
+  underlying glow instead of replacing it.
+- Settings keys whitelisted: `audioGlow` (`off`/`pulse`/`spectrum`/`wave`),
+  `audioGlowIntensity` (0..100), `audioGlowTint` (bool). Defaults:
+  off / 60 / false.
+
 ## [0.7.4-beta] - 2026-05-20
 
 > Retires the legacy Tk Settings dialog: every knob it owned moved

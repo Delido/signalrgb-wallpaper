@@ -313,7 +313,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.4-beta"
+APP_VERSION = "0.7.5-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -378,6 +378,13 @@ DEFAULT_SCREEN_SETTINGS = {
     # Value is the maximum displacement in CSS pixels at the cursor's
     # most extreme corner. 0 = off (default). 30 is gentle, 80 is strong.
     "parallax3d":      0,
+    # Whole-screen audio-reactive glow layer. Driven by the same FFT data
+    # the audio-spectrum widget already drains (Lively's
+    # livelyAudioListener / WE's wallpaperRegisterAudioListener).
+    # Modes: "off" | "pulse" | "spectrum" | "wave".
+    "audioGlow":            "off",
+    "audioGlowIntensity":   60,    # 0..100
+    "audioGlowTint":        False, # tint with the live glow-feed average
     # Last known viewport reported by the wallpaper page itself (in CSS
     # pixels). The bridge can't ask Windows directly because each page
     # lives on whichever monitor Lively / WE assigns it; the page knows.
@@ -1575,6 +1582,7 @@ class BridgeRuntime:
         "showStatus",
         "ambientEffect", "ambientTint", "ambientDensity",
         "pixelfx", "parallax3d",
+        "audioGlow", "audioGlowIntensity", "audioGlowTint",
         "widgetsLocked",
     }
 

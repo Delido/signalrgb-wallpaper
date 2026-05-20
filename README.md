@@ -26,12 +26,10 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.4-beta — Configurator now owns _Number of screens_
-> and _Show debug overlay_; the legacy Tk Settings dialog tray entry
-> is retired. Builder window joins the DE / EN localised UI. Folds in
-> the single-WE-bundle packaging (0.7.2-beta + 0.7.3-beta), 4-monitor
-> support, ultrawide aspect-ratio and Lively-import hotfix from
-> v0.7.1-beta. Marked prerelease.
+> **Status:** v0.7.5-beta — adds the whole-screen audio-reactive glow
+> layer (Pulse / Spectrum / Waveform driven by Lively's FFT). Folds
+> in the Configurator + Builder + WE + ultrawide work from the 0.7.1
+> → 0.7.4 beta cycle. Marked prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -199,10 +197,6 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Planned
 
-- **Whole-screen audio-reactive glow layer** — the audio spectrum widget
-  shipped in 0.6.0-beta covers "audio visualiser in a box". A separate
-  ambient pulse / spectrum layer behind the whole wallpaper (driven by
-  the same Lively / WE FFT listener) is still open.
 - **Wallpaper preset library** — curated bundle of glow-ready
   backgrounds shipped with the installer or fetched on demand.
 - **Preset slots in the configurator** — save a "background + glow +
@@ -218,6 +212,11 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Recently shipped
 
+- ✅ **Whole-screen audio-reactive glow layer** — Pulse / Spectrum
+  bars / Waveform modes driven by the same FFT feed the audio-spectrum
+  widget uses. Mix-blend-mode: screen so it stacks on the existing
+  glow instead of replacing it. Tint-with-glow toggle to match the
+  live colour (0.7.5-beta)
 - ✅ **Configurator owns _Number of screens_ + debug overlay** —
   both knobs moved from the legacy Tk dialog into the in-browser
   Configurator. The Tk dialog tray entry is gone; the dialog code

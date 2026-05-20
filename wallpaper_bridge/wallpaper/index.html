@@ -131,6 +131,21 @@
   }
   #pixelfx-canvas.on { display: block; }
 
+  /* ── Audio-reactive glow layer (whole-screen) ───────────────────────────
+     Pulses / spectrum bars / waveform driven by Lively's livelyAudioListener
+     (or Wallpaper Engine's wallpaperRegisterAudioListener). Above the glow
+     bars but below widgets so widgets stay readable. mix-blend-mode: screen
+     so it adds light over whatever's underneath instead of replacing it. */
+  #audioglow-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 3;
+    pointer-events: none;
+    display: none;
+    mix-blend-mode: screen;
+  }
+  #audioglow-canvas.on { display: block; }
+
   /* ── Widgets layer ──────────────────────────────────────────────────────
      Sits above the dim layer and below the debug HUD. Pointer-events flip
      between none (locked / normal use — clicks fall through to Lively's
@@ -458,6 +473,7 @@
 <img id="bg" alt="">
 <div id="dim"></div>
 <canvas id="ambient-canvas"></canvas>
+<canvas id="audioglow-canvas"></canvas>
 <div id="widgets-container"></div>
 <canvas id="pixelfx-canvas"></canvas>
 <div id="widget-picker">
@@ -830,6 +846,15 @@ function applyProperty(name, val) {
       break;
     case "parallax3d":
       parallax.setStrength(parseInt(val, 10) | 0);
+      break;
+    case "audioGlow":
+      audioGlow.setMode(typeof val === "string" ? val : "off");
+      break;
+    case "audioGlowIntensity":
+      audioGlow.setIntensity(parseInt(val, 10) | 0);
+      break;
+    case "audioGlowTint":
+      audioGlow.setTinted(!!val);
       break;
     case "screenIndex":
       // Delivered by Wallpaper Engine when the user picks a different
@@ -1843,6 +1868,157 @@ const AMBIENT_PRESETS = {
 // ripples) only fire when the wallpaper has interaction enabled in
 // Lively / WE.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audio-reactive glow layer.
+//
+// Whole-screen overlay driven by `lastAudio` (the FFT-bin array Lively /
+// WE push into livelyAudioListener). Three modes:
+//   pulse    — global brightness/scale modulated by overall amplitude
+//   spectrum — 32 bars across the bottom of the screen
+//   wave     — symmetric waveform across the centre line
+//
+// Reuses the existing `lastAudio` global the audio-spectrum widget already
+// drains; no second listener subscription needed. RAF loop is parked when
+// mode === "off" so the cost is zero on idle setups.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const audioGlow = (function () {
+  const canvas = document.getElementById("audioglow-canvas");
+  const ctx = canvas.getContext("2d");
+  let mode = "off";          // off / pulse / spectrum / wave
+  let intensity = 60;        // 0..100, scales output amplitude
+  let tinted = false;        // mirror the live glow-feed colour when true
+  let raf = null;
+  let viewW = 0, viewH = 0;
+  // Smoothed amplitude for the pulse mode so the layer doesn't strobe on
+  // every FFT update. Each tick lerps the running value toward the latest
+  // sample.
+  let smoothAmp = 0;
+
+  function resize() {
+    viewW = window.innerWidth;
+    viewH = window.innerHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.round(viewW * dpr);
+    canvas.height = Math.round(viewH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", () => { if (mode !== "off") resize(); });
+
+  function start() {
+    if (raf) return;
+    resize();
+    raf = requestAnimationFrame(tick);
+  }
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+    ctx.clearRect(0, 0, viewW, viewH);
+  }
+
+  // Convert the FFT bin array into a per-band amplitude array of `n`
+  // values in [0, 1]. Lively gives us 128 raw bins; we collapse to the
+  // requested bucket count and clamp.
+  function bucketise(audio, n) {
+    const out = new Array(n).fill(0);
+    if (!audio || !audio.length) return out;
+    const len = audio.length;
+    const perBucket = Math.max(1, Math.floor(len / n));
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      const start = i * perBucket;
+      const end = Math.min(len, start + perBucket);
+      for (let j = start; j < end; j++) sum += Math.max(0, audio[j]);
+      out[i] = Math.min(1, sum / Math.max(1, end - start));
+    }
+    return out;
+  }
+
+  function colour() {
+    return tinted ? currentTintCss : "rgb(106,176,255)";
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, viewW, viewH);
+    const k = intensity / 100;
+    if (mode === "pulse") {
+      // Smooth the loudest band so the pulse breathes instead of strobing.
+      let peak = 0;
+      if (lastAudio && lastAudio.length) {
+        for (let i = 0; i < lastAudio.length; i++) {
+          const v = Math.max(0, lastAudio[i]);
+          if (v > peak) peak = v;
+        }
+      }
+      smoothAmp += (Math.min(1, peak) - smoothAmp) * 0.18;
+      const radius = Math.max(viewW, viewH) * (0.4 + 0.35 * smoothAmp);
+      const cx = viewW / 2, cy = viewH / 2;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      g.addColorStop(0,   "rgba(0,0,0,0)");
+      g.addColorStop(0.5, "rgba(0,0,0,0)");
+      g.addColorStop(0.85, fadedColour(colour(), 0.55 * k * smoothAmp));
+      g.addColorStop(1,   fadedColour(colour(), 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, viewW, viewH);
+    } else if (mode === "spectrum") {
+      const bins = bucketise(lastAudio, 64);
+      const gap = 2;
+      const w = (viewW - gap * (bins.length - 1)) / bins.length;
+      const baseH = Math.max(40, viewH * 0.18);
+      ctx.fillStyle = colour();
+      ctx.globalAlpha = 0.7 * k;
+      for (let i = 0; i < bins.length; i++) {
+        const h = bins[i] * baseH;
+        const x = i * (w + gap);
+        // Bars grow upward from the bottom edge.
+        ctx.fillRect(x, viewH - h, w, h);
+      }
+      ctx.globalAlpha = 1;
+    } else if (mode === "wave") {
+      const samples = bucketise(lastAudio, 128);
+      // Mirror around the horizontal centre line so the wave breathes
+      // symmetrically. Stroke twice with mid-screen origin.
+      const mid = viewH / 2;
+      const amp = viewH * 0.25 * k;
+      ctx.strokeStyle = colour();
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const x = (i / (samples.length - 1)) * viewW;
+        const y = mid - samples[i] * amp;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const x = (i / (samples.length - 1)) * viewW;
+        const y = mid + samples[i] * amp;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function fadedColour(rgb, a) {
+    // rgb is "rgb(r,g,b)"; splice in an explicit alpha for rgba().
+    const m = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(rgb);
+    if (!m) return rgb;
+    return "rgba(" + m[1] + "," + m[2] + "," + m[3] + "," + a + ")";
+  }
+
+  return {
+    setMode(m) {
+      mode = m || "off";
+      if (mode === "off") { canvas.classList.remove("on"); stop(); }
+      else                { canvas.classList.add("on");    start(); }
+    },
+    setIntensity(n) { intensity = Math.max(0, Math.min(100, n | 0)); },
+    setTinted(b)    { tinted = !!b; },
+  };
+})();
 
 const pixelfx = (function () {
   const canvas = document.getElementById("pixelfx-canvas");

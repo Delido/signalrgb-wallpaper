@@ -597,6 +597,33 @@
         effect. 0 = off. 30 is subtle, 80 is dramatic. Uses Lively's
         cursor-position callback, so it works under click-through.
       </div>
+
+      <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
+
+      <div class="row">
+        <label for="audioglow-mode" data-i18n="effects.audio_glow">Audio glow</label>
+        <select id="audioglow-mode">
+          <option value="off"      data-i18n="effects.audio_glow.off">Off</option>
+          <option value="pulse"    data-i18n="effects.audio_glow.pulse">Pulse</option>
+          <option value="spectrum" data-i18n="effects.audio_glow.spectrum">Spectrum bars</option>
+          <option value="wave"     data-i18n="effects.audio_glow.wave">Waveform</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="audioglow-intensity" data-i18n="effects.audio_glow.intensity">Intensity</label>
+        <input type="range" id="audioglow-intensity" min="0" max="100" step="1">
+        <span class="val" id="audioglow-intensity-val">60</span>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="audioglow-tint">
+        <label for="audioglow-tint" data-i18n="effects.audio_glow.tint">Tint with the live glow colour</label>
+      </div>
+      <div class="hint" data-i18n="effects.hint_audio_glow">
+        Whole-screen layer driven by the same FFT feed the Audio Spectrum
+        widget uses. Requires Lively / Wallpaper Engine to be actively
+        playing audio through the system mixer — silent input means no
+        visible effect.
+      </div>
     </div>
   </section>
 
@@ -710,6 +737,17 @@ const TRANSLATIONS = {
   "effects.density":        { en: "Density",              de: "Dichte" },
   "effects.pixelfx":        { en: "Pixelfx (cursor)",     de: "Pixelfx (Cursor)" },
   "effects.parallax":       { en: "3D parallax",          de: "3D-Parallax" },
+  "effects.audio_glow":           { en: "Audio glow",         de: "Audio-Glow" },
+  "effects.audio_glow.off":       { en: "Off",                de: "Aus" },
+  "effects.audio_glow.pulse":     { en: "Pulse",              de: "Puls" },
+  "effects.audio_glow.spectrum":  { en: "Spectrum bars",      de: "Spektrum-Balken" },
+  "effects.audio_glow.wave":      { en: "Waveform",           de: "Wellenform" },
+  "effects.audio_glow.intensity": { en: "Intensity",          de: "Intensität" },
+  "effects.audio_glow.tint":      { en: "Tint with the live glow colour",
+                                    de: "Mit Live-Glow-Farbe einfärben" },
+  "effects.hint_audio_glow":      {
+    en: "Whole-screen layer driven by the same FFT feed the Audio Spectrum widget uses. Requires Lively / Wallpaper Engine to be actively playing audio through the system mixer — silent input means no visible effect.",
+    de: "Vollflächiger Layer, der dieselbe FFT-Datenquelle wie das Audio-Spektrum-Widget nutzt. Lively / Wallpaper Engine muss aktiv Audio über den System-Mixer wiedergeben — ohne Audio-Eingang gibt es keinen sichtbaren Effekt." },
   "effects.hint_pixelfx":   {
     en: "Trail and hover-glow work with Lively click-through enabled (position is pushed by the host). Click ripple needs real mouse events — toggle <em>Wallpaper interaction</em> in Lively to see it.",
     de: "Mausspur und Hover-Glow funktionieren auch mit Lively-Click-Through (Position kommt vom Host). Klick-Welle braucht echte Mausevents — <em>Wallpaper interaction</em> in Lively aktivieren um's zu sehen."
@@ -941,6 +979,10 @@ const els = {
   pixelfxRow:     $("pixelfx-row"),
   parallax3d:     $("parallax3d"),
   parallax3dVal:  $("parallax3d-val"),
+  audioGlowMode:      $("audioglow-mode"),
+  audioGlowIntensity: $("audioglow-intensity"),
+  audioGlowIntensityVal: $("audioglow-intensity-val"),
+  audioGlowTint:      $("audioglow-tint"),
   lockBar:        $("lock-bar"),
   lockLabel:      $("lock-label"),
   lockHint:       $("lock-hint"),
@@ -1162,6 +1204,9 @@ bindRangeChange(els.gridBlur,       els.gridBlurVal,       "gridBlur",     " px"
 bindRangeChange(els.stripesBlur,    els.stripesBlurVal,    "stripesBlur",  " px");
 bindRangeChange(els.ambientDensity, els.ambientDensityVal, "ambientDensity", "");
 bindRangeChange(els.parallax3d,     els.parallax3dVal,     "parallax3d",     " px");
+bindRangeChange(els.audioGlowIntensity, els.audioGlowIntensityVal, "audioGlowIntensity", "");
+els.audioGlowMode.addEventListener("change", () => setSetting("audioGlow", els.audioGlowMode.value));
+els.audioGlowTint.addEventListener("change", () => setSetting("audioGlowTint", els.audioGlowTint.checked));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Effects section
@@ -1726,6 +1771,10 @@ function renderAll() {
   els.ambientDensityVal.textContent = String(settings.ambientDensity ?? 60);
   els.parallax3d.value = String(settings.parallax3d ?? 0);
   els.parallax3dVal.textContent = (settings.parallax3d ?? 0) + " px";
+  els.audioGlowMode.value      = settings.audioGlow || "off";
+  els.audioGlowIntensity.value = String(settings.audioGlowIntensity ?? 60);
+  els.audioGlowIntensityVal.textContent = String(settings.audioGlowIntensity ?? 60);
+  els.audioGlowTint.checked    = !!settings.audioGlowTint;
   const pixel = settings.pixelfx || "off";
   els.pixelfxRow.querySelectorAll(".seg").forEach((b) => {
     b.classList.toggle("active", b.dataset.value === pixel);
