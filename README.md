@@ -26,10 +26,11 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.5-beta — adds the whole-screen audio-reactive glow
-> layer (Pulse / Spectrum / Waveform driven by Lively's FFT). Folds
-> in the Configurator + Builder + WE + ultrawide work from the 0.7.1
-> → 0.7.4 beta cycle. Marked prerelease.
+> **Status:** v0.7.6-beta — fixes the SignalRGB layout-editor
+> rendering stretched LED cells (plugin's static `Size()` was 1:1
+> while runtime grids weren't). Folds in the whole-screen audio-glow
+> layer from v0.7.5-beta and everything from the 0.7.1 → 0.7.4 beta
+> cycle. Marked prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /

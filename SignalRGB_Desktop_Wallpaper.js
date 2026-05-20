@@ -35,9 +35,18 @@ export function Name()                { return "SignalRGB Desktop Wallpaper"; }
 export function Version()             { return "0.2.0"; }
 export function Type()                { return "network"; }
 export function Publisher()           { return "Delido"; }
-export function Size()                { return [32, 32]; }
+// Size() declares the device's *visual aspect ratio* in SignalRGB's
+// layout editor — only the ratio matters, not the absolute numbers.
+// SignalRGB locks the on-canvas bounding box to this ratio, so any
+// runtime device.setSize() with a different ratio gets visually
+// stretched (the LED count is still right, but each cell looks
+// squashed). 16:9 is the dominant monitor aspect, so we ship it as
+// the default. Users on 1:1 / 21:9 / 32:9 / 9:16 will still see
+// rectangular cells in the canvas, but the actual glow output to the
+// wallpaper page is unaffected — only the SignalRGB-editor preview is.
+export function Size()                { return [16, 9]; }
 export function DefaultPosition()     { return [50, 50]; }
-export function DefaultScale()        { return 60.0; }
+export function DefaultScale()        { return 1.0; }
 export function SubdeviceController() { return false; }
 export function ImageUrl()            { return ICON_DATA_URI; }
 

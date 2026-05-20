@@ -4,6 +4,30 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6-beta] - 2026-05-20
+
+> Tiny plugin-side fix: SignalRGB's layout editor was rendering our
+> LED cells as rectangles because the plugin declared a 1:1 visual
+> aspect while sending non-square LED grids at runtime.
+
+### Fixed
+
+- **SignalRGB layout editor stretched LED cells horizontally.**
+  `export function Size()` is the device's *visual aspect ratio* in
+  the canvas — SignalRGB locks the on-canvas bounding box to that
+  ratio and stretches whatever runtime `device.setSize([cols, rows])`
+  pushes to fit it. Our plugin used to declare `[32, 32]` (1:1),
+  which made e.g. a 32×8 runtime grid render as 4:1-stretched cells.
+  Changed to `[16, 9]` so 16:9 monitor users (the dominant case)
+  finally see square LED cells. Ultrawide / portrait users will still
+  see some stretching in the editor but far less than before, and
+  the actual glow output to the wallpaper page is unaffected — only
+  the SignalRGB-editor preview was wrong.
+- **`DefaultScale()`** dropped from a suspicious `60.0` to `1.0`
+  (full-canvas default when the device is first dropped). Pre-
+  existing user placements are not touched; this only affects
+  fresh adds.
+
 ## [0.7.5-beta] - 2026-05-20
 
 > Ships the long-standing roadmap item *Whole-screen audio-reactive
