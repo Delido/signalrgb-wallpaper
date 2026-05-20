@@ -26,8 +26,11 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.1-beta — adds 4-monitor support + the Lively-import
-> hotfix on top of v0.7.0 stable. Marked prerelease.
+> **Status:** v0.7.2-beta — Wallpaper Engine now ships as a **single**
+> bundle with a _Screen index_ property (assigned N times instead of
+> four separate tiles). 4-monitor support + ultrawide aspect-ratio +
+> Lively-import hotfix from v0.7.1-beta are folded in. Marked
+> prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -108,11 +111,14 @@ GIF (`docs/images/demo.gif`) is enough.
    monitors) onto Lively to import them, then right-click → _Set as
    wallpaper_ on each monitor.
 4. **Wallpaper Engine users**: if Steam + Wallpaper Engine were
-   detected the bundles are already in WE's library — open Wallpaper
-   Engine, find **SignalRGB Glow - Screen 1 / 2 / 3 / 4** under _My
-   Wallpapers_, and assign one per monitor. If Steam wasn't detected
-   the installer opens the _Wallpaper Engine wallpapers_ staging
-   folder; drop the four folders into Steam's
+   detected the bundle is already in WE's library — open Wallpaper
+   Engine, find **SignalRGB Glow** under _My Wallpapers_, and assign
+   the same wallpaper to every monitor you want to drive. For each
+   assignment open its properties panel and pick a different _Screen
+   index_ (Screen 1 / 2 / 3 / 4) so the bridge sends the matching
+   SignalRGB device's colours. If Steam wasn't detected the installer
+   opens the _Wallpaper Engine wallpapers_ staging folder; drop the
+   `signalrgb-glow` folder into Steam's
    `…\steamapps\common\wallpaper_engine\projects\myprojects\` by hand.
 5. Right-click the bridge's tray icon → **Configurator…** (the default
    action). In the browser: per-screen tabs at the top → set the
@@ -192,55 +198,83 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Planned
 
-- **Chunked UDP transport** — SignalRGB's plugin sandbox caps `udp.send()`
-  at 4 096 bytes per datagram, which puts the per-screen glow grid ceiling
-  at 36 × 36. Splitting each frame across multiple packets (the bridge
-  would reassemble before broadcasting) would lift this to ~256 × 256
-  without protocol drama. Touches plugin + bridge; wallpaper page is
-  unchanged.
 - **Whole-screen audio-reactive glow layer** — the audio spectrum widget
   shipped in 0.6.0-beta covers "audio visualiser in a box". A separate
-  ambient pulse / spectrum layer behind the whole wallpaper (driven by the
-  same Lively / WE FFT listener) is still open.
-- **Wallpaper preset library** — curated bundle of glow-ready backgrounds
-  shipped with the installer or fetched on demand
-- **Simpler install** (remainder) — Lively isn't auto-imported yet;
-  Wallpaper Engine auto-copy already shipped in 0.5.2-beta. A single
-  bootstrapper that pulls Lively if missing and imports the zips would
-  remove most of the manual setup.
-- **Preset slots in the configurator** — save a
-  "background + glow + dim + blur" combo per screen and switch with one click
-- **More than 4 monitors** — lift the current `MAX_SCREENS = 4` cap to N
-- **Localisation** — DE / EN at minimum, tray + builder + configurator +
-  installer strings
-- **Pattern-fill brush in the builder** — halftone / dither / hatching
-  as an alternative to solid-colour transparent cuts (intentionally
-  skipped during the 0.4.5 builder polish, kept on the wish list)
+  ambient pulse / spectrum layer behind the whole wallpaper (driven by
+  the same Lively / WE FFT listener) is still open.
+- **Wallpaper preset library** — curated bundle of glow-ready
+  backgrounds shipped with the installer or fetched on demand.
+- **Preset slots in the configurator** — save a "background + glow +
+  dim + blur + widgets" combo per screen and switch with one click.
+- **Configurator owns _Number of screens_ + debug overlay** — the
+  last two knobs still living in the legacy Tk dialog. Once moved the
+  legacy dialog can retire.
+- **Auto-Lively bootstrapper** — Wallpaper Engine auto-copy + Lively
+  auto-import both shipped, but if neither host is installed the user
+  still has to install Lively manually. A bundled bootstrapper that
+  pulls + installs Lively if missing would close the loop.
+- **Builder localisation** — the Configurator + tray + About are
+  DE / EN since 0.7.0; the Builder window is still English-only.
+- **More than 4 monitors** — lift the current `MAX_SCREENS = 4` cap
+  to N. Most code paths are already data-driven (config migration,
+  Configurator tab generator, build.ps1 staging loops); the QML +
+  Inno Setup `[Files]` block would need either generation or a
+  higher hard-coded ceiling.
+- **Pattern-fill brush in the builder** — halftone / dither /
+  hatching as an alternative to solid-colour transparent cuts
+  (intentionally skipped during the 0.4.5 builder polish, kept on
+  the wish list).
 
 ### Recently shipped
 
-- ✅ **4-monitor support** — bridge / plugin / installer / Configurator /
-  Builder all lifted from `MAX_SCREENS = 3` to `4` (0.7.1-beta)
-- ✅ **In-browser configurator** with per-screen tabs, drag-and-resize
-  layout preview, prominent lock toggle, form-based widget options
-  (0.6.0-beta / 0.6.1-beta)
-- ✅ **Ambient effects** (snow / rain / sparks / aurora) with glow-tint
-  opt-in (0.6.0-beta)
-- ✅ **Pixelfx** — mouse trail, hover glow, click ripple via Lively's
-  cursor callback (0.6.0-beta)
+- ✅ **Ultrawide-friendly glow grid** — plugin gained an
+  _Aspect Ratio_ dropdown (Auto / 1:1 / 16:9 / 21:9 / 32:9 / 9:16 /
+  Custom). Auto reads each monitor's viewport via the bridge's
+  `/config` `screens[]` sidecar; 3840 × 1080 panels now get a non-
+  square grid that actually matches their shape (0.7.1-beta)
+- ✅ **4-monitor support** — bridge / plugin / installer /
+  Configurator / Builder all lifted from `MAX_SCREENS = 3` to `4`
+  (0.7.1-beta)
+- ✅ **Lively auto-import** — installer drops `signalrgb-glow-
+  screen-{1..N}` straight into Lively's library with deterministic
+  folder names, so re-installs overwrite in place instead of
+  duplicating tiles (0.7.0)
+- ✅ **Chunked UDP transport** — frames > 4 KB are now split across
+  multiple datagrams (`SC` magic) and reassembled bridge-side,
+  enabling real 64 × 64 / 96 × 96 / 128 × 128 grids (0.6.0-beta /
+  0.7.0)
+- ✅ **3D parallax** — background image slides against the cursor for
+  a fake-depth effect (0.7.0)
+- ✅ **DE / EN localisation** — tray menu, About dialog and the
+  Configurator all auto-detect the Windows locale; Builder strings
+  still pending (0.7.0)
+- ✅ **About-dialog overhaul** — maintainer name + GitHub avatar +
+  open-source-credits link + tip jar (0.7.0)
+- ✅ **Snap-to-grid in the Configurator's layout preview** and a
+  top-level _Lock / Unlock widgets_ tray entry (0.7.0)
+- ✅ **In-browser configurator** with per-screen tabs, drag-and-
+  resize layout preview, prominent lock toggle, form-based widget
+  options (0.6.0-beta / 0.6.1-beta)
+- ✅ **Ambient effects** (snow / rain / sparks / aurora) with
+  glow-tint opt-in (0.6.0-beta)
+- ✅ **Pixelfx** — mouse trail, hover glow, click ripple via the
+  host's cursor callback (0.6.0-beta)
 - ✅ **System-stat widgets** — CPU / RAM sparklines + audio spectrum,
   fed by a `psutil` poller in the bridge (0.6.0-beta)
 - ✅ **In-app GitHub update checker** with prerelease-aware semver
   filtering (0.5.1-beta)
-- ✅ **Wallpaper Engine support** — bundles built alongside Lively zips
-  and auto-copied to Steam's WE projects folder when detected
-  (0.5.2-beta / 0.5.3-beta)
-- ✅ **Widget framework** with 7+ built-in types (clock, calendar,
+- ✅ **Wallpaper Engine support** — bundles built alongside Lively
+  zips and auto-copied to Steam's WE projects folder when detected,
+  plus a single combined Workshop item with a _Screen index_
+  property covering up to 4 monitors (0.5.2-beta → 0.7.1-beta)
+- ✅ **Widget framework** with 11 built-in types (clock, calendar,
   weather, sticky note, countdown, picture frame, quote, CPU, RAM,
-  audio) and an extensible registry (0.5.0 / 0.5.1-beta)
+  audio spectrum, network) and an extensible registry
+  (0.5.0 → 0.6.0-beta)
 - ✅ **Builder polish** — live brush cursor, hardness slider, round /
   square brush shape, erase brush, drag-and-drop merge slots, full
-  undo / redo (0.4.5)
+  undo / redo, _Apply to Screen 1 / 2 / 3 / 4_ buttons (0.4.5 →
+  0.7.1-beta)
 - ✅ **GIMP-style builder layout** — icon toolbox + tool options +
   canvas + files panel (0.4.5)
 - ✅ **Side-by-side image merge** in the builder (0.4.4 / 0.4.5)

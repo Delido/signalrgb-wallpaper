@@ -4,6 +4,32 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2-beta] - 2026-05-20
+
+> Wallpaper Engine packaging consolidation: one Workshop item with a
+> *Screen index* property replaces the four per-screen bundles. Folds
+> in everything from v0.7.1-beta (4-monitor support, ultrawide aspect
+> ratio, Lively-import hotfix, Weather widget cache fix).
+
+### Changed
+
+- **Single Wallpaper Engine bundle.** The installer now copies
+  `wallpaper_bridge/we_bundles_single/signalrgb-glow/` into both
+  `{app}\Wallpaper Engine wallpapers\signalrgb-glow\` and (when Steam
+  is detected) `…\steamapps\common\wallpaper_engine\projects\myprojects\signalrgb-glow\`,
+  instead of four per-screen folders. Subscribers assign the same
+  wallpaper to every monitor they want to drive and pick a different
+  *Screen index* (Screen 1 / 2 / 3 / 4) per assignment in WE's
+  properties panel. The bridge already routed by `?screen=N` query
+  param, so this is a packaging change only — no protocol change.
+- **`installer/build.ps1`** drops step `[3b/5]` (per-screen WE bundle
+  staging) entirely; the legacy `wallpaper_bridge/we_bundles/` folder
+  is wiped on each build so it can't accidentally feed stale sources
+  into the installer.
+- **Uninstaller** removes the new `signalrgb-glow/` folder AND the
+  legacy `SignalRGB_Glow_Screen{1..4}/` folders, so upgrades from
+  earlier beta installs leave a clean Steam projects folder.
+
 ## [0.7.1-beta] - 2026-05-20
 
 > Folds the Lively-import hotfix into a beta that also lifts the

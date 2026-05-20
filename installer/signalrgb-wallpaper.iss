@@ -4,6 +4,7 @@
 ;   {app}                                  -- LOCALAPPDATA\Programs\SignalRGBWallpaper
 ;     ├ SignalRGBBridge.exe                -- bridge + tray
 ;     ├ Lively wallpapers\Screen{1,2,3,4}.zip
+;     ├ Wallpaper Engine wallpapers\signalrgb-glow\
 ;     ├ LICENSE, README.md, CHANGELOG.md
 ;   {userdocs}\WhirlwindFX\Plugins         -- SignalRGB plugin (.js + .qml)
 ;   HKCU\...\Run\SignalRGBWallpaperBridge  -- optional autostart
@@ -119,37 +120,20 @@ Source: "..\wallpaper_bridge\lively_bundles\signalrgb-glow-screen-4\*"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installlively/autoimport; Check: LivelyDetected
 
-; Wallpaper Engine bundles — only copied if the WE task is selected.
-; Two destinations: (1) a manual-import staging folder under {app}, and
-; (2) — when Steam + Wallpaper Engine are detected — the live projects
-; folder Wallpaper Engine actually scans, so the wallpapers show up in
-; "My Wallpapers" without the user touching anything.
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen1\*"; \
-  DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen1"; \
+; Wallpaper Engine bundle — single combined item with a "Screen index"
+; property the user picks per assignment. Replaces the four per-screen
+; folders we used to ship: one Library tile assigned N times beats four
+; tiles assigned once each. Two destinations:
+;   (1) a manual-import staging folder under {app}\Wallpaper Engine
+;       wallpapers\signalrgb-glow\, and
+;   (2) — when Steam + Wallpaper Engine are detected — the live projects
+;       folder Wallpaper Engine actually scans, so the wallpaper shows
+;       up in "My Wallpapers" without the user touching anything.
+Source: "..\wallpaper_bridge\we_bundles_single\signalrgb-glow\*"; \
+  DestDir: "{app}\Wallpaper Engine wallpapers\signalrgb-glow"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen2\*"; \
-  DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen2"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen3\*"; \
-  DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen3"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen4\*"; \
-  DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen4"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen1\*"; \
-  DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion; \
-  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen2\*"; \
-  DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen2"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion; \
-  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen3\*"; \
-  DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"; \
-  Flags: recursesubdirs createallsubdirs ignoreversion; \
-  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
-Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen4\*"; \
-  DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen4"; \
+Source: "..\wallpaper_bridge\we_bundles_single\signalrgb-glow\*"; \
+  DestDir: "{code:GetWallpaperEngineProjects}\signalrgb-glow"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 
@@ -183,17 +167,17 @@ Filename: "{app}\Lively wallpapers"; Verb: open; \
   Flags: postinstall skipifsilent shellexec nowait; \
   Tasks: installlively; Check: NotLivelyAutoImported
 ; ── WE-path: if Wallpaper Engine was detected we already dropped the
-;    bundles into its projects folder — just nudge the user to open WE
-;    and pick them from "My Wallpapers". (Open the WE projects folder so
-;    they can visually confirm.)
+;    bundle into its projects folder — just nudge the user to open WE
+;    and assign 'SignalRGB Glow' to each monitor (with a different
+;    'Screen index' per assignment in the WE properties panel).
 Filename: "{code:GetWallpaperEngineProjects}"; Verb: open; \
-  Description: "Open the Wallpaper Engine projects folder (wallpapers are already there — assign per monitor in WE)"; \
+  Description: "Open the Wallpaper Engine projects folder (assign 'SignalRGB Glow' per monitor, pick a different Screen index each time)"; \
   Flags: postinstall skipifsilent shellexec nowait; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 ; ── WE-path fallback: if Steam wasn't found, point them at our local
-;    staging folder so they can drag the folders to WE manually.
+;    staging folder so they can drag the folder into WE manually.
 Filename: "{app}\Wallpaper Engine wallpapers"; Verb: open; \
-  Description: "Open the Wallpaper Engine bundles folder (drag the folders into Wallpaper Engine manually)"; \
+  Description: "Open the Wallpaper Engine bundle folder (drag 'signalrgb-glow' into Wallpaper Engine manually)"; \
   Flags: postinstall skipifsilent shellexec nowait; \
   Tasks: installwallpaperengine; Check: WallpaperEngineNotDetected
 ; ── Start the bridge right away (only if user kept autostart)
@@ -202,8 +186,11 @@ Filename: "{app}\{#MyAppExeName}"; \
   Flags: postinstall skipifsilent nowait; Tasks: autostart
 
 [UninstallDelete]
-; Clean the Steam-side WE bundles if we copied them there. Removes only our
-; three folders; leaves any other WE wallpapers alone.
+; Clean the Steam-side WE bundle if we copied it there. Removes only the
+; single combined folder we install; leaves any other WE wallpapers alone.
+; Legacy entries below catch pre-v0.7.2-beta installs that shipped four
+; per-screen folders, so an upgrade-uninstall still cleans those up.
+Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\signalrgb-glow"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen2"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"

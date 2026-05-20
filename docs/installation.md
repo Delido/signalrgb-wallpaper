@@ -40,14 +40,17 @@ few additional setup items:
 - ☑ **Lively Wallpaper** (default on). Required for the Lively path.
 - ☑ **Auto-import into Lively** (default on, sub-task of Lively). When
   checked + a Lively install is detected (GitHub or MSIX build), the
-  three glow bundles get extracted directly into Lively's
-  `Library\wallpapers\signalrgb-glow-screen-{1,2,3}\` with deterministic
-  folder names. Every subsequent installer run overwrites in place —
-  no more *"delete and re-import after every update"* dance.
+  four glow bundles get extracted directly into Lively's
+  `Library\wallpapers\signalrgb-glow-screen-{1,2,3,4}\` with
+  deterministic folder names. Every subsequent installer run overwrites
+  in place — no more *"delete and re-import after every update"* dance.
 - ☐ **Wallpaper Engine** (Steam — auto-skipped if not detected). When
-  checked + a Steam install is detected (HKCU registry + `libraryfolders.vdf`
-  parsing for off-drive libraries), the three glow bundles get copied
-  straight into `…\steamapps\common\wallpaper_engine\projects\myprojects\`.
+  checked + a Steam install is detected (HKCU registry +
+  `libraryfolders.vdf` parsing for off-drive libraries), the **single
+  combined** glow bundle gets copied straight into
+  `…\steamapps\common\wallpaper_engine\projects\myprojects\signalrgb-glow\`.
+  Assign it to each monitor you want to drive and pick a different
+  *Screen index* per assignment in WE's properties panel.
 
 **Additional setup:**
 
@@ -79,8 +82,8 @@ If you'd rather not run the installer:
 | `SignalRGBBridge.exe` | Anywhere stable (e.g. `C:\Tools\SignalRGBWallpaper\`) | ~20 MB |
 | `SignalRGB_Desktop_Wallpaper.js` | `Documents\WhirlwindFX\Plugins\` | ~20 KB |
 | `SignalRGB_Desktop_Wallpaper.qml` | same folder | ~3 KB |
-| `SignalRGB_Glow_Screen{1,2,3}.zip` | Drag each onto Lively | ~100 KB each |
-| `SignalRGB_Glow_WallpaperEngine.zip` | Extract; drop each `SignalRGB_Glow_ScreenN/` folder into Steam's `…\steamapps\common\wallpaper_engine\projects\myprojects\` | ~300 KB total |
+| `SignalRGB_Glow_Screen{1,2,3,4}.zip` | Drag each onto Lively | ~100 KB each |
+| `SignalRGB_Glow_WE_Single.zip` | Extract; drop `signalrgb-glow/` into Steam's `…\steamapps\common\wallpaper_engine\projects\myprojects\`. Assign once per monitor, pick a different *Screen index* per assignment in WE's properties panel. | ~300 KB |
 
 Then double-click `SignalRGBBridge.exe`.
 
@@ -172,14 +175,14 @@ If you didn't auto-import, drag each `SignalRGB_Glow_ScreenN.zip` onto
 Lively to import, then assign.
 
 **Wallpaper Engine users:** if you let the installer auto-copy, WE
-already lists the four bundles under *My Wallpapers*. Click each one,
-pick the matching monitor. (Or use the **single-bundle** Workshop item
-if you've subscribed to that one — assign the same wallpaper to every
-monitor and set a different *Screen index* per assignment in its
-properties panel.)
+already lists **SignalRGB Glow** under *My Wallpapers* — one tile that
+you assign to every monitor you want to drive. Open each assignment's
+properties panel and pick a different *Screen index* (Screen 1 / 2 /
+3 / 4) so the bridge sends the matching SignalRGB device's colours.
 
-If you didn't auto-copy, extract `SignalRGB_Glow_WallpaperEngine.zip` and
-drop each folder into `…\steamapps\common\wallpaper_engine\projects\myprojects\`.
+If you didn't auto-copy, extract `SignalRGB_Glow_WE_Single.zip` and
+drop the `signalrgb-glow` folder into
+`…\steamapps\common\wallpaper_engine\projects\myprojects\`.
 
 ## Next steps
 
@@ -198,10 +201,13 @@ The uninstaller:
 
 - Kills the running bridge first (`taskkill /f /im SignalRGBBridge.exe`).
 - Removes the bridge exe + bundled files from `{InstallDir}`.
-- Removes the auto-imported Lively folders (`signalrgb-glow-screen-{1,2,3}\`)
-  if Lively was detected — leaves other Lively wallpapers alone.
-- Removes the auto-copied Wallpaper Engine bundle folders if Steam was
-  detected — leaves other WE wallpapers alone.
+- Removes the auto-imported Lively folders
+  (`signalrgb-glow-screen-{1,2,3,4}\`) if Lively was detected — leaves
+  other Lively wallpapers alone.
+- Removes the auto-copied Wallpaper Engine bundle (`signalrgb-glow\`,
+  plus the legacy `SignalRGB_Glow_Screen{1..4}\` folders for users
+  upgrading from pre-0.7.2-beta installs) if Steam was detected —
+  leaves other WE wallpapers alone.
 - Drops the autostart `Run` registry entry.
 
 The plugin in `WhirlwindFX\Plugins\` is *not* removed automatically —

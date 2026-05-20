@@ -168,69 +168,15 @@ $singleProject = @{
 } | ConvertTo-Json -Depth 6
 Set-Content -Path (Join-Path $weSingle "project.json") -Value $singleProject -Encoding UTF8
 
-# --- 3b. Stage Wallpaper Engine bundles --------------------------------------
-# WE projects are FOLDERS (not zips) with a project.json next to the index.html.
-# The installer either copies them straight into Steam's
-# `wallpaper_engine\projects\myprojects\` if it can detect a Steam install, or
-# drops them under `{app}\Wallpaper Engine wallpapers\` for manual import.
-Write-Host "[3b/5] Staging Wallpaper Engine bundles" -ForegroundColor Yellow
-$weStage = Join-Path $bridgeDir "we_bundles"
-if (Test-Path $weStage) { Remove-Item $weStage -Recurse -Force }
-New-Item -ItemType Directory -Path $weStage | Out-Null
-foreach ($n in 0, 1, 2, 3) {
-    $label = ($n + 1).ToString()
-    $bundleDir = Join-Path $weStage ("SignalRGB_Glow_Screen{0}" -f $label)
-    Copy-Item -Path $src -Destination $bundleDir -Recurse
-    # Drop the Lively-only manifest from the WE bundle
-    $info = Join-Path $bundleDir "LivelyInfo.json"
-    if (Test-Path $info) { Remove-Item $info -Force }
-    # Patch the screen index meta tag (same trick as the Lively zips)
-    $idx = Join-Path $bundleDir "index.html"
-    (Get-Content $idx -Raw) -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', ('${1}' + $n + '${2}') |
-        Set-Content $idx -NoNewline
-    # Wallpaper Engine looks for project.json. Title disambiguates the
-    # three bundles in WE's "My Wallpapers" view; description is shown
-    # 1:1 in the Steam Workshop listing when uploading and supports BBCode
-    # (so [b]…[/b] and [url=…]…[/url] render). preview points at the
-    # 1920×1080 workshop_preview.png — same image then gets re-selected
-    # at Workshop upload time as the Workshop preview.
-    $description = @"
-[b]Live SignalRGB-driven glow on your desktop wallpaper.[/b]
-
-This wallpaper renders the colours of your currently running SignalRGB effect through transparent regions of a background image. Perfect for setups that already have SignalRGB driving fan / keyboard / strip lighting — your wallpaper now matches.
-
-[b]Important — requires the SignalRGB Wallpaper Bridge:[/b]
-[list]
-[*] Download + install from [url=https://github.com/Delido/signalrgb-wallpaper/releases]github.com/Delido/signalrgb-wallpaper[/url]
-[*] The installer copies a SignalRGB plugin into your WhirlwindFX/Plugins folder and registers a local bridge (UDP 17320 + WebSocket).
-[*] Once the bridge is running, the wallpaper picks up the live colours automatically. No bridge running = the wallpaper shows just the background image (no glow).
-[/list]
-
-[b]Features driven by the bridge:[/b]
-[list]
-[*] In-browser configurator with drag-and-resize widget layout — clock, calendar, weather, sticky notes, countdown, picture frame, quote, CPU / RAM meters, audio spectrum
-[*] Full-canvas ambient effects: snow, rain, sparks, aurora — optionally tinted from the live glow colour
-[*] Cursor pixelfx (mouse trail, hover glow, click ripple) and 3D parallax on the background
-[*] DE / EN UI, auto-detected from your Windows locale
-[/list]
-
-[b]This bundle is for screen $label of up to 4 monitors.[/b] Set the bridge's screen count to match, place the matching SignalRGB "Desktop Wallpaper - Screen $label" device on the canvas where you want colours sampled from.
-
-MIT licensed. Open source: [url=https://github.com/Delido/signalrgb-wallpaper]github.com/Delido/signalrgb-wallpaper[/url]
-"@
-    $project = @{
-        title       = "SignalRGB Glow - Screen $label"
-        description = $description
-        type        = "Web"
-        file        = "index.html"
-        preview     = "workshop_preview.png"
-        tags        = @("RGB","Customizable","Web","Abstract","Other")
-        contentrating = "Everyone"
-        version     = 8
-        general     = @{ properties = @{} }
-    } | ConvertTo-Json -Depth 5
-    Set-Content -Path (Join-Path $bundleDir "project.json") -Value $project -Encoding UTF8
-}
+# --- 3b. (retired in 0.7.2-beta) ----------------------------------------------
+# We used to stage four per-screen WE bundles here so each monitor got its
+# own Library tile. The single combined bundle from step 3a covers the same
+# use case via the screenIndex property (assigned N times with a different
+# index per assignment), so the installer + Workshop pipeline now ship only
+# the single bundle. Drop the legacy folder if a previous build left it
+# behind so the installer can't accidentally pull stale per-screen sources.
+$legacyWeStage = Join-Path $bridgeDir "we_bundles"
+if (Test-Path $legacyWeStage) { Remove-Item $legacyWeStage -Recurse -Force }
 
 # --- 4. Package the pause-tester diagnostic wallpaper -------------------------
 Write-Host "[4/5] Packaging Lively pause-tester" -ForegroundColor Yellow
