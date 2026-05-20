@@ -17,7 +17,7 @@ and a one-click installer.
 ---
 
 Use your current SignalRGB effect as a glow layer on your desktop wallpaper.
-Up to **3 monitors**, each configurable separately. Renders inside
+Up to **4 monitors**, each configurable separately. Renders inside
 [Lively Wallpaper](https://www.rocksdanister.com/lively/) as a regular Web
 wallpaper — no proprietary host, no custom shaders.
 
@@ -26,7 +26,8 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.0 — first stable after the 0.5 / 0.6 beta cycle.
+> **Status:** v0.7.1-beta — adds 4-monitor support + the Lively-import
+> hotfix on top of v0.7.0 stable. Marked prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -41,7 +42,7 @@ whatever colour your current effect is producing right now.
 ## Features
 
 - 🌈 **Live RGB glow** behind a transparent background image, 60 fps target
-- 🖥️ **1–3 monitor support** with independent settings per screen
+- 🖥️ **1–4 monitor support** with independent settings per screen
 - 🎚️ **System tray dialog** for everything: background per screen, glow
   layout (pixel grid / stripes / pills / off), strength, dim, blur — live apply
 - 🖌️ **In-browser wallpaper builder** (`Build Wallpaper…` in tray) for
@@ -103,15 +104,15 @@ GIF (`docs/images/demo.gif`) is enough.
    - **Start bridge automatically on logon** (recommended).
 3. **Lively users**: the installer opens the _Lively wallpapers_
    folder at the end — drag `SignalRGB_Glow_Screen1.zip` (and
-   `Screen2.zip` / `Screen3.zip` for additional monitors) onto Lively
-   to import them, then right-click → _Set as wallpaper_ on each
-   monitor.
+   `Screen2.zip` / `Screen3.zip` / `Screen4.zip` for additional
+   monitors) onto Lively to import them, then right-click → _Set as
+   wallpaper_ on each monitor.
 4. **Wallpaper Engine users**: if Steam + Wallpaper Engine were
    detected the bundles are already in WE's library — open Wallpaper
-   Engine, find **SignalRGB Glow - Screen 1 / 2 / 3** under _My
+   Engine, find **SignalRGB Glow - Screen 1 / 2 / 3 / 4** under _My
    Wallpapers_, and assign one per monitor. If Steam wasn't detected
    the installer opens the _Wallpaper Engine wallpapers_ staging
-   folder; drop the three folders into Steam's
+   folder; drop the four folders into Steam's
    `…\steamapps\common\wallpaper_engine\projects\myprojects\` by hand.
 5. Right-click the bridge's tray icon → **Configurator…** (the default
    action). In the browser: per-screen tabs at the top → set the
@@ -209,7 +210,7 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
   remove most of the manual setup.
 - **Preset slots in the configurator** — save a
   "background + glow + dim + blur" combo per screen and switch with one click
-- **More than 3 monitors** — lift the current `MAX_SCREENS = 3` cap to N
+- **More than 4 monitors** — lift the current `MAX_SCREENS = 4` cap to N
 - **Localisation** — DE / EN at minimum, tray + builder + configurator +
   installer strings
 - **Pattern-fill brush in the builder** — halftone / dither / hatching
@@ -218,6 +219,8 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Recently shipped
 
+- ✅ **4-monitor support** — bridge / plugin / installer / Configurator /
+  Builder all lifted from `MAX_SCREENS = 3` to `4` (0.7.1-beta)
 - ✅ **In-browser configurator** with per-screen tabs, drag-and-resize
   layout preview, prominent lock toggle, form-based widget options
   (0.6.0-beta / 0.6.1-beta)

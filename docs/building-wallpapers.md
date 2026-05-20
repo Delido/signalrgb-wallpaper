@@ -21,8 +21,10 @@ needed.
 
 ### Steps
 
-1. Right-click the **SignalRGB Wallpaper tray icon** → **Build Wallpaper…**.
-   Your default browser opens to `http://127.0.0.1:17320/builder`.
+1. Right-click the **SignalRGB Wallpaper tray icon** → **Build
+   Wallpaper…** (or click **Open Builder…** in the Configurator's
+   *Background* section for the current screen). Your default browser
+   opens to `http://127.0.0.1:17320/builder`.
 2. Click **Choose image…** (or drag a PNG/JPG/WebP into the canvas area).
 3. The image appears on a checkerboard background — the checkerboard is
    what'll show through wherever you make pixels transparent.
@@ -38,13 +40,19 @@ needed.
    transparent-area edges from looking pixelated when the glow blurs
    through.
 8. Click **Undo** to remove the last click, or **Reset** to start over.
-9. Click **Save as PNG**. The file downloads via your browser as
-   `<original-name>-glow.png`.
-10. Right-click the tray icon → **Settings…** → pick the screen tab →
-    **Background image** → Browse → pick your new PNG → **Save**.
+9. Click **Save as PNG** to download via your browser as
+   `<original-name>-glow.png`, or click one of the **Apply to screen
+   → 1 / 2 / 3 / 4** buttons to push the PNG straight to the bridge's
+   `POST /screen/N/background` endpoint — the wallpaper picks it up
+   instantly without a download-and-pick step.
+10. (Download route only) Open the tray icon → **Configurator…** →
+    pick the screen tab → *Background* → *Choose image…* → pick your
+    new PNG. The bridge stores it under
+    `%LOCALAPPDATA%\SignalRGBWallpaper\screens\` and pushes the new
+    URL to the live wallpaper.
 
 That's it. The wallpaper updates live across all monitors displaying
-that screen index — no Lively reload.
+that screen index — no host reload.
 
 ### Tips for the builder
 
@@ -216,10 +224,13 @@ which the wallpaper can't load. Always use **Export As → PNG**.
 
 ### 9. Test in the wallpaper
 
-1. Right-click the SignalRGB Wallpaper tray icon → **Settings…**
+1. Right-click the SignalRGB Wallpaper tray icon → **Configurator…**.
 2. Pick the screen tab you want to apply it to.
-3. **Background image** → Browse → pick your PNG.
-4. Click **Save**. The wallpaper page applies it instantly.
+3. *Background* → *Choose image…* → pick your PNG.
+
+The wallpaper page applies it instantly — no Save button, every
+Configurator change pushes straight to the live wallpaper over
+WebSocket.
 
 Iterate: if too little glows, go back to GIMP and cut more out. Too
 much, undo some deletions. Re-export, re-pick.
@@ -266,9 +277,9 @@ magick input.jpg -alpha set -channel A `
   effect is a side-to-side sweep, a building skyline with windows
   along the bottom highlights the sweep nicely. If it's a rainbow
   cycle, anything with multiple separated bright spots works.
-- **Test with the "Glow Strength" slider** in tray Settings if your
-  glow feels weak. 150% gives a more dramatic look on dark
-  backgrounds; 80–100% is more subtle.
+- **Test with the *Strength* slider** in the Configurator's *Glow*
+  section if your glow feels weak. 150% gives a more dramatic look on
+  dark backgrounds; 80–100% is more subtle.
 
 ## Example: the bundled cyberpunk skyline
 

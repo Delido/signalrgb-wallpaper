@@ -43,6 +43,10 @@ under which each ships is below.
 - **Open-Meteo** — free weather API. Data is CC-BY 4.0; the widget shows an
   *"via Open-Meteo"* attribution in its footer whenever it has real data.
   <https://open-meteo.com/>
+  Note: every weather API call is made by the wallpaper page running in
+  the end-user's CEF / WebView. This project does not centrally proxy or
+  re-host the data; Open-Meteo sees many independent low-volume callers,
+  one per user, well inside their free non-commercial tier.
 - **Quotable** — random-quote API behind the *Quote* widget. Data is
   CC BY-SA; the widget footer says *"via Quotable"*.
   <https://github.com/lukePeavey/quotable>
@@ -65,3 +69,55 @@ under which each ships is below.
 
 - **GitHub CLI** (releases) · `git` · `winget` · **Inno Setup** (installer
   compilation).
+
+## License compatibility summary
+
+This project is **MIT licensed** (see `LICENSE` at the repo root). MIT is
+maximally permissive and compatible with all dependencies below. Each item
+lists the dep, its license, and the (short) reason redistribution inside an
+MIT product is OK.
+
+| Dep | License | Why we can bundle / use it |
+| --- | --- | --- |
+| Python 3 (runtime + stdlib) | PSF License | PSF explicitly permits redistribution including in derivative / commercial work. |
+| pystray | LGPL 3.0 | LGPL allows linking from non-LGPL apps. Attribution above is the required notice; users wanting to swap pystray can replace the bundled module files inside the PyInstaller extraction. |
+| Pillow / PIL | MIT-CMU (HPND) | Permissive — same shape as MIT; just include the notice (we do, here). |
+| psutil | BSD-3-Clause | Permissive — include notice (here) and don't claim endorsement (we don't). |
+| PyInstaller bootloader stub | GPL 2.0+ **with bootloader linking exception** | The exception (see PyInstaller's `COPYING.txt`) explicitly allows building closed-source / commercial / non-GPL applications. Our app is MIT, well inside the carve-out. |
+| interact.js | MIT | Permissive — we ship `interact.LICENSE.txt` next to the .js in every wallpaper bundle. |
+| Open-Meteo data | CC-BY 4.0 | Attribution required at point of display. Done in the Weather widget footer (*"via Open-Meteo"*) and here. |
+| Quotable data | CC BY-SA | Attribution + share-alike on derivative datasets. We don't redistribute the data, we display it per call; attribution shown in the Quote widget footer (*"via Quotable"*) and here. |
+| GitHub Releases API | (Free public API) | Read-only, well under rate limits for unauthenticated requests, no terms we're violating. |
+
+### Hosts the wallpaper *runs inside* (we don't bundle them)
+
+These are runtime environments our wallpaper bundles target — analogous to
+"a Python script running on a GPL'd interpreter" or "a webpage rendered in
+Chrome". Their license terms cover the host, not the content rendered
+inside it.
+
+- **Lively Wallpaper (GPL 3.0)** — we don't link to, modify, or bundle
+  Lively. Our wallpaper is a standard HTML5 file that runs in Lively's
+  WebView the same way any other community wallpaper does. No GPL
+  propagation.
+- **Wallpaper Engine (proprietary)** — Steam's standard Workshop content
+  terms apply when uploading. We comply: the wallpaper is original code +
+  permissively-licensed deps with attribution.
+- **SignalRGB (proprietary)** — we use their **public plugin API**.
+  SignalRGB markets a community plugin ecosystem; our plugin uses only
+  documented entry points (`device.color()`, `udp.createSocket()`, etc.).
+
+### What this means in practice
+
+- Our distribution is MIT — anyone can fork, modify, redistribute,
+  including commercially.
+- The PyInstaller-built exe carries:
+  - MIT for our own code (and the wallpaper bundles).
+  - Permissive notices for Pillow, psutil, interact.js.
+  - LGPL notice for pystray (with a documented "you can replace the
+    bundled module files" path).
+  - PyInstaller bootloader's GPL+exception cover (the exception kicks in
+    automatically).
+- No copyleft contamination of our own code.
+
+This audit was last refreshed for **v0.7.0** (2026-05-19).

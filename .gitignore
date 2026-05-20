@@ -13,7 +13,9 @@ wallpaper_bridge/SignalRGBBridge*.exe
 # the SignalRGB_Glow_WallpaperEngine.zip asset; we_bundles/ is the staging
 # folder Inno Setup packages from.
 wallpaper_bridge/we_bundles/
+wallpaper_bridge/we_bundles_single/
 wallpaper_bridge/SignalRGB_Glow_WallpaperEngine.zip
+wallpaper_bridge/SignalRGB_Glow_WE_Single.zip
 
 # Lively wallpaper folders — staged by installer/build.ps1 for the
 # installer's auto-import task; the standalone Screen{1,2,3}.zip files

@@ -313,7 +313,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.7.1-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -331,8 +331,8 @@ WS_PORT  = 17320
 MAX_BACKGROUND_UPLOAD_BYTES = 50 * 1024 * 1024
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-MAX_SCREEN_INDEX = 7  # generous upper bound; plugin caps at 2 (3 screens)
-N_SCREENS = 3
+MAX_SCREEN_INDEX = 7  # generous upper bound; plugin caps at 3 (4 screens)
+N_SCREENS = 4
 
 CONFIG_VERSION = 1
 DEFAULT_SCREEN_SETTINGS = {
@@ -1032,7 +1032,27 @@ class Broadcaster:
         # place.
         if method == "GET" and target.split("?", 1)[0] in ("/config", "/config/"):
             try:
-                payload = json.dumps({"screenCount": int(self.get_screen_count())}).encode("utf-8")
+                # The plugin uses screenCount to decide how many virtual
+                # controllers to announce. The per-screen viewport[] sidecar
+                # lets the plugin auto-derive a matching grid aspect ratio
+                # — e.g. 3840×1080 ultrawide gets cols≈3.56×rows instead of
+                # a square — so the SignalRGB device's effect samples scale
+                # to the actual monitor instead of always being square.
+                count = int(self.get_screen_count())
+                screens = []
+                for i in range(count):
+                    try:
+                        s = self.get_settings(i)
+                        screens.append({
+                            "viewportW": int(s.get("viewportW") or 0),
+                            "viewportH": int(s.get("viewportH") or 0),
+                        })
+                    except Exception:
+                        screens.append({"viewportW": 0, "viewportH": 0})
+                payload = json.dumps({
+                    "screenCount": count,
+                    "screens": screens,
+                }).encode("utf-8")
                 head = (
                     "HTTP/1.1 200 OK\r\n"
                     "Content-Type: application/json\r\n"

@@ -71,9 +71,12 @@ Symptom: you double-click `SignalRGBBridge.exe`, no tray icon, nothing.
 
 The Lively wallpaper opens but never receives frames.
 
-1. **Enable the debug overlay** for that screen: tray → Settings… →
-   the screen's tab → "Show debug overlay" → Save. The wallpaper now
-   shows a tiny status line top-left.
+1. **Enable the debug overlay** for that screen: tray → **Advanced** →
+   **Legacy Settings dialog…** → the screen's tab → *Show debug
+   overlay* → **Save**. The wallpaper now shows a tiny status line
+   top-left. (The new in-browser Configurator doesn't surface this
+   toggle yet — it's the one knob still living in the legacy Tk
+   dialog besides *Number of screens*.)
 2. **Read the status:**
    - `connecting ws://127.0.0.1:17320/?screen=N…` — bridge not running
      or wrong port. Confirm `SignalRGBBridge.exe` is in your tray.
@@ -148,8 +151,9 @@ image appears (or it's broken).
 
 ## SignalRGB shows too many / too few devices
 
-Set "Number of screens" in the tray Settings dialog. Plugin polls the
-bridge every ~2 seconds and adjusts. If it doesn't:
+Set *Number of screens* in tray → **Advanced** → **Legacy Settings
+dialog…**. Plugin polls the bridge every ~2 seconds and adjusts. If it
+doesn't:
 
 - Make sure the bridge is actually running (tray icon visible).
 - Open `http://127.0.0.1:17320/config` in a browser — should return
@@ -160,14 +164,20 @@ bridge every ~2 seconds and adjusts. If it doesn't:
 ## Lively "Pause wallpapers" doesn't stop the glow
 
 The wallpaper page implements Lively's
-`window.livelyWallpaperPlaybackChanged(state)` hook correctly per the
-[wiki spec](https://github.com/rocksdanister/lively/wiki/Web-Guide-V-:-System-Data),
-opts in via `"Arguments": "--pause-event true"` in `LivelyInfo.json`,
+`window.livelyWallpaperPlaybackChanged(state)` hook per the
+[wiki spec](https://github.com/rocksdanister/lively/wiki/Web-Guide-V-:-System-Data)
 and shows a red "⏸ PAUSED" badge in the top-right corner when the hook
-fires. **But** whether the hook actually fires depends on the Lively
-build and the user's environment — some setups don't deliver the
-suspend IPC to the WebView2 player at all, in which case our page
-never knows it should pause.
+fires. It also subscribes to `document.visibilitychange` as a defensive
+fallback for hosts that suspend the surface without firing the Lively
+event. We deliberately do **not** pass `--pause-event true` in
+`LivelyInfo.Arguments` — newer Lively builds reject that as an unknown
+option (Wallpaper plugin exception on import). The pause hook still
+fires on builds that push it without the opt-in.
+
+**But** whether either hook actually fires depends on the Lively build
+and the user's environment — some setups don't deliver the suspend
+IPC to the WebView2 player at all, in which case the visibilitychange
+fallback is the only signal the page gets.
 
 Quick check: when you click "Pause wallpapers" in Lively's tray, do
 **other** Web-type wallpapers in your library actually pause (freeze)?
@@ -178,6 +188,135 @@ Quick check: when you click "Pause wallpapers" in Lively's tray, do
   with your Lively version and Windows build.
 - **Yes for others but not ours** → file an issue against this project
   with your Lively version (`Settings → About` in Lively).
+
+## Updated wallpaper but Lively still shows the old version
+
+Symptom: you rebuilt + reimported a wallpaper zip (or pulled a new
+release), but the wallpaper in Lively keeps rendering the old
+behaviour — old layout, no parallax, missing widgets.
+
+Lively extracts each imported wallpaper zip **once** into a
+random-hash folder under
+`%USERPROFILE%\AppData\Local\Lively Wallpaper\Library\wallpapers\<hash>\`
+(MSIX build path differs; both end in `Library\wallpapers\<hash>\`).
+Re-zipping the source folder does **not** propagate — Lively never
+re-reads the original zip.
+
+To pick up new HTML / JS / `LivelyInfo.json` changes:
+
+1. In Lively's **Library**, right-click the wallpaper → **Delete**.
+2. Drag the new zip onto Lively (or re-run the installer with
+   *Auto-import into Lively* enabled — v0.7.0+ uses deterministic
+   folder names `signalrgb-glow-screen-{1,2,3}\`, which the installer
+   overwrites in place, so no manual delete needed for future
+   updates).
+3. Right-click each new tile → **Set as wallpaper** for the matching
+   monitor.
+
+The deterministic-folder auto-import is the v0.7.0 fix specifically
+for this footgun. Pre-v0.7.0 users coming from a manual drag-import
+still hit it once on the upgrade — after the installer takes over,
+subsequent updates are silent.
+
+## Lively import fails: "Unknown options are passed. WallpaperPluginException"
+
+If Lively shows *Error initializing — Unknown options are passed.
+Exception: WallpaperPluginException* when importing the wallpaper,
+you're on the broken **v0.7.0** Lively bundles —
+`LivelyInfo.Arguments` carried an invalid `--system-cursor true`
+value that Lively rejects on import. Fixed in **v0.7.1** (Arguments
+reverted to `null`).
+
+To recover:
+
+1. Install **v0.7.1** or newer (re-run the installer with *Auto-import
+   into Lively* enabled, or grab the fresh `SignalRGB_Glow_ScreenN.zip`
+   from the release page).
+2. In Lively's Library, delete the broken tiles (the import error
+   leaves a stub entry), then re-import the fresh zip.
+
+The parallax + cursor-driven Pixelfx effects still work on v0.7.1 —
+they receive the cursor through the DOM `mousemove` listener whenever
+Lively's *Wallpaper interaction* setting is on, instead of through
+the rejected argument.
+
+## Parallax / cursor effects don't react in Lively
+
+The 3D parallax (Configurator → Effects → *3D parallax*) and the
+mouse-driven Pixelfx modes (*Trail*, *Glow*, *Ripple — all*) need
+real-time cursor coordinates. v0.7.1 reads them from the wallpaper
+page's DOM `mousemove` events, which only fire when the wallpaper
+surface is reachable by real mouse events:
+
+- **Lively** — toggle the wallpaper's *Wallpaper interaction* setting
+  to **on** (right-click the active tile → *Customise* → top of the
+  panel). Click-through mode delivers no DOM mousemove events to the
+  page, so the parallax / Pixelfx stays still.
+- **Wallpaper Engine** — set *Mouse input* to *Allow*. Same logic.
+- **Builder / Configurator preview / browser tab** — works
+  automatically; those surfaces are normal interactive web pages.
+
+Click-driven Pixelfx (the *Ripple* mode) additionally needs real
+clicks to reach the wallpaper, which is the same requirement as
+*interaction-on*.
+
+## Setting the SignalRGB plugin's Glow Grid Base Size > 36 errors out
+
+Symptom: in SignalRGB's plugin settings, you bump *Glow Grid Base
+Size* to **64**, **96**, or **128**, hit Save, and SignalRGB's log
+shows:
+
+```text
+udp.error - Buffer too large. Max size is 4096 bytes!
+```
+
+This is the SignalRGB plugin sandbox's hard 4 KB `udp.send()` cap.
+The plugin and bridge **do** support larger grids — v0.6.0+ chunks
+frames > 4 KB across multiple datagrams (`SC` wire format) and the
+bridge reassembles them.
+
+If you're seeing the error:
+
+- **Check the bundle versions match.** Both `SignalRGBBridge.exe` and
+  `SignalRGB_Desktop_Wallpaper.js` must be ≥ v0.6.0 — the chunked
+  protocol is implemented in both halves. Old plugin file + new
+  bridge (or vice versa) fall back to the single-packet `SR` format
+  and hit the limit.
+- **Re-run the installer** with *Install the SignalRGB Desktop
+  Wallpaper plugin* enabled to drop the matching JS / QML in
+  `Documents\WhirlwindFX\Plugins\`.
+- Then re-pick **64 / 96 / 128** in the plugin settings.
+
+## Plugin's Aspect Ratio = Auto, but the glow grid is still square
+
+The plugin's *Auto* mode reads the per-screen viewport from the
+bridge's `GET /config` endpoint, and the bridge only knows the
+viewport once a wallpaper page has connected via WebSocket and pushed
+its `{type:"viewport", w, h}` frame. Before that's happened, *Auto*
+falls back to 16:9.
+
+Steps to check:
+
+1. **Is the wallpaper actually running?** Set the wallpaper in Lively /
+   Wallpaper Engine for that screen index. The viewport is sent on
+   WS open + on `window.resize` (debounced).
+2. **Does the bridge see it?** Open
+   `http://127.0.0.1:17320/config` in a browser — the `screens[]`
+   array should show `{viewportW: …, viewportH: …}` populated for
+   each connected screen.
+3. **Is the plugin reading it?** Check SignalRGB's log
+   (`SignalRGB_*.log`); on every Update tick the plugin XHRs `/config`
+   and updates its internal viewport cache. A grid change is logged
+   as `screen N grid CxR (aspect=Auto)` — confirm the numbers match
+   the monitor.
+
+If the wallpaper has been running but the viewport is still 0, the
+WS connect happened before this beta. Reload the wallpaper (Lively:
+right-click → *Unset* + *Set as wallpaper* again; WE: similar) to
+re-trigger the `viewport` push.
+
+If you'd rather not rely on Auto, pick a fixed aspect (*16:9* /
+*21:9* / *32:9* / *9:16*) or *Custom* + type the cols × rows.
 
 ## "Address already in use" on bridge startup
 

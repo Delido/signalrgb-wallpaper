@@ -473,15 +473,35 @@
 
 // Pick up the screen index from the meta tag (set per-bundle when the
 // Lively zip is built). Fall back to 0 if missing/garbage.
-const SCREEN_INDEX = (function () {
+//
+// The single-Workshop-item WE bundle DOESN'T pin the meta tag; instead it
+// declares a `screenIndex` user property in project.json so each WE
+// assignment (one per monitor) sets a different value. The
+// `wallpaperPropertyListener` path below routes that property to
+// setScreenIndex(), which reconnects the WS to the right screen on the
+// fly. Default 0 covers the first-paint before WE delivers properties.
+let SCREEN_INDEX = (function () {
   const m = document.querySelector('meta[name="signalrgb-screen-index"]');
   const v = m && m.getAttribute("content");
   const n = parseInt(v, 10);
   return Number.isFinite(n) && n >= 0 ? n : 0;
 })();
 
-const WS_URL = "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
+function wsUrl() {
+  return "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
+}
 const RECONNECT_MS = 1500;
+
+function setScreenIndex(n) {
+  n = parseInt(n, 10);
+  if (!Number.isFinite(n) || n < 0) return;
+  if (n === SCREEN_INDEX) return;
+  console.log("[wallpaper] screenIndex →", n);
+  SCREEN_INDEX = n;
+  // Drop the current WS — onclose triggers the reconnect timer, which
+  // rebuilds the URL from wsUrl() and lands us on the new screen.
+  try { if (ws && ws.readyState <= 1) ws.close(); } catch (_) {}
+}
 
 const bgEl = document.getElementById("bg");
 const dimEl = document.getElementById("dim");
@@ -594,10 +614,11 @@ function reportViewport() {
 window.addEventListener("resize", reportViewport);
 
 function connect() {
-  statusEl.textContent = "connecting " + WS_URL + "…";
+  const url = wsUrl();
+  statusEl.textContent = "connecting " + url + "…";
   statusEl.classList.remove("ok");
   statusEl.classList.add("bad");
-  try { ws = new WebSocket(WS_URL); }
+  try { ws = new WebSocket(url); }
   catch (e) {
     statusEl.textContent = "ws error: " + e.message;
     setTimeout(connect, RECONNECT_MS);
@@ -605,7 +626,7 @@ function connect() {
   }
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
-    statusEl.textContent = "connected " + WS_URL;
+    statusEl.textContent = "connected " + url;
     statusEl.classList.remove("bad");
     statusEl.classList.add("ok");
     reportViewport();
@@ -810,6 +831,14 @@ function applyProperty(name, val) {
     case "parallax3d":
       parallax.setStrength(parseInt(val, 10) | 0);
       break;
+    case "screenIndex":
+      // Delivered by Wallpaper Engine when the user picks a different
+      // screen on the per-assignment property panel. Switching here
+      // reconnects the WS to the matching ?screen=N route. Lively
+      // doesn't send this (it relies on the meta tag baked at build
+      // time per Lively bundle).
+      setScreenIndex(val);
+      break;
   }
 }
 
@@ -850,14 +879,15 @@ window.wallpaperPropertyListener = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Pause/resume integration.
 //
-// LivelyInfo.Arguments contains "--pause-event true" which opts this wallpaper
-// in to Lively's playback notifications. When the user picks "Pause wallpapers"
-// from Lively's tray, Lively calls livelyWallpaperPlaybackChanged(state). Payload
-// shape varies across Lively builds — we accept boolean, {IsRunning}, {playing},
-// {isPlaying} etc.
-//
-// We also subscribe to document.visibilitychange as a defensive fallback: some
-// hosts (CEF in fullscreen-minimised state, RDP disconnects) only fire that.
+// When the user picks "Pause wallpapers" from Lively's tray, Lively *may* call
+// livelyWallpaperPlaybackChanged(state) — but only if the host build delivers
+// the IPC and the LivelyInfo opts into it. We don't pass "--pause-event true"
+// in Arguments anymore (Lively rejects unknown options on import, and the
+// event also fails to fire on many builds), so we rely on
+// document.visibilitychange instead — fires reliably across CEF / WebView2 /
+// browser tabs whenever the surface becomes hidden. The callback is still
+// wired up below so newer Lively builds that push the event through get a
+// proper hook.
 // ─────────────────────────────────────────────────────────────────────────────
 let isPaused = false;
 const pausedBadgeEl = document.getElementById("paused-badge");
@@ -1339,7 +1369,21 @@ function applyWidgetPosition(rec, w) {
 }
 
 function applyWidgetOptions(rec, w) {
-  rec.opts = w.options || {};
+  const nextOpts = w.options || {};
+  // When the user edits a widget's options (location for weather, label
+  // for countdown, etc.) we want the visible state to reflect them
+  // immediately — not 30 minutes later when the next REFRESH window opens.
+  // So whenever the options payload has actually changed, drop any cached
+  // fetch result and force the next tick() to re-fetch.
+  const prevSig = rec._optsSig;
+  const nextSig = JSON.stringify(nextOpts);
+  const changed = prevSig !== undefined && prevSig !== nextSig;
+  rec._optsSig = nextSig;
+  rec.opts = nextOpts;
+  if (changed) {
+    rec.cache = null;
+    rec.lastFetch = 0;
+  }
   rec.el.classList.toggle("tinted", !!rec.opts.tintFromGlow);
   if (rec.opts.tintFromGlow) {
     rec.el.style.setProperty("--w-tint", currentTintCss);
@@ -1906,10 +1950,12 @@ const pixelfx = (function () {
   };
 })();
 
-// Lively pushes per-frame cursor coords via this callback when the
-// wallpaper's LivelyInfo.json has `Arguments: "--system-cursor true"`,
-// which works even with click-through enabled. Forwarded to both
-// pixelfx (trail / glow / ripple) and parallax (3D background sway).
+// Lively pushes per-frame cursor coords via this callback when its
+// host gives the wallpaper cursor data. Forwarded to both pixelfx
+// (trail / glow / ripple) and parallax (3D background sway). When
+// click-through is on and Lively doesn't push coords, the DOM
+// mousemove listener below stays silent — users need to toggle
+// "Wallpaper interaction" in Lively to get cursor-driven effects.
 window.livelyCurrentCursorPos = function (x, y) {
   pixelfx.setCursor(x, y);
   parallax.setCursor(x, y);
@@ -1917,9 +1963,9 @@ window.livelyCurrentCursorPos = function (x, y) {
 
 // DOM mousemove fallback — fires when Lively's "Wallpaper interaction"
 // is enabled (no click-through), or when the wallpaper is otherwise
-// reachable by real mouse events (e.g. in the Builder/Configurator
-// preview, or in a normal browser tab during development). Together
-// with --system-cursor above this covers both interaction modes.
+// reachable by real mouse events (Builder/Configurator preview, plain
+// browser tab during development, Wallpaper Engine with interaction
+// allowed).
 document.addEventListener("mousemove", (e) => {
   pixelfx.setCursor(e.clientX, e.clientY);
   parallax.setCursor(e.clientX, e.clientY);

@@ -1,8 +1,8 @@
 # Multi-Screen Setup
 
-Driving glow on 2 or 3 monitors independently. Each monitor gets its
-own SignalRGB device, its own canvas placement, and its own background
-image + layout in the tray.
+Driving glow on 2, 3, or 4 monitors independently. Each monitor gets
+its own SignalRGB device, its own canvas placement, and its own
+background image + layout in the Configurator.
 
 ## Mental model
 
@@ -39,11 +39,14 @@ image + layout in the tray.
 Three independent pieces have to line up:
 
 1. **SignalRGB plugin** must announce N devices (controlled via tray
-   "Number of screens")
+   *Advanced → Legacy Settings dialog… → Number of screens*).
 2. **SignalRGB canvas** must have those devices placed where you want
-   colours sampled
-3. **Lively** must show the matching wallpaper zip on each physical
-   monitor
+   colours sampled.
+3. **Wallpaper host** (Lively or Wallpaper Engine) must show the
+   matching wallpaper zip / bundle on each physical monitor. For
+   Lively it's one zip per screen; for Wallpaper Engine you can use
+   the per-screen bundles OR the single combined bundle with its
+   *Screen index* property (v0.7.0+).
 
 ## Walkthrough: 2 monitors
 
@@ -52,7 +55,8 @@ shows the right half.
 
 ### Step 1 — set screen count to 2
 
-Tray icon → Settings… → "Number of screens" = **2** → Save.
+Tray icon → **Advanced** → **Legacy Settings dialog…** → *Number of
+screens* = **2** → **Save**.
 
 SignalRGB device list now shows:
 - Desktop Wallpaper - Screen 1
@@ -77,22 +81,25 @@ both devices on top of each other covering the full canvas. They'll get
 the same colours and your two monitors will look identical (not very
 useful unless you have specific reasons).
 
-### Step 3 — import + activate the Lively wallpapers
+### Step 3 — assign the wallpapers
 
-Drag `SignalRGB_Glow_Screen1.zip` and `SignalRGB_Glow_Screen2.zip`
-into Lively.
+**Lively:** if you let the installer auto-import (default on),
+*SignalRGB Glow - Screen 1 / 2* are already in your Lively Library
+under deterministic folders. Right-click each → *Set as wallpaper* →
+pick the matching monitor. If you didn't auto-import, drag each
+`SignalRGB_Glow_ScreenN.zip` onto Lively first.
 
-In Lively, each wallpaper tile has a screen selector when you right-click
-→ "Set as wallpaper". For each tile, pick the matching physical monitor:
+**Wallpaper Engine:** either subscribe to / use the per-screen items
+(*SignalRGB Glow - Screen 1 / 2*) and assign each to its monitor, or
+use the **single combined item** (recommended): assign the same
+wallpaper to every monitor and set a different *Screen index* per
+assignment in WE's properties panel. Both routes connect to the
+matching `?screen=N` on the bridge.
 
-- **SignalRGB Glow - Screen 1** → Monitor 1 (your main display, usually)
-- **SignalRGB Glow - Screen 2** → Monitor 2
-
-**Important:** the *number* in the tile name corresponds to which
-SignalRGB device it subscribes to, not which physical monitor it has to
-go on. The two are independent — you decide the mapping by which Lively
-monitor you activate it on. So if your "Monitor 1" in Windows is the
-right-side display, just activate "Screen 1" tile on that monitor.
+**Important:** the *number* in the tile / property corresponds to
+which SignalRGB device the wallpaper subscribes to, not which
+physical monitor it has to go on. The two are independent — you
+decide the mapping by which host-monitor you activate it on.
 
 ### Step 4 — verify
 
@@ -100,9 +107,11 @@ Each wallpaper should now glow with a portion of your SignalRGB effect.
 Switch SignalRGB effects to make sure the colours follow.
 
 If a wallpaper stays black:
-- Toggle "Show debug overlay" in the tray Settings for that screen —
-  if it says `connecting` or `disconnected`, the bridge isn't running
-  or its WS handshake is failing. See [troubleshooting.md](troubleshooting.md).
+
+- Toggle *Show debug overlay* in tray → **Advanced** → **Legacy
+  Settings dialog…** for that screen — if the overlay says
+  `connecting` or `disconnected`, the bridge isn't running or its WS
+  handshake is failing. See [troubleshooting.md](troubleshooting.md).
 - Make sure the matching SignalRGB device is placed on the canvas at
   a non-empty area. A device with no canvas placement gets all-black
   pixels.
@@ -118,9 +127,33 @@ layout suggestions:
   and Screen 2 side-by-side covering the bulk of the canvas, place
   Screen 3 as a small region wherever makes sense for the side monitor.
 
+## Walkthrough: 4 monitors
+
+Same flow with `Number of screens = 4` and four zips / four assignments
+of the single WE bundle. Canvas layout suggestions:
+
+- **4 in a row:** divide the canvas into quarters, one device per
+  quarter. Pairs nicely with a 4× super-wide setup or a 1+3 row.
+- **2 × 2 grid:** quad-monitor stacks (two on top of two). Place
+  Screens 1/2 along the top of the canvas, Screens 3/4 along the
+  bottom. Each device samples a quadrant of the effect.
+- **3+1 (main triple + side):** Screens 1/2/3 cover the main
+  triple-monitor block; Screen 4 lives in a small dedicated region
+  for the side / portrait / control monitor.
+- **Independent per-monitor sampling:** put all four devices on top
+  of each other covering the full canvas — every monitor sees the
+  whole effect, mirrored. Simplest layout if you don't care about
+  spatial mapping.
+
+Heads up on UDP throughput: at 128 × 128 grid × 4 screens × ~30 fps,
+each frame is ~49 KB after chunking. That's still <2 MB/s on
+localhost (no real load), but the SignalRGB plugin sandbox is on a
+shared event loop — drop to 64 × 64 or 96 × 96 grid if you ever see
+the plugin's tick stutter.
+
 ## Per-screen background images
 
-Each screen tab in the tray Settings is independent. You can:
+Each screen tab in the Configurator is independent. You can:
 
 - Use a different background PNG per monitor (e.g. each with cut-outs
   matching that monitor's "theme")
@@ -129,13 +162,14 @@ Each screen tab in the tray Settings is independent. You can:
 
 ## Reducing screen count later
 
-If you set count = 3 and want to go back to 2:
+If you set count = 4 and want to go back to 2 (or 3):
 
-1. Tray Settings → set "Number of screens" = 2 → Save.
-2. The Screen 3 device disappears from SignalRGB. Its canvas placement
-   is **lost**.
-3. The Lively wallpaper for Screen 3 stops receiving frames and shows a
-   blank glow layer. Deactivate it in Lively or it'll keep retrying.
-
-The Screen 3 tab settings stay in `config.json` — if you bump the count
-back to 3 later, the old settings come back.
+1. Tray → **Advanced** → **Legacy Settings dialog…** → set *Number of
+   screens* to the new value → **Save**.
+2. The now-unused Screen N device(s) disappear from SignalRGB. Their
+   canvas placement is **lost** — Configurator settings for the
+   higher-indexed screens stay in `config.json`, so bumping the count
+   back up restores them.
+3. The wallpaper(s) for the dropped screen(s) stop receiving frames
+   and show a blank glow layer. Deactivate them in Lively / Wallpaper
+   Engine or they'll keep retrying the WS connection.

@@ -3,7 +3,7 @@
 ; Per-user install (no admin needed). Installs:
 ;   {app}                                  -- LOCALAPPDATA\Programs\SignalRGBWallpaper
 ;     ├ SignalRGBBridge.exe                -- bridge + tray
-;     ├ Lively wallpapers\Screen{1,2,3}.zip
+;     ├ Lively wallpapers\Screen{1,2,3,4}.zip
 ;     ├ LICENSE, README.md, CHANGELOG.md
 ;   {userdocs}\WhirlwindFX\Plugins         -- SignalRGB plugin (.js + .qml)
 ;   HKCU\...\Run\SignalRGBWallpaperBridge  -- optional autostart
@@ -93,6 +93,8 @@ Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen2.zip"; DestDir: "{app}\Lively
   Flags: ignoreversion; Tasks: installlively
 Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen3.zip"; DestDir: "{app}\Lively wallpapers"; \
   Flags: ignoreversion; Tasks: installlively
+Source: "..\wallpaper_bridge\SignalRGB_Glow_Screen4.zip"; DestDir: "{app}\Lively wallpapers"; \
+  Flags: ignoreversion; Tasks: installlively
 
 ; Direct auto-import into Lively's library — deterministic folder names so
 ; subsequent installer runs overwrite in place, killing the "delete +
@@ -112,6 +114,10 @@ Source: "..\wallpaper_bridge\lively_bundles\signalrgb-glow-screen-3\*"; \
   DestDir: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-3"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installlively/autoimport; Check: LivelyDetected
+Source: "..\wallpaper_bridge\lively_bundles\signalrgb-glow-screen-4\*"; \
+  DestDir: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-4"; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
+  Tasks: installlively/autoimport; Check: LivelyDetected
 
 ; Wallpaper Engine bundles — only copied if the WE task is selected.
 ; Two destinations: (1) a manual-import staging folder under {app}, and
@@ -127,6 +133,9 @@ Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen2\*"; \
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen3\*"; \
   DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen3"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
+Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen4\*"; \
+  DestDir: "{app}\Wallpaper Engine wallpapers\SignalRGB_Glow_Screen4"; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: installwallpaperengine
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen1\*"; \
   DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; \
@@ -137,6 +146,10 @@ Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen2\*"; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen3\*"; \
   DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"; \
+  Flags: recursesubdirs createallsubdirs ignoreversion; \
+  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+Source: "..\wallpaper_bridge\we_bundles\SignalRGB_Glow_Screen4\*"; \
+  DestDir: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen4"; \
   Flags: recursesubdirs createallsubdirs ignoreversion; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 
@@ -194,12 +207,14 @@ Filename: "{app}\{#MyAppExeName}"; \
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen1"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen2"
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen3"
+Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen4"
 ; Clean the auto-imported Lively bundles. Deterministic folder names mean
 ; we know exactly which subfolders belong to us — Lively's other wallpapers
 ; under the same Library\wallpapers\ tree are left alone.
 Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-1"
 Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-2"
 Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-3"
+Type: filesandordirs; Name: "{code:GetLivelyLibraryPath}\signalrgb-glow-screen-4"
 
 [UninstallRun]
 ; Make sure the running bridge releases its file handles before uninstall

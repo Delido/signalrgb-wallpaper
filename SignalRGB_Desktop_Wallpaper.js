@@ -1,6 +1,6 @@
 // SignalRGB Desktop Wallpaper plugin (multi-screen).
 //
-// Announces 1..3 virtual controllers ("Desktop Wallpaper - Screen N"), one
+// Announces 1..4 virtual controllers ("Desktop Wallpaper - Screen N"), one
 // per monitor the user wants to drive. Each controller is a distinct device
 // in SignalRGB so the user can place them at different canvas positions and
 // they'll pull different effect colours. Each device sends its own UDP
@@ -9,7 +9,7 @@
 //
 // Wire format (per UDP datagram, one frame):
 //   bytes 0..1   magic "SR"            (0x53 0x52)
-//   byte  2      screen index (u8)     0..2
+//   byte  2      screen index (u8)     0..3
 //   bytes 3..4   width  (u16 big-endian)
 //   bytes 5..6   height (u16 big-endian)
 //   bytes 7..    width*height RGB triplets, row-major
@@ -45,6 +45,9 @@ export function ImageUrl()            { return ICON_DATA_URI; }
 controller:readonly
 discovery:readonly
 gridSize:readonly
+aspectRatio:readonly
+customCols:readonly
+customRows:readonly
 LightingMode:readonly
 forcedColor:readonly
 shutdownColor:readonly
@@ -52,7 +55,7 @@ targetFps:readonly
 bridgePort:readonly
 */
 
-const MAX_SCREENS  = 3;
+const MAX_SCREENS  = 4;
 // Per-packet UDP cap inside SignalRGB's plugin sandbox. Real fixed limit
 // is 4096 B; we shave off 4 bytes of headroom so we never tickle the
 // boundary if the engine validates strictly.
@@ -80,9 +83,18 @@ const CONFIG_URL   = "http://" + BRIDGE_HOST + ":" + BRIDGE_PORT + "/config";
 
 export function ControllableParameters() {
     return [
-        {"property":"gridSize", "group":"settings", "label":"Glow Grid Size",
-         "description":"Square grid resolution sent per screen. 36 is the largest that fits SignalRGB's 4 KB UDP cap in a single packet; 64 / 96 / 128 use the bridge's chunked transport (each frame split across multiple datagrams, reassembled before reaching the wallpaper). Bigger = finer glow gradient + more browser work.",
+        {"property":"gridSize", "group":"settings", "label":"Glow Grid Base Size",
+         "description":"Shorter-side resolution of the glow grid (rows for landscape aspect ratios, cols for portrait). The other side is derived from Aspect Ratio. 36 base is the largest that fits SignalRGB's 4 KB UDP cap in a single packet; 64 / 96 / 128 use the bridge's chunked transport (each frame split across multiple datagrams, reassembled before reaching the wallpaper).",
          "type":"combobox", "values":["8","16","32","36","64","96","128"], "default":"32"},
+        {"property":"aspectRatio", "group":"settings", "label":"Aspect Ratio",
+         "description":"Shape of the glow grid. Auto reads each monitor's actual viewport from the bridge (set automatically the first time a wallpaper page connects). 1:1 keeps the legacy square behaviour. 16:9 widescreen / 21:9 ultrawide / 32:9 super-ultrawide / 9:16 portrait force a fixed shape. Custom uses the Custom Cols × Rows fields below.",
+         "type":"combobox", "values":["Auto","1:1","16:9","21:9","32:9","9:16","Custom"], "default":"Auto"},
+        {"property":"customCols", "group":"settings", "label":"Custom Cols",
+         "description":"Number of columns when Aspect Ratio = Custom (1..128). Ignored otherwise.",
+         "type":"textfield", "filter":"^[0-9]{1,3}$", "default":"32"},
+        {"property":"customRows", "group":"settings", "label":"Custom Rows",
+         "description":"Number of rows when Aspect Ratio = Custom (1..128). Ignored otherwise.",
+         "type":"textfield", "filter":"^[0-9]{1,3}$", "default":"32"},
         {"property":"targetFps", "group":"settings", "label":"Target FPS",
          "description":"Frame rate the engine should call Render() at. 30 is plenty for ambient lighting; 60 is the engine's hard cap.",
          "type":"combobox", "values":["15","30","60"], "default":"30"},
@@ -105,6 +117,9 @@ export function ControllableParameters() {
 // globals, and ControllableParameters values may not be wired up the
 // first time Initialize() runs.
 function gridSizeValue()     { return clampInt(typeof gridSize     !== "undefined" ? parseInt(gridSize)     : 32, 1, MAX_GRID); }
+function aspectRatioValue()  { return            typeof aspectRatio  !== "undefined" ? aspectRatio           : "Auto"; }
+function customColsValue()   { return clampInt(typeof customCols    !== "undefined" ? parseInt(customCols)   : 32, 1, MAX_GRID); }
+function customRowsValue()   { return clampInt(typeof customRows    !== "undefined" ? parseInt(customRows)   : 32, 1, MAX_GRID); }
 function targetFpsValue()    { return            typeof targetFps    !== "undefined" ? parseInt(targetFps)    : 30; }
 function bridgePortValue()   { return            typeof bridgePort   !== "undefined" ? parseInt(bridgePort)   : 17320; }
 function lightingModeValue() { return            typeof LightingMode !== "undefined" ? LightingMode           : "Canvas"; }
@@ -163,12 +178,50 @@ function rebuildFrameBuffer(s, screenIndex) {
     s.frameBuf[6] =  s.rows       & 0xff;
 }
 
+// Viewport sizes published by the bridge via GET /config. Updated by
+// DiscoveryService each time it polls (every ~2 s) and read by
+// computeGridDimensions when Aspect Ratio = Auto.
+const viewportsByScreen = [];
+
+// Resolve the {cols, rows} the plugin should currently send. The "base
+// size" combobox (8/16/32/36/64/96/128) controls the SHORTER side; the
+// longer side is derived from the chosen aspect ratio so an ultrawide
+// monitor stops getting a square grid that under-samples its width.
+function computeGridDimensions() {
+    const base = gridSizeValue();
+    const aspect = aspectRatioValue();
+    if (aspect === "Custom") {
+        return { cols: customColsValue(), rows: customRowsValue() };
+    }
+    if (aspect === "1:1") {
+        return { cols: base, rows: base };
+    }
+    let w = 16, h = 9;   // default 16:9 fallback (also: "Auto" with no viewport yet)
+    if      (aspect === "16:9") { w = 16; h = 9; }
+    else if (aspect === "21:9") { w = 21; h = 9; }
+    else if (aspect === "32:9") { w = 32; h = 9; }
+    else if (aspect === "9:16") { w = 9;  h = 16; }
+    else if (aspect === "Auto") {
+        const v = viewportsByScreen[currentScreenIndex()];
+        if (v && v.w > 0 && v.h > 0) { w = v.w; h = v.h; }
+    }
+    let cols, rows;
+    if (w >= h) {
+        rows = base;
+        cols = Math.max(1, Math.round(base * w / h));
+    } else {
+        cols = base;
+        rows = Math.max(1, Math.round(base * h / w));
+    }
+    return { cols: clampInt(cols, 1, MAX_GRID), rows: clampInt(rows, 1, MAX_GRID) };
+}
+
 function applyZoneSize() {
     const s = getState();
-    const size = gridSizeValue();
-    s.cols = size;
-    s.rows = size;
-    s.leds = size * size;
+    const dims = computeGridDimensions();
+    s.cols = dims.cols;
+    s.rows = dims.rows;
+    s.leds = s.cols * s.rows;
     device.setSize([s.cols, s.rows]);
     const names = [];
     const positions = [];
@@ -180,7 +233,8 @@ function applyZoneSize() {
     }
     device.setControllableLeds(names, positions);
     rebuildFrameBuffer(s, currentScreenIndex());
-    device.log("[DesktopWallpaper] screen " + currentScreenIndex() + " grid " + s.cols + "x" + s.rows);
+    device.log("[DesktopWallpaper] screen " + currentScreenIndex() + " grid " + s.cols + "x" + s.rows
+               + " (aspect=" + aspectRatioValue() + ")");
 }
 
 function openSocket() {
@@ -217,13 +271,25 @@ export function Initialize() {
     openSocket();
 }
 
-export function ongridSizeChanged()   { applyZoneSize(); }
-export function onbridgePortChanged() { openSocket(); }
-export function ontargetFpsChanged()  { applyFrameRateTarget(); }
+export function ongridSizeChanged()     { applyZoneSize(); }
+export function onaspectRatioChanged()  { applyZoneSize(); }
+export function oncustomColsChanged()   { applyZoneSize(); }
+export function oncustomRowsChanged()   { applyZoneSize(); }
+export function onbridgePortChanged()   { openSocket(); }
+export function ontargetFpsChanged()    { applyFrameRateTarget(); }
 
 export function Render() {
     const s = getState();
     if (!s.sock || !s.frameBuf) return;
+
+    // Cheap O(1) re-check: when Aspect Ratio = Auto and the bridge just
+    // published a fresh viewport for this screen, we rebuild the grid here
+    // — SignalRGB doesn't fire onChanged events for state that lives
+    // outside ControllableParameters, so we react on the next tick instead.
+    const want = computeGridDimensions();
+    if (want.cols !== s.cols || want.rows !== s.rows) {
+        applyZoneSize();
+    }
 
     // Keep the screen-index byte in sync — if the user reordered screens
     // SignalRGB might invoke us in a different order.
@@ -362,6 +428,18 @@ export function DiscoveryService() {
             xhr.send(null);
             if (xhr.status === 200) {
                 const cfg = JSON.parse(xhr.responseText);
+                // Sidecar: bridge publishes each screen's last-known viewport
+                // (set when a wallpaper page opens its WS) so the plugin's
+                // Aspect Ratio = Auto can derive cols/rows from the real
+                // monitor instead of assuming 16:9.
+                if (cfg && Array.isArray(cfg.screens)) {
+                    for (let i = 0; i < cfg.screens.length; i++) {
+                        const v = cfg.screens[i] || {};
+                        const w = parseInt(v.viewportW) | 0;
+                        const h = parseInt(v.viewportH) | 0;
+                        viewportsByScreen[i] = (w > 0 && h > 0) ? { w, h } : null;
+                    }
+                }
                 const n = parseInt(cfg && cfg.screenCount);
                 if (isFinite(n) && n >= 1 && n <= MAX_SCREENS) return n;
             }

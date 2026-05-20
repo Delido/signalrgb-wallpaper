@@ -4,6 +4,58 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1-beta] - 2026-05-20
+
+> Folds the Lively-import hotfix into a beta that also lifts the
+> long-standing `MAX_SCREENS = 3` cap to **4**. Released as a
+> prerelease — stable users with *Allow beta versions* off won't see
+> it as an update.
+
+### Added
+
+- **4-monitor support.** The bridge's `N_SCREENS`, the SignalRGB
+  plugin's `MAX_SCREENS`, the Configurator's tab generator, the
+  Builder's *Apply to screen* + *Multi-monitor split* button rows,
+  the installer's auto-import / WE-bundle copies, and the single-WE-
+  bundle's `screenIndex` combobox all moved from 3 → 4. Bridge config
+  migration is data-driven on `N_SCREENS`, so existing `config.json`
+  files gain the Screen 4 settings block on next launch without
+  losing anything.
+- **Build emits 4 Lively zips + 4 WE folders.** `installer/build.ps1`
+  iterates `0..3` for the per-screen Lively and WE stagers; installer
+  copies / auto-imports / uninstaller entries all extended.
+- **Non-square glow grids for ultrawide monitors.** The SignalRGB
+  plugin gained an *Aspect Ratio* dropdown (Auto / 1:1 / 16:9 / 21:9
+  / 32:9 / 9:16 / Custom) and *Custom Cols* / *Custom Rows* textfields.
+  *Auto* reads each screen's actual viewport (the wallpaper page
+  already reports it over WS; the bridge now relays it through
+  `GET /config` in a new `screens[]` sidecar) and derives the longer
+  side from the *Glow Grid Base Size* combobox so a 3840 × 1080 panel
+  gets `base × (base · 3840/1080)` instead of a square that
+  under-samples its width. The wire format already supported
+  arbitrary W × H frames; the wallpaper page reads `--cols` / `--rows`
+  per frame, so no client-side change was needed.
+
+### Fixed
+
+- **Lively import failure** (carried over from the local v0.7.1
+  hotfix that was never published). `LivelyInfo.Arguments` reverted
+  from `"--system-cursor true"` to `null`. Parallax + Pixelfx still
+  receive cursor coordinates via the DOM `mousemove` listener
+  whenever Lively's *Wallpaper interaction* setting is enabled (or
+  the page is loaded in WE / a browser). Pure click-through users no
+  longer get cursor-driven effects, which is a knowable trade-off
+  and far less bad than a broken wallpaper.
+- **Weather widget always showed Berlin.** When the user edited the
+  location through the Configurator, the widget's `rec.cache` (last
+  fetched payload, including the *label*) and `rec.lastFetch`
+  timestamp (30-min refresh cap) were never invalidated, so the
+  next render still showed the old data and the next tick wouldn't
+  re-fetch for up to half an hour. `applyWidgetOptions` now stores a
+  signature of the previous options and drops cache + fetch timer
+  whenever it changes, forcing an immediate re-fetch on edit. Fix
+  is generic — countdown / quote / any future cached widgets benefit.
+
 ## [0.7.0] - 2026-05-19
 
 > First stable release after a long beta cycle (0.5.0 → 0.6.2-beta).
@@ -41,15 +93,15 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Added a *"Buy me a coffee"* PayPal button.
 - **3D parallax** (`parallax3d`, CSS px max-displacement, 0..120).
   When > 0 the background image lerps a fraction of the cursor
-  offset for a fake-depth effect. Two cursor inputs cover both
-  Lively modes: `LivelyInfo.Arguments = "--system-cursor true"`
-  enables Lively's `livelyCurrentCursorPos` callback under
-  click-through, and a DOM `mousemove` listener catches real events
-  when *Wallpaper interaction* is enabled. Scale-up of the bg image
-  is computed per frame so the worst-case translate doesn't reveal
-  edges, with 2 % headroom for jitter. Smooth RAF lerp; disabled
-  (no rAF cost) when off. Slider lives in the Configurator's
-  *Effects* section. Same dual cursor feed also covers Pixelfx.
+  offset for a fake-depth effect. Cursor coords flow from two
+  sources: Lively's `livelyCurrentCursorPos` callback (pushed by the
+  host when available) and a DOM `mousemove` listener that catches
+  real events when *Wallpaper interaction* is enabled. Scale-up of
+  the bg image is computed per frame so the worst-case translate
+  doesn't reveal edges, with 2 % headroom for jitter. Smooth RAF
+  lerp; disabled (no rAF cost) when off. Slider lives in the
+  Configurator's *Effects* section. Same dual cursor feed also
+  covers Pixelfx.
 - **Chunked UDP transport.** The SignalRGB plugin sandbox caps
   `udp.send()` at 4 096 B per datagram, which had pinned us at
   36 × 36 grids. The plugin now sends frames > 4 KB as multiple
