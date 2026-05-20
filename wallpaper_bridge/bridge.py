@@ -41,6 +41,7 @@ import base64
 import ctypes
 from ctypes import wintypes
 import hashlib
+import copy
 import json
 import locale
 import mimetypes
@@ -313,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.6-beta"
+APP_VERSION = "0.7.7-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -392,7 +393,29 @@ DEFAULT_SCREEN_SETTINGS = {
     # screen instead of guessing FullHD. 0 = not yet reported.
     "viewportW":       0,
     "viewportH":       0,
+    # Per-screen preset slots. Each slot is either None (empty) or a
+    # snapshot dict of every settable screen key (see PRESET_SNAPSHOT_KEYS
+    # below). The Configurator surfaces N slot buttons; Save captures the
+    # current state, Apply writes the snapshot back into the screen's
+    # settings, Clear sets the slot to None.
+    "presets":         [None, None, None, None],
 }
+
+# Keys that get rolled up into a preset snapshot. Excludes anything the
+# wallpaper page reports back (viewports), anything transient (locks), and
+# the preset list itself (so a preset can't recursively contain its
+# siblings).
+PRESET_SNAPSHOT_KEYS = (
+    "bgImage", "bgImageUrl", "bgFit", "bgDim",
+    "barLayout", "showBars", "glowStrength",
+    "gridBlur", "stripesBlur", "barHeight", "barWidth",
+    "showStatus",
+    "widgets",
+    "ambientEffect", "ambientTint", "ambientDensity",
+    "pixelfx", "parallax3d",
+    "audioGlow", "audioGlowIntensity", "audioGlowTint",
+)
+PRESET_SLOTS = 4
 
 # Server-side schemas for widget option defaults — keep in sync with the
 # wallpaper-page renderers. Tray "Add widget" uses these to seed a fresh
@@ -495,6 +518,26 @@ def screens_dir() -> Path:
     p = config_path().parent / "screens"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def library_dir() -> Path:
+    """Curated starter-wallpaper library. The installer drops PNGs +
+    library.json here; the Configurator's `Library` section browses
+    them. Users can also drop their own PNGs in here by hand — the
+    bridge serves anything that's whitelisted by name, and missing
+    library.json just yields an empty browser. When running from
+    Python source (no installer), prefer the build-time output under
+    `wallpaper_bridge/library/` so dev iterations don't require a
+    full install cycle."""
+    user_dir = config_path().parent / "library"
+    if user_dir.exists() and any(user_dir.iterdir()):
+        return user_dir
+    # Dev fallback: the build-time library next to the bridge source.
+    dev_dir = Path(__file__).resolve().parent / "library"
+    if dev_dir.exists():
+        return dev_dir
+    user_dir.mkdir(parents=True, exist_ok=True)
+    return user_dir
 
 
 def default_config() -> dict:
@@ -679,6 +722,16 @@ def load_config() -> dict:
         s = cfg["screens"].setdefault(str(n), {})
         for k, v in DEFAULT_SCREEN_SETTINGS.items():
             s.setdefault(k, v)
+        # Pad / truncate the presets list to PRESET_SLOTS so a config
+        # written by an older build (with no presets) gets the right
+        # number of empty slots, and one from a future build with more
+        # slots gets the surplus dropped (defensive, not critical).
+        if not isinstance(s.get("presets"), list):
+            s["presets"] = [None] * PRESET_SLOTS
+        elif len(s["presets"]) < PRESET_SLOTS:
+            s["presets"] = list(s["presets"]) + [None] * (PRESET_SLOTS - len(s["presets"]))
+        elif len(s["presets"]) > PRESET_SLOTS:
+            s["presets"] = list(s["presets"])[:PRESET_SLOTS]
     return cfg
 
 
@@ -869,7 +922,8 @@ class Broadcaster:
         them. Runs on the asyncio loop thread."""
         t = msg.get("type")
         if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
-                 "setting-update", "viewport", "bridge-setting-update"):
+                 "setting-update", "viewport", "bridge-setting-update",
+                 "preset-save", "preset-apply", "preset-clear"):
             try:
                 self.on_widget_command(screen, msg)
             except Exception as e:
@@ -1146,6 +1200,73 @@ class Broadcaster:
                 writer.write(head + data)
             except FileNotFoundError:
                 http_error(writer, 500, "builder.html not bundled with this build")
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # Wallpaper library: list + individual file. Files live under
+        # %LOCALAPPDATA%\SignalRGBWallpaper\library\ — the installer drops
+        # the generated starter set there on install, and the user can
+        # also add their own PNGs by hand. `library.json` carries
+        # metadata (label, thumb path, etc.); the listing endpoint just
+        # streams that file. Individual /library/<name> serves the PNG /
+        # thumb bytes back; the Configurator builds img URLs off this
+        # path. Path traversal is blocked by rejecting any name with a
+        # path separator or dot-dot.
+        if method == "GET" and target.split("?", 1)[0] == "/library/list":
+            try:
+                lib_dir = library_dir()
+                cat_path = lib_dir / "library.json"
+                if cat_path.exists():
+                    payload = cat_path.read_bytes()
+                else:
+                    payload = b'{"version":1,"items":[]}'
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Access-Control-Allow-Origin: *\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+        if method == "GET" and target.split("?", 1)[0].startswith("/library/"):
+            name = target.split("?", 1)[0][len("/library/"):]
+            if not name or "/" in name or "\\" in name or ".." in name:
+                http_error(writer, 400, "bad library filename")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                fp = library_dir() / name
+                if not fp.exists() or not fp.is_file():
+                    http_error(writer, 404, "library item not found")
+                else:
+                    body = fp.read_bytes()
+                    ct, _ = mimetypes.guess_type(str(fp))
+                    if not ct: ct = "application/octet-stream"
+                    head = (
+                        "HTTP/1.1 200 OK\r\n"
+                        f"Content-Type: {ct}\r\n"
+                        f"Content-Length: {len(body)}\r\n"
+                        "Cache-Control: public, max-age=86400\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n\r\n"
+                    ).encode()
+                    writer.write(head + body)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
             try: await writer.drain()
@@ -1563,6 +1684,71 @@ class BridgeRuntime:
             self.push_settings(screen, snap)
         return snap
 
+    # ----- Preset slots -----
+
+    def save_preset(self, screen: int, slot: int) -> dict | None:
+        """Capture the screen's current state into preset slot `slot`.
+        The snapshot is a deep copy of every PRESET_SNAPSHOT_KEYS value,
+        so later mutations to the live settings don't drift into the
+        saved slot."""
+        if not (0 <= slot < PRESET_SLOTS):
+            print(f"[preset] bad slot: {slot}")
+            return None
+        def mutate(s):
+            snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
+                        for k in PRESET_SNAPSHOT_KEYS}
+            presets = list(s.get("presets") or [None] * PRESET_SLOTS)
+            while len(presets) < PRESET_SLOTS:
+                presets.append(None)
+            presets[slot] = snapshot
+            s["presets"] = presets
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            print(f"[preset] saved screen={screen} slot={slot}")
+        return snap
+
+    def apply_preset(self, screen: int, slot: int) -> dict | None:
+        """Write a saved snapshot back into the screen's live settings.
+        Whitelist the keys so a malformed slot can't sneak unexpected
+        fields into the config."""
+        if not (0 <= slot < PRESET_SLOTS):
+            print(f"[preset] bad slot: {slot}")
+            return None
+        with self.config_lock:
+            screen_cfg = self.config.get("screens", {}).get(str(screen))
+            if not screen_cfg:
+                return None
+            presets = screen_cfg.get("presets") or []
+            if slot >= len(presets) or presets[slot] is None:
+                print(f"[preset] empty slot: screen={screen} slot={slot}")
+                return None
+            snapshot = copy.deepcopy(presets[slot])
+        def mutate(s):
+            for k in PRESET_SNAPSHOT_KEYS:
+                if k in snapshot:
+                    s[k] = snapshot[k]
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            print(f"[preset] applied screen={screen} slot={slot}")
+        return snap
+
+    def clear_preset(self, screen: int, slot: int) -> dict | None:
+        if not (0 <= slot < PRESET_SLOTS):
+            return None
+        def mutate(s):
+            presets = list(s.get("presets") or [None] * PRESET_SLOTS)
+            while len(presets) < PRESET_SLOTS:
+                presets.append(None)
+            presets[slot] = None
+            s["presets"] = presets
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            print(f"[preset] cleared screen={screen} slot={slot}")
+        return snap
+
     def set_widgets_locked(self, screen: int, locked: bool) -> dict | None:
         def mutate(s):
             s["widgetsLocked"] = bool(locked)
@@ -1659,6 +1845,12 @@ class BridgeRuntime:
                                            msg.get("value"))
             elif t == "viewport":
                 self.update_viewport(screen, msg.get("w"), msg.get("h"))
+            elif t == "preset-save":
+                self.save_preset(screen, int(msg.get("slot", -1)))
+            elif t == "preset-apply":
+                self.apply_preset(screen, int(msg.get("slot", -1)))
+            elif t == "preset-clear":
+                self.clear_preset(screen, int(msg.get("slot", -1)))
         threading.Thread(target=run, daemon=True, name="widget-mutate").start()
 
     def update_viewport(self, screen: int, w, h) -> dict | None:

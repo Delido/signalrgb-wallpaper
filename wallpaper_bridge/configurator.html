@@ -447,6 +447,63 @@
   .layout-preview.unlocked .preview-widget .resize-handle { display: block; }
 
   /* Toast for transient status messages */
+  /* Wallpaper library thumbnails — small clickable tiles under the
+     Background section. Click sets the screen's background to the
+     full-res PNG behind that thumb. */
+  .lib-tile {
+    width: 96px; height: 54px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #0c0e13 center / cover no-repeat;
+    cursor: pointer; padding: 0;
+    position: relative;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .lib-tile:hover {
+    border-color: #3a6ba8; transform: translateY(-1px);
+  }
+  .lib-tile .label {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    color: #d8e6fc;
+    font-size: 10px; padding: 1px 3px;
+    border-radius: 0 0 3px 3px;
+    text-align: center;
+    pointer-events: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lib-empty {
+    color: var(--text-dim); font-size: 12px; font-style: italic;
+    flex: 1; align-self: center;
+  }
+
+  /* Preset slot rows — one per saved combo. Filled slots show a short
+     summary (counts of widgets + active effects); empty slots hide
+     Apply/Clear so only Save is offered. */
+  .preset-slot {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; margin-top: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .preset-slot .name {
+    flex: 0 0 60px; font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .preset-slot .summary {
+    flex: 1 1 auto; color: var(--text-dim);
+  }
+  .preset-slot.empty .summary { font-style: italic; opacity: 0.6; }
+  .preset-slot .actions {
+    display: flex; gap: 4px; flex: 0 0 auto;
+  }
+  .preset-slot .actions .btn {
+    padding: 4px 10px; font-size: 11px;
+  }
+
   #toast {
     position: fixed; bottom: 20px; right: 20px;
     background: var(--panel-2);
@@ -474,6 +531,22 @@
 
 <main>
 
+  <!-- ── Presets ───────────────────────────────────────────────────── -->
+  <section class="card collapsed" id="card-presets">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.presets">Presets</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="presets.hint">
+        Save the current background + glow + dim + blur + effects + widgets
+        as a snapshot, then switch back with one click. Slots are per
+        screen.
+      </div>
+      <div id="preset-slots"></div>
+    </div>
+  </section>
+
   <!-- ── Background ─────────────────────────────────────────────────── -->
   <section class="card" id="card-bg">
     <header class="section-head" data-toggle>
@@ -481,6 +554,10 @@
       <h2 data-i18n="section.bg">Background</h2>
     </header>
     <div class="body">
+      <div class="row">
+        <label data-i18n="bg.library">Library</label>
+        <div id="library-strip" style="flex:1; display:flex; gap:8px; flex-wrap:wrap;"></div>
+      </div>
       <div class="row">
         <label for="bg-image" data-i18n="bg.path">Image path</label>
         <input type="text" id="bg-image" placeholder="paste a URL or absolute path">
@@ -714,6 +791,10 @@ const TRANSLATIONS = {
   "section.widgets":        { en: "Widgets",              de: "Widgets" },
 
   "bg.path":                { en: "Image path",           de: "Bildpfad" },
+  "bg.library":             { en: "Library",              de: "Bibliothek" },
+  "bg.library.empty":       { en: "(no library wallpapers installed)",
+                              de: "(keine Bibliotheks-Wallpaper installiert)" },
+  "bg.library.applied":     { en: "Applied {label}",      de: "{label} angewendet" },
   "bg.choose":              { en: "Choose image…",        de: "Bild auswählen…" },
   "bg.open_builder":        { en: "Open Builder…",        de: "Builder öffnen…" },
   "bg.fit":                 { en: "Fit",                  de: "Anpassen" },
@@ -724,6 +805,16 @@ const TRANSLATIONS = {
   "bg.debug_overlay":       { en: "Show debug overlay (top-left status line on the wallpaper)",
                               de: "Debug-Overlay anzeigen (Status-Zeile oben links im Wallpaper)" },
   "bridge.screens":         { en: "Screens:",             de: "Bildschirme:" },
+  "section.presets":        { en: "Presets",              de: "Voreinstellungen" },
+  "presets.hint":           {
+    en: "Save the current background + glow + dim + blur + effects + widgets as a snapshot, then switch back with one click. Slots are per screen.",
+    de: "Aktuelle Kombination aus Hintergrund + Glow + Abdunklung + Blur + Effekten + Widgets als Snapshot speichern und mit einem Klick wieder zurückwechseln. Slots sind pro Bildschirm." },
+  "presets.apply":          { en: "Apply",                de: "Anwenden" },
+  "presets.save":           { en: "Save",                 de: "Speichern" },
+  "presets.empty":          { en: "(empty)",              de: "(leer)" },
+  "presets.widget_one":     { en: "widget",               de: "Widget" },
+  "presets.widget_many":    { en: "widgets",              de: "Widgets" },
+  "presets.saved_toast":    { en: "Saved preset {n}",     de: "Voreinstellung {n} gespeichert" },
 
   "glow.show":              { en: "Show glow layer",      de: "Glow-Schicht anzeigen" },
   "glow.layout":            { en: "Layout",               de: "Layout" },
@@ -983,6 +1074,8 @@ const els = {
   audioGlowIntensity: $("audioglow-intensity"),
   audioGlowIntensityVal: $("audioglow-intensity-val"),
   audioGlowTint:      $("audioglow-tint"),
+  presetSlots:        $("preset-slots"),
+  libraryStrip:       $("library-strip"),
   lockBar:        $("lock-bar"),
   lockLabel:      $("lock-label"),
   lockHint:       $("lock-hint"),
@@ -1080,6 +1173,135 @@ function switchScreen(n) {
   });
   if (ws) { try { ws.close(); } catch (_) {} ws = null; }
   connect();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preset slots
+//
+// Each screen owns N slots; each slot is either empty or holds a snapshot
+// of the bg/glow/effects/widgets state. The DOM rows are generated once
+// up-front, then renderPresets() refreshes the labels + button-states off
+// the latest settings push.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PRESET_SLOTS = 4;
+
+(function buildPresetSlots() {
+  for (let i = 0; i < PRESET_SLOTS; i++) {
+    const row = document.createElement("div");
+    row.className = "preset-slot empty";
+    row.dataset.slot = String(i);
+    row.innerHTML =
+      '<span class="name" data-i18n="presets.slot_label" data-slot-num="' + (i + 1) + '">Slot ' + (i + 1) + '</span>' +
+      '<span class="summary"></span>' +
+      '<div class="actions">' +
+        '<button class="btn apply" data-i18n="presets.apply">Apply</button>' +
+        '<button class="btn save"  data-i18n="presets.save">Save</button>' +
+        '<button class="btn danger clear">×</button>' +
+      '</div>';
+    row.querySelector(".apply").addEventListener("click", () =>
+      sendCmd({ type: "preset-apply", slot: i }));
+    row.querySelector(".save").addEventListener("click", () => {
+      sendCmd({ type: "preset-save", slot: i });
+      toast(t("presets.saved_toast", { n: i + 1 }), "good");
+    });
+    row.querySelector(".clear").addEventListener("click", () =>
+      sendCmd({ type: "preset-clear", slot: i }));
+    els.presetSlots.appendChild(row);
+  }
+})();
+
+function renderPresets() {
+  const slots = Array.isArray(settings.presets) ? settings.presets : [];
+  for (let i = 0; i < PRESET_SLOTS; i++) {
+    const row = els.presetSlots.children[i];
+    if (!row) continue;
+    const snap = slots[i];
+    const filled = snap && typeof snap === "object";
+    row.classList.toggle("empty", !filled);
+    const sum = row.querySelector(".summary");
+    sum.textContent = filled ? summariseSnapshot(snap) : t("presets.empty");
+    row.querySelector(".apply").disabled = !filled;
+    row.querySelector(".clear").disabled = !filled;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wallpaper library — fetched once from /library/list, rendered as a
+// horizontal strip of thumbnail tiles in the Background section. Clicking
+// a tile uploads the matching PNG to the active screen via the existing
+// /screen/N/background endpoint (same code path Builder's Apply uses).
+// ─────────────────────────────────────────────────────────────────────────────
+
+let libraryCatalogue = null;
+
+(async function loadLibrary() {
+  try {
+    const resp = await fetch("/library/list");
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const cat = await resp.json();
+    libraryCatalogue = Array.isArray(cat.items) ? cat.items : [];
+  } catch (e) {
+    libraryCatalogue = [];
+  }
+  renderLibraryStrip();
+})();
+
+function renderLibraryStrip() {
+  if (!els.libraryStrip) return;
+  els.libraryStrip.innerHTML = "";
+  if (!libraryCatalogue || libraryCatalogue.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "lib-empty";
+    empty.dataset.i18n = "bg.library.empty";
+    empty.textContent = t("bg.library.empty");
+    els.libraryStrip.appendChild(empty);
+    return;
+  }
+  for (const item of libraryCatalogue) {
+    const btn = document.createElement("button");
+    btn.className = "lib-tile";
+    btn.title = item.label || item.id;
+    btn.style.backgroundImage = "url(/library/" + encodeURIComponent(item.thumb || item.file) + ")";
+    const lbl = document.createElement("span");
+    lbl.className = "label";
+    lbl.textContent = item.label || item.id;
+    btn.appendChild(lbl);
+    btn.addEventListener("click", () => applyLibraryItem(item));
+    els.libraryStrip.appendChild(btn);
+  }
+}
+
+async function applyLibraryItem(item) {
+  // Pull the full-res PNG and POST it to the bridge as the screen's
+  // background. Same endpoint Builder uses; bridge then echoes the new
+  // bgImage path back over WS so the wallpaper page refreshes.
+  try {
+    const resp = await fetch("/library/" + encodeURIComponent(item.file));
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const blob = await resp.blob();
+    const up = await fetch("/screen/" + activeScreen + "/background", {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: blob,
+    });
+    if (!up.ok) throw new Error("upload HTTP " + up.status);
+    toast(t("bg.library.applied", { label: item.label || item.id }), "good");
+  } catch (e) {
+    toast("Library apply failed: " + e.message, "bad");
+  }
+}
+
+function summariseSnapshot(snap) {
+  const bits = [];
+  const widgetCount = Array.isArray(snap.widgets) ? snap.widgets.length : 0;
+  bits.push(widgetCount + " " + t(widgetCount === 1 ? "presets.widget_one" : "presets.widget_many"));
+  if (snap.barLayout)     bits.push(snap.barLayout.replace(/^lay-/, ""));
+  if (snap.ambientEffect && snap.ambientEffect !== "off") bits.push(snap.ambientEffect);
+  if (snap.pixelfx       && snap.pixelfx       !== "off") bits.push("pixelfx:" + snap.pixelfx);
+  if (snap.parallax3d                                  )  bits.push("parallax " + snap.parallax3d);
+  if (snap.audioGlow     && snap.audioGlow     !== "off") bits.push("audio:" + snap.audioGlow);
+  return bits.join(" · ");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1746,6 +1968,8 @@ els.modal.addEventListener("click", (e) => {
 // Render — pull settings into the form controls.
 // ─────────────────────────────────────────────────────────────────────────────
 function renderAll() {
+  // Presets (rendered first because they live above Background in the UI)
+  renderPresets();
   // Background
   els.bgImage.value = settings.bgImage || "";
   els.bgFit.value   = settings.bgFit   || "cover";

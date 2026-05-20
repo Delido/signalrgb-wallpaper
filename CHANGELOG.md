@@ -4,6 +4,55 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7-beta] - 2026-05-20
+
+### Added
+
+- **Per-screen preset slots in the Configurator.** Four numbered
+  slots per screen, each saving a snapshot of every settable field
+  in `PRESET_SNAPSHOT_KEYS` (background image / fit / dim, glow
+  layout / strength / blurs, all ambient + pixelfx + parallax +
+  audio-glow knobs, **and the full widget array including positions
+  and options**). New WS command types: `preset-save` /
+  `preset-apply` / `preset-clear`. Bridge runtime gains matching
+  `save_preset` / `apply_preset` / `clear_preset` methods. UI:
+  collapsed-by-default *Presets* section above *Background* with one
+  row per slot showing a short summary (widget count, layout,
+  active effects). Pre-v0.7.7-beta configs auto-pad to four empty
+  slots on next load.
+- **Pattern-fill brush in the Builder.** New tool button in the
+  toolbox (dots glyph) — instead of clearing a solid hole, paints
+  transparency in a structured pattern. Three pattern types:
+  *Halftone* (dot grid, dot radius modulated by density), *Dither*
+  (ordered Bayer 8×8 threshold matrix), *Hatching* (parallel lines
+  at a chosen angle and spacing). Scale (2..32 px), Density (5..95 %),
+  Angle (0..180°) sliders. Reuses the existing brush size / hardness
+  / shape options. Pattern coordinates are absolute-canvas-based, so
+  adjacent strokes tile continuously instead of restarting per stamp.
+  Stored as a new `kind: "pattern"` click record so undo / redo /
+  rotate-90° work consistently with the other tools.
+- **Wallpaper library.** Four procedurally generated starter
+  wallpapers (cyberpunk skyline, neon grid, anime round window,
+  geometric panels) ship with the installer, dropped into
+  `%LOCALAPPDATA%\SignalRGBWallpaper\library\` together with a
+  `library.json` manifest. The Configurator's *Background* section
+  gets a *Library* strip of thumbnail tiles; clicking one uploads
+  the full-res PNG to the active screen via the same
+  `POST /screen/N/background` endpoint the Builder uses. Bridge
+  serves the listing + files at `/library/list` and `/library/<file>`
+  with path-traversal protection (no `..` / slashes in filenames).
+  Users can add their own PNGs to the same folder; the bridge
+  enumerates whatever's there.
+
+### Changed
+
+- **Plugin log spells out what Auto resolved to.** `applyZoneSize`
+  used to log just `aspect=Auto`. Now it appends either
+  `(viewport 3840x1080)` if the bridge has seen a real viewport push
+  from the wallpaper page, or `(no viewport from bridge — 16:9
+  fallback)` if not. Turns "why are my LEDs 7296 instead of 14592?"
+  into a single-grep diagnosis in `SignalRGB_*.log`.
+
 ## [0.7.6-beta] - 2026-05-20
 
 > Tiny plugin-side fix: SignalRGB's layout editor was rendering our

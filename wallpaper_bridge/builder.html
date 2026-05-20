@@ -450,6 +450,19 @@
         <line x1="11" y1="9" x2="15" y2="13"/>
       </svg>
     </button>
+    <button class="tool-btn" data-tool="pattern" data-i18n-title="tool.pattern.tip" title="Pattern brush — halftone / dither / hatching transparent cuts">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="5"  cy="5"  r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="5"  r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="19" cy="5"  r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="5"  cy="12" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="5"  cy="19" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="19" cy="19" r="1.6" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
   </div>
 
   <!-- ── Tool-options + history (left-middle) ───────────────────────────── -->
@@ -481,7 +494,7 @@
         <div class="hint" data-i18n-html="hint.ellipse">Drag to draw a bounding box. Resize via handles. Press <strong>Confirm</strong> to apply.</div>
       </div>
 
-      <div class="tool-options-group" data-tools="restore erase">
+      <div class="tool-options-group" data-tools="restore erase pattern">
         <div class="row">
           <label for="brush-size" data-i18n="opt.size">Size</label>
           <input id="brush-size" type="range" min="3" max="120" value="20">
@@ -499,6 +512,36 @@
           <button class="seg" data-shape="square">
             <svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10"/></svg><span data-i18n="brush.square">Square</span>
           </button>
+        </div>
+      </div>
+
+      <div class="tool-options-group" data-tools="pattern">
+        <div class="hint" data-i18n="hint.pattern">
+          Cuts a structured transparent pattern instead of a solid hole.
+          Pick halftone (dots), dither (Bayer 8×8), or hatching (lines).
+        </div>
+        <div class="row">
+          <label for="pattern-type" data-i18n="pattern.type">Pattern</label>
+          <select id="pattern-type">
+            <option value="halftone" data-i18n="pattern.halftone">Halftone (dots)</option>
+            <option value="dither"   data-i18n="pattern.dither">Dither (Bayer 8×8)</option>
+            <option value="hatching" data-i18n="pattern.hatching">Hatching (lines)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="pattern-scale" data-i18n="pattern.scale">Scale</label>
+          <input id="pattern-scale" type="range" min="2" max="32" value="8">
+          <span class="val" id="pattern-scale-val">8 px</span>
+        </div>
+        <div class="row">
+          <label for="pattern-density" data-i18n="pattern.density">Density</label>
+          <input id="pattern-density" type="range" min="5" max="95" value="50">
+          <span class="val" id="pattern-density-val">50 %</span>
+        </div>
+        <div class="row">
+          <label for="pattern-angle" data-i18n="pattern.angle">Angle</label>
+          <input id="pattern-angle" type="range" min="0" max="180" value="45">
+          <span class="val" id="pattern-angle-val">45°</span>
         </div>
       </div>
 
@@ -677,6 +720,13 @@ const els = {
   brushSizeVal: $("brush-size-val"),
   brushHardness:    $("brush-hardness"),
   brushHardnessVal: $("brush-hardness-val"),
+  patternType:    $("pattern-type"),
+  patternScale:   $("pattern-scale"),
+  patternScaleVal:$("pattern-scale-val"),
+  patternDensity: $("pattern-density"),
+  patternDensityVal: $("pattern-density-val"),
+  patternAngle:   $("pattern-angle"),
+  patternAngleVal: $("pattern-angle-val"),
   brushShapeRow:    $("brush-shape-row"),
   brushCursor:      $("brush-cursor"),
   feather:      $("feather"),
@@ -777,6 +827,7 @@ const TOOL_KEYS = {
   ellipse:  "tool.ellipse.name",
   restore:  "tool.restore.name",
   erase:    "tool.erase.name",
+  pattern:  "tool.pattern.name",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -804,6 +855,7 @@ const TRANSLATIONS = {
   "tool.ellipse.name":  { en: "Ellipse",         de: "Ellipse" },
   "tool.restore.name":  { en: "Restore brush",   de: "Wiederherstellen-Pinsel" },
   "tool.erase.name":    { en: "Erase brush",     de: "Radier-Pinsel" },
+  "tool.pattern.name":  { en: "Pattern brush",   de: "Muster-Pinsel" },
 
   // Toolbox button tooltips.
   "tool.color.tip":   { en: "Click pixel — remove similar colours",
@@ -820,6 +872,8 @@ const TRANSLATIONS = {
                         de: "Wiederherstellen — transparente Pixel zurück malen" },
   "tool.erase.tip":   { en: "Erase brush — paint pixels transparent",
                         de: "Radieren — Pixel transparent malen" },
+  "tool.pattern.tip": { en: "Pattern brush — halftone / dither / hatching transparent cuts",
+                        de: "Muster-Pinsel — Halbton / Dither / Schraffur als transparente Schnitte" },
 
   // Tool-options labels.
   "opt.tolerance": { en: "Tolerance", de: "Toleranz" },
@@ -838,6 +892,15 @@ const TRANSLATIONS = {
                     de: "Klicken, um Ecken zu setzen. Ecken ziehen zum Umformen. <strong>Bestätigen</strong> in der schwebenden Leiste zum Anwenden." },
   "hint.ellipse": { en: "Drag to draw a bounding box. Resize via handles. Press <strong>Confirm</strong> to apply.",
                     de: "Ziehen, um einen Rahmen zu zeichnen. Über Griffe anpassen. <strong>Bestätigen</strong> zum Anwenden." },
+  "hint.pattern": { en: "Cuts a structured transparent pattern instead of a solid hole. Pick halftone (dots), dither (Bayer 8×8), or hatching (lines).",
+                    de: "Schneidet ein strukturiertes Transparenz-Muster statt eines durchgehenden Lochs. Wahl: Halbton (Punkte), Dither (Bayer 8×8), Schraffur (Linien)." },
+  "pattern.type":     { en: "Pattern",            de: "Muster" },
+  "pattern.halftone": { en: "Halftone (dots)",    de: "Halbton (Punkte)" },
+  "pattern.dither":   { en: "Dither (Bayer 8×8)", de: "Dither (Bayer 8×8)" },
+  "pattern.hatching": { en: "Hatching (lines)",   de: "Schraffur (Linien)" },
+  "pattern.scale":    { en: "Scale",              de: "Skalierung" },
+  "pattern.density":  { en: "Density",            de: "Dichte" },
+  "pattern.angle":    { en: "Angle",              de: "Winkel" },
 
   // History.
   "section.history":  { en: "History",         de: "Verlauf" },
@@ -1205,11 +1268,14 @@ els.rotateBtn.addEventListener("click", () => {
     if (c.kind === "ellipse") {
       return { kind: "ellipse", cx: h - 1 - c.cy, cy: c.cx, rx: c.ry, ry: c.rx };
     }
-    if (c.kind === "restore" || c.kind === "erase") {
+    if (c.kind === "restore" || c.kind === "erase" || c.kind === "pattern") {
       // Each stamp's (x, y) rotates the same way as any other point; r
       // stays put because the brush is a circle (rotation-invariant).
       // Square stamps stay axis-aligned squares after a 90° rotation.
-      return {
+      // Pattern entries carry an extra angle field — bump by 90° so the
+      // hatching direction stays visually consistent with the rotated
+      // image. Mod 360 to keep it in range.
+      const rotated = {
         kind: c.kind,
         strokes: c.strokes.map((st) => ({
           x: h - 1 - st.y, y: st.x, r: st.r,
@@ -1217,6 +1283,13 @@ els.rotateBtn.addEventListener("click", () => {
           hardness: (st.hardness == null) ? 100 : st.hardness,
         })),
       };
+      if (c.kind === "pattern") {
+        rotated.pattern = c.pattern;
+        rotated.scale   = c.scale;
+        rotated.density = c.density;
+        rotated.angle   = ((c.angle || 0) + 90) % 360;
+      }
+      return rotated;
     }
     return c;
   });
@@ -1270,7 +1343,7 @@ function selectTool(tool) {
   // Abandon any half-drawn brush stroke; hide the live brush cursor
   // unless we're back on the restore tool with the mouse over canvas.
   brushStroke = null;
-  const isBrush = (tool === "restore" || tool === "erase");
+  const isBrush = (tool === "restore" || tool === "erase" || tool === "pattern");
   if (!isBrush) els.brushCursor.classList.remove("on");
 }
 
@@ -1334,6 +1407,15 @@ els.brushSize.addEventListener("input", () => {
 els.brushHardness.addEventListener("input", () => {
   els.brushHardnessVal.textContent = els.brushHardness.value;
   syncBrushCursorSize();
+});
+els.patternScale.addEventListener("input", () => {
+  els.patternScaleVal.textContent = els.patternScale.value + " px";
+});
+els.patternDensity.addEventListener("input", () => {
+  els.patternDensityVal.textContent = els.patternDensity.value + " %";
+});
+els.patternAngle.addEventListener("input", () => {
+  els.patternAngleVal.textContent = els.patternAngle.value + "°";
 });
 els.threshold.addEventListener("change", () => {
   // Live-update the most-recent colour click (with or without region)
@@ -1420,7 +1502,7 @@ function clampY(y) { return Math.max(0, Math.min(els.canvas.height - 1, y)); }
 
 els.canvas.addEventListener("mousedown", (e) => {
   if (!originalData) return;
-  if (currentTool === "restore" || currentTool === "erase") {
+  if (currentTool === "restore" || currentTool === "erase" || currentTool === "pattern") {
     const { x, y } = canvasPx(e);
     brushStroke = [];
     stampBrushAt(x, y);
@@ -1529,8 +1611,21 @@ window.addEventListener("mouseup", () => {
   // so undo treats one drag as one operation.
   if (brushStroke) {
     if (brushStroke.length > 0) {
-      const kind = (currentTool === "erase") ? "erase" : "restore";
-      pushClick({ kind, strokes: brushStroke });
+      let entry;
+      if (currentTool === "pattern") {
+        entry = {
+          kind: "pattern",
+          strokes: brushStroke,
+          pattern: els.patternType.value || "halftone",
+          scale:   clampInt(parseInt(els.patternScale.value, 10), 2, 64),
+          density: clampInt(parseInt(els.patternDensity.value, 10), 1, 99),
+          angle:   clampInt(parseInt(els.patternAngle.value, 10), 0, 180),
+        };
+      } else {
+        const kind = (currentTool === "erase") ? "erase" : "restore";
+        entry = { kind, strokes: brushStroke };
+      }
+      pushClick(entry);
       updateHistory();
       applyMask();   // re-apply with feather so the rim looks consistent
     }
@@ -1910,7 +2005,7 @@ function applyMask() {
         compiled[i] = { kind: "color", r: c.r, g: c.g, b: c.b,
                         t2: c.threshold * c.threshold,
                         region: c.region || null };
-      } else if (c.kind === "restore" || c.kind === "erase") {
+      } else if (c.kind === "restore" || c.kind === "erase" || c.kind === "pattern") {
         let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
         for (let s = 0; s < c.strokes.length; s++) {
           const st = c.strokes[s];
@@ -1920,7 +2015,11 @@ function applyMask() {
           if (st.y + st.r > yMax) yMax = st.y + st.r;
         }
         compiled[i] = { kind: c.kind, strokes: c.strokes,
-                        bbox: { xMin, yMin, xMax, yMax } };
+                        bbox: { xMin, yMin, xMax, yMax },
+                        // Pattern entries carry an extra config blob the
+                        // hot loop reads to compute per-pixel clearance.
+                        pattern: c.pattern, scale: c.scale,
+                        density: c.density, angle: c.angle };
       } else {
         compiled[i] = c;
       }
@@ -1950,7 +2049,7 @@ function applyMask() {
               const dy = (y - c.cy) / c.ry;
               if (dx * dx + dy * dy <= 1) alpha = 0;
             }
-          } else if (c.kind === "restore" || c.kind === "erase") {
+          } else if (c.kind === "restore" || c.kind === "erase" || c.kind === "pattern") {
             if (x < c.bbox.xMin || x > c.bbox.xMax ||
                 y < c.bbox.yMin || y > c.bbox.yMax) continue;
             // Find the maximum stamp factor across all stamps hitting
@@ -1984,6 +2083,12 @@ function applyMask() {
             if (c.kind === "restore") {
               const contrib = origA * maxFactor;
               if (contrib > alpha) alpha = contrib;
+            } else if (c.kind === "pattern") {
+              const mask = patternClearance(x, y, c.pattern, c.scale, c.density, c.angle);
+              if (mask > 0) {
+                const target = origA * (1 - maxFactor * mask);
+                if (target < alpha) alpha = target;
+              }
             } else {
               // Erase: drive alpha down toward origA*(1-factor). min-merge
               // so a hard center stays fully transparent even if later
@@ -2060,6 +2165,22 @@ function stampBrushAt(cx, cy) {
         // hard stamp already removed.
         const target = origA * (1 - factor);
         if (target < buf[localIdx + 3]) buf[localIdx + 3] = target;
+      } else if (currentTool === "pattern") {
+        // Pattern mode: clear pixels where the deterministic pattern
+        // says "transparent here", attenuated by the brush-stamp factor
+        // at the rim. Pattern uses absolute canvas (px, py) so adjacent
+        // strokes tile continuously instead of restarting at each stamp.
+        const mask = patternClearance(
+          px, py,
+          els.patternType.value || "halftone",
+          clampInt(parseInt(els.patternScale.value, 10), 2, 64),
+          clampInt(parseInt(els.patternDensity.value, 10), 1, 99),
+          clampInt(parseInt(els.patternAngle.value, 10), 0, 180),
+        );
+        if (mask > 0) {
+          const target = origA * (1 - factor * mask);
+          if (target < buf[localIdx + 3]) buf[localIdx + 3] = target;
+        }
       } else {
         // Restore mode: bring alpha UP towards (origA * factor).
         // Max-merge so overlapping soft stamps don't punch holes in
@@ -2073,6 +2194,55 @@ function stampBrushAt(cx, cy) {
 }
 
 function clampInt(v, lo, hi) { return Math.max(lo, Math.min(hi, isFinite(v) ? v : lo)); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pattern brush — returns the clearance factor in [0..1] for one canvas
+// pixel given the current pattern config. 1 means "fully transparent
+// here"; 0 means "leave alpha as-is". The brush stamp's soft-edge factor
+// multiplies this externally, so the stroke fades cleanly at the rim.
+//
+// halftone: regular dot grid. Each cell is `scale` px wide; the dot
+//   radius scales with density (50 % density ≈ dot fills √0.5 of the
+//   cell). Pixel is inside a dot → clearance 1.
+// dither: ordered Bayer 8×8. Each pixel's (x%8, y%8) yields a threshold
+//   in [0, 63]; if density > threshold/64 → clearance 1.
+// hatching: parallel lines at `angle` degrees. Pixel projects onto the
+//   line normal; if (projected % scale) < line_width → clearance 1.
+//   line_width = scale * density (density acts as line/gap ratio).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BAYER_8 = [
+   0, 32,  8, 40,  2, 34, 10, 42,
+  48, 16, 56, 24, 50, 18, 58, 26,
+  12, 44,  4, 36, 14, 46,  6, 38,
+  60, 28, 52, 20, 62, 30, 54, 22,
+   3, 35, 11, 43,  1, 33,  9, 41,
+  51, 19, 59, 27, 49, 17, 57, 25,
+  15, 47,  7, 39, 13, 45,  5, 37,
+  63, 31, 55, 23, 61, 29, 53, 21,
+];
+
+function patternClearance(px, py, pattern, scale, density, angle) {
+  const d = density / 100;
+  if (pattern === "dither") {
+    const m = (((py & 7) << 3) | (px & 7));
+    return d > (BAYER_8[m] / 64) ? 1 : 0;
+  }
+  if (pattern === "hatching") {
+    const rad = (angle * Math.PI) / 180;
+    const proj = px * Math.cos(rad) + py * Math.sin(rad);
+    const phase = ((proj % scale) + scale) % scale;
+    return phase < scale * d ? 1 : 0;
+  }
+  // halftone (default)
+  const cellX = px % scale;
+  const cellY = py % scale;
+  const cx = scale / 2, cy = scale / 2;
+  const dx = cellX - cx, dy = cellY - cy;
+  const dist2 = dx * dx + dy * dy;
+  const r2 = (scale / 2) * (scale / 2) * d;
+  return dist2 < r2 ? 1 : 0;
+}
 
 // Standard even-odd ray-cast for point-in-polygon. O(n) per pixel where
 // n is the polygon's corner count.
@@ -2313,6 +2483,10 @@ function updateHistory() {
       row.innerHTML =
         '<span class="swatch" style="background:#c66"></span>' +
         '<span class="label">#' + (i + 1) + ' erase · ' + c.strokes.length + ' stamps</span>';
+    } else if (c.kind === "pattern") {
+      row.innerHTML =
+        '<span class="swatch" style="background:#d8a"></span>' +
+        '<span class="label">#' + (i + 1) + ' ' + (c.pattern || "halftone") + ' · ' + c.strokes.length + ' stamps</span>';
     }
     els.history.appendChild(row);
   });

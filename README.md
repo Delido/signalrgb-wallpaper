@@ -26,11 +26,12 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.6-beta — fixes the SignalRGB layout-editor
-> rendering stretched LED cells (plugin's static `Size()` was 1:1
-> while runtime grids weren't). Folds in the whole-screen audio-glow
-> layer from v0.7.5-beta and everything from the 0.7.1 → 0.7.4 beta
-> cycle. Marked prerelease.
+> **Status:** v0.7.7-beta — adds per-screen preset slots, a
+> pattern-fill brush in the Builder (halftone / dither / hatching),
+> and a procedural starter wallpaper library. Folds in the
+> SignalRGB layout-editor fix from v0.7.6-beta, the whole-screen
+> audio-glow layer from v0.7.5-beta and everything from the 0.7.1
+> → 0.7.4 beta cycle. Marked prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -198,21 +199,29 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Planned
 
-- **Wallpaper preset library** — curated bundle of glow-ready
-  backgrounds shipped with the installer or fetched on demand.
-- **Preset slots in the configurator** — save a "background + glow +
-  dim + blur + widgets" combo per screen and switch with one click.
 - **Auto-Lively bootstrapper** — Wallpaper Engine auto-copy + Lively
   auto-import both shipped, but if neither host is installed the user
   still has to install Lively manually. A bundled bootstrapper that
   pulls + installs Lively if missing would close the loop.
-- **Pattern-fill brush in the builder** — halftone / dither /
-  hatching as an alternative to solid-colour transparent cuts
-  (intentionally skipped during the 0.4.5 builder polish, kept on
-  the wish list).
 
 ### Recently shipped
 
+- ✅ **Pattern-fill brush in the Builder** — new tool: halftone /
+  dither (Bayer 8×8) / hatching transparent cuts. Scale, density and
+  angle controls per pattern. Tiles continuously across stamps
+  (coordinates are canvas-absolute) (0.7.7-beta)
+- ✅ **Wallpaper library** — installer ships four procedurally
+  generated starter wallpapers under
+  `%LOCALAPPDATA%\SignalRGBWallpaper\library\`. Configurator's
+  Background section gets a thumbnail strip; click → applies to the
+  active screen via `POST /screen/N/background`. Users can drop
+  their own PNGs into the same folder (0.7.7-beta)
+- ✅ **Per-screen preset slots in the Configurator** — four slots
+  per screen, each saving a snapshot of background + glow + dim +
+  blur + ambient + pixelfx + parallax + audio glow + widgets (with
+  positions / options). New WS commands `preset-save` / `apply` /
+  `clear`. Slot rows show a short summary (widget count, layout,
+  active effects) (0.7.7-beta)
 - ✅ **Whole-screen audio-reactive glow layer** — Pulse / Spectrum
   bars / Waveform modes driven by the same FFT feed the audio-spectrum
   widget uses. Mix-blend-mode: screen so it stacks on the existing

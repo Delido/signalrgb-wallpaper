@@ -242,8 +242,19 @@ function applyZoneSize() {
     }
     device.setControllableLeds(names, positions);
     rebuildFrameBuffer(s, currentScreenIndex());
-    device.log("[DesktopWallpaper] screen " + currentScreenIndex() + " grid " + s.cols + "x" + s.rows
-               + " (aspect=" + aspectRatioValue() + ")");
+    // Surface what the geometry resolver actually chose, including whether
+    // Auto found a real viewport from /config or fell back to 16:9. Makes
+    // diagnosing "why are my LEDs 7296 instead of 14592?" a one-line lookup
+    // in SignalRGB's log.
+    let tag = "aspect=" + aspectRatioValue();
+    if (aspectRatioValue() === "Auto") {
+        const v = viewportsByScreen[currentScreenIndex()];
+        tag += (v && v.w > 0 && v.h > 0)
+            ? " (viewport " + v.w + "x" + v.h + ")"
+            : " (no viewport from bridge — 16:9 fallback)";
+    }
+    device.log("[DesktopWallpaper] screen " + currentScreenIndex() + " grid "
+               + s.cols + "x" + s.rows + " " + tag);
 }
 
 function openSocket() {

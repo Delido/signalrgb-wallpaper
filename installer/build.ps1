@@ -43,6 +43,8 @@ if ($LASTEXITCODE -ne 0) { throw "thumbnail generation failed" }
 if ($LASTEXITCODE -ne 0) { throw "banner generation failed" }
 & python (Join-Path $installer "generate_workshop_preview.py")
 if ($LASTEXITCODE -ne 0) { throw "workshop preview generation failed" }
+& python (Join-Path $installer "generate_library.py")
+if ($LASTEXITCODE -ne 0) { throw "library generation failed" }
 
 # --- 2. Rebuild SignalRGBBridge.exe ------------------------------------------
 Write-Host "[2/5] Rebuilding SignalRGBBridge.exe" -ForegroundColor Yellow
