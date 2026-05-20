@@ -392,14 +392,14 @@
 <body>
 
 <header>
-  <h1>SignalRGB Wallpaper Builder</h1>
-  <span class="sub">Click bright areas to make them transparent, then apply to a screen.</span>
+  <h1 data-i18n="header.title">SignalRGB Wallpaper Builder</h1>
+  <span class="sub" data-i18n="header.sub">Click bright areas to make them transparent, then apply to a screen.</span>
 </header>
 
 <main>
   <!-- ── Icon toolbox (left, narrow) ────────────────────────────────────── -->
   <div class="panel left toolbox" id="toolbox">
-    <button class="tool-btn active" data-tool="color" title="Click pixel — remove similar colours">
+    <button class="tool-btn active" data-tool="color" data-i18n-title="tool.color.tip" title="Click pixel — remove similar colours">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="6"/>
         <line x1="12" y1="2" x2="12" y2="6"/>
@@ -409,18 +409,18 @@
         <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>
       </svg>
     </button>
-    <button class="tool-btn" data-tool="bounded" title="Click in region — drag rectangle, then click colours inside">
+    <button class="tool-btn" data-tool="bounded" data-i18n-title="tool.bounded.tip" title="Click in region — drag rectangle, then click colours inside">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3" y="3" width="18" height="18" rx="1.2" stroke-dasharray="3 2.5"/>
         <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>
       </svg>
     </button>
-    <button class="tool-btn" data-tool="region" title="Drag rectangle — remove the area you draw">
+    <button class="tool-btn" data-tool="region" data-i18n-title="tool.region.tip" title="Drag rectangle — remove the area you draw">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="4" y="6" width="16" height="12" rx="1.2" stroke-dasharray="3 2.5"/>
       </svg>
     </button>
-    <button class="tool-btn" data-tool="polygon" title="Polygon — click corners, drag handles, confirm">
+    <button class="tool-btn" data-tool="polygon" data-i18n-title="tool.polygon.tip" title="Polygon — click corners, drag handles, confirm">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <polygon points="12,3 21,9 18,20 6,20 3,9"/>
         <circle cx="12" cy="3"  r="1.3" fill="currentColor" stroke="none"/>
@@ -430,20 +430,20 @@
         <circle cx="3"  cy="9"  r="1.3" fill="currentColor" stroke="none"/>
       </svg>
     </button>
-    <button class="tool-btn" data-tool="ellipse" title="Ellipse — drag bbox, resize handles, confirm">
+    <button class="tool-btn" data-tool="ellipse" data-i18n-title="tool.ellipse.tip" title="Ellipse — drag bbox, resize handles, confirm">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <ellipse cx="12" cy="12" rx="9" ry="6"/>
       </svg>
     </button>
     <div class="tool-btn-divider"></div>
-    <button class="tool-btn" data-tool="restore" title="Restore brush — paint back transparent pixels">
+    <button class="tool-btn" data-tool="restore" data-i18n-title="tool.restore.tip" title="Restore brush — paint back transparent pixels">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M9 14l-3 3c-1 1-1 2.5 0 3.5s2.5 1 3.5 0l3-3"/>
         <path d="M9 14l5-5 4 4-5 5z"/>
         <path d="M14 9l5-5c0.8-0.8 2.2-0.8 3 0s0.8 2.2 0 3l-5 5"/>
       </svg>
     </button>
-    <button class="tool-btn" data-tool="erase" title="Erase brush — paint pixels transparent">
+    <button class="tool-btn" data-tool="erase" data-i18n-title="tool.erase.tip" title="Erase brush — paint pixels transparent">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M16 4l4 4-9 9-4-4z"/>
         <path d="M7 13l-3 3c-0.8 0.8-0.8 2.2 0 3l1 1h6l2-2"/>
@@ -455,49 +455,49 @@
   <!-- ── Tool-options + history (left-middle) ───────────────────────────── -->
   <div class="panel left padded" id="tool-options-panel">
     <section>
-      <h2 id="active-tool-label">Click pixel</h2>
+      <h2 id="active-tool-label" data-i18n="tool.color.name">Click pixel</h2>
 
       <div class="tool-options-group" data-tools="color bounded">
         <div class="row">
-          <label for="threshold">Tolerance</label>
+          <label for="threshold" data-i18n="opt.tolerance">Tolerance</label>
           <input id="threshold" type="range" min="0" max="200" value="30">
           <span class="val" id="threshold-val">30</span>
         </div>
       </div>
 
       <div class="tool-options-group" data-tools="bounded">
-        <div class="hint">Drag a rectangle first to bound where the colour match applies. Then click colours inside it.</div>
+        <div class="hint" data-i18n="hint.bounded">Drag a rectangle first to bound where the colour match applies. Then click colours inside it.</div>
       </div>
 
       <div class="tool-options-group" data-tools="region">
-        <div class="hint">Drag a rectangle on the canvas. The area becomes transparent on release.</div>
+        <div class="hint" data-i18n="hint.region">Drag a rectangle on the canvas. The area becomes transparent on release.</div>
       </div>
 
       <div class="tool-options-group" data-tools="polygon">
-        <div class="hint">Click to place corners. Drag corners to reshape. Press <strong>Confirm</strong> in the floating bar to apply.</div>
+        <div class="hint" data-i18n-html="hint.polygon">Click to place corners. Drag corners to reshape. Press <strong>Confirm</strong> in the floating bar to apply.</div>
       </div>
 
       <div class="tool-options-group" data-tools="ellipse">
-        <div class="hint">Drag to draw a bounding box. Resize via handles. Press <strong>Confirm</strong> to apply.</div>
+        <div class="hint" data-i18n-html="hint.ellipse">Drag to draw a bounding box. Resize via handles. Press <strong>Confirm</strong> to apply.</div>
       </div>
 
       <div class="tool-options-group" data-tools="restore erase">
         <div class="row">
-          <label for="brush-size">Size</label>
+          <label for="brush-size" data-i18n="opt.size">Size</label>
           <input id="brush-size" type="range" min="3" max="120" value="20">
           <span class="val" id="brush-size-val">20</span>
         </div>
         <div class="row">
-          <label for="brush-hardness">Hardness</label>
+          <label for="brush-hardness" data-i18n="opt.hardness">Hardness</label>
           <input id="brush-hardness" type="range" min="0" max="100" value="100">
           <span class="val" id="brush-hardness-val">100</span>
         </div>
         <div class="seg-row" id="brush-shape-row">
           <button class="seg active" data-shape="round">
-            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg>Round
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg><span data-i18n="brush.round">Round</span>
           </button>
           <button class="seg" data-shape="square">
-            <svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10"/></svg>Square
+            <svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10"/></svg><span data-i18n="brush.square">Square</span>
           </button>
         </div>
       </div>
@@ -505,20 +505,20 @@
       <div class="tool-options-group" data-tools="color bounded region polygon ellipse">
         <div class="check-row">
           <input type="checkbox" id="feather" checked>
-          <label for="feather">Soften edges (2 px feather)</label>
+          <label for="feather" data-i18n="opt.feather">Soften edges (2 px feather)</label>
         </div>
       </div>
     </section>
 
     <section>
-      <h2>History</h2>
+      <h2 data-i18n="section.history">History</h2>
       <div class="history" id="history"></div>
       <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn" id="undo-btn" disabled>Undo</button>
-        <button class="btn" id="redo-btn" disabled>Redo</button>
+        <button class="btn" id="undo-btn" disabled data-i18n="btn.undo">Undo</button>
+        <button class="btn" id="redo-btn" disabled data-i18n="btn.redo">Redo</button>
       </div>
       <div class="btn-row" style="margin-top: 6px;">
-        <button class="btn danger" id="reset-edits-btn" disabled>Reset all edits</button>
+        <button class="btn danger" id="reset-edits-btn" disabled data-i18n="btn.reset_edits">Reset all edits</button>
       </div>
     </section>
   </div>
@@ -526,10 +526,10 @@
   <!-- ── Canvas (centre) ────────────────────────────────────────────────── -->
   <div class="canvas-area">
     <div class="canvas-toolbar">
-      <button class="btn btn-icon" id="zoom-out"   disabled title="Zoom out">−</button>
-      <button class="btn btn-icon" id="zoom-fit"   disabled title="Fit to viewport">Fit</button>
-      <button class="btn btn-icon" id="zoom-100"   disabled title="Actual size">100%</button>
-      <button class="btn btn-icon" id="zoom-in"    disabled title="Zoom in">+</button>
+      <button class="btn btn-icon" id="zoom-out"   disabled data-i18n-title="zoom.out" title="Zoom out">−</button>
+      <button class="btn btn-icon" id="zoom-fit"   disabled data-i18n-title="zoom.fit" title="Fit to viewport" data-i18n="zoom.fit_label">Fit</button>
+      <button class="btn btn-icon" id="zoom-100"   disabled data-i18n-title="zoom.actual" title="Actual size">100%</button>
+      <button class="btn btn-icon" id="zoom-in"    disabled data-i18n-title="zoom.in" title="Zoom in">+</button>
       <span class="zoom-display" id="zoom-display">—</span>
       <div class="spacer"></div>
       <span class="stat" id="canvas-stat"></span>
@@ -544,79 +544,79 @@
         <div id="brush-cursor" class="shape-round"></div>
         <div id="split-line"></div>
       </div>
-      <div class="placeholder" id="placeholder">
+      <div class="placeholder" id="placeholder" data-i18n-html="placeholder">
         <strong>Drag an image here, or click "Choose image…"</strong>
         Anything with bright, distinct hotspots works best —<br>
         night cityscapes, neon art, sci-fi panels, etc.
       </div>
     </div>
     <div class="shape-toolbar" id="shape-toolbar">
-      <span class="label" id="shape-toolbar-label">Drawing shape…</span>
-      <button class="btn primary" id="shape-confirm">Confirm</button>
-      <button class="btn" id="shape-cancel">Cancel</button>
+      <span class="label" id="shape-toolbar-label" data-i18n="shape.drawing">Drawing shape…</span>
+      <button class="btn primary" id="shape-confirm" data-i18n="btn.confirm">Confirm</button>
+      <button class="btn" id="shape-cancel" data-i18n="btn.cancel">Cancel</button>
     </div>
   </div>
 
   <!-- ── Files / Output / Apply (right) ─────────────────────────────────── -->
   <div class="panel right padded" id="files-panel">
     <section>
-      <h2>Load</h2>
+      <h2 data-i18n="section.load">Load</h2>
       <div class="btn-row">
-        <label class="btn primary" for="file-input">Choose image…</label>
+        <label class="btn primary" for="file-input" data-i18n="btn.choose_image">Choose image…</label>
         <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
       </div>
-      <div class="stat" id="img-stat">No image loaded.</div>
+      <div class="stat" id="img-stat" data-i18n="stat.no_image">No image loaded.</div>
       <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn" id="rotate-btn" disabled>Rotate 90°</button>
+        <button class="btn" id="rotate-btn" disabled data-i18n="btn.rotate">Rotate 90°</button>
       </div>
     </section>
 
     <section>
-      <h2>Merge two images</h2>
-      <div class="hint" style="margin-bottom: 8px;">
+      <h2 data-i18n="section.merge">Merge two images</h2>
+      <div class="hint" style="margin-bottom: 8px;" data-i18n="merge.hint">
         Drop or pick two images, side-by-side into one canvas:
       </div>
       <div class="merge-slot" id="merge-slot-a">
         <div class="btn-row">
-          <label class="btn" for="merge-input-a">Pick A…</label>
+          <label class="btn" for="merge-input-a" data-i18n="merge.pick_a">Pick A…</label>
           <input id="merge-input-a" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
         </div>
-        <div class="stat" id="merge-a-stat">— or drop a file here</div>
+        <div class="stat" id="merge-a-stat" data-i18n="merge.drop_here">— or drop a file here</div>
       </div>
       <div class="merge-slot" id="merge-slot-b" style="margin-top: 4px;">
         <div class="btn-row">
-          <label class="btn" for="merge-input-b">Pick B…</label>
+          <label class="btn" for="merge-input-b" data-i18n="merge.pick_b">Pick B…</label>
           <input id="merge-input-b" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
         </div>
-        <div class="stat" id="merge-b-stat">— or drop a file here</div>
+        <div class="stat" id="merge-b-stat" data-i18n="merge.drop_here">— or drop a file here</div>
       </div>
       <div class="check-row" style="margin-top: 8px;">
         <input type="checkbox" id="merge-5050">
-        <label for="merge-5050">Force 50/50</label>
+        <label for="merge-5050" data-i18n="merge.force_5050">Force 50/50</label>
       </div>
       <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn primary" id="merge-go" disabled>Merge &amp; load →</button>
+        <button class="btn primary" id="merge-go" disabled data-i18n="merge.go">Merge &amp; load →</button>
       </div>
     </section>
 
     <section>
-      <h2>Output</h2>
+      <h2 data-i18n="section.output">Output</h2>
       <div class="row">
-        <label for="max-size">Max size</label>
+        <label for="max-size" data-i18n="out.max_size">Max size</label>
         <select id="max-size">
-          <option value="0">Original</option>
+          <option value="0" data-i18n="out.original">Original</option>
           <option value="3840" selected>4K (3840 px)</option>
           <option value="2560">QHD (2560 px)</option>
           <option value="1920">FHD (1920 px)</option>
         </select>
       </div>
       <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn primary" id="save-btn" disabled>Save as PNG…</button>
+        <button class="btn primary" id="save-btn" disabled data-i18n="btn.save_png">Save as PNG…</button>
       </div>
     </section>
 
     <section>
-      <h2>Apply to screen</h2>
+      <h2 data-i18n="section.apply">Apply to screen</h2>
       <div class="btn-row">
         <button class="btn primary apply-screen" data-screen="0" disabled>→ 1</button>
         <button class="btn primary apply-screen" data-screen="1" disabled>→ 2</button>
@@ -626,10 +626,10 @@
     </section>
 
     <section>
-      <h2>Multi-monitor split</h2>
+      <h2 data-i18n="section.split">Multi-monitor split</h2>
       <div class="check-row">
         <input type="checkbox" id="split-preview">
-        <label for="split-preview">Show split guide</label>
+        <label for="split-preview" data-i18n="split.show_guide">Show split guide</label>
       </div>
       <div class="btn-row" style="margin-top: 6px;">
         <button class="btn split-btn" data-left="0" data-right="1" disabled>Split → 1 + 2</button>
@@ -767,15 +767,200 @@ let brushShape = "round";  // "round" | "square"
 let redoStack = [];
 
 // Tool label shown above the options panel; kept in sync with currentTool.
-const TOOL_LABELS = {
-  color:    "Click pixel",
-  bounded:  "Click in region",
-  region:   "Drag rectangle",
-  polygon:  "Polygon",
-  ellipse:  "Ellipse",
-  restore:  "Restore brush",
-  erase:    "Erase brush",
+// Each tool label is looked up via t("tool.<key>.name") so switching
+// languages re-renders the active-tool header in selectTool().
+const TOOL_KEYS = {
+  color:    "tool.color.name",
+  bounded:  "tool.bounded.name",
+  region:   "tool.region.name",
+  polygon:  "tool.polygon.name",
+  ellipse:  "tool.ellipse.name",
+  restore:  "tool.restore.name",
+  erase:    "tool.erase.name",
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Localisation (EN / DE)
+//
+// Same shape as the Configurator's i18n: a flat string table keyed by
+// dotted ids, plus walkers for `data-i18n` (textContent),
+// `data-i18n-title` (title attribute) and `data-i18n-html` (innerHTML —
+// for strings that contain <strong> / <br>). Language source is the
+// bridge's /config endpoint, which already echoes the user's chosen
+// language; we fall back to "en" if the fetch fails or the page is
+// served from elsewhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TRANSLATIONS = {
+  "header.title": { en: "SignalRGB Wallpaper Builder", de: "SignalRGB Wallpaper Builder" },
+  "header.sub":   { en: "Click bright areas to make them transparent, then apply to a screen.",
+                    de: "Helle Bereiche anklicken, um sie transparent zu machen, dann auf einen Bildschirm anwenden." },
+
+  // Tool labels (h2 in tool-options panel) — keyed off currentTool.
+  "tool.color.name":    { en: "Click pixel",     de: "Pixel anklicken" },
+  "tool.bounded.name":  { en: "Click in region", de: "In Bereich klicken" },
+  "tool.region.name":   { en: "Drag rectangle",  de: "Rechteck ziehen" },
+  "tool.polygon.name":  { en: "Polygon",         de: "Polygon" },
+  "tool.ellipse.name":  { en: "Ellipse",         de: "Ellipse" },
+  "tool.restore.name":  { en: "Restore brush",   de: "Wiederherstellen-Pinsel" },
+  "tool.erase.name":    { en: "Erase brush",     de: "Radier-Pinsel" },
+
+  // Toolbox button tooltips.
+  "tool.color.tip":   { en: "Click pixel — remove similar colours",
+                        de: "Pixel anklicken — ähnliche Farben entfernen" },
+  "tool.bounded.tip": { en: "Click in region — drag rectangle, then click colours inside",
+                        de: "In Bereich klicken — Rechteck ziehen, dann Farben darin anklicken" },
+  "tool.region.tip":  { en: "Drag rectangle — remove the area you draw",
+                        de: "Rechteck ziehen — gezeichneten Bereich entfernen" },
+  "tool.polygon.tip": { en: "Polygon — click corners, drag handles, confirm",
+                        de: "Polygon — Ecken anklicken, Griffe ziehen, bestätigen" },
+  "tool.ellipse.tip": { en: "Ellipse — drag bbox, resize handles, confirm",
+                        de: "Ellipse — Rahmen ziehen, Griffe anpassen, bestätigen" },
+  "tool.restore.tip": { en: "Restore brush — paint back transparent pixels",
+                        de: "Wiederherstellen — transparente Pixel zurück malen" },
+  "tool.erase.tip":   { en: "Erase brush — paint pixels transparent",
+                        de: "Radieren — Pixel transparent malen" },
+
+  // Tool-options labels.
+  "opt.tolerance": { en: "Tolerance", de: "Toleranz" },
+  "opt.size":      { en: "Size",      de: "Größe" },
+  "opt.hardness":  { en: "Hardness",  de: "Härte" },
+  "opt.feather":   { en: "Soften edges (2 px feather)", de: "Kanten weichzeichnen (2 px Feder)" },
+  "brush.round":   { en: "Round",     de: "Rund" },
+  "brush.square":  { en: "Square",    de: "Quadratisch" },
+
+  // Tool-options hints.
+  "hint.bounded": { en: "Drag a rectangle first to bound where the colour match applies. Then click colours inside it.",
+                    de: "Zuerst ein Rechteck ziehen, um den Farbabgleich einzugrenzen. Dann Farben darin anklicken." },
+  "hint.region":  { en: "Drag a rectangle on the canvas. The area becomes transparent on release.",
+                    de: "Ein Rechteck auf der Leinwand ziehen. Beim Loslassen wird der Bereich transparent." },
+  "hint.polygon": { en: "Click to place corners. Drag corners to reshape. Press <strong>Confirm</strong> in the floating bar to apply.",
+                    de: "Klicken, um Ecken zu setzen. Ecken ziehen zum Umformen. <strong>Bestätigen</strong> in der schwebenden Leiste zum Anwenden." },
+  "hint.ellipse": { en: "Drag to draw a bounding box. Resize via handles. Press <strong>Confirm</strong> to apply.",
+                    de: "Ziehen, um einen Rahmen zu zeichnen. Über Griffe anpassen. <strong>Bestätigen</strong> zum Anwenden." },
+
+  // History.
+  "section.history":  { en: "History",         de: "Verlauf" },
+  "btn.undo":         { en: "Undo",            de: "Rückgängig" },
+  "btn.redo":         { en: "Redo",            de: "Wiederholen" },
+  "btn.reset_edits":  { en: "Reset all edits", de: "Alle Änderungen zurücksetzen" },
+
+  // Zoom toolbar.
+  "zoom.out":       { en: "Zoom out",          de: "Verkleinern" },
+  "zoom.fit":       { en: "Fit to viewport",   de: "An Ansicht anpassen" },
+  "zoom.fit_label": { en: "Fit",               de: "Fit" },
+  "zoom.actual":    { en: "Actual size",       de: "Tatsächliche Größe" },
+  "zoom.in":        { en: "Zoom in",           de: "Vergrößern" },
+
+  // Placeholder + shape toolbar.
+  "placeholder":     { en: '<strong>Drag an image here, or click "Choose image…"</strong>\n        Anything with bright, distinct hotspots works best —<br>\n        night cityscapes, neon art, sci-fi panels, etc.',
+                       de: '<strong>Ein Bild hierher ziehen oder „Bild auswählen…“ klicken</strong>\n        Funktioniert am besten mit hellen, deutlichen Hotspots —<br>\n        nächtliche Stadtansichten, Neon-Kunst, Sci-Fi-Panels, etc.' },
+  "shape.drawing":   { en: "Drawing shape…",   de: "Form wird gezeichnet…" },
+  "btn.confirm":     { en: "Confirm",          de: "Bestätigen" },
+  "btn.cancel":      { en: "Cancel",           de: "Abbrechen" },
+
+  // Right panel — Load.
+  "section.load":     { en: "Load",            de: "Laden" },
+  "btn.choose_image": { en: "Choose image…",   de: "Bild auswählen…" },
+  "stat.no_image":    { en: "No image loaded.",de: "Kein Bild geladen." },
+  "btn.rotate":       { en: "Rotate 90°",      de: "90° drehen" },
+
+  // Right panel — Merge.
+  "section.merge":   { en: "Merge two images", de: "Zwei Bilder zusammenführen" },
+  "merge.hint":      { en: "Drop or pick two images, side-by-side into one canvas:",
+                       de: "Zwei Bilder ablegen oder auswählen, nebeneinander in einer Leinwand:" },
+  "merge.pick_a":    { en: "Pick A…",          de: "A auswählen…" },
+  "merge.pick_b":    { en: "Pick B…",          de: "B auswählen…" },
+  "merge.drop_here": { en: "— or drop a file here", de: "— oder Datei hier ablegen" },
+  "merge.force_5050":{ en: "Force 50/50",      de: "50/50 erzwingen" },
+  "merge.go":        { en: "Merge & load →",   de: "Zusammenführen & laden →" },
+
+  // Right panel — Output.
+  "section.output": { en: "Output",   de: "Ausgabe" },
+  "out.max_size":   { en: "Max size", de: "Max. Größe" },
+  "out.original":   { en: "Original", de: "Original" },
+  "btn.save_png":   { en: "Save as PNG…", de: "Als PNG speichern…" },
+
+  // Right panel — Apply / Split.
+  "section.apply":  { en: "Apply to screen",      de: "Auf Bildschirm anwenden" },
+  "section.split":  { en: "Multi-monitor split",  de: "Multi-Monitor-Aufteilung" },
+  "split.show_guide": { en: "Show split guide",   de: "Aufteilungs-Hilfslinie anzeigen" },
+
+  // Toast templates — formatted at runtime via {placeholders}.
+  "toast.decode_failed":  { en: "Failed to decode {name}",          de: "{name} konnte nicht dekodiert werden" },
+  "toast.merged":         { en: "Merged {w}×{h} loaded.",           de: "{w}×{h} zusammengeführt geladen." },
+  "toast.bounded_no_area":{ en: "Drag a rectangle first to set the area, then click a colour inside it.",
+                            de: "Erst ein Rechteck ziehen, um den Bereich festzulegen, dann eine Farbe darin anklicken." },
+  "toast.bounded_outside":{ en: "Click inside the yellow region. Drag a new rectangle to relocate it.",
+                            de: "In den gelben Bereich klicken. Neues Rechteck ziehen, um ihn zu verschieben." },
+  "toast.polygon_3_corners_cancel": { en: "Polygon needs at least 3 corners. Cancel to remove the whole shape.",
+                                      de: "Polygon braucht mindestens 3 Ecken. Abbrechen entfernt die ganze Form." },
+  "toast.polygon_3_corners": { en: "Polygon needs at least 3 corners.",
+                               de: "Polygon braucht mindestens 3 Ecken." },
+  "toast.ellipse_too_small": { en: "Ellipse is too small.", de: "Ellipse ist zu klein." },
+  "toast.saved":            { en: "Saved {name} ({size}).",   de: "{name} gespeichert ({size})." },
+  "toast.save_failed":      { en: "Save failed: {msg}",        de: "Speichern fehlgeschlagen: {msg}" },
+  "toast.applied":          { en: "Applied to Screen {n} ({size}).",
+                              de: "Auf Bildschirm {n} angewendet ({size})." },
+  "toast.apply_failed":     { en: "Apply to Screen {n} failed: {msg}",
+                              de: "Anwenden auf Bildschirm {n} fehlgeschlagen: {msg}" },
+  "toast.split_applied":    { en: "Split applied: L→Screen {l}, R→Screen {r}.",
+                              de: "Aufteilung angewendet: L→Bildschirm {l}, R→Bildschirm {r}." },
+  "toast.split_failed":     { en: "Split apply failed: {msg}", de: "Aufteilung fehlgeschlagen: {msg}" },
+};
+
+let _lang = "en";
+
+function t(key, params) {
+  const entry = TRANSLATIONS[key];
+  let s = (entry && (entry[_lang] || entry.en)) || key;
+  if (params) {
+    for (const k in params) s = s.replace(new RegExp("\\{" + k + "\\}", "g"), params[k]);
+  }
+  return s;
+}
+
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+    el.innerHTML = t(el.getAttribute("data-i18n-html"));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    el.setAttribute("title", t(el.getAttribute("data-i18n-title")));
+  });
+}
+
+function setLanguage(lang) {
+  if (lang === _lang) return;
+  if (lang !== "en" && lang !== "de") return;
+  _lang = lang;
+  applyI18n();
+}
+
+// Ask the bridge what language to use. Auto-mode in the bridge already
+// resolves to "en" or "de" based on the Windows locale before the
+// response goes out, so the builder only ever sees a concrete value.
+(function fetchLanguage() {
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "/config", true);
+    xhr.timeout = 1500;
+    xhr.onload = () => {
+      if (xhr.status !== 200) return;
+      try {
+        const cfg = JSON.parse(xhr.responseText);
+        if (cfg && (cfg.language === "en" || cfg.language === "de")) setLanguage(cfg.language);
+      } catch (_) {}
+    };
+    xhr.send();
+  } catch (_) {}
+})();
+
+// Initial pass so the static HTML strings render in the default language
+// before the async fetch completes. Cheap (DOM has ~50 nodes to scan).
+applyI18n();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Toast helper
@@ -900,7 +1085,7 @@ function loadSlotFromFile(file, setSlot) {
   if (!file) return;
   fileToImage(file).then(
     (img) => { setSlot({ img, name: file.name }); updateMergeUI(); },
-    () => toast("Failed to decode " + file.name, "bad"),
+    () => toast(t("toast.decode_failed", { name: file.name }), "bad"),
   );
 }
 
@@ -960,7 +1145,7 @@ els.mergeGo.addEventListener("click", () => {
   const stripExt = (n) => n.replace(/\.[^.]+$/, "");
   const name = `${stripExt(mergeSlotA.name)}+${stripExt(mergeSlotB.name)}.png`;
   applySourceImage(name, merged);
-  toast(`Merged ${merged.width}×${merged.height} loaded.`, "good");
+  toast(t("toast.merged", { w: merged.width, h: merged.height }), "good");
 });
 
 function setControlsEnabled(on) {
@@ -1060,10 +1245,13 @@ els.toolBtns.forEach((btn) => {
 });
 
 function selectTool(tool) {
-  if (!TOOL_LABELS[tool]) return;
+  if (!TOOL_KEYS[tool]) return;
   currentTool = tool;
   els.toolBtns.forEach((b) => b.classList.toggle("active", b.dataset.tool === tool));
-  els.activeToolLabel.textContent = TOOL_LABELS[tool];
+  els.activeToolLabel.textContent = t(TOOL_KEYS[tool]);
+  // Keep the data-i18n attr in sync so applyI18n() after a language
+  // switch re-renders the label without needing to call selectTool again.
+  els.activeToolLabel.dataset.i18n = TOOL_KEYS[tool];
   els.toolOptionGroups.forEach((g) => {
     const tools = (g.dataset.tools || "").split(/\s+/);
     g.classList.toggle("hidden", !tools.includes(tool));
@@ -1381,12 +1569,12 @@ window.addEventListener("mouseup", () => {
     }
     // Click (no significant drag) — pick colour at this pixel
     if (!boundedRegion) {
-      toast("Drag a rectangle first to set the area, then click a colour inside it.", "bad");
+      toast(t("toast.bounded_no_area"), "bad");
       return;
     }
     if (anchor.x < boundedRegion.x0 || anchor.x > boundedRegion.x1 ||
         anchor.y < boundedRegion.y0 || anchor.y > boundedRegion.y1) {
-      toast("Click inside the yellow region. Drag a new rectangle to relocate it.", "bad");
+      toast(t("toast.bounded_outside"), "bad");
       return;
     }
     const i = (anchor.y * els.canvas.width + anchor.x) * 4;
@@ -1582,7 +1770,7 @@ els.shapeOverlay.addEventListener("contextmenu", (e) => {
   const idx = parseInt(t.dataset.idx, 10);
   if (!isFinite(idx)) return;
   if (editingShape.points.length <= 3) {
-    toast("Polygon needs at least 3 corners. Cancel to remove the whole shape.", "bad");
+    toast(t("toast.polygon_3_corners_cancel"), "bad");
     e.preventDefault();
     return;
   }
@@ -1629,11 +1817,11 @@ function cancelShapeEdit() {
 els.shapeConfirm.addEventListener("click", () => {
   if (!editingShape) return;
   if (editingShape.kind === "polygon" && editingShape.points.length < 3) {
-    toast("Polygon needs at least 3 corners.", "bad");
+    toast(t("toast.polygon_3_corners"), "bad");
     return;
   }
   if (editingShape.kind === "ellipse" && (editingShape.rx < 1 || editingShape.ry < 1)) {
-    toast("Ellipse is too small.", "bad");
+    toast(t("toast.ellipse_too_small"), "bad");
     return;
   }
   pushClick(editingShape);
@@ -1983,9 +2171,9 @@ els.saveBtn.addEventListener("click", async () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast(`Saved ${a.download} (${formatBytes(blob.size)}).`, "good");
+    toast(t("toast.saved", { name: a.download, size: formatBytes(blob.size) }), "good");
   } catch (e) {
-    toast("Save failed: " + e.message, "bad");
+    toast(t("toast.save_failed", { msg: e.message }), "bad");
   }
 });
 
@@ -1996,9 +2184,9 @@ els.applyBtns.forEach((btn) => {
     try {
       const blob = await canvasToBlob();
       await uploadToScreen(screen, blob);
-      toast(`Applied to Screen ${screen + 1} (${formatBytes(blob.size)}).`, "good");
+      toast(t("toast.applied", { n: screen + 1, size: formatBytes(blob.size) }), "good");
     } catch (e) {
-      toast(`Apply to Screen ${screen + 1} failed: ${e.message}`, "bad");
+      toast(t("toast.apply_failed", { n: screen + 1, msg: e.message }), "bad");
     } finally {
       btn.disabled = false;
     }
@@ -2017,9 +2205,9 @@ els.splitBtns.forEach((btn) => {
       const rightBlob = await canvasToBlob({ sx: halfW,  sy: 0, sw: w - halfW,     sh: h });
       await uploadToScreen(leftScreen,  leftBlob);
       await uploadToScreen(rightScreen, rightBlob);
-      toast(`Split applied: L→Screen ${leftScreen + 1}, R→Screen ${rightScreen + 1}.`, "good");
+      toast(t("toast.split_applied", { l: leftScreen + 1, r: rightScreen + 1 }), "good");
     } catch (e) {
-      toast("Split apply failed: " + e.message, "bad");
+      toast(t("toast.split_failed", { msg: e.message }), "bad");
     } finally {
       btn.disabled = false;
     }

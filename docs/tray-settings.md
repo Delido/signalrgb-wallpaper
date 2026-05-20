@@ -26,7 +26,6 @@ When a newer release is published, an extra `⬆ Update available: vX.Y.Z — op
 
 | Entry | What it does |
 | --- | --- |
-| **Legacy Settings dialog…** | The classic Tk window that pre-dated the Configurator. Still useful for one thing the Configurator doesn't cover yet: the global `Number of screens` knob. Pick 1 / 2 / 3 / 4, click Save — SignalRGB picks up the new count within ~2 s. |
 | **Quick add widget** *(submenu)* | Per-screen submenu that mirrors the Configurator's *Add a widget* picker grid. Same eleven types, plus an *Edit widgets* toggle and a "Currently placed: N" status line. |
 | **Quick effects** *(submenu)* | Per-screen submenu with radio lists for ambient preset (off / snow / rain / sparks / aurora), tint-with-glow toggle, and pixelfx mode (off / trail / glow / ripple / all). Same state as the Configurator's Effects section. |
 | **Reload config** | Re-reads `%LOCALAPPDATA%\SignalRGBWallpaper\config.json` from disk. Useful if you edited it by hand or are debugging settings sync. Pushes the reloaded state to all connected wallpaper pages. |
@@ -113,5 +112,6 @@ Override by editing `config.json`:
 The Configurator picks up the active language on its first WebSocket
 push from the bridge and re-localises live without a reload.
 
-Builder window strings are English-only for now — tracked on the README
-roadmap.
+Builder window strings are also DE / EN since v0.7.4-beta; it fetches
+the active language from the bridge's `GET /config` endpoint on load
+and applies it to all labels + toast messages.

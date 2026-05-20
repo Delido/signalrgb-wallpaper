@@ -71,12 +71,10 @@ Symptom: you double-click `SignalRGBBridge.exe`, no tray icon, nothing.
 
 The Lively wallpaper opens but never receives frames.
 
-1. **Enable the debug overlay** for that screen: tray → **Advanced** →
-   **Legacy Settings dialog…** → the screen's tab → *Show debug
-   overlay* → **Save**. The wallpaper now shows a tiny status line
-   top-left. (The new in-browser Configurator doesn't surface this
-   toggle yet — it's the one knob still living in the legacy Tk
-   dialog besides *Number of screens*.)
+1. **Enable the debug overlay** for that screen: tray icon →
+   **Configurator…** → pick the screen tab → *Background* → tick
+   *Show debug overlay (top-left status line on the wallpaper)*. The
+   wallpaper now shows a tiny status line top-left.
 2. **Read the status:**
    - `connecting ws://127.0.0.1:17320/?screen=N…` — bridge not running
      or wrong port. Confirm `SignalRGBBridge.exe` is in your tray.
@@ -151,9 +149,9 @@ image appears (or it's broken).
 
 ## SignalRGB shows too many / too few devices
 
-Set *Number of screens* in tray → **Advanced** → **Legacy Settings
-dialog…**. Plugin polls the bridge every ~2 seconds and adjusts. If it
-doesn't:
+Set *Number of screens* in the Configurator (top-right of the tab
+bar — *Screens: 1 / 2 / 3 / 4*). Plugin polls the bridge every ~2
+seconds and adjusts. If it doesn't:
 
 - Make sure the bridge is actually running (tray icon visible).
 - Open `http://127.0.0.1:17320/config` in a browser — should return

@@ -26,11 +26,12 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.2-beta — Wallpaper Engine now ships as a **single**
-> bundle with a _Screen index_ property (assigned N times instead of
-> four separate tiles). 4-monitor support + ultrawide aspect-ratio +
-> Lively-import hotfix from v0.7.1-beta are folded in. Marked
-> prerelease.
+> **Status:** v0.7.4-beta — Configurator now owns _Number of screens_
+> and _Show debug overlay_; the legacy Tk Settings dialog tray entry
+> is retired. Builder window joins the DE / EN localised UI. Folds in
+> the single-WE-bundle packaging (0.7.2-beta + 0.7.3-beta), 4-monitor
+> support, ultrawide aspect-ratio and Lively-import hotfix from
+> v0.7.1-beta. Marked prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -206,20 +207,10 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
   backgrounds shipped with the installer or fetched on demand.
 - **Preset slots in the configurator** — save a "background + glow +
   dim + blur + widgets" combo per screen and switch with one click.
-- **Configurator owns _Number of screens_ + debug overlay** — the
-  last two knobs still living in the legacy Tk dialog. Once moved the
-  legacy dialog can retire.
 - **Auto-Lively bootstrapper** — Wallpaper Engine auto-copy + Lively
   auto-import both shipped, but if neither host is installed the user
   still has to install Lively manually. A bundled bootstrapper that
   pulls + installs Lively if missing would close the loop.
-- **Builder localisation** — the Configurator + tray + About are
-  DE / EN since 0.7.0; the Builder window is still English-only.
-- **More than 4 monitors** — lift the current `MAX_SCREENS = 4` cap
-  to N. Most code paths are already data-driven (config migration,
-  Configurator tab generator, build.ps1 staging loops); the QML +
-  Inno Setup `[Files]` block would need either generation or a
-  higher hard-coded ceiling.
 - **Pattern-fill brush in the builder** — halftone / dither /
   hatching as an alternative to solid-colour transparent cuts
   (intentionally skipped during the 0.4.5 builder polish, kept on
@@ -227,6 +218,18 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Recently shipped
 
+- ✅ **Configurator owns _Number of screens_ + debug overlay** —
+  both knobs moved from the legacy Tk dialog into the in-browser
+  Configurator. The Tk dialog tray entry is gone; the dialog code
+  stays in the source as dormant fallback (0.7.4-beta)
+- ✅ **Builder is DE / EN** — all labels, tooltips and toast
+  messages localised. Language is pulled from the bridge's
+  `GET /config` endpoint on load (0.7.4-beta)
+- ✅ **Single Wallpaper Engine bundle** — installer copies one
+  `signalrgb-glow/` folder instead of four per-screen folders;
+  subscribers assign once per monitor and pick a different
+  _Screen index_ per assignment (0.7.2-beta), with installer
+  auto-clean of legacy per-screen folders on upgrade (0.7.3-beta)
 - ✅ **Ultrawide-friendly glow grid** — plugin gained an
   _Aspect Ratio_ dropdown (Auto / 1:1 / 16:9 / 21:9 / 32:9 / 9:16 /
   Custom). Auto reads each monitor's viewport via the bridge's

@@ -4,6 +4,42 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4-beta] - 2026-05-20
+
+> Retires the legacy Tk Settings dialog: every knob it owned moved
+> into the in-browser Configurator. Builder window joins the DE / EN
+> localised UI.
+
+### Added
+
+- **Configurator owns `Number of screens`.** A small picker lives in
+  the tab bar's top-right ("Screens: 1 / 2 / 3 / 4"). Clicking sends
+  a new WS command type `bridge-setting-update` to the bridge, which
+  persists the value to `config.json` and re-pushes settings to every
+  connected Configurator so all open tabs stay in sync. Tabs beyond
+  the active count are visually dimmed (clickable, but the matching
+  SignalRGB device isn't announced).
+- **Configurator owns *Show debug overlay*.** Per-screen checkbox in
+  the Background section, wired through the existing
+  `setting-update showStatus` path.
+- **`GET /config` exposes the active UI language** alongside
+  `screenCount` + `screens[]`. The Builder fetches it on load.
+- **Builder is DE / EN.** Its own `TRANSLATIONS` map + `t()` +
+  `applyI18n()` (same shape as the Configurator), covering every
+  visible label, tooltip, hint, and toast message. Language source
+  is the new `/config` field.
+
+### Changed
+
+- **Tray menu retires the *Legacy Settings dialog…* entry.** Every
+  knob the dialog owned now lives in the Configurator (per-screen
+  settings already moved in 0.6.0-beta; `screenCount` + `showStatus`
+  finished the move in this beta). The `SettingsDialog` class stays
+  in `bridge.py` as dormant code in case a future workflow needs a
+  no-WebView fallback, but no menu entry reaches it.
+- **Architecture doc** updated to reflect the threading model now
+  having one `tk.Tk()` user — the About dialog — instead of two.
+
 ## [0.7.3-beta] - 2026-05-20
 
 > Adds auto-cleanup of the legacy per-screen Wallpaper Engine folders

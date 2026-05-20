@@ -313,7 +313,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.3-beta"
+APP_VERSION = "0.7.4-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -512,9 +512,9 @@ def default_config() -> dict:
 # crashes — it just shows up as the dotted-key, which makes missing entries
 # obvious during dev.
 #
-# Coverage is intentional, not exhaustive: tray menu, About dialog, and the
-# Configurator's main labels. The Builder window keeps English-only for now
-# (its strings are a separate ~80-entry job — tracked on the roadmap).
+# Coverage: tray menu, About dialog, the Configurator's main labels, and
+# (since v0.7.4-beta) the Builder window — the Builder has its own
+# in-page TRANSLATIONS map and fetches the active language from /config.
 # ----------------------------------------------------------------------------
 
 TRANSLATIONS = {
@@ -862,7 +862,7 @@ class Broadcaster:
         them. Runs on the asyncio loop thread."""
         t = msg.get("type")
         if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
-                 "setting-update", "viewport"):
+                 "setting-update", "viewport", "bridge-setting-update"):
             try:
                 self.on_widget_command(screen, msg)
             except Exception as e:
@@ -884,6 +884,7 @@ class Broadcaster:
             writer.write(encode_text_frame(json.dumps({
                 "type": "settings", "screen": screen,
                 "data": settings, "language": _CURRENT_LANG,
+                "screenCount": int(self.get_screen_count()),
             })))
         except Exception as e:
             print(f"[ws] initial settings push failed: {e}")
@@ -958,7 +959,8 @@ class Broadcaster:
         # Surface the active UI language alongside the per-screen data so
         # the Configurator can localise itself off a single push.
         msg = json.dumps({"type": "settings", "screen": screen,
-                          "data": settings, "language": _CURRENT_LANG})
+                          "data": settings, "language": _CURRENT_LANG,
+                          "screenCount": int(self.get_screen_count())})
         frame = encode_text_frame(msg)
         dead = []
         for w in clients:
@@ -1052,6 +1054,7 @@ class Broadcaster:
                 payload = json.dumps({
                     "screenCount": count,
                     "screens": screens,
+                    "language": _CURRENT_LANG,
                 }).encode("utf-8")
                 head = (
                     "HTTP/1.1 200 OK\r\n"
@@ -1586,6 +1589,45 @@ class BridgeRuntime:
             self.push_settings(screen, snap)
         return snap
 
+    # Whitelist of global (bridge-scoped) keys the Configurator may set via
+    # the `bridge-setting-update` WS command. Per-screen keys go through
+    # `update_screen_setting` above; this is the global counterpart.
+    _SETTABLE_BRIDGE_KEYS = {"screenCount"}
+
+    def update_bridge_setting(self, key: str, value):
+        """Mutate a top-level (non-per-screen) config field. Currently
+        screenCount only — the Configurator uses this to retire the
+        legacy Tk dialog as the sole source of that knob.
+
+        Re-pushes every screen's settings so the live screenCount field
+        in the settings payload propagates to all connected pages
+        (and the Configurator's screen-count input stays in sync if
+        multiple Configurator tabs are open)."""
+        if key not in self._SETTABLE_BRIDGE_KEYS:
+            print(f"[settings] ignoring non-whitelisted bridge key: {key!r}")
+            return
+        if key == "screenCount":
+            try:
+                n = max(1, min(N_SCREENS, int(value)))
+            except (TypeError, ValueError):
+                print(f"[settings] screenCount value not an int: {value!r}")
+                return
+            with self.config_lock:
+                if self.config.get("screenCount") == n:
+                    return
+                self.config["screenCount"] = n
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            for s in range(N_SCREENS):
+                try:
+                    self.push_settings(s, snapshot["screens"][str(s)])
+                except Exception as e:
+                    print(f"[settings] push after screenCount failed: {e}")
+            print(f"[settings] screenCount -> {n}")
+
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
         defer the actual persistence + rebroadcast to a thread so the WS
@@ -1603,6 +1645,9 @@ class BridgeRuntime:
                 self.set_widgets_locked(screen, bool(msg.get("locked", True)))
             elif t == "setting-update":
                 self.update_screen_setting(screen, str(msg.get("key", "")),
+                                           msg.get("value"))
+            elif t == "bridge-setting-update":
+                self.update_bridge_setting(str(msg.get("key", "")),
                                            msg.get("value"))
             elif t == "viewport":
                 self.update_viewport(screen, msg.get("w"), msg.get("h"))
@@ -2198,7 +2243,6 @@ class TrayApp:
                 self._toggle_widgets_lock_all),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(tr("tray.advanced"), pystray.Menu(
-                pystray.MenuItem(tr("tray.legacy_settings"),  self._open_settings),
                 pystray.MenuItem(tr("tray.quick_add_widget"), pystray.Menu(self._widget_menu_items)),
                 pystray.MenuItem(tr("tray.quick_effects"),    pystray.Menu(self._effects_menu_items)),
                 pystray.MenuItem(tr("tray.reload_config"),    self._reload_config),

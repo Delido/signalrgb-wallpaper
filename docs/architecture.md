@@ -38,14 +38,8 @@ landed here), see [HANDOFF.md](../HANDOFF.md) in the repo root.
 │  │ pystray thread (main): tray icon + menu                  │  │
 │  │   - "Configurator…" opens /configurator in browser       │  │
 │  │   - "Build Wallpaper…" opens /builder in browser         │  │
-│  │   - "Advanced → Legacy Settings dialog" spawns tkinter   │  │
-│  │   - "Reload config" re-reads + pushes to all clients     │  │
+│  │   - "Advanced → Quick add/effects, Reload config"        │  │
 │  │   - "Quit" → os._exit(0) hard kill                       │  │
-│  ├──────────────────────────────────────────────────────────┤  │
-│  │ Per-dialog thread: tkinter Legacy Settings UI            │  │
-│  │   - Pre-dates the Configurator; still owns               │  │
-│  │     'Number of screens' + per-screen 'Show debug overlay'│  │
-│  │   - All other knobs live in the Configurator now         │  │
 │  ├──────────────────────────────────────────────────────────┤  │
 │  │ Shared state:                                            │  │
 │  │   - %LOCALAPPDATA%/SignalRGBWallpaper/config.json        │  │
@@ -242,10 +236,12 @@ Three concurrent contexts:
    sysstats poller.
 2. **Main thread** — runs `pystray.Icon.run()` which blocks on the
    Win32 message pump.
-3. **Per-dialog thread** — spawned (daemon) when *Advanced → Legacy
-   Settings dialog…* is clicked. Creates a `tk.Tk()` and runs
-   `mainloop()`. Destroyed when the dialog closes. The About dialog
-   spawns a separate one of these (also tkinter).
+3. **Per-dialog thread** — spawned (daemon) when the About dialog
+   opens. Creates a `tk.Tk()` and runs `mainloop()`; destroyed when
+   the dialog closes. (The Settings UI moved entirely to the browser
+   Configurator in v0.7.4-beta; the legacy Tk `SettingsDialog` class
+   is no longer reachable from the tray menu and only kept in the
+   source as dormant code.)
 
 Cross-thread invariants:
 - The asyncio loop's state is touched ONLY via

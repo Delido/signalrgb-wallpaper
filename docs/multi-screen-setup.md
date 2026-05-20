@@ -38,8 +38,8 @@ background image + layout in the Configurator.
 
 Three independent pieces have to line up:
 
-1. **SignalRGB plugin** must announce N devices (controlled via tray
-   *Advanced → Legacy Settings dialog… → Number of screens*).
+1. **SignalRGB plugin** must announce N devices (controlled via the
+   Configurator's *Screens:* picker, top-right of the tab bar).
 2. **SignalRGB canvas** must have those devices placed where you want
    colours sampled.
 3. **Wallpaper host** (Lively or Wallpaper Engine) must show the
@@ -55,8 +55,8 @@ shows the right half.
 
 ### Step 1 — set screen count to 2
 
-Tray icon → **Advanced** → **Legacy Settings dialog…** → *Number of
-screens* = **2** → **Save**.
+Open the Configurator (tray icon → **Configurator…**). At the
+top-right of the tab bar there's a *Screens:* picker — click **2**.
 
 SignalRGB device list now shows:
 - Desktop Wallpaper - Screen 1
@@ -108,8 +108,8 @@ Switch SignalRGB effects to make sure the colours follow.
 
 If a wallpaper stays black:
 
-- Toggle *Show debug overlay* in tray → **Advanced** → **Legacy
-  Settings dialog…** for that screen — if the overlay says
+- Toggle *Show debug overlay* in the Configurator → that screen's
+  tab → *Background* section — if the overlay on the wallpaper says
   `connecting` or `disconnected`, the bridge isn't running or its WS
   handshake is failing. See [troubleshooting.md](troubleshooting.md).
 - Make sure the matching SignalRGB device is placed on the canvas at
@@ -164,8 +164,8 @@ Each screen tab in the Configurator is independent. You can:
 
 If you set count = 4 and want to go back to 2 (or 3):
 
-1. Tray → **Advanced** → **Legacy Settings dialog…** → set *Number of
-   screens* to the new value → **Save**.
+1. Configurator → top-right *Screens:* picker → pick the new value.
+   The bridge persists it and pushes to every open Configurator tab.
 2. The now-unused Screen N device(s) disappear from SignalRGB. Their
    canvas placement is **lost** — Configurator settings for the
    higher-indexed screens stay in `config.json`, so bumping the count

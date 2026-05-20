@@ -59,7 +59,7 @@
 
   /* ── Screen tabs ───────────────────────────────────────────────────── */
   .tabs {
-    display: flex; gap: 4px;
+    display: flex; gap: 4px; align-items: flex-end;
     padding: 0 22px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
@@ -79,6 +79,33 @@
     background: var(--panel);
     color: var(--text);
     border-color: var(--border);
+  }
+  .tab.inactive { opacity: 0.45; }
+  .tab.inactive::after { content: " ·"; opacity: 0.6; }
+
+  .screencount-pick {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 0 6px 0;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .screencount-pick .lbl {
+    text-transform: uppercase; letter-spacing: 0.08em; margin-right: 6px;
+  }
+  .sc-btn {
+    width: 28px; height: 28px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer; font: inherit;
+  }
+  .sc-btn:hover { color: var(--text); border-color: #3a6ba8; }
+  .sc-btn.active {
+    background: var(--accent-bg);
+    color: #d8e6fc;
+    border-color: #3a6ba8;
   }
 
   main {
@@ -479,6 +506,10 @@
         <input type="range" id="bg-dim" min="0" max="100" step="1">
         <span class="val" id="bg-dim-val">0 %</span>
       </div>
+      <div class="check-row">
+        <input type="checkbox" id="bg-debug">
+        <label for="bg-debug" data-i18n="bg.debug_overlay">Show debug overlay (top-left status line on the wallpaper)</label>
+      </div>
     </div>
   </section>
 
@@ -663,6 +694,9 @@ const TRANSLATIONS = {
   "bg.fit.contain":         { en: "contain (letterbox)",  de: "contain (mit Rand)" },
   "bg.fit.fill":            { en: "fill (stretch)",       de: "fill (stretchen)" },
   "bg.dim":                 { en: "Dim",                  de: "Abdunkeln" },
+  "bg.debug_overlay":       { en: "Show debug overlay (top-left status line on the wallpaper)",
+                              de: "Debug-Overlay anzeigen (Status-Zeile oben links im Wallpaper)" },
+  "bridge.screens":         { en: "Screens:",             de: "Bildschirme:" },
 
   "glow.show":              { en: "Show glow layer",      de: "Glow-Schicht anzeigen" },
   "glow.layout":            { en: "Layout",               de: "Layout" },
@@ -891,6 +925,7 @@ const els = {
   bgFit:          $("bg-fit"),
   bgDim:          $("bg-dim"),
   bgDimVal:       $("bg-dim-val"),
+  bgDebug:        $("bg-debug"),
   glowBars:       $("glow-bars"),
   glowLayout:     $("glow-layout"),
   glowStrength:   $("glow-strength"),
@@ -934,8 +969,10 @@ function toast(msg, kind) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tabs
+// Tabs + screen-count picker
 // ─────────────────────────────────────────────────────────────────────────────
+let screenCount = N_SCREENS;   // overridden by every settings push
+
 for (let i = 0; i < N_SCREENS; i++) {
   const t = document.createElement("button");
   t.className = "tab" + (i === 0 ? " active" : "");
@@ -944,6 +981,55 @@ for (let i = 0; i < N_SCREENS; i++) {
   t.addEventListener("click", () => switchScreen(i));
   els.tabs.appendChild(t);
 }
+
+// Right-aligned screen-count picker. Replaces the legacy Tk dialog's
+// "Number of screens" knob — sends `bridge-setting-update screenCount`
+// over the active WS, which the bridge persists + broadcasts so every
+// open Configurator tab stays in sync.
+(function buildScreenCountPicker() {
+  const wrap = document.createElement("div");
+  wrap.className = "screencount-pick";
+  wrap.id = "screencount-pick";
+  const lbl = document.createElement("span");
+  lbl.className = "lbl";
+  lbl.dataset.i18n = "bridge.screens";
+  lbl.textContent = "Screens:";
+  wrap.appendChild(lbl);
+  for (let n = 1; n <= N_SCREENS; n++) {
+    const b = document.createElement("button");
+    b.className = "sc-btn";
+    b.dataset.n = String(n);
+    b.textContent = String(n);
+    b.addEventListener("click", () => setScreenCount(n));
+    wrap.appendChild(b);
+  }
+  els.tabs.appendChild(wrap);
+  els.scPick = wrap;
+})();
+
+function setScreenCount(n) {
+  if (!isFinite(n) || n < 1 || n > N_SCREENS) return;
+  // Optimistic local apply so the picker doesn't lag behind the click.
+  applyScreenCount(n);
+  sendCmd({ type: "bridge-setting-update", key: "screenCount", value: n });
+}
+
+function applyScreenCount(n) {
+  n = parseInt(n, 10);
+  if (!isFinite(n) || n < 1 || n > N_SCREENS) return;
+  screenCount = n;
+  document.querySelectorAll(".sc-btn").forEach((b) => {
+    b.classList.toggle("active", parseInt(b.dataset.n, 10) === n);
+  });
+  // Dim tabs for screens beyond the active count — they still work (you
+  // can edit settings for an inactive screen), but the visual hint
+  // matches the SignalRGB plugin's actual device list.
+  document.querySelectorAll(".tab").forEach((t) => {
+    const idx = parseInt(t.dataset.screen, 10);
+    t.classList.toggle("inactive", idx >= n);
+  });
+}
+
 function switchScreen(n) {
   if (n === activeScreen) return;
   activeScreen = n;
@@ -991,6 +1077,7 @@ function connect() {
       if (msg && msg.type === "settings" && msg.data) {
         settings = msg.data;
         if (msg.language) setLanguage(msg.language);
+        if (typeof msg.screenCount === "number") applyScreenCount(msg.screenCount);
         renderAll();
       }
     } catch (_) {}
@@ -1018,6 +1105,7 @@ els.bgDim  .addEventListener("input",  () => {
   els.bgDimVal.textContent = els.bgDim.value + " %";
 });
 els.bgDim  .addEventListener("change", () => setSetting("bgDim", parseInt(els.bgDim.value, 10)));
+els.bgDebug.addEventListener("change", () => setSetting("showStatus", els.bgDebug.checked));
 
 // File picker: convert any image to PNG via canvas, POST to the bridge's
 // existing /screen/N/background endpoint (same one the builder uses for
@@ -1618,6 +1706,7 @@ function renderAll() {
   els.bgFit.value   = settings.bgFit   || "cover";
   els.bgDim.value   = String(settings.bgDim ?? 0);
   els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";
+  els.bgDebug.checked = !!settings.showStatus;
   // Glow
   els.glowBars.checked   = settings.showBars !== false;
   els.glowLayout.value   = settings.barLayout || "lay-grid";

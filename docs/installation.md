@@ -134,10 +134,10 @@ For each active screen, the page has four collapsible sections:
 Settings push to the live wallpaper over WebSocket immediately — no
 Lively reload needed.
 
-For the screen count itself: tray → **Advanced** → **Legacy Settings
-dialog…** (the classic Tk window) → set *Number of screens* to **1**,
-**2**, **3**, or **4** → **Save**. The SignalRGB plugin polls the
-bridge every tick and adjusts its device list.
+For the screen count itself: in the Configurator, top-right of the
+tab bar there's a *Screens:* picker — click **1**, **2**, **3**, or
+**4**. The SignalRGB plugin polls the bridge every tick and adjusts
+its device list accordingly.
 
 ### 4. Place the SignalRGB devices on the canvas
 
