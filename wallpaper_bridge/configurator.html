@@ -80,8 +80,7 @@
     color: var(--text);
     border-color: var(--border);
   }
-  .tab.inactive { opacity: 0.45; }
-  .tab.inactive::after { content: " ·"; opacity: 0.6; }
+  .tab.inactive { display: none; }
 
   .screencount-pick {
     margin-left: auto;
@@ -472,6 +471,17 @@
     pointer-events: none;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .lib-tile .del {
+    position: absolute; top: 2px; right: 2px;
+    width: 18px; height: 18px;
+    background: rgba(180, 50, 50, 0.85);
+    color: #fff;
+    border: none; border-radius: 3px;
+    font-size: 12px; line-height: 16px;
+    cursor: pointer;
+    opacity: 0; transition: opacity 0.12s;
+  }
+  .lib-tile:hover .del { opacity: 1; }
   .lib-empty {
     color: var(--text-dim); font-size: 12px; font-style: italic;
     flex: 1; align-self: center;
@@ -556,7 +566,15 @@
     <div class="body">
       <div class="row">
         <label data-i18n="bg.library">Library</label>
-        <div id="library-strip" style="flex:1; display:flex; gap:8px; flex-wrap:wrap;"></div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+          <div id="library-strip" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+          <div style="display:flex; gap:6px;">
+            <label class="btn" for="lib-upload" style="flex:0 0 auto"
+                   data-i18n="bg.library.upload">Add image…</label>
+            <input id="lib-upload" type="file" accept="image/png,image/jpeg,image/webp"
+                   style="display:none">
+          </div>
+        </div>
       </div>
       <div class="row">
         <label for="bg-image" data-i18n="bg.path">Image path</label>
@@ -784,6 +802,7 @@ const TRANSLATIONS = {
   "header.open_builder":    { en: "Open Builder…",        de: "Builder öffnen…" },
   "conn.connecting":        { en: "connecting…",          de: "verbinde…" },
   "conn.disconnected":      { en: "disconnected — retrying…", de: "getrennt — versuche erneut…" },
+  "conn.connected":         { en: "connected · Screen {n}", de: "verbunden · Bildschirm {n}" },
 
   "section.bg":             { en: "Background",           de: "Hintergrund" },
   "section.glow":           { en: "Glow",                 de: "Glow" },
@@ -795,6 +814,13 @@ const TRANSLATIONS = {
   "bg.library.empty":       { en: "(no library wallpapers installed)",
                               de: "(keine Bibliotheks-Wallpaper installiert)" },
   "bg.library.applied":     { en: "Applied {label}",      de: "{label} angewendet" },
+  "bg.library.upload":      { en: "Add image…",           de: "Bild hinzufügen…" },
+  "bg.library.uploaded":    { en: "Added {label} to library",
+                              de: "{label} zur Bibliothek hinzugefügt" },
+  "bg.library.delete_confirm": {
+    en: "Delete {label} from the library? This removes the file from %LOCALAPPDATA%\\SignalRGBWallpaper\\library and cannot be undone.",
+    de: "{label} aus der Bibliothek löschen? Datei wird aus %LOCALAPPDATA%\\SignalRGBWallpaper\\library entfernt und kann nicht wiederhergestellt werden." },
+  "bg.library.deleted":     { en: "Removed {label}",      de: "{label} entfernt" },
   "bg.choose":              { en: "Choose image…",        de: "Bild auswählen…" },
   "bg.open_builder":        { en: "Open Builder…",        de: "Builder öffnen…" },
   "bg.fit":                 { en: "Fit",                  de: "Anpassen" },
@@ -1156,13 +1182,17 @@ function applyScreenCount(n) {
   document.querySelectorAll(".sc-btn").forEach((b) => {
     b.classList.toggle("active", parseInt(b.dataset.n, 10) === n);
   });
-  // Dim tabs for screens beyond the active count — they still work (you
-  // can edit settings for an inactive screen), but the visual hint
-  // matches the SignalRGB plugin's actual device list.
+  // Hide tabs for screens beyond the active count entirely (CSS
+  // display:none). Matches the SignalRGB plugin's actual device
+  // list — no visual clutter for screens that don't exist.
   document.querySelectorAll(".tab").forEach((t) => {
     const idx = parseInt(t.dataset.screen, 10);
     t.classList.toggle("inactive", idx >= n);
   });
+  // If the currently active tab just got hidden (user lowered the
+  // screen count), fall back to Screen 1 so the UI doesn't show stale
+  // settings for an inactive screen.
+  if (activeScreen >= n) switchScreen(0);
 }
 
 function switchScreen(n) {
@@ -1267,9 +1297,70 @@ function renderLibraryStrip() {
     lbl.className = "label";
     lbl.textContent = item.label || item.id;
     btn.appendChild(lbl);
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.title = "Delete";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteLibraryItem(item);
+    });
+    btn.appendChild(del);
     btn.addEventListener("click", () => applyLibraryItem(item));
     els.libraryStrip.appendChild(btn);
   }
+}
+
+async function refreshLibrary() {
+  try {
+    const resp = await fetch("/library/list", { cache: "no-store" });
+    const cat = await resp.json();
+    libraryCatalogue = Array.isArray(cat.items) ? cat.items : [];
+  } catch (_) {
+    libraryCatalogue = [];
+  }
+  renderLibraryStrip();
+}
+
+async function deleteLibraryItem(item) {
+  const label = item.label || item.id;
+  if (!confirm(t("bg.library.delete_confirm", { label }))) return;
+  try {
+    const resp = await fetch("/library/" + encodeURIComponent(item.file),
+                             { method: "DELETE" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    toast(t("bg.library.deleted", { label }), "good");
+    await refreshLibrary();
+  } catch (e) {
+    toast("Delete failed: " + e.message, "bad");
+  }
+}
+
+// Upload via the visible "Add image…" input. We strip the extension
+// from the original filename, send the bytes to /library/upload?name=…,
+// then refresh the strip so the new tile appears immediately.
+const _libUpload = document.getElementById("lib-upload");
+if (_libUpload) {
+  _libUpload.addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";   // allow re-uploading the same name in one session
+    if (!file) return;
+    const label = file.name.replace(/\.(png|jpe?g|webp|gif|bmp)$/i, "");
+    try {
+      const buf = await file.arrayBuffer();
+      const url = "/library/upload?name=" + encodeURIComponent(label);
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: buf,
+      });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      toast(t("bg.library.uploaded", { label }), "good");
+      await refreshLibrary();
+    } catch (err) {
+      toast("Upload failed: " + err.message, "bad");
+    }
+  });
 }
 
 async function applyLibraryItem(item) {
@@ -1323,7 +1414,7 @@ function connect() {
   catch (e) { els.conn.textContent = "ws error"; setTimeout(connect, 1500); return; }
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
-    els.conn.textContent = "connected · " + t("tray.screen_n", { n: activeScreen + 1 });
+    els.conn.textContent = t("conn.connected", { n: activeScreen + 1 });
     els.conn.className = "conn ok";
   };
   ws.onerror = () => {};

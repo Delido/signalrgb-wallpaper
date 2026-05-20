@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.7-beta"
+APP_VERSION = "0.7.8-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -518,6 +518,55 @@ def screens_dir() -> Path:
     p = config_path().parent / "screens"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+_LIBRARY_SAFE_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789-_"
+
+def _library_slug(label: str, lib: Path) -> str:
+    """Make a filesystem-safe slug from a user-provided label, avoiding
+    collisions with existing files in `lib`. Trimmed to 60 chars."""
+    s = "".join(c if c in _LIBRARY_SAFE_CHARS else "-" for c in (label or "").lower())
+    while "--" in s: s = s.replace("--", "-")
+    s = s.strip("-") or "untitled"
+    s = s[:60]
+    base = s
+    i = 2
+    while any((lib / (base + ext)).exists() for ext in (".png", ".jpg", ".webp")):
+        base = f"{s}-{i}"
+        i += 1
+    return base
+
+
+def _library_rebuild_catalogue(lib: Path) -> None:
+    """Rescan the library folder and rewrite library.json with one entry
+    per image. Files matching `<stem>.thumb.png` are paired as thumbs
+    with their main image; everything else becomes a tile without an
+    explicit thumb (the Configurator falls back to the main file)."""
+    items = []
+    files = sorted([p for p in lib.iterdir()
+                    if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")])
+    stems = {p.name for p in files}
+    for fp in files:
+        stem = fp.stem
+        # Skip thumbnail siblings — they'll be linked from their parent.
+        if stem.endswith(".thumb"):
+            continue
+        thumb = None
+        for cand in (stem + ".thumb.png", stem + ".thumb.jpg", stem + ".thumb.webp"):
+            if cand in stems:
+                thumb = cand
+                break
+        items.append({
+            "id":    stem,
+            "label": stem.replace("-", " ").replace("_", " ").title(),
+            "file":  fp.name,
+            "thumb": thumb or fp.name,
+        })
+    cat_path = lib / "library.json"
+    cat_path.write_text(
+        json.dumps({"version": 1, "items": items}, indent=2),
+        encoding="utf-8",
+    )
 
 
 def library_dir() -> Path:
@@ -1269,6 +1318,108 @@ class Broadcaster:
                     writer.write(head + body)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # POST /library/upload — body is the raw PNG; query string carries
+        # ?name=<label>. We slug the label, drop into the user-writable
+        # library dir, regenerate library.json so future /library/list
+        # calls include the new entry. Bytes capped via the same
+        # MAX_BACKGROUND_UPLOAD_BYTES the screen uploader uses.
+        if method == "POST" and target.split("?", 1)[0] == "/library/upload":
+            qs = target.split("?", 1)[1] if "?" in target else ""
+            params = dict(p.split("=", 1) for p in qs.split("&") if "=" in p)
+            label = urllib.parse.unquote(params.get("name", "Untitled")).strip() or "Untitled"
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= MAX_BACKGROUND_UPLOAD_BYTES):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                # Reject anything that doesn't look like a PNG/JPEG/WebP.
+                if not (body[:8] == b"\x89PNG\r\n\x1a\n" or body[:3] == b"\xff\xd8\xff"
+                        or body[:4] == b"RIFF"):
+                    http_error(writer, 400, "unsupported image format")
+                    try: await writer.drain()
+                    except Exception: pass
+                    try: writer.close()
+                    except Exception: pass
+                    return
+                slug = _library_slug(label, library_dir())
+                ext = ".png"
+                if body[:3] == b"\xff\xd8\xff": ext = ".jpg"
+                elif body[:4] == b"RIFF":       ext = ".webp"
+                fp = library_dir() / (slug + ext)
+                fp.write_bytes(body)
+                _library_rebuild_catalogue(library_dir())
+                payload = json.dumps({"ok": True, "id": slug, "file": fp.name}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 500, f"upload failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # DELETE /library/<name> — removes the file + its thumbnail (if any)
+        # + regenerates library.json. Same path-traversal protections as the
+        # GET handler. We only delete inside library_dir(); no risk of
+        # walking out via dots or separators.
+        if method == "DELETE" and target.split("?", 1)[0].startswith("/library/"):
+            name = target.split("?", 1)[0][len("/library/"):]
+            if not name or "/" in name or "\\" in name or ".." in name:
+                http_error(writer, 400, "bad library filename")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                lib = library_dir()
+                fp = lib / name
+                if fp.exists() and fp.is_file():
+                    fp.unlink()
+                # Also drop a sibling .thumb.png if present (matches our
+                # generator's naming) — try both <name>.thumb.png and
+                # <stem>.thumb.png since the file extension might differ.
+                stem = fp.stem
+                if stem.endswith(".thumb"): stem = stem[:-len(".thumb")]
+                for cand in (lib / (stem + ".thumb.png"), lib / (fp.name + ".thumb")):
+                    try:
+                        if cand.exists(): cand.unlink()
+                    except Exception: pass
+                _library_rebuild_catalogue(lib)
+                payload = b'{"ok":true}'
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"delete failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()

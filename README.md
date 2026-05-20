@@ -26,12 +26,12 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.7-beta — adds per-screen preset slots, a
-> pattern-fill brush in the Builder (halftone / dither / hatching),
-> and a procedural starter wallpaper library. Folds in the
-> SignalRGB layout-editor fix from v0.7.6-beta, the whole-screen
-> audio-glow layer from v0.7.5-beta and everything from the 0.7.1
-> → 0.7.4 beta cycle. Marked prerelease.
+> **Status:** v0.7.8-beta — auto-Lively bootstrapper closes the last
+> planned roadmap item; library gains upload + delete; audio glow
+> fixed in Lively (`--audio` flag); a sweep of small Configurator /
+> Builder / installer papercuts. Folds in the v0.7.7-beta preset
+> slots, pattern brush + starter library, and everything from the
+> 0.7.1 → 0.7.6 beta cycle. Marked prerelease.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -199,12 +199,22 @@ on timing — pull requests and votes (👍 on the matching issue) welcome.
 
 ### Planned
 
-- **Auto-Lively bootstrapper** — Wallpaper Engine auto-copy + Lively
-  auto-import both shipped, but if neither host is installed the user
-  still has to install Lively manually. A bundled bootstrapper that
-  pulls + installs Lively if missing would close the loop.
+_(nothing currently planned — the formerly-tracked items all shipped
+in the 0.7.x beta cycle. Have a wish? Open an
+[issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
+and tag it `enhancement`.)_
 
 ### Recently shipped
+
+- ✅ **Auto-Lively bootstrapper** — when the user kept the opt-in
+  task AND no Lively install was detected, the installer downloads
+  and silently installs the latest Lively from GitHub Releases
+  before copying our bundles. Bundled PowerShell helper, no Inno
+  Download Plugin dependency (0.7.8-beta)
+- ✅ **Library: add + delete from the Configurator** — Add image…
+  button + per-tile hover delete corner. Bridge gains
+  `POST /library/upload` + `DELETE /library/<file>`; catalogue
+  rebuilds automatically (0.7.8-beta)
 
 - ✅ **Pattern-fill brush in the Builder** — new tool: halftone /
   dither (Bayer 8×8) / hatching transparent cuts. Scale, density and

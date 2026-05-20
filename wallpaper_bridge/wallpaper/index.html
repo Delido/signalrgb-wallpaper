@@ -2092,8 +2092,13 @@ const pixelfx = (function () {
       grad.addColorStop(0,   rgbToRgba(tintCss, 0.35));
       grad.addColorStop(0.5, rgbToRgba(tintCss, 0.10));
       grad.addColorStop(1,   rgbToRgba(tintCss, 0));
+      // Fill a circular path instead of a 2r × 2r rect: some CEF
+      // builds render the rect's corners visibly (despite the gradient
+      // being alpha-0 past radius r), making the glow look square.
       ctx.fillStyle = grad;
-      ctx.fillRect(cursorX - r, cursorY - r, r * 2, r * 2);
+      ctx.beginPath();
+      ctx.arc(cursorX, cursorY, r, 0, Math.PI * 2);
+      ctx.fill();
     }
     if (wantsRipple()) {
       for (const r of ripples) {

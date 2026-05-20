@@ -4,6 +4,59 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.8-beta] - 2026-05-20
+
+> Sweep of user-reported papercuts plus the last open roadmap item.
+
+### Added
+
+- **Auto-Lively bootstrapper.** Closes the last *Planned* roadmap
+  item: when the user opts in and Lively isn't detected, the
+  installer downloads the latest Lively setup from GitHub Releases
+  and runs it silently before the auto-import [Files] step. Driven
+  by a new bundled `install_lively.ps1`; fails closed (no kill of
+  the wizard) if GitHub is unreachable. New Inno [Tasks] entry
+  `installlively/autoinstall` (sub-task of *Lively Wallpaper*,
+  default on).
+- **Library upload + delete in the Configurator.** Bridge gains
+  `POST /library/upload?name=<label>` (raw PNG / JPEG / WebP body)
+  and `DELETE /library/<file>`. Configurator's Background section
+  shows an *Add image…* button next to the strip; each tile has a
+  hover-only `×` delete corner. Library catalogue is rebuilt on
+  every mutation so the strip refreshes immediately.
+
+### Fixed
+
+- **Audio listener never fired in Lively.** `LivelyInfo.Arguments`
+  was `null` since v0.7.1-beta (after the `--system-cursor true`
+  fiasco), but Lively only pushes audio data when the wallpaper opts
+  in. Set to `"--audio"` (the documented Lively flag) so both the
+  whole-screen audio glow layer AND the audio-spectrum widget
+  actually receive FFT samples on Lively. WE users were unaffected.
+- **Configurator status badge showed `connected · tray.screen_n`.**
+  The template called `t("tray.screen_n", …)` but `tray.screen_n`
+  only exists in the bridge's tray-side translation table, not the
+  Configurator's. Replaced with a dedicated `conn.connected` entry
+  ("connected · Screen {n}" / "verbunden · Bildschirm {n}").
+- **Configurator tabs for inactive screens stayed visible** (dimmed).
+  Switched to `display: none` so a 1-screen install only shows
+  *Screen 1*. Lowering the screen count while a higher tab is active
+  falls back to *Screen 1* automatically.
+- **Hover-glow Pixelfx rendered as a square** in some CEF builds.
+  The radial-gradient `fillRect` was technically alpha-0 at the
+  corners but the CEF compositor was rendering the rect bounds
+  anyway. Switched to `ctx.arc + ctx.fill` — guaranteed circle.
+
+### Changed
+
+- **Inno installer task defaults pass.** *Wallpaper Engine* now
+  defaults to checked (was unchecked) — undetected Steam installs
+  are still no-ops thanks to the `Check: WallpaperEngineDetected`
+  gating, so the default-on doesn't risk anything. New optional
+  task *Open the Configurator in your browser when done* (default
+  on). Description wording for *Auto-import* + *Start bridge on
+  logon* tightened.
+
 ## [0.7.7-beta] - 2026-05-20
 
 ### Added
