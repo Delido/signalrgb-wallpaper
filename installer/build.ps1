@@ -151,11 +151,12 @@ $singleProject = @{
     tags        = @("RGB","Customizable","Web","Abstract","Multi-Monitor")
     contentrating = "Everyone"
     version     = 8
-    # Wallpaper Engine ignores wallpaperRegisterAudioListener() callbacks
-    # unless this flag is set on the project. Without it the audio-glow
-    # layer + audio-spectrum widget never see any FFT samples on WE.
-    supportsaudioprocessing = $true
     general     = @{
+        # WE ignores wallpaperRegisterAudioListener() callbacks unless
+        # this flag is set INSIDE the `general` block (not at the top
+        # level). Without it the audio-glow layer + audio-spectrum
+        # widget never see any FFT samples on WE.
+        supportsaudioprocessing = $true
         properties = @{
             screenIndex = @{
                 order   = 0

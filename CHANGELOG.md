@@ -4,18 +4,31 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.10-beta] - 2026-05-20
+
+### Fixed
+
+- **WE audio fix from v0.7.9-beta was set on the wrong JSON node.**
+  v0.7.9-beta added `"supportsaudioprocessing": true` at the project
+  root, but WE only honours it as a child of `general` (verified
+  against real Workshop wallpapers, e.g.
+  [IPdotSetAF/NeoMatrix](https://github.com/IPdotSetAF/NeoMatrix)).
+  Moved to the right place — `wallpaperRegisterAudioListener`
+  callbacks finally fire under WE.
+
 ## [0.7.9-beta] - 2026-05-20
 
 ### Fixed
 
 - **Audio still dead in Wallpaper Engine.** v0.7.8-beta fixed Lively
   via `LivelyInfo.Arguments = "--audio"`, but WE has an analogous
-  opt-in: `project.json` must declare
-  `"supportsaudioprocessing": true` or the engine ignores every
-  `wallpaperRegisterAudioListener` callback. Our `project.json`
-  didn't set it, so the audio-glow layer + audio-spectrum widget
-  saw no FFT samples on WE. Added to the build's combined-bundle
-  manifest generator.
+  opt-in: `project.json` must declare `"supportsaudioprocessing":
+  true` or the engine ignores every `wallpaperRegisterAudioListener`
+  callback. Our `project.json` didn't set it, so the audio-glow
+  layer + audio-spectrum widget saw no FFT samples on WE. Added to
+  the build's combined-bundle manifest generator. *(v0.7.10-beta
+  caveat: the flag was put on the top-level node here — WE silently
+  ignored it. Real fix is in 0.7.10-beta.)*
 
 ## [0.7.8-beta] - 2026-05-20
 
