@@ -30,36 +30,109 @@ Grab the latest `SignalRGBWallpaperSetup-<version>.exe` from the
 and run it. No admin needed — installs per-user into
 `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`.
 
-### Installer wizard
+### Installer walkthrough
 
-The **Tasks page** asks you to pick one or both wallpaper hosts plus a
-few additional setup items:
+The wizard is six screens long. Click through them in order — the
+defaults are sensible for new installs, and an upgrade run uses the
+same defaults so you can mostly just hold Enter.
+
+#### 1. Language
+
+![Language picker](images/installer/01-language.png)
+
+The wizard offers German and English. Pick whichever you prefer — the
+rest of the wizard, the tray menu, the About dialog and the
+Configurator all follow the same setting after install (the bridge
+also re-resolves on launch from your Windows locale unless you set
+`"language"` explicitly in `config.json`).
+
+#### 2. License
+
+![License agreement](images/installer/02-license.png)
+
+MIT license, the whole project is open source. Accept and click
+*Weiter / Next*.
+
+#### 3. Tasks (the page that does the actual work)
+
+![Tasks page — auto-Lively + WE + autostart](images/installer/03-tasks.png)
+
+This is the meaty page. Defaults match the most common path
+(Lively + auto-import + auto-install Lively if missing + WE
+auto-copy when Steam is detected):
 
 **Wallpaper host:**
 
-- ☑ **Lively Wallpaper** (default on). Required for the Lively path.
-- ☑ **Auto-import into Lively** (default on, sub-task of Lively). When
-  checked + a Lively install is detected (GitHub or MSIX build), the
-  four glow bundles get extracted directly into Lively's
+- ☑ **Lively Wallpaper** (default on) — required for the Lively path.
+- ☑ **Auto-import into Lively's Library** (sub-task) — when this
+  task and a Lively install (GitHub or MSIX build) are both present,
+  the four glow bundles get extracted directly into Lively's
   `Library\wallpapers\signalrgb-glow-screen-{1,2,3,4}\` with
-  deterministic folder names. Every subsequent installer run overwrites
-  in place — no more *"delete and re-import after every update"* dance.
-- ☐ **Wallpaper Engine** (Steam — auto-skipped if not detected). When
-  checked + a Steam install is detected (HKCU registry +
-  `libraryfolders.vdf` parsing for off-drive libraries), the **single
-  combined** glow bundle gets copied straight into
-  `…\steamapps\common\wallpaper_engine\projects\myprojects\signalrgb-glow\`.
-  Assign it to each monitor you want to drive and pick a different
-  *Screen index* per assignment in WE's properties panel.
+  deterministic folder names. Every subsequent installer run
+  overwrites in place — no more *"delete and re-import after every
+  update"* dance.
+- ☑ **Auto-install Lively Wallpaper if not already present** — when
+  Lively isn't on disk, the installer downloads the latest release
+  from GitHub and runs it silently *before* the auto-import step, so
+  you don't have to install Lively manually first.
+- ☑ **Wallpaper Engine** (Steam — auto-skipped if not detected) —
+  copies the single combined `signalrgb-glow/` bundle into
+  `…\steamapps\common\wallpaper_engine\projects\myprojects\`. You
+  assign it once per monitor in WE and pick a different *Screen
+  index* per assignment.
 
 **Additional setup:**
 
-- ☑ **Install the SignalRGB Desktop Wallpaper plugin** (default on) —
-  drops `SignalRGB_Desktop_Wallpaper.js` + `.qml` into your
-  `Documents\WhirlwindFX\Plugins\` folder so SignalRGB can drive the
-  bridge.
-- ☑ **Start bridge automatically on logon** (default on) — adds an
-  HKCU `Run` registry entry. Standard per-user autostart, no service.
+- ☑ **Install the SignalRGB Desktop Wallpaper plugin** *(required)*
+  — drops `SignalRGB_Desktop_Wallpaper.js` + `.qml` into your
+  `Documents\WhirlwindFX\Plugins\` folder. Without this, SignalRGB
+  has no way to send colours to the bridge and the whole product
+  does nothing. Only uncheck if you're maintaining the plugin file
+  by hand (devs only).
+- ☑ **Start the bridge automatically on logon** — adds an HKCU
+  `Run` registry entry. Standard per-user autostart, no service.
+- ☑ **Open the Configurator in the browser when done** — pops the
+  in-browser settings UI right after install so you can pick a
+  background and start configuring without finding the tray icon
+  first.
+
+#### 4. Summary
+
+![Summary review](images/installer/04-summary.png)
+
+Quick recap of what's about to happen. Click *Installieren / Install*.
+
+#### 5. (Optional) Close running bridge
+
+![File-in-use warning](images/installer/05-file-in-use.png)
+
+Only appears when you're upgrading and the bridge is still running.
+Pick *Schließe die Anwendungen automatisch / Close the applications
+automatically* and the installer will end the running process before
+overwriting it — saves a manual quit + re-run. The bridge can be
+auto-restarted at the end of the wizard via the *Start now* checkbox
+on the final page.
+
+#### 6. Finish
+
+![Final page with post-install actions](images/installer/06-finished.png)
+
+Two opt-in actions at the end:
+
+- ☑ **Start the SignalRGB Wallpaper Bridge now** — launches
+  `SignalRGBBridge.exe` so the tray icon appears immediately. If
+  unticked you can also start it via Start menu later.
+- ☑ **Open the Configurator in your browser** — pops
+  `http://127.0.0.1:17320/configurator` so you can pick a background,
+  set glow + widget options, etc.
+
+> A third checkbox shows up only when **Wallpaper Engine was picked
+> AND Steam wasn't detected**: *Open the Wallpaper Engine bundle
+> folder*. In that case the installer dropped `signalrgb-glow/` into
+> `{app}\Wallpaper Engine wallpapers\` instead of Steam's
+> `myprojects\`, and you need to drag the folder into Wallpaper
+> Engine by hand. Once Steam IS detected, the bundle goes straight
+> into the right place and no post-install action is needed.
 
 ### After install
 

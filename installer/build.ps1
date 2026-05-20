@@ -60,6 +60,7 @@ try {
         --collect-all psutil `
         --add-data "builder.html;." `
         --add-data "configurator.html;." `
+        --add-data "help.html;." `
         --distpath dist_bridge --workpath build_bridge `
         bridge.py
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }

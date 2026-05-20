@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SignalRGB Wallpaper Help</title>
+<style>
+  :root {
+    --bg: #15171d;
+    --panel: #1e2128;
+    --panel-2: #262b34;
+    --border: #2f3641;
+    --text: #d7dbe2;
+    --text-dim: #8a93a3;
+    --accent: #6ab0ff;
+    --accent-bg: #1f3a5a;
+    --accent-bg-hover: #284a72;
+    --danger: #e07070;
+    --ok: #9bd49a;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 system-ui, "Segoe UI", Roboto, ui-sans-serif, sans-serif;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 22px;
+    display: flex; align-items: center; gap: 14px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .spacer { flex: 1; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font: inherit; cursor: pointer; user-select: none;
+    text-decoration: none;
+  }
+  .btn:hover { background: #2c323d; }
+  .btn.primary { background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc; }
+  .btn.primary:hover { background: var(--accent-bg-hover); }
+
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 22px;
+  }
+
+  .intro {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 22px;
+  }
+  .intro p { margin: 6px 0; }
+  .intro .note {
+    color: var(--text-dim);
+    font-size: 12.5px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Table of contents ── */
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 22px;
+  }
+  nav.toc h2 {
+    margin: 0 0 6px 0; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+  nav.toc ul { margin: 0; padding-left: 18px; }
+  nav.toc li { margin: 2px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  /* ── Scenario card ── */
+  section.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+  section.card > header {
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+    border-top: none;
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    user-select: none;
+    position: static;
+  }
+  section.card > header .chev {
+    color: var(--text-dim);
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  section.card.collapsed > header .chev { transform: rotate(-90deg); }
+  section.card > header h2 {
+    margin: 0; font-size: 14px; font-weight: 600;
+    color: var(--text);
+  }
+  section.card .body { padding: 14px 18px 18px 18px; }
+  section.card.collapsed .body { display: none; }
+
+  section.card h3 {
+    margin: 14px 0 6px 0; font-size: 13px; font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  section.card h3:first-child { margin-top: 0; }
+  section.card p { margin: 6px 0; }
+  section.card ol, section.card ul {
+    margin: 6px 0; padding-left: 22px;
+  }
+  section.card li { margin: 3px 0; }
+  section.card code {
+    background: #0c0e13;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: Consolas, "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: #c0d4ff;
+  }
+  section.card .diagram {
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 10px 0;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre;
+    overflow-x: auto;
+    color: #b8c3d3;
+  }
+  section.card .callout {
+    background: #1a2438;
+    border: 1px solid #2a3a52;
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-size: 12.5px;
+  }
+  section.card .callout strong { color: #d8e6fc; }
+  section.card img {
+    max-width: 100%; height: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin: 8px 0;
+    display: block;
+  }
+  /* If the help-images folder is empty (no user shots dropped in yet),
+     the broken-image icon is more confusing than the diagram alone.
+     Hide failed loads. */
+  section.card img:not([src]),
+  section.card img[src=""] { display: none; }
+
+  footer {
+    margin-top: 30px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 12px;
+    text-align: center;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 data-i18n="header.title">SignalRGB Wallpaper Help</h1>
+  <span class="spacer"></span>
+  <a class="btn" href="/configurator" data-i18n="header.configurator">Configurator</a>
+  <a class="btn" href="/builder" data-i18n="header.builder">Builder</a>
+</header>
+
+<main>
+
+  <div class="intro">
+    <p data-i18n="intro.p1">This page walks you through the common Wallpaper Engine and Lively setups for one, two and more monitors — what you're configuring, why, and the exact steps.</p>
+    <p data-i18n="intro.p2">All settings (background image, glow layout, widgets, presets, audio glow) live in the in-browser <strong>Configurator</strong>. This Help page is purely reference.</p>
+    <div class="note" data-i18n="intro.note">If a screenshot is missing where you'd expect one, the maintainer hasn't dropped images into the help-images folder yet — diagrams are still readable on their own.</div>
+  </div>
+
+  <nav class="toc">
+    <h2 data-i18n="toc.title">On this page</h2>
+    <ul>
+      <li><a href="#qs"          data-i18n="toc.qs">Quick start</a></li>
+      <li><a href="#one-lively"  data-i18n="toc.one_lively">1 monitor · Lively</a></li>
+      <li><a href="#one-we"      data-i18n="toc.one_we">1 monitor · Wallpaper Engine</a></li>
+      <li><a href="#two-lively"  data-i18n="toc.two_lively">2 monitors · Lively (independent)</a></li>
+      <li><a href="#two-we"      data-i18n="toc.two_we">2 monitors · Wallpaper Engine (single bundle, Screen index)</a></li>
+      <li><a href="#two-span"    data-i18n="toc.two_span">2 monitors · Spanned / mirrored (one wallpaper across both)</a></li>
+      <li><a href="#three-four"  data-i18n="toc.three_four">3–4 monitors</a></li>
+      <li><a href="#ultra"       data-i18n="toc.ultra">Ultrawide / non-16:9 monitors</a></li>
+      <li><a href="#tips"        data-i18n="toc.tips">Tips &amp; common pitfalls</a></li>
+    </ul>
+  </nav>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="qs">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="qs.title">Quick start</h2></header>
+    <div class="body">
+      <p data-i18n="qs.p1">There are three independent pieces of plumbing — they all have to be aligned:</p>
+      <div class="diagram" data-diagram="qs"> SignalRGB                 (effects engine, colour source)
+   │ 1..4 virtual "Desktop Wallpaper – Screen N" devices
+   │ placed on the SignalRGB canvas
+   ▼
+ SignalRGBBridge.exe       (UDP receiver + WebSocket server, in your tray)
+   │ ws://127.0.0.1:17320/?screen=N
+   ▼
+ Wallpaper host            (Lively  OR  Wallpaper Engine — one HTML
+                            wallpaper page per monitor)
+</div>
+      <h3 data-i18n="qs.h_setup">What the installer set up for you</h3>
+      <ul>
+        <li data-i18n="qs.s1"><strong>SignalRGBBridge.exe</strong> sits in the system tray and converts the plugin's UDP frames into WebSocket pushes. Configurator + Builder + Help (this page) are served from it on <code>127.0.0.1:17320</code>.</li>
+        <li data-i18n="qs.s2"><strong>SignalRGB plugin</strong> in <code>Documents\WhirlwindFX\Plugins\</code> announces 1–4 virtual devices. The plugin's <em>Glow Grid Base Size</em> + <em>Aspect Ratio</em> control the colour resolution.</li>
+        <li data-i18n="qs.s3"><strong>Lively bundles</strong>: <code>signalrgb-glow-screen-1</code>…<code>4</code> dropped into Lively's Library — one per monitor.</li>
+        <li data-i18n="qs.s4"><strong>Wallpaper Engine bundle</strong>: a single <code>signalrgb-glow/</code> in <code>…\steamapps\common\wallpaper_engine\projects\myprojects\</code> — assigned multiple times with a different <em>Screen index</em>.</li>
+      </ul>
+      <h3 data-i18n="qs.h_next">Open the Configurator</h3>
+      <p data-i18n="qs.next">From here, right-click the tray icon → <strong>Configurator…</strong>. The Configurator is where you pick how many screens, the background image, the glow layout, widgets, presets, ambient effects, and audio glow.</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="one-lively">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="one_lively.title">1 monitor · Lively</h2></header>
+    <div class="body">
+      <h3 data-i18n="common.h_why">Why this setup</h3>
+      <p data-i18n="one_lively.why">You have one screen and you want the glow on it. This is the simplest path — no canvas split, no Screen index, just one device → one wallpaper.</p>
+      <div class="diagram" data-diagram="one_lively">  SignalRGB canvas               Lively
+  ┌─────────────────┐           ┌────────────────┐
+  │   ┌─────────┐   │           │   Screen 1     │
+  │   │ Screen1 │   │  ── ws ── │  Glow tile     │
+  │   │ device  │   │           │  (assigned to  │
+  │   └─────────┘   │           │   Monitor 1)   │
+  └─────────────────┘           └────────────────┘
+</div>
+      <img src="/help/images/one_lively.png" alt="" data-helpimg="one_lively">
+      <h3 data-i18n="common.h_how">How to set it up</h3>
+      <ol>
+        <li data-i18n="one_lively.s1">Configurator: top-right of the tab bar, set <em>Screens:</em> to <strong>1</strong>.</li>
+        <li data-i18n="one_lively.s2">In SignalRGB → <strong>Layouts</strong>, drag <em>Desktop Wallpaper – Screen 1</em> onto the canvas at the position you want colours sampled from. Resize to taste.</li>
+        <li data-i18n="one_lively.s3">In Lively → Library, right-click <em>SignalRGB Glow – Screen 1</em> → <em>Set as wallpaper</em> → pick your monitor.</li>
+        <li data-i18n="one_lively.s4">Back in the Configurator: pick a background image (or one from the Library strip), tweak glow strength + dim if needed.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="one-we">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="one_we.title">1 monitor · Wallpaper Engine</h2></header>
+    <div class="body">
+      <h3 data-i18n="common.h_why">Why this setup</h3>
+      <p data-i18n="one_we.why">Same idea as Lively but with Wallpaper Engine. WE ships a single combined bundle; on one monitor you just leave <em>Screen index</em> at <strong>Screen 1</strong>.</p>
+      <div class="diagram" data-diagram="one_we">  SignalRGB canvas               Wallpaper Engine
+  ┌─────────────────┐           ┌────────────────┐
+  │   ┌─────────┐   │           │ SignalRGB Glow │
+  │   │ Screen1 │   │  ── ws ── │ Screen index:  │
+  │   │ device  │   │           │   Screen 1     │
+  │   └─────────┘   │           │ → Monitor 1    │
+  └─────────────────┘           └────────────────┘
+</div>
+      <img src="/help/images/one_we.png" alt="" data-helpimg="one_we">
+      <h3 data-i18n="common.h_how">How to set it up</h3>
+      <ol>
+        <li data-i18n="one_we.s1">Configurator: set <em>Screens:</em> to <strong>1</strong>.</li>
+        <li data-i18n="one_we.s2">SignalRGB → <strong>Layouts</strong>: drag <em>Desktop Wallpaper – Screen 1</em> onto the canvas.</li>
+        <li data-i18n="one_we.s3">Wallpaper Engine → <em>My Wallpapers</em>: assign <em>SignalRGB Glow</em> to your monitor.</li>
+        <li data-i18n="one_we.s4">In WE's per-wallpaper properties panel, leave <em>Screen index</em> at <strong>Screen 1</strong>.</li>
+        <li data-i18n="one_we.s5">If audio glow / spectrum widget doesn't pulse: make sure <em>Audio Processing</em> is on in WE's general settings (Settings → Performance).</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="two-lively">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="two_lively.title">2 monitors · Lively (independent)</h2></header>
+    <div class="body">
+      <h3 data-i18n="common.h_why">Why this setup</h3>
+      <p data-i18n="two_lively.why">Two monitors, each with its own glow that follows a <em>different</em> region of the SignalRGB canvas. Pick this when you want the left monitor's glow to follow keyboard / strip LEDs on the left side of your physical setup, and the right monitor to follow the right side.</p>
+      <div class="diagram" data-diagram="two_lively">  SignalRGB canvas                       Lively
+  ┌─────────────────────────────────┐    ┌────────────┐  ┌────────────┐
+  │ ┌────────┐         ┌────────┐   │    │ Screen 1   │  │ Screen 2   │
+  │ │Screen1 │         │Screen2 │   │ ws │ Glow tile  │  │ Glow tile  │
+  │ │ device │         │ device │   │ ─→ │  → Monitor │  │  → Monitor │
+  │ └────────┘         └────────┘   │    │   left     │  │   right    │
+  └─────────────────────────────────┘    └────────────┘  └────────────┘
+</div>
+      <img src="/help/images/two_lively.png" alt="" data-helpimg="two_lively">
+      <h3 data-i18n="common.h_how">How to set it up</h3>
+      <ol>
+        <li data-i18n="two_lively.s1">Configurator: <em>Screens:</em> = <strong>2</strong>.</li>
+        <li data-i18n="two_lively.s2">SignalRGB → <strong>Layouts</strong>: place <em>Desktop Wallpaper – Screen 1</em> on the LEFT half of the canvas, <em>Screen 2</em> on the RIGHT half. Resize each to cover the area you want sampled.</li>
+        <li data-i18n="two_lively.s3">Lively → Library: assign <em>SignalRGB Glow – Screen 1</em> to your LEFT monitor, <em>Screen 2</em> to your RIGHT monitor.</li>
+        <li data-i18n="two_lively.s4">In the Configurator, the per-screen tabs (<em>Screen 1</em> / <em>Screen 2</em>) let you pick a different background image, glow layout and widgets per monitor.</li>
+      </ol>
+      <div class="callout" data-i18n="two_lively.callout"><strong>Heads-up:</strong> "Screen 1" is which SignalRGB device feeds it — not which physical monitor it has to live on. Activate Screen 1's tile on whichever monitor you want it on.</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="two-we">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="two_we.title">2 monitors · Wallpaper Engine (single bundle, Screen index)</h2></header>
+    <div class="body">
+      <h3 data-i18n="common.h_why">Why this setup</h3>
+      <p data-i18n="two_we.why">Wallpaper Engine ships <em>one</em> bundle (<code>SignalRGB Glow</code>). You assign it to both monitors and set a different <em>Screen index</em> per assignment — the wallpaper page reconnects to the matching <code>?screen=N</code> route on the bridge. No need for two separate bundles like the pre-0.7.2-beta era.</p>
+      <div class="diagram" data-diagram="two_we">  SignalRGB canvas                Wallpaper Engine
+  ┌──────────────────────────┐    ┌────────────────────┐  ┌────────────────────┐
+  │ ┌────────┐  ┌────────┐   │    │ SignalRGB Glow     │  │ SignalRGB Glow     │
+  │ │Screen1 │  │Screen2 │   │ ws │ Screen index:      │  │ Screen index:      │
+  │ │ device │  │ device │   │ ─→ │   Screen 1         │  │   Screen 2         │
+  │ └────────┘  └────────┘   │    │ → Monitor left     │  │ → Monitor right    │
+  └──────────────────────────┘    └────────────────────┘  └────────────────────┘
+</div>
+      <img src="/help/images/two_we.png" alt="" data-helpimg="two_we">
+      <h3 data-i18n="common.h_how">How to set it up</h3>
+      <ol>
+        <li data-i18n="two_we.s1">Configurator: <em>Screens:</em> = <strong>2</strong>.</li>
+        <li data-i18n="two_we.s2">SignalRGB → Layouts: place <em>Desktop Wallpaper – Screen 1</em> on the LEFT half of the canvas, <em>Screen 2</em> on the RIGHT half.</li>
+        <li data-i18n="two_we.s3">WE → <em>My Wallpapers</em>: drag <em>SignalRGB Glow</em> onto your LEFT monitor. In the per-wallpaper properties panel, leave <em>Screen index</em> at <strong>Screen 1</strong>.</li>
+        <li data-i18n="two_we.s4">Drag the <em>same</em> <em>SignalRGB Glow</em> onto your RIGHT monitor. In that assignment's properties, change <em>Screen index</em> to <strong>Screen 2</strong>.</li>
+      </ol>
+      <div class="callout" data-i18n="two_we.callout"><strong>One bundle, N monitors</strong> — the trick is the <em>Screen index</em> per assignment. Both wallpaper instances open separate WS connections to the bridge with <code>?screen=0</code> and <code>?screen=1</code>; the bridge routes the matching SignalRGB device's colours to each.</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="two-span">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="two_span.title">2 monitors · Spanned / mirrored (one wallpaper across both)</h2></header>
+    <div class="body">
+      <h3 data-i18n="common.h_why">Why this setup</h3>
+      <p data-i18n="two_span.why">You want one wide image stretched across both monitors with the glow sampled from a single SignalRGB device. Useful for super-wide compositions (long cityscapes, panoramic art) where the cut-out region spans both monitors as a continuous picture.</p>
+      <div class="diagram" data-diagram="two_span">  SignalRGB canvas               Lively (span mode) or WE
+  ┌─────────────────────────┐    ┌────────────────────────────┐
+  │   ┌──────────────────┐  │    │ ↕      SignalRGB Glow     ↕ │
+  │   │   Screen 1       │  │ ws │  Screen 1 — Spanned across  │
+  │   │   device (wide)  │  │ ─→ │      both monitors          │
+  │   └──────────────────┘  │    │  (single wallpaper page)    │
+  └─────────────────────────┘    └────────────────────────────┘
+</div>
+      <img src="/help/images/two_span.png" alt="" data-helpimg="two_span">
+      <h3 data-i18n="common.h_how">How to set it up</h3>
+      <ol>
+        <li data-i18n="two_span.s1">Configurator: <em>Screens:</em> = <strong>1</strong> (we only need one device for the spanned image).</li>
+        <li data-i18n="two_span.s2">SignalRGB → Layouts: place <em>Desktop Wallpaper – Screen 1</em> across the whole canvas area you want sampled.</li>
+        <li data-i18n="two_span.s3"><strong>Lively:</strong> right-click <em>SignalRGB Glow – Screen 1</em> → <em>Customise</em> → set <em>Wallpaper arrangement</em> to <em>Span across screens</em>. Assign to both monitors.</li>
+        <li data-i18n="two_span.s4"><strong>Wallpaper Engine:</strong> right-click on its tray icon → <em>Display Settings</em> → choose <em>Spanned</em>; pick <em>SignalRGB Glow</em>.</li>
+        <li data-i18n="two_span.s5">Plugin Aspect Ratio → <strong>Custom</strong>, type your combined resolution (e.g. 3840×1080 for two FHD side-by-side → Custom Cols 128 × Rows 36 gives a clean 32:9-shaped glow grid).</li>
+      </ol>
+      <div class="callout" data-i18n="two_span.callout"><strong>When to pick span over independent</strong>: if the underlying picture is one image (panoramic). If the two monitors should show <em>different</em> things (different cut-outs / themes), use the independent setup above instead.</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="three-four">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="three_four.title">3–4 monitors</h2></header>
+    <div class="body">
+      <p data-i18n="three_four.p1">Same flow as 2 monitors, just with more devices and tiles. Configurator <em>Screens:</em> set to 3 or 4 and the corresponding tabs appear.</p>
+      <h3 data-i18n="three_four.h_layouts">Canvas layout suggestions</h3>
+      <ul>
+        <li data-i18n="three_four.l1"><strong>3 in a row</strong> — divide the canvas into vertical thirds, one device per third.</li>
+        <li data-i18n="three_four.l2"><strong>2+1 (main pair + side)</strong> — Screens 1 / 2 across the bulk of the canvas, Screen 3 in a smaller dedicated region.</li>
+        <li data-i18n="three_four.l3"><strong>2×2 grid</strong> — Screens 1 / 2 along the top, Screens 3 / 4 along the bottom. Each device samples a quadrant of the effect.</li>
+        <li data-i18n="three_four.l4"><strong>3+1 (triple + side)</strong> — Screens 1 / 2 / 3 cover the main triple-monitor block; Screen 4 lives in a smaller region for the side / portrait / control monitor.</li>
+      </ul>
+      <h3 data-i18n="three_four.h_we">Wallpaper Engine: assign the same bundle N times</h3>
+      <p data-i18n="three_four.we_p">Each assignment gets a different <em>Screen index</em> in WE's per-wallpaper properties panel (Screen 1 / 2 / 3 / 4).</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="ultra">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="ultra.title">Ultrawide / non-16:9 monitors</h2></header>
+    <div class="body">
+      <p data-i18n="ultra.p1">The SignalRGB plugin's <em>Glow Grid Base Size</em> + <em>Aspect Ratio</em> settings control how the colour samples are shaped. By default <em>Aspect Ratio = Auto</em>: the plugin reads each screen's viewport from the bridge (the wallpaper page reports it on connect) and derives the longer side from your selected base size.</p>
+      <div class="diagram" data-diagram="ultra">  3840 × 1080 monitor + Base 64 + Aspect Auto:
+    cols = round(64 × 3840/1080) = 228
+    rows = 64
+    Total LEDs = 228 × 64 = 14592 (uses chunked UDP)
+
+  3840 × 1080 monitor + Base 64 + Aspect 16:9 (fallback):
+    cols = round(64 × 16/9)     = 114
+    rows = 64
+    Total LEDs = 114 × 64 = 7296 (still chunked)
+</div>
+      <h3 data-i18n="ultra.h_what">What you set on the plugin side</h3>
+      <ul>
+        <li data-i18n="ultra.u1"><em>Aspect Ratio = Auto</em>: simplest, the bridge tells the plugin your real viewport once the wallpaper has connected once. If it stays on 16:9 → the wallpaper hasn't pushed its viewport yet (re-set the wallpaper in Lively / WE).</li>
+        <li data-i18n="ultra.u2"><em>Aspect Ratio = 32:9 / 21:9 / 9:16</em>: forces a fixed shape regardless of viewport. Useful as a workaround when Auto stays stuck on 16:9.</li>
+        <li data-i18n="ultra.u3"><em>Aspect Ratio = Custom</em>: type <em>Custom Cols</em> × <em>Custom Rows</em> directly. The other Aspect Ratio settings are ignored.</li>
+      </ul>
+      <div class="callout" data-i18n="ultra.callout"><strong>Heads-up:</strong> larger grids = more UDP per frame. 14592 LEDs per frame at 30 fps ≈ 1.3 MB/s — chunked transport handles it fine on localhost, but if you see the SignalRGB plugin tick stuttering, drop the base size to 32 or pick a coarser aspect.</div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────────────── -->
+  <section class="card" id="tips">
+    <header data-toggle><span class="chev">▾</span><h2 data-i18n="tips.title">Tips &amp; common pitfalls</h2></header>
+    <div class="body">
+
+      <h3 data-i18n="tips.h_paused">Wallpaper appears stuck</h3>
+      <ul>
+        <li data-i18n="tips.p1">If the glow doesn't react at all: bridge probably isn't running. Look for the tray icon — relaunch <code>SignalRGBBridge.exe</code> if missing.</li>
+        <li data-i18n="tips.p2">If the glow froze on one colour: the wallpaper might be paused. Lively → tray <em>Pause wallpapers</em> toggles all; WE → right-click WE tray icon → <em>Stop wallpapers</em>.</li>
+        <li data-i18n="tips.p3">Configurator status badge (top right) tells you the WS state — if it stays <em>connecting…</em>, port 17320 is blocked / another process is holding it.</li>
+      </ul>
+
+      <h3 data-i18n="tips.h_audio">Audio glow / spectrum widget doesn't pulse</h3>
+      <ul>
+        <li data-i18n="tips.a1"><strong>Lively:</strong> needs <code>--audio</code> in <code>LivelyInfo.Arguments</code>. Bundled since v0.7.8-beta; if you imported an older zip, re-import the new one.</li>
+        <li data-i18n="tips.a2"><strong>Wallpaper Engine:</strong> needs <code>"supportsaudioprocessing": true</code> inside <code>general</code> in <code>project.json</code>. Bundled since v0.7.10-beta. Also: WE's <em>Audio Processing</em> setting (Settings → Performance) has to be on.</li>
+        <li data-i18n="tips.a3">No actual audio playing? No pulses to render. Play music or a video and the spectrum should react.</li>
+      </ul>
+
+      <h3 data-i18n="tips.h_widgets">Widgets don't appear or can't be moved</h3>
+      <ul>
+        <li data-i18n="tips.w1">Configurator → <em>Widgets</em> → check the lock toggle. Locked = widgets are static + click-through; unlocked = draggable on the wallpaper itself.</li>
+        <li data-i18n="tips.w2">Tray icon → <em>🔓 Unlock widgets (all screens)</em> toggles every active screen at once.</li>
+        <li data-i18n="tips.w3">If Lively is in click-through mode, dragging works in the Configurator's layout preview but not on the live wallpaper. Switch Lively interaction on if you want to drag on the wallpaper directly.</li>
+      </ul>
+
+      <h3 data-i18n="tips.h_workshop">Wallpaper Engine Workshop subscriptions</h3>
+      <p data-i18n="tips.w_p">If you subscribed to an older per-screen <em>SignalRGB Glow – Screen 1/2/3</em> from Workshop (pre-v0.7.2-beta): those are obsolete. Unsubscribe in Steam and use the single combined <em>SignalRGB Glow</em> the installer drops into your local <em>myprojects</em> folder.</p>
+
+    </div>
+  </section>
+
+  <footer>
+    <span data-i18n="footer.text">Help page · </span>
+    <a href="https://github.com/Delido/signalrgb-wallpaper" target="_blank">GitHub</a>
+    <span> · </span>
+    <a href="https://github.com/Delido/signalrgb-wallpaper/issues" target="_blank" data-i18n="footer.issues">Report a bug</a>
+  </footer>
+
+</main>
+
+<script>
+"use strict";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Localisation. Same pattern as Configurator + Builder: TRANSLATIONS map
+// keyed by dotted ids, walker that applies textContent / innerHTML / title.
+// Language source is the bridge's GET /config endpoint (echoes the user's
+// chosen language).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TRANSLATIONS = {
+  "header.title":        { en: "SignalRGB Wallpaper Help",  de: "SignalRGB Wallpaper Hilfe" },
+  "header.configurator": { en: "Configurator",              de: "Konfigurator" },
+  "header.builder":      { en: "Builder",                   de: "Builder" },
+
+  "intro.p1":  { en: "This page walks you through the common Wallpaper Engine and Lively setups for one, two and more monitors — what you're configuring, why, and the exact steps.",
+                 de: "Diese Seite zeigt dir die üblichen Konfigurationen für ein, zwei oder mehr Bildschirme — sowohl mit Wallpaper Engine als auch mit Lively. Was, warum, und die exakten Schritte." },
+  "intro.p2":  { en: "All settings (background image, glow layout, widgets, presets, audio glow) live in the in-browser <strong>Configurator</strong>. This Help page is purely reference.",
+                 de: "Alle Einstellungen (Hintergrund, Glow-Layout, Widgets, Presets, Audio-Glow) liegen im in-Browser-<strong>Konfigurator</strong>. Diese Hilfeseite ist reine Referenz." },
+  "intro.note":{ en: "If a screenshot is missing where you'd expect one, the maintainer hasn't dropped images into the help-images folder yet — diagrams are still readable on their own.",
+                 de: "Wenn ein Screenshot fehlt: der Maintainer hat die Bilder noch nicht in den help-images-Ordner gelegt — die ASCII-Diagramme sind aber für sich lesbar." },
+
+  "toc.title":       { en: "On this page",          de: "Auf dieser Seite" },
+  "toc.qs":          { en: "Quick start",           de: "Schnellstart" },
+  "toc.one_lively":  { en: "1 monitor · Lively",    de: "1 Bildschirm · Lively" },
+  "toc.one_we":      { en: "1 monitor · Wallpaper Engine", de: "1 Bildschirm · Wallpaper Engine" },
+  "toc.two_lively":  { en: "2 monitors · Lively (independent)",
+                       de: "2 Bildschirme · Lively (unabhängig)" },
+  "toc.two_we":      { en: "2 monitors · Wallpaper Engine (single bundle, Screen index)",
+                       de: "2 Bildschirme · Wallpaper Engine (ein Bundle, Screen index)" },
+  "toc.two_span":    { en: "2 monitors · Spanned / mirrored (one wallpaper across both)",
+                       de: "2 Bildschirme · Gespannt / gespiegelt (ein Wallpaper über beide)" },
+  "toc.three_four":  { en: "3–4 monitors",          de: "3–4 Bildschirme" },
+  "toc.ultra":       { en: "Ultrawide / non-16:9 monitors",
+                       de: "Ultrawide / nicht-16:9-Bildschirme" },
+  "toc.tips":        { en: "Tips & common pitfalls",  de: "Tipps & häufige Stolperfallen" },
+
+  "common.h_why": { en: "Why this setup",            de: "Warum dieses Setup" },
+  "common.h_how": { en: "How to set it up",          de: "So richtest du es ein" },
+
+  // ── Quick start
+  "qs.title":   { en: "Quick start",                de: "Schnellstart" },
+  "qs.p1":      { en: "There are three independent pieces of plumbing — they all have to be aligned:",
+                  de: "Es gibt drei voneinander unabhängige Komponenten, die alle aufeinander abgestimmt sein müssen:" },
+  "qs.h_setup": { en: "What the installer set up for you",
+                  de: "Was der Installer für dich eingerichtet hat" },
+  "qs.s1":      { en: "<strong>SignalRGBBridge.exe</strong> sits in the system tray and converts the plugin's UDP frames into WebSocket pushes. Configurator + Builder + Help (this page) are served from it on <code>127.0.0.1:17320</code>.",
+                  de: "<strong>SignalRGBBridge.exe</strong> läuft im Tray und wandelt die UDP-Frames des Plugins in WebSocket-Pushes um. Konfigurator + Builder + Hilfe (diese Seite) werden über <code>127.0.0.1:17320</code> ausgeliefert." },
+  "qs.s2":      { en: "<strong>SignalRGB plugin</strong> in <code>Documents\\WhirlwindFX\\Plugins\\</code> announces 1–4 virtual devices. The plugin's <em>Glow Grid Base Size</em> + <em>Aspect Ratio</em> control the colour resolution.",
+                  de: "<strong>SignalRGB-Plugin</strong> in <code>Dokumente\\WhirlwindFX\\Plugins\\</code> meldet 1–4 virtuelle Geräte an. Die <em>Glow Grid Base Size</em> + <em>Aspect Ratio</em> des Plugins steuern die Farbauflösung." },
+  "qs.s3":      { en: "<strong>Lively bundles</strong>: <code>signalrgb-glow-screen-1</code>…<code>4</code> dropped into Lively's Library — one per monitor.",
+                  de: "<strong>Lively-Bundles</strong>: <code>signalrgb-glow-screen-1</code>…<code>4</code> in der Lively-Bibliothek — eines pro Bildschirm." },
+  "qs.s4":      { en: "<strong>Wallpaper Engine bundle</strong>: a single <code>signalrgb-glow/</code> in <code>…\\steamapps\\common\\wallpaper_engine\\projects\\myprojects\\</code> — assigned multiple times with a different <em>Screen index</em>.",
+                  de: "<strong>Wallpaper-Engine-Bundle</strong>: ein <code>signalrgb-glow/</code> in <code>…\\steamapps\\common\\wallpaper_engine\\projects\\myprojects\\</code> — mehrfach zugewiesen mit jeweils anderem <em>Screen index</em>." },
+  "qs.h_next":  { en: "Open the Configurator",      de: "Den Konfigurator öffnen" },
+  "qs.next":    { en: "From here, right-click the tray icon → <strong>Configurator…</strong>. The Configurator is where you pick how many screens, the background image, the glow layout, widgets, presets, ambient effects, and audio glow.",
+                  de: "Jetzt: Rechtsklick auf das Tray-Icon → <strong>Konfigurator…</strong>. Dort wählst du die Anzahl der Bildschirme, Hintergrundbild, Glow-Layout, Widgets, Presets, Ambient-Effekte und Audio-Glow." },
+
+  // ── 1 monitor Lively
+  "one_lively.title": { en: "1 monitor · Lively",   de: "1 Bildschirm · Lively" },
+  "one_lively.why":   { en: "You have one screen and you want the glow on it. This is the simplest path — no canvas split, no Screen index, just one device → one wallpaper.",
+                        de: "Du hast einen Bildschirm und willst den Glow darauf. Einfachster Pfad — keine Canvas-Aufteilung, kein Screen index, nur ein Gerät → ein Wallpaper." },
+  "one_lively.s1":    { en: "Configurator: top-right of the tab bar, set <em>Screens:</em> to <strong>1</strong>.",
+                        de: "Konfigurator: oben rechts in der Tab-Leiste <em>Screens:</em> auf <strong>1</strong> stellen." },
+  "one_lively.s2":    { en: "In SignalRGB → <strong>Layouts</strong>, drag <em>Desktop Wallpaper – Screen 1</em> onto the canvas at the position you want colours sampled from. Resize to taste.",
+                        de: "In SignalRGB → <strong>Layouts</strong> das Gerät <em>Desktop Wallpaper – Screen 1</em> auf den Bereich ziehen, dessen Farben gesampelt werden sollen. Größe nach Geschmack." },
+  "one_lively.s3":    { en: "In Lively → Library, right-click <em>SignalRGB Glow – Screen 1</em> → <em>Set as wallpaper</em> → pick your monitor.",
+                        de: "In Lively → Bibliothek auf <em>SignalRGB Glow – Screen 1</em> rechtsklicken → <em>Als Wallpaper setzen</em> → Monitor wählen." },
+  "one_lively.s4":    { en: "Back in the Configurator: pick a background image (or one from the Library strip), tweak glow strength + dim if needed.",
+                        de: "Zurück im Konfigurator: Hintergrundbild auswählen (z.B. aus dem Library-Streifen), bei Bedarf Glow-Stärke und Abdunklung anpassen." },
+
+  // ── 1 monitor WE
+  "one_we.title": { en: "1 monitor · Wallpaper Engine", de: "1 Bildschirm · Wallpaper Engine" },
+  "one_we.why":   { en: "Same idea as Lively but with Wallpaper Engine. WE ships a single combined bundle; on one monitor you just leave <em>Screen index</em> at <strong>Screen 1</strong>.",
+                    de: "Gleiches Prinzip wie Lively, nur mit Wallpaper Engine. WE bekommt ein kombiniertes Bundle; bei einem Bildschirm bleibt <em>Screen index</em> einfach auf <strong>Screen 1</strong>." },
+  "one_we.s1": { en: "Configurator: set <em>Screens:</em> to <strong>1</strong>.",
+                 de: "Konfigurator: <em>Screens:</em> auf <strong>1</strong> stellen." },
+  "one_we.s2": { en: "SignalRGB → <strong>Layouts</strong>: drag <em>Desktop Wallpaper – Screen 1</em> onto the canvas.",
+                 de: "SignalRGB → <strong>Layouts</strong>: <em>Desktop Wallpaper – Screen 1</em> auf das Canvas ziehen." },
+  "one_we.s3": { en: "Wallpaper Engine → <em>My Wallpapers</em>: assign <em>SignalRGB Glow</em> to your monitor.",
+                 de: "Wallpaper Engine → <em>My Wallpapers</em>: <em>SignalRGB Glow</em> deinem Bildschirm zuweisen." },
+  "one_we.s4": { en: "In WE's per-wallpaper properties panel, leave <em>Screen index</em> at <strong>Screen 1</strong>.",
+                 de: "Im WE-Properties-Panel des Wallpapers <em>Screen index</em> auf <strong>Screen 1</strong> lassen." },
+  "one_we.s5": { en: "If audio glow / spectrum widget doesn't pulse: make sure <em>Audio Processing</em> is on in WE's general settings (Settings → Performance).",
+                 de: "Wenn Audio-Glow / Spectrum-Widget nicht reagiert: in WE → Settings → Performance prüfen, dass <em>Audio Processing</em> aktiviert ist." },
+
+  // ── 2 monitor Lively independent
+  "two_lively.title": { en: "2 monitors · Lively (independent)", de: "2 Bildschirme · Lively (unabhängig)" },
+  "two_lively.why":   { en: "Two monitors, each with its own glow that follows a <em>different</em> region of the SignalRGB canvas. Pick this when you want the left monitor's glow to follow keyboard / strip LEDs on the left side of your physical setup, and the right monitor to follow the right side.",
+                        de: "Zwei Bildschirme mit jeweils eigenem Glow, der einer <em>anderen</em> Region des SignalRGB-Canvas folgt. Sinnvoll wenn der linke Bildschirm den LEDs/Strips auf deiner linken Seite folgen soll und der rechte denen auf der rechten." },
+  "two_lively.s1": { en: "Configurator: <em>Screens:</em> = <strong>2</strong>.", de: "Konfigurator: <em>Screens:</em> = <strong>2</strong>." },
+  "two_lively.s2": { en: "SignalRGB → <strong>Layouts</strong>: place <em>Desktop Wallpaper – Screen 1</em> on the LEFT half of the canvas, <em>Screen 2</em> on the RIGHT half. Resize each to cover the area you want sampled.",
+                     de: "SignalRGB → <strong>Layouts</strong>: <em>Desktop Wallpaper – Screen 1</em> auf die LINKE Canvas-Hälfte, <em>Screen 2</em> auf die RECHTE. Jeweils auf den Bereich anpassen, der gesampelt werden soll." },
+  "two_lively.s3": { en: "Lively → Library: assign <em>SignalRGB Glow – Screen 1</em> to your LEFT monitor, <em>Screen 2</em> to your RIGHT monitor.",
+                     de: "Lively → Bibliothek: <em>SignalRGB Glow – Screen 1</em> dem LINKEN Bildschirm zuweisen, <em>Screen 2</em> dem RECHTEN." },
+  "two_lively.s4": { en: "In the Configurator, the per-screen tabs (<em>Screen 1</em> / <em>Screen 2</em>) let you pick a different background image, glow layout and widgets per monitor.",
+                     de: "Im Konfigurator kannst du in den Tabs <em>Screen 1</em> / <em>Screen 2</em> pro Bildschirm ein eigenes Hintergrundbild, Glow-Layout und Widget-Set wählen." },
+  "two_lively.callout": { en: "<strong>Heads-up:</strong> \"Screen 1\" is which SignalRGB device feeds it — not which physical monitor it has to live on. Activate Screen 1's tile on whichever monitor you want it on.",
+                          de: "<strong>Tipp:</strong> \"Screen 1\" ist die Bezeichnung des speisenden SignalRGB-Geräts — nicht des physischen Monitors. Du kannst Screen 1 auf jeden beliebigen Bildschirm aktivieren." },
+
+  // ── 2 monitor WE
+  "two_we.title": { en: "2 monitors · Wallpaper Engine (single bundle, Screen index)",
+                    de: "2 Bildschirme · Wallpaper Engine (ein Bundle, Screen index)" },
+  "two_we.why":   { en: "Wallpaper Engine ships <em>one</em> bundle (<code>SignalRGB Glow</code>). You assign it to both monitors and set a different <em>Screen index</em> per assignment — the wallpaper page reconnects to the matching <code>?screen=N</code> route on the bridge. No need for two separate bundles like the pre-0.7.2-beta era.",
+                    de: "Wallpaper Engine bekommt <em>ein</em> Bundle (<code>SignalRGB Glow</code>). Du weist es beiden Bildschirmen zu und stellst pro Zuweisung einen anderen <em>Screen index</em> ein — die Wallpaper-Seite reconnected zur passenden <code>?screen=N</code>-Route der Bridge. Keine getrennten Bundles mehr wie vor 0.7.2-beta." },
+  "two_we.s1": { en: "Configurator: <em>Screens:</em> = <strong>2</strong>.", de: "Konfigurator: <em>Screens:</em> = <strong>2</strong>." },
+  "two_we.s2": { en: "SignalRGB → Layouts: place <em>Desktop Wallpaper – Screen 1</em> on the LEFT half of the canvas, <em>Screen 2</em> on the RIGHT half.",
+                 de: "SignalRGB → Layouts: <em>Desktop Wallpaper – Screen 1</em> auf LINKS, <em>Screen 2</em> auf RECHTS." },
+  "two_we.s3": { en: "WE → <em>My Wallpapers</em>: drag <em>SignalRGB Glow</em> onto your LEFT monitor. In the per-wallpaper properties panel, leave <em>Screen index</em> at <strong>Screen 1</strong>.",
+                 de: "WE → <em>My Wallpapers</em>: <em>SignalRGB Glow</em> auf den LINKEN Bildschirm ziehen. Im Properties-Panel <em>Screen index</em> auf <strong>Screen 1</strong> lassen." },
+  "two_we.s4": { en: "Drag the <em>same</em> <em>SignalRGB Glow</em> onto your RIGHT monitor. In that assignment's properties, change <em>Screen index</em> to <strong>Screen 2</strong>.",
+                 de: "Das <em>gleiche</em> <em>SignalRGB Glow</em> auf den RECHTEN Bildschirm ziehen. In diesem Properties-Panel <em>Screen index</em> auf <strong>Screen 2</strong> setzen." },
+  "two_we.callout": { en: "<strong>One bundle, N monitors</strong> — the trick is the <em>Screen index</em> per assignment. Both wallpaper instances open separate WS connections to the bridge with <code>?screen=0</code> and <code>?screen=1</code>; the bridge routes the matching SignalRGB device's colours to each.",
+                      de: "<strong>Ein Bundle, N Monitore</strong> — der Trick ist der <em>Screen index</em> pro Zuweisung. Beide Wallpaper-Instanzen öffnen getrennte WS-Verbindungen zur Bridge mit <code>?screen=0</code> bzw. <code>?screen=1</code>; die Bridge routet die jeweiligen SignalRGB-Geräte-Farben dorthin." },
+
+  // ── 2 monitor spanned
+  "two_span.title": { en: "2 monitors · Spanned / mirrored (one wallpaper across both)",
+                      de: "2 Bildschirme · Gespannt / gespiegelt (ein Wallpaper über beide)" },
+  "two_span.why":   { en: "You want one wide image stretched across both monitors with the glow sampled from a single SignalRGB device. Useful for super-wide compositions (long cityscapes, panoramic art) where the cut-out region spans both monitors as a continuous picture.",
+                      de: "Du willst ein einzelnes breites Bild über beide Bildschirme spannen, mit Glow von einem einzigen SignalRGB-Gerät. Sinnvoll für Super-Wide-Kompositionen (lange Stadtsilhouetten, panoramische Kunst), bei denen die Cut-out-Region als ein durchgehendes Bild über beide Bildschirme läuft." },
+  "two_span.s1": { en: "Configurator: <em>Screens:</em> = <strong>1</strong> (we only need one device for the spanned image).",
+                   de: "Konfigurator: <em>Screens:</em> = <strong>1</strong> (für das gespannte Bild brauchen wir nur ein Gerät)." },
+  "two_span.s2": { en: "SignalRGB → Layouts: place <em>Desktop Wallpaper – Screen 1</em> across the whole canvas area you want sampled.",
+                   de: "SignalRGB → Layouts: <em>Desktop Wallpaper – Screen 1</em> über den gesamten zu sampelnden Canvas-Bereich legen." },
+  "two_span.s3": { en: "<strong>Lively:</strong> right-click <em>SignalRGB Glow – Screen 1</em> → <em>Customise</em> → set <em>Wallpaper arrangement</em> to <em>Span across screens</em>. Assign to both monitors.",
+                   de: "<strong>Lively:</strong> Rechtsklick auf <em>SignalRGB Glow – Screen 1</em> → <em>Customise</em> → <em>Wallpaper arrangement</em> auf <em>Span across screens</em> setzen. Beide Bildschirme zuweisen." },
+  "two_span.s4": { en: "<strong>Wallpaper Engine:</strong> right-click on its tray icon → <em>Display Settings</em> → choose <em>Spanned</em>; pick <em>SignalRGB Glow</em>.",
+                   de: "<strong>Wallpaper Engine:</strong> Rechtsklick aufs Tray-Icon → <em>Display Settings</em> → <em>Spanned</em> wählen; <em>SignalRGB Glow</em> als Wallpaper." },
+  "two_span.s5": { en: "Plugin Aspect Ratio → <strong>Custom</strong>, type your combined resolution (e.g. 3840×1080 for two FHD side-by-side → Custom Cols 128 × Rows 36 gives a clean 32:9-shaped glow grid).",
+                   de: "Plugin Aspect Ratio → <strong>Custom</strong>, kombinierte Auflösung eingeben (z.B. 3840×1080 für zwei FHD nebeneinander → Custom Cols 128 × Rows 36 ergibt ein sauberes 32:9-Glow-Grid)." },
+  "two_span.callout": { en: "<strong>When to pick span over independent</strong>: if the underlying picture is one image (panoramic). If the two monitors should show <em>different</em> things (different cut-outs / themes), use the independent setup above instead.",
+                        de: "<strong>Wann Span statt Unabhängig:</strong> wenn das Bild dahinter EIN Bild ist (panoramisch). Wenn beide Bildschirme <em>unterschiedliche</em> Inhalte zeigen sollen (verschiedene Cut-outs / Themen), nimm stattdessen das unabhängige Setup oben." },
+
+  // ── 3-4 monitor
+  "three_four.title":   { en: "3–4 monitors", de: "3–4 Bildschirme" },
+  "three_four.p1":      { en: "Same flow as 2 monitors, just with more devices and tiles. Configurator <em>Screens:</em> set to 3 or 4 and the corresponding tabs appear.",
+                          de: "Gleiches Vorgehen wie bei 2 Bildschirmen, nur mit mehr Geräten und Tiles. Konfigurator <em>Screens:</em> auf 3 oder 4 setzen, dann erscheinen die zugehörigen Tabs." },
+  "three_four.h_layouts": { en: "Canvas layout suggestions", de: "Vorschläge für die Canvas-Aufteilung" },
+  "three_four.l1":      { en: "<strong>3 in a row</strong> — divide the canvas into vertical thirds, one device per third.",
+                          de: "<strong>3 nebeneinander</strong> — Canvas in vertikale Drittel teilen, ein Gerät pro Drittel." },
+  "three_four.l2":      { en: "<strong>2+1 (main pair + side)</strong> — Screens 1 / 2 across the bulk of the canvas, Screen 3 in a smaller dedicated region.",
+                          de: "<strong>2+1 (Hauptpaar + Seite)</strong> — Screens 1 / 2 über den Hauptbereich, Screen 3 in einer eigenen kleineren Region." },
+  "three_four.l3":      { en: "<strong>2×2 grid</strong> — Screens 1 / 2 along the top, Screens 3 / 4 along the bottom. Each device samples a quadrant of the effect.",
+                          de: "<strong>2×2 Gitter</strong> — Screens 1 / 2 oben, Screens 3 / 4 unten. Jedes Gerät sampelt einen Quadranten des Effekts." },
+  "three_four.l4":      { en: "<strong>3+1 (triple + side)</strong> — Screens 1 / 2 / 3 cover the main triple-monitor block; Screen 4 lives in a smaller region for the side / portrait / control monitor.",
+                          de: "<strong>3+1 (Triple + Seite)</strong> — Screens 1 / 2 / 3 decken den Haupt-Triple-Block ab, Screen 4 in einer kleineren Region für Side- / Portrait- / Control-Monitor." },
+  "three_four.h_we":    { en: "Wallpaper Engine: assign the same bundle N times", de: "Wallpaper Engine: gleiches Bundle N-mal zuweisen" },
+  "three_four.we_p":    { en: "Each assignment gets a different <em>Screen index</em> in WE's per-wallpaper properties panel (Screen 1 / 2 / 3 / 4).",
+                          de: "Jede Zuweisung bekommt einen anderen <em>Screen index</em> in WE's Properties-Panel (Screen 1 / 2 / 3 / 4)." },
+
+  // ── Ultrawide
+  "ultra.title":  { en: "Ultrawide / non-16:9 monitors", de: "Ultrawide / nicht-16:9-Bildschirme" },
+  "ultra.p1":     { en: "The SignalRGB plugin's <em>Glow Grid Base Size</em> + <em>Aspect Ratio</em> settings control how the colour samples are shaped. By default <em>Aspect Ratio = Auto</em>: the plugin reads each screen's viewport from the bridge (the wallpaper page reports it on connect) and derives the longer side from your selected base size.",
+                    de: "Die SignalRGB-Plugin-Einstellungen <em>Glow Grid Base Size</em> + <em>Aspect Ratio</em> steuern die Form der Farbsamples. Standard <em>Aspect Ratio = Auto</em>: das Plugin liest die Viewport-Größe pro Bildschirm aus der Bridge (das Wallpaper meldet sie beim Connect) und leitet die längere Seite aus deiner gewählten Basisgröße ab." },
+  "ultra.h_what": { en: "What you set on the plugin side", de: "Was du auf der Plugin-Seite einstellst" },
+  "ultra.u1": { en: "<em>Aspect Ratio = Auto</em>: simplest, the bridge tells the plugin your real viewport once the wallpaper has connected once. If it stays on 16:9 → the wallpaper hasn't pushed its viewport yet (re-set the wallpaper in Lively / WE).",
+                de: "<em>Aspect Ratio = Auto</em>: einfachster Weg — die Bridge meldet dem Plugin deinen echten Viewport, sobald das Wallpaper einmal verbunden war. Bleibt's auf 16:9 → das Wallpaper hat den Viewport noch nicht gepusht (Wallpaper in Lively / WE neu setzen)." },
+  "ultra.u2": { en: "<em>Aspect Ratio = 32:9 / 21:9 / 9:16</em>: forces a fixed shape regardless of viewport. Useful as a workaround when Auto stays stuck on 16:9.",
+                de: "<em>Aspect Ratio = 32:9 / 21:9 / 9:16</em>: erzwingt eine feste Form unabhängig vom Viewport. Nützlich wenn Auto auf 16:9 hängen bleibt." },
+  "ultra.u3": { en: "<em>Aspect Ratio = Custom</em>: type <em>Custom Cols</em> × <em>Custom Rows</em> directly. The other Aspect Ratio settings are ignored.",
+                de: "<em>Aspect Ratio = Custom</em>: <em>Custom Cols</em> × <em>Custom Rows</em> direkt eintippen. Die anderen Aspect-Ratio-Einstellungen werden ignoriert." },
+  "ultra.callout":{ en: "<strong>Heads-up:</strong> larger grids = more UDP per frame. 14592 LEDs per frame at 30 fps ≈ 1.3 MB/s — chunked transport handles it fine on localhost, but if you see the SignalRGB plugin tick stuttering, drop the base size to 32 or pick a coarser aspect.",
+                    de: "<strong>Achtung:</strong> größere Grids = mehr UDP pro Frame. 14592 LEDs/Frame bei 30 fps ≈ 1,3 MB/s — der chunked Transport macht das auf localhost easy, aber wenn der SignalRGB-Plugin-Tick stuttert: Base Size auf 32 reduzieren oder gröberen Aspect wählen." },
+
+  // ── Tips
+  "tips.title":     { en: "Tips & common pitfalls", de: "Tipps & häufige Stolperfallen" },
+  "tips.h_paused":  { en: "Wallpaper appears stuck", de: "Wallpaper scheint eingefroren" },
+  "tips.p1":  { en: "If the glow doesn't react at all: bridge probably isn't running. Look for the tray icon — relaunch <code>SignalRGBBridge.exe</code> if missing.",
+                de: "Wenn der Glow gar nicht reagiert: Bridge läuft wahrscheinlich nicht. Tray-Icon prüfen — <code>SignalRGBBridge.exe</code> neu starten falls fehlt." },
+  "tips.p2":  { en: "If the glow froze on one colour: the wallpaper might be paused. Lively → tray <em>Pause wallpapers</em> toggles all; WE → right-click WE tray icon → <em>Stop wallpapers</em>.",
+                de: "Wenn der Glow auf einer Farbe eingefroren ist: Wallpaper könnte pausiert sein. Lively → Tray <em>Pause wallpapers</em> schaltet alle; WE → Rechtsklick WE-Tray-Icon → <em>Stop wallpapers</em>." },
+  "tips.p3":  { en: "Configurator status badge (top right) tells you the WS state — if it stays <em>connecting…</em>, port 17320 is blocked / another process is holding it.",
+                de: "Konfigurator-Status-Badge (oben rechts) zeigt den WS-Status — wenn er auf <em>verbinde…</em> hängen bleibt, ist Port 17320 blockiert oder ein anderer Prozess hält ihn." },
+  "tips.h_audio": { en: "Audio glow / spectrum widget doesn't pulse", de: "Audio-Glow / Spectrum-Widget reagiert nicht" },
+  "tips.a1":  { en: "<strong>Lively:</strong> needs <code>--audio</code> in <code>LivelyInfo.Arguments</code>. Bundled since v0.7.8-beta; if you imported an older zip, re-import the new one.",
+                de: "<strong>Lively:</strong> braucht <code>--audio</code> in <code>LivelyInfo.Arguments</code>. Seit v0.7.8-beta gebundled; wer ein älteres Zip importiert hat: neues Zip neu importieren." },
+  "tips.a2":  { en: "<strong>Wallpaper Engine:</strong> needs <code>\"supportsaudioprocessing\": true</code> inside <code>general</code> in <code>project.json</code>. Bundled since v0.7.10-beta. Also: WE's <em>Audio Processing</em> setting (Settings → Performance) has to be on.",
+                de: "<strong>Wallpaper Engine:</strong> braucht <code>\"supportsaudioprocessing\": true</code> innerhalb von <code>general</code> in <code>project.json</code>. Seit v0.7.10-beta gebundled. Außerdem: WE's <em>Audio Processing</em>-Einstellung (Settings → Performance) muss an sein." },
+  "tips.a3":  { en: "No actual audio playing? No pulses to render. Play music or a video and the spectrum should react.",
+                de: "Spielt kein Audio? Dann auch kein Puls zum Rendern. Musik oder Video starten und das Spektrum sollte reagieren." },
+  "tips.h_widgets": { en: "Widgets don't appear or can't be moved", de: "Widgets erscheinen nicht oder lassen sich nicht verschieben" },
+  "tips.w1":  { en: "Configurator → <em>Widgets</em> → check the lock toggle. Locked = widgets are static + click-through; unlocked = draggable on the wallpaper itself.",
+                de: "Konfigurator → <em>Widgets</em> → Lock-Toggle prüfen. Gesperrt = Widgets sind statisch + klick-durchlässig; entsperrt = direkt auf dem Wallpaper ziehbar." },
+  "tips.w2":  { en: "Tray icon → <em>🔓 Unlock widgets (all screens)</em> toggles every active screen at once.",
+                de: "Tray-Icon → <em>🔓 Widgets entsperren (alle Bildschirme)</em> schaltet alle aktiven Bildschirme auf einmal um." },
+  "tips.w3":  { en: "If Lively is in click-through mode, dragging works in the Configurator's layout preview but not on the live wallpaper. Switch Lively interaction on if you want to drag on the wallpaper directly.",
+                de: "Wenn Lively im Click-through-Modus ist: das Ziehen funktioniert in der Layout-Vorschau des Konfigurators, nicht auf dem Live-Wallpaper. Lively-Interaktion einschalten, wenn du direkt auf dem Wallpaper ziehen willst." },
+  "tips.h_workshop": { en: "Wallpaper Engine Workshop subscriptions", de: "Wallpaper-Engine-Workshop-Abos" },
+  "tips.w_p":  { en: "If you subscribed to an older per-screen <em>SignalRGB Glow – Screen 1/2/3</em> from Workshop (pre-v0.7.2-beta): those are obsolete. Unsubscribe in Steam and use the single combined <em>SignalRGB Glow</em> the installer drops into your local <em>myprojects</em> folder.",
+                 de: "Wer noch ältere Per-Screen-<em>SignalRGB Glow – Screen 1/2/3</em>-Items aus dem Workshop abonniert hat (vor v0.7.2-beta): die sind obsolet. In Steam abbestellen und das kombinierte <em>SignalRGB Glow</em>-Bundle nutzen, das der Installer in deinen lokalen <em>myprojects</em>-Ordner legt." },
+
+  "footer.text":   { en: "Help page · ",    de: "Hilfeseite · " },
+  "footer.issues": { en: "Report a bug",    de: "Bug melden" },
+};
+
+let _lang = "en";
+
+function t(key, params) {
+  const entry = TRANSLATIONS[key];
+  let s = (entry && (entry[_lang] || entry.en)) || key;
+  if (params) {
+    for (const k in params) s = s.replace(new RegExp("\\{" + k + "\\}", "g"), params[k]);
+  }
+  return s;
+}
+
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    // Strings with embedded markup (strong/em/code/br) go through innerHTML;
+    // plain ones through textContent. We detect by checking whether the
+    // translation has any '<' in it.
+    const s = t(key);
+    if (s.indexOf("<") !== -1) el.innerHTML = s;
+    else el.textContent = s;
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    el.setAttribute("title", t(el.getAttribute("data-i18n-title")));
+  });
+}
+
+function setLanguage(lang) {
+  if (lang === _lang) return;
+  if (lang !== "en" && lang !== "de") return;
+  _lang = lang;
+  document.documentElement.lang = lang;
+  applyI18n();
+}
+
+// Pull the user's chosen language from /config — same approach the
+// Builder uses. Falls back to English if the fetch fails (e.g. opened
+// directly from disk for editing).
+(function fetchLanguage() {
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", "/config", true);
+    xhr.timeout = 1500;
+    xhr.onload = () => {
+      if (xhr.status !== 200) return;
+      try {
+        const cfg = JSON.parse(xhr.responseText);
+        if (cfg && (cfg.language === "en" || cfg.language === "de")) setLanguage(cfg.language);
+      } catch (_) {}
+    };
+    xhr.send();
+  } catch (_) {}
+})();
+
+applyI18n();
+
+// Collapse-toggle for section headers (same as Configurator).
+document.querySelectorAll("section.card > header[data-toggle]").forEach((h) => {
+  h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed"));
+});
+
+// Hide help-images placeholders that 404 (no user-provided screenshot
+// dropped in yet). Cleaner than a broken-image icon.
+document.querySelectorAll("img[data-helpimg]").forEach((img) => {
+  img.addEventListener("error", () => { img.style.display = "none"; }, { once: true });
+});
+</script>
+</body>
+</html>

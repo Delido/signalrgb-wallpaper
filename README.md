@@ -26,12 +26,14 @@ strips, whatever) sits on top of a coloured glow layer. The glow comes
 from the live SignalRGB canvas, so anything you cut transparent shines in
 whatever colour your current effect is producing right now.
 
-> **Status:** v0.7.8-beta — auto-Lively bootstrapper closes the last
-> planned roadmap item; library gains upload + delete; audio glow
-> fixed in Lively (`--audio` flag); a sweep of small Configurator /
-> Builder / installer papercuts. Folds in the v0.7.7-beta preset
-> slots, pattern brush + starter library, and everything from the
-> 0.7.1 → 0.7.6 beta cycle. Marked prerelease.
+> **Status:** v0.8.0 — first stable after the long 0.7.x beta cycle.
+> Rolls up everything: in-browser Help page with scenario
+> walkthroughs (tray → _Help…_), Configurator + Builder + Help all
+> DE / EN, auto-Lively bootstrapper, single-bundle Wallpaper Engine
+> with _Screen index_ property, 4-monitor support, ultrawide
+> aspect-ratio handling, whole-screen audio-reactive glow layer,
+> per-screen preset slots, pattern-fill brush, wallpaper library
+> with upload + delete.
 > Brings the full in-browser **configurator** (per-screen tabs,
 > drag-and-resize layout preview, snap-to-grid), 11 widget types
 > (clock / calendar / weather / sticky note / countdown / picture / quote /
@@ -87,13 +89,18 @@ GIF (`docs/images/demo.gif`) is enough.
   - [Lively Wallpaper](https://www.rocksdanister.com/lively/) (free,
     recommended) — **GitHub installer build** preferred; the Microsoft
     Store / MSIX build also works for Web-type wallpapers
-  - [Wallpaper Engine](https://www.wallpaperengine.io/) (paid, on Steam)
-    — auto-detected by the installer; the three glow bundles get
-    dropped straight into Steam's `wallpaper_engine\projects\myprojects`
+  - [Wallpaper Engine](https://www.wallpaperengine.io/) (paid, on
+    Steam) — auto-detected by the installer; the single combined
+    `signalrgb-glow/` bundle gets dropped straight into Steam's
+    `wallpaper_engine\projects\myprojects\` and is assigned once per
+    monitor with a different _Screen index_ per assignment.
 
 ## Quick start
 
 ### Easy path: installer
+
+> **Step-by-step walkthrough with screenshots:**
+> [docs/installation.md#installer-walkthrough](docs/installation.md#installer-walkthrough)
 
 1. Grab `SignalRGBWallpaperSetup-<version>.exe` from
    [Releases](https://github.com/Delido/signalrgb-wallpaper/releases).
@@ -101,11 +108,14 @@ GIF (`docs/images/demo.gif`) is enough.
    `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`. On the Tasks page:
    - **Wallpaper host:** check **Lively** (default) and/or **Wallpaper
      Engine**. Lively-only and WE-only setups both work; only the
-     selected host's files get copied.
+     selected host's files get copied. If Lively isn't installed yet,
+     the installer can download + silent-install it for you.
    - **Install SignalRGB plugin** (recommended) — drops the plugin
      into `Documents\WhirlwindFX\Plugins\` so SignalRGB can drive the
      bridge.
    - **Start bridge automatically on logon** (recommended).
+   - **Open the Configurator when done** — pops the browser UI
+     straight after install so you can pick a background image.
 3. **Lively users**: the installer opens the _Lively wallpapers_
    folder at the end — drag `SignalRGB_Glow_Screen1.zip` (and
    `Screen2.zip` / `Screen3.zip` / `Screen4.zip` for additional
@@ -122,16 +132,21 @@ GIF (`docs/images/demo.gif`) is enough.
    `signalrgb-glow` folder into Steam's
    `…\steamapps\common\wallpaper_engine\projects\myprojects\` by hand.
 5. Right-click the bridge's tray icon → **Configurator…** (the default
-   action). In the browser: per-screen tabs at the top → set the
-   number of screens to drive in the _Advanced → Legacy Settings_
-   dialog if more than 1, then pick a background image, tweak the
-   glow layout / strength, place widgets via drag-and-resize, switch
-   on an ambient effect, etc.
+   action). In the browser: per-screen tabs at the top → use the
+   _Screens:_ picker (top-right of the tab bar) to set how many
+   monitors you want to drive, then per tab pick a background image,
+   tweak glow layout / strength, place widgets via drag-and-resize,
+   switch on an ambient effect, etc.
 6. In SignalRGB: place the **Desktop Wallpaper - Screen N** devices
    on SignalRGB's canvas at the positions you want colours sampled
    from. (Layouts → drag the devices.) Optionally raise _Glow Grid
-   Size_ in the plugin settings up to `128` — anything > 36 uses the
-   bridge's new chunked-UDP transport automatically.
+   Base Size_ in the plugin settings up to `128` — anything > 36 uses
+   the bridge's chunked-UDP transport automatically.
+
+> **Stuck or unsure which setup matches your monitors?** The tray
+> icon also has a **Help…** entry — a scenario-based walkthrough for
+> 1 / 2 / 3 / 4 monitor setups with both Lively and Wallpaper Engine,
+> plus a Tips section for common pitfalls (DE / EN).
 
 Uninstall via Windows Settings → Apps, or run `unins000.exe` in the
 install folder. The uninstaller also removes the three Steam-side WE
@@ -206,6 +221,14 @@ and tag it `enhancement`.)_
 
 ### Recently shipped
 
+- ✅ **In-browser Help page** — scenario-based walkthrough for
+  1 / 2 / 3 / 4 monitors × Lively / Wallpaper Engine, plus an
+  ultrawide section and a Tips & common pitfalls block. Tray icon
+  → _Help…_ entry, DE / EN auto from `/config` (0.7.11-beta)
+- ✅ **WE audio fixed** — `supportsaudioprocessing: true` is now
+  inside `general` in `project.json` where WE actually honours it.
+  Audio glow layer + audio-spectrum widget receive FFT samples
+  under WE (0.7.10-beta)
 - ✅ **Auto-Lively bootstrapper** — when the user kept the opt-in
   task AND no Lively install was detected, the installer downloads
   and silently installs the latest Lively from GitHub Releases

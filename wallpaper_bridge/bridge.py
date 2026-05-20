@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.7.10-beta"
+APP_VERSION = "0.8.0"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -620,6 +620,7 @@ TRANSLATIONS = {
     # ── Tray menu ────────────────────────────────────────────────────
     "tray.configurator":        {"en": "Configurator…",           "de": "Konfigurator…"},
     "tray.builder":             {"en": "Build Wallpaper…",        "de": "Wallpaper bauen…"},
+    "tray.help":                {"en": "Help…",                   "de": "Hilfe…"},
     "tray.lock_all":            {"en": "🔓 Lock widgets (all screens)",
                                  "de": "🔓 Widgets sperren (alle Bildschirme)"},
     "tray.unlock_all":          {"en": "🔒 Unlock widgets (all screens)",
@@ -1420,6 +1421,76 @@ class Broadcaster:
                 writer.write(head + payload)
             except Exception as e:
                 http_error(writer, 500, f"delete failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # In-browser help page — scenario-based walkthroughs (1/2/3/4
+        # monitors × Lively / Wallpaper Engine). Static HTML; pulls the
+        # active language from /config like the Builder does. Images
+        # under /help/images/* served from a sibling folder so the
+        # maintainer can drop screenshots in by hand.
+        if method == "GET" and target.split("?", 1)[0] in ("/help", "/help/"):
+            try:
+                help_path = _resource_path("help.html")
+                data = help_path.read_bytes()
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(data)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + data)
+            except FileNotFoundError:
+                http_error(writer, 500, "help.html not bundled with this build")
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+        # /help/images/<file> — optional screenshots the maintainer can
+        # drop into wallpaper_bridge/help_assets/ (dev) or
+        # %LOCALAPPDATA%\SignalRGBWallpaper\help_images\ (post-install).
+        # Path-traversal protected like /library.
+        if method == "GET" and target.split("?", 1)[0].startswith("/help/images/"):
+            name = target.split("?", 1)[0][len("/help/images/"):]
+            if not name or "/" in name or "\\" in name or ".." in name:
+                http_error(writer, 400, "bad help-image filename")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                # Prefer the user-writable %LOCALAPPDATA% copy so users can
+                # add their own screenshots without rebuilding the bridge.
+                user_dir = config_path().parent / "help_images"
+                dev_dir  = Path(__file__).resolve().parent / "help_assets"
+                fp = None
+                for cand in (user_dir / name, dev_dir / name):
+                    if cand.exists() and cand.is_file():
+                        fp = cand; break
+                if fp is None:
+                    http_error(writer, 404, "help image not found")
+                else:
+                    body = fp.read_bytes()
+                    ct, _ = mimetypes.guess_type(str(fp))
+                    if not ct: ct = "application/octet-stream"
+                    head = (
+                        "HTTP/1.1 200 OK\r\n"
+                        f"Content-Type: {ct}\r\n"
+                        f"Content-Length: {len(body)}\r\n"
+                        "Cache-Control: public, max-age=86400\r\n"
+                        "Connection: close\r\n\r\n"
+                    ).encode()
+                    writer.write(head + body)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -2589,6 +2660,7 @@ class TrayApp:
         items.extend([
             pystray.MenuItem(tr("tray.configurator"), self._open_configurator, default=True),
             pystray.MenuItem(tr("tray.builder"),      self._open_builder),
+            pystray.MenuItem(tr("tray.help"),         self._open_help),
             pystray.MenuItem(
                 tr("tray.lock_all") if any_unlocked else tr("tray.unlock_all"),
                 self._toggle_widgets_lock_all),
@@ -2682,6 +2754,16 @@ class TrayApp:
         # WS / image proxy listen on, so the URL is always reachable when
         # the bridge is running.
         url = f"http://{WS_HOST}:{WS_PORT}/builder"
+        try:
+            webbrowser.open(url, new=2)
+        except Exception as e:
+            print(f"[tray] failed to open browser: {e}")
+
+    def _open_help(self, icon, item):
+        # Help page — scenario walkthroughs (1/2/3/4 monitors × Lively /
+        # Wallpaper Engine) plus a Tips section. Same browser-served
+        # pattern as Configurator / Builder.
+        url = f"http://{WS_HOST}:{WS_PORT}/help"
         try:
             webbrowser.open(url, new=2)
         except Exception as e:

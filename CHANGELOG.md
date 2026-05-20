@@ -4,6 +4,52 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-05-20
+
+> First stable after the long 0.7.x beta cycle. Rolls up every
+> feature from v0.7.1-beta → v0.7.10-beta (full-screen audio glow,
+> auto-Lively bootstrapper, library upload / delete, pattern brush,
+> 4-monitor support, ultrawide aspect ratios, configurator + builder
+> localisation, single-bundle Wallpaper Engine packaging, …) plus
+> the items below.
+
+### Added
+
+- **In-browser Help page.** New `/help` route serves a scenario-based
+  walkthrough — Quick start + 1/2/3/4 monitor setups for both Lively
+  and Wallpaper Engine (independent vs single-bundle vs spanned),
+  ultrawide aspect notes, and a Tips & common pitfalls section.
+  Pure HTML, no dependencies beyond what's already bundled. Full
+  DE / EN — language pulled from `GET /config` like Builder.
+- **Tray menu gains a *Help…* entry** alongside *Configurator…* and
+  *Build Wallpaper…*. Opens `/help` in the user's default browser.
+- **Optional help-images folder.** Each scenario card carries an
+  `<img>` placeholder under `/help/images/<name>.png`. Bridge serves
+  whatever's in `%LOCALAPPDATA%\SignalRGBWallpaper\help_images\` (user
+  override) or `wallpaper_bridge/help_assets/` (dev fallback). Missing
+  images hide silently (no broken-image icons) — the ASCII diagrams
+  in each card stand alone if no screenshot is provided.
+- **`docs/installation.md` gains a screenshot walkthrough** of every
+  Inno Setup wizard step (language → license → tasks → summary →
+  file-in-use → finish). README quick-start links to it.
+
+### Changed
+
+- **Installer task defaults cleaned up.** *Install the SignalRGB
+  Desktop Wallpaper plugin* keeps its default-on state but the
+  description now flags it as **required**, and it sits at the top of
+  *Additional setup* instead of buried below the autostart/configurator
+  toggles. Users who casually uncheck it currently end up with a
+  bridge but no SignalRGB → bridge path; the new wording makes the
+  consequence obvious.
+- **Removed the redundant "Open Wallpaper Engine projects folder"
+  post-install action** for the auto-copy-detected case. When both
+  Steam and WE are detected, the bundle is already in place and
+  shows up in WE's *My Wallpapers* tab — opening Explorer to confirm
+  a file landed there was filesystem-debug noise, not a normal user
+  need. The not-detected fallback (where the user *does* need to
+  drag a folder into WE manually) stays.
+
 ## [0.7.10-beta] - 2026-05-20
 
 ### Fixed

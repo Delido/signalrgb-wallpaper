@@ -76,8 +76,13 @@ Name: "installwallpaperengine"; \
   Description: "Wallpaper Engine (Steam — auto-skipped if not detected)"; \
   GroupDescription: "Wallpaper host:"; Flags: checkedonce
 ; ── Additional setup
+; installplugin lives at the TOP of the group on purpose: it's the
+; piece that lets SignalRGB actually talk to the bridge. Without it
+; the whole product does nothing — no glow, no live colours. Keep
+; checkedonce (default on for first installs) AND mention "required"
+; in the description so users don't casually uncheck it.
 Name: "installplugin"; \
-  Description: "Install the SignalRGB Desktop Wallpaper plugin into the WhirlwindFX Plugins folder"; \
+  Description: "Install the SignalRGB Desktop Wallpaper plugin (required — SignalRGB drives the bridge through this)"; \
   GroupDescription: "Additional setup:"; Flags: checkedonce
 Name: "autostart"; \
   Description: "Start the bridge automatically on logon"; \
@@ -217,14 +222,12 @@ Filename: "{app}\Lively wallpapers"; Verb: open; \
   Description: "Open the Lively wallpapers folder (drag the zips onto Lively)"; \
   Flags: postinstall skipifsilent shellexec nowait; \
   Tasks: installlively; Check: NotLivelyAutoImported
-; ── WE-path: if Wallpaper Engine was detected we already dropped the
-;    bundle into its projects folder — just nudge the user to open WE
-;    and assign 'SignalRGB Glow' to each monitor (with a different
-;    'Screen index' per assignment in the WE properties panel).
-Filename: "{code:GetWallpaperEngineProjects}"; Verb: open; \
-  Description: "Open the Wallpaper Engine projects folder (assign 'SignalRGB Glow' per monitor, pick a different Screen index each time)"; \
-  Flags: postinstall skipifsilent shellexec nowait; \
-  Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+; ── WE-path: when WE was detected, the bundle is already in WE's
+;    projects folder and shows up in "My Wallpapers" on next start.
+;    No post-install action is offered for the detected case — the
+;    "Open projects folder" prompt the older betas had was just
+;    filesystem-confirmation noise; the user opens WE, not Explorer.
+;
 ; ── WE-path fallback: if Steam wasn't found, point them at our local
 ;    staging folder so they can drag the folder into WE manually.
 Filename: "{app}\Wallpaper Engine wallpapers"; Verb: open; \

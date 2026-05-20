@@ -77,6 +77,7 @@ python -m PyInstaller `
   --collect-all psutil `
   --add-data "builder.html;." `
   --add-data "configurator.html;." `
+  --add-data "help.html;." `
   --distpath dist_bridge `
   --workpath build_bridge `
   bridge.py
@@ -96,7 +97,7 @@ Flags explained:
   this pulls them all in so the tray icon + About-dialog avatar work.
 - `--collect-all psutil` — psutil ships native `.pyd` extensions for
   the OS-specific syscalls behind the CPU / RAM / Network widgets.
-- `--add-data "builder.html;."` + `"configurator.html;."` — bundles
+- `--add-data "builder.html;."` + `"configurator.html;."` + `"help.html;."` — bundles
   the two in-browser UIs served at `/builder` and `/configurator`.
 
 ### Quick rebuild loop during development
