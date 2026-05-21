@@ -14,6 +14,140 @@ Status legend:
 
 ---
 
+## 🖼️ Workflow polish — Gallery + Builder + multi-monitor (next beta)
+
+Identified during v0.8.2-beta testing: the "find a wallpaper → cut
+transparency into it → use it on a screen" loop is more friction
+than it should be, and multi-monitor users have to redo the same
+settings on every tab manually.
+
+Split across two betas:
+
+- **v0.8.3-beta — Gallery + Builder bridge** (~13 h)
+- **v0.8.4-beta — Multi-monitor convenience** (~9 h)
+
+### 🔲 Gallery: hover-preview large + RGB-mock glow behind — ~3-4 h
+
+Hovering a Library tile pops a larger preview (around 800 × 450)
+with an animated RGB-cycle gradient behind the transparent
+cut-outs (or the live `currentTintCss` value if a wallpaper page
+is already running). You see what the wallpaper *actually looks
+like* before you commit. Click anywhere outside or press Esc to
+dismiss; Apply button inside the preview to commit.
+
+### 🔲 Gallery: click is preview, Apply is separate + 5 s Undo-Toast — ~1 h
+
+Currently a single click wipes the screen's existing background.
+Split into a *preview* click (popup as above) + a deliberate
+*Apply* button inside. Plus: after Apply, a 5-second
+*"Undo — restore previous background"* toast at the bottom of the
+Configurator. Reverts via the same `POST /screen/N/background`
+path using a cached prev-bg blob.
+
+### 🔲 Gallery: right-click context menu — ~3 h
+
+`contextmenu` event on Library tiles → custom menu (Configurator
+already has the styling chops for it):
+
+- Apply (default left-click action; here just for symmetry)
+- Edit in Builder → opens `/builder` in a new tab with the
+  image's path as a query parameter (see Builder "Open from
+  library" below)
+- Rename → prompts for a new label, renames the file +
+  regenerates `library.json`
+- Duplicate → copies the PNG with a "-copy" suffix + new
+  catalogue entry
+- Delete → same path as the existing hover-× button
+
+### 🔲 Gallery: sort + pin favourites — ~1 h
+
+`library.json` gains optional `pinned: true` and `addedAt`
+timestamps. Render order: pinned first → built-in starters →
+user uploads sorted by addedAt descending. Right-click → Pin /
+Unpin toggle.
+
+### 🔲 Gallery: drag-and-drop reorder — ~2 h
+
+HTML5 drag API on Library tiles. On drop: bridge gets a
+`POST /library/reorder` with the new `order` array; persisted as
+an `order` field per entry in `library.json`. Render order falls
+back to addedAt when `order` is absent (backwards-compatible).
+
+### 🔲 Builder: "Open from library" picker — ~2 h
+
+Currently Builder only accepts *Choose image…* + drag-and-drop.
+Adds a dropdown next to those that lists every Library item;
+pick one and the Builder loads it as the active image. Also
+honours `?image=<path>` query string so Configurator's
+*Edit in Builder* context-menu entry can deep-link.
+
+### 🔲 Builder: "Save to library" button — ~2 h
+
+New action next to *Apply to Screen N* / *Save as PNG*:
+
+- *Save to library as…* → prompts for label, creates a new
+  Library entry from the current canvas
+- *Update library entry* → only enabled when the user opened
+  this image from Library; overwrites in place
+
+### 🔲 Builder: live RGB preview behind the canvas — ~3 h
+
+Toggle in the Builder's top bar: *"Show glow preview"*. When on,
+a CSS layer underneath the canvas runs an animated RGB cycle
+(re-uses the same gradient style the Library preview uses), so
+the user sees what their cut-outs look like against actual
+shifting colour as they work. Defaults to off to keep the
+edit canvas clean.
+
+### 🔲 Configurator: tab labels with resolution — ~30 min
+
+Tab text becomes "Screen 1 — 3840×1080" using `viewportW/H` from
+the screen's settings (the bridge already tracks this for the
+plugin's Auto-aspect-ratio feature). On screens that haven't
+connected a wallpaper page yet, falls back to just "Screen N".
+
+### 🔲 Configurator: mirror mode per tab — ~3 h
+
+Checkbox in each non-Screen-1 tab: *"Mirror Screen 1"*. When
+enabled, the tab becomes read-only and every settings push for
+Screen 1 also gets pushed to this screen. Persisted as
+`screen.mirrorOf: 0` in `config.json`. Bridge enforces the
+mirror invariant on the server side so external clients (REST
+API in the future) can't bypass it.
+
+### 🔲 Configurator: "Apply to all screens" button per section — ~2 h
+
+Small button at the right of each settings section header
+(Background, Glow, Effects, Widgets): *"Apply to all screens"*.
+Copies this screen's section's values to every other screen in
+one shot. Quick-config instead of N-times manual setting.
+
+### 🔲 Configurator: overview card with mini-thumbnails — ~3 h
+
+A new card at the top of the Configurator, above the tab bar:
+horizontal row of N small monitor-frame thumbnails (matching the
+screen count), each showing the current background image of its
+screen. Click a thumbnail → jumps to that Screen's tab. Visual
+overview of which monitor shows what, without having to flip
+through tabs.
+
+### 🔲 Builder: Ctrl + Wheel zoom — ~1 h
+
+Currently zoom is via a slider. Add `wheel` event handler with
+`ctrl` modifier → zoom in / out anchored at cursor position.
+Industry-standard editor feel.
+
+### 🔲 Builder: crop tool — ~3 h
+
+New toolbox entry: *Crop*. Drag a rectangle; on confirm, the
+canvas resizes to that rectangle. Pre-fills the rectangle to
+match the target screen's aspect ratio when known (we have
+`viewportW/H` from the screen the user came from). Useful for
+3840 × 2160 source images that need to fit a 3840 × 1080
+ultrawide.
+
+---
+
 ## 🎯 Tier 1 — Setup polish (biggest UX wins for least effort)
 
 These directly reduce the "I installed it and nothing happens / I
@@ -126,10 +260,11 @@ sysstats. Widget shows title + artist + a tiny progress bar.
 
 ### 🔲 Builder: AI cut-out tool — ~6-8 h
 
-Tiny WebAssembly background-removal model (e.g. ONNX runtime web
-+ a small U²-Net variant, or RemBG.js). Adds a *"Auto-cut bright
-regions"* tool to the toolbox; one click runs the model on the
-current image and writes the predicted alpha mask.
+Tiny WebAssembly background-removal model — ONNX runtime web
+together with a small U²-Net variant, or alternatively RemBG.js.
+Adds a *"Auto-cut bright regions"* tool to the toolbox; one click
+runs the model on the current image and writes the predicted
+alpha mask.
 
 Risks: WebAssembly model can be 5-20 MB which bloats the bundle.
 Maybe lazy-load from a CDN on first use instead of bundling.
