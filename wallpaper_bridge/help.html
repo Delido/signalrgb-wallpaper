@@ -444,6 +444,16 @@
       <h3 data-i18n="tips.h_workshop">Wallpaper Engine Workshop subscriptions</h3>
       <p data-i18n="tips.w_p">If you subscribed to an older per-screen <em>SignalRGB Glow – Screen 1/2/3</em> from Workshop (pre-v0.7.2-beta): those are obsolete. Unsubscribe in Steam and use the single combined <em>SignalRGB Glow</em> the installer drops into your local <em>myprojects</em> folder.</p>
 
+      <h3 data-i18n="tips.h_lhm">Hardware Sensor widget shows "LHM not detected"</h3>
+      <p data-i18n="tips.lhm_p1">The <em>Hardware Sensor</em> widget reads temperatures, fan RPMs, voltages and drive readings from <strong>LibreHardwareMonitor</strong> — a free open-source sensor tool that ships its own HTTP server. The bridge polls that server once per second. Setup:</p>
+      <ol>
+        <li data-i18n="tips.lhm_s1">Download LibreHardwareMonitor from <a href="https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases" target="_blank">github.com/LibreHardwareMonitor/LibreHardwareMonitor</a> and run it (admin required — needs the WinRing0 driver for low-level CPU sensors).</li>
+        <li data-i18n="tips.lhm_s2">In LHM: <em>Options → Remote Web Server → Run</em>. Default port is <code>8085</code>; leave it on that.</li>
+        <li data-i18n="tips.lhm_s3">In the Configurator's <em>Widgets</em> section: add a <em>Hardware Sensor</em> widget. Its options modal now lists every sensor LHM is reporting. Pick one (e.g. <em>CPU / Temperatures / Core (Tctl/Tdie)</em>), optionally override label and decimals, save.</li>
+        <li data-i18n="tips.lhm_s4">Repeat for as many sensors as you want — one widget per sensor.</li>
+      </ol>
+      <p data-i18n="tips.lhm_p2">LHM is optional and not bundled — we don't ship it for license / driver-elevation reasons (MPL 2.0 sources + kernel driver install would complicate our MIT/per-user installer). If LHM isn't running, the widget just shows <code>—</code> in your wallpaper.</p>
+
     </div>
   </section>
 
@@ -646,6 +656,20 @@ const TRANSLATIONS = {
   "tips.h_workshop": { en: "Wallpaper Engine Workshop subscriptions", de: "Wallpaper-Engine-Workshop-Abos" },
   "tips.w_p":  { en: "If you subscribed to an older per-screen <em>SignalRGB Glow – Screen 1/2/3</em> from Workshop (pre-v0.7.2-beta): those are obsolete. Unsubscribe in Steam and use the single combined <em>SignalRGB Glow</em> the installer drops into your local <em>myprojects</em> folder.",
                  de: "Wer noch ältere Per-Screen-<em>SignalRGB Glow – Screen 1/2/3</em>-Items aus dem Workshop abonniert hat (vor v0.7.2-beta): die sind obsolet. In Steam abbestellen und das kombinierte <em>SignalRGB Glow</em>-Bundle nutzen, das der Installer in deinen lokalen <em>myprojects</em>-Ordner legt." },
+  "tips.h_lhm":   { en: "Hardware Sensor widget shows \"LHM not detected\"",
+                    de: "Hardware-Sensor-Widget zeigt \"LHM not detected\"" },
+  "tips.lhm_p1":  { en: "The <em>Hardware Sensor</em> widget reads temperatures, fan RPMs, voltages and drive readings from <strong>LibreHardwareMonitor</strong> — a free open-source sensor tool that ships its own HTTP server. The bridge polls that server once per second. Setup:",
+                    de: "Das <em>Hardware-Sensor</em>-Widget liest Temperaturen, Lüfter-RPMs, Spannungen und Laufwerks-Werte aus <strong>LibreHardwareMonitor</strong> — einem freien Open-Source-Sensor-Tool mit eigenem HTTP-Server. Die Bridge pollt diesen Server einmal pro Sekunde. Setup:" },
+  "tips.lhm_s1":  { en: "Download LibreHardwareMonitor from <a href=\"https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases\" target=\"_blank\">github.com/LibreHardwareMonitor/LibreHardwareMonitor</a> and run it (admin required — needs the WinRing0 driver for low-level CPU sensors).",
+                    de: "LibreHardwareMonitor von <a href=\"https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases\" target=\"_blank\">github.com/LibreHardwareMonitor/LibreHardwareMonitor</a> laden und starten (Admin nötig — der WinRing0-Treiber wird für Low-Level-CPU-Sensoren gebraucht)." },
+  "tips.lhm_s2":  { en: "In LHM: <em>Options → Remote Web Server → Run</em>. Default port is <code>8085</code>; leave it on that.",
+                    de: "In LHM: <em>Options → Remote Web Server → Run</em>. Standardport ist <code>8085</code>; einfach belassen." },
+  "tips.lhm_s3":  { en: "In the Configurator's <em>Widgets</em> section: add a <em>Hardware Sensor</em> widget. Its options modal now lists every sensor LHM is reporting. Pick one (e.g. <em>CPU / Temperatures / Core (Tctl/Tdie)</em>), optionally override label and decimals, save.",
+                    de: "Im Konfigurator <em>Widgets</em>: ein <em>Hardware Sensor</em>-Widget hinzufügen. Sein Options-Modal listet jetzt jeden Sensor, den LHM meldet. Auswählen (z. B. <em>CPU / Temperatures / Core (Tctl/Tdie)</em>), optional Label und Dezimalstellen überschreiben, speichern." },
+  "tips.lhm_s4":  { en: "Repeat for as many sensors as you want — one widget per sensor.",
+                    de: "Beliebig oft wiederholen — ein Widget pro Sensor." },
+  "tips.lhm_p2":  { en: "LHM is optional and not bundled — we don't ship it for license / driver-elevation reasons (MPL 2.0 sources + kernel driver install would complicate our MIT/per-user installer). If LHM isn't running, the widget just shows <code>—</code> in your wallpaper.",
+                    de: "LHM ist optional und nicht gebundled — wir liefern es nicht mit aus, aus Lizenz- und Treiber-Elevation-Gründen (MPL-2.0-Sourcen + Kernel-Treiber-Install würden unseren MIT-/Per-User-Installer verkomplizieren). Wenn LHM nicht läuft, zeigt das Widget einfach <code>—</code> im Wallpaper." },
 
   "footer.text":   { en: "Help page · ",    de: "Hilfeseite · " },
   "footer.issues": { en: "Report a bug",    de: "Bug melden" },

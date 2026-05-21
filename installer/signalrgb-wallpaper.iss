@@ -71,7 +71,7 @@ Name: "installlively/autoimport"; \
   GroupDescription: "Wallpaper host:"; Flags: checkedonce
 Name: "installlively/autoinstall"; \
   Description: "Auto-install Lively Wallpaper if not already present (downloads the latest release from GitHub)"; \
-  GroupDescription: "Wallpaper host:"; Flags: checkedonce
+  GroupDescription: "Wallpaper host:"; Flags: unchecked
 Name: "installwallpaperengine"; \
   Description: "Wallpaper Engine (Steam — auto-skipped if not detected)"; \
   GroupDescription: "Wallpaper host:"; Flags: checkedonce

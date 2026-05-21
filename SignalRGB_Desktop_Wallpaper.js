@@ -228,16 +228,32 @@ function computeGridDimensions() {
 function applyZoneSize() {
     const s = getState();
     const dims = computeGridDimensions();
+    // Early-bail when nothing actually changed. SignalRGB fires onXChanged
+    // once per ControllableParameter during plugin init, so without this
+    // we'd run device.setControllableLeds() (which rebuilds the entire
+    // LED registry, ~14k entries for a 228x64 grid) up to 5 times in a
+    // row at startup, blocking the single-threaded JS sandbox and
+    // visibly stuttering not just our glow but every other plugin
+    // SignalRGB is initialising at the same time.
+    if (s.frameBuf && s.cols === dims.cols && s.rows === dims.rows) {
+        return;
+    }
     s.cols = dims.cols;
     s.rows = dims.rows;
     s.leds = s.cols * s.rows;
     device.setSize([s.cols, s.rows]);
-    const names = [];
-    const positions = [];
+    // Pre-size the arrays so V8 doesn't grow them in chunks. Tiny diff
+    // but cheap and the registration call below is already the bottle-
+    // neck — every microsecond saved off the synchronous build helps.
+    const total = s.leds;
+    const names = new Array(total);
+    const positions = new Array(total);
+    let i = 0;
     for (let y = 0; y < s.rows; y++) {
         for (let x = 0; x < s.cols; x++) {
-            names.push("Z" + (y * s.cols + x + 1));
-            positions.push([x, y]);
+            names[i]     = "Z" + (i + 1);
+            positions[i] = [x, y];
+            i++;
         }
     }
     device.setControllableLeds(names, positions);
@@ -291,10 +307,17 @@ export function Initialize() {
     openSocket();
 }
 
-export function ongridSizeChanged()     { applyZoneSize(); }
-export function onaspectRatioChanged()  { applyZoneSize(); }
-export function oncustomColsChanged()   { applyZoneSize(); }
-export function oncustomRowsChanged()   { applyZoneSize(); }
+// Each onXChanged sets `dimsDirty` instead of running applyZoneSize
+// directly. SignalRGB fires these in tight bursts at startup (once per
+// ControllableParameter); coalescing them into a single Render-side
+// rebuild collapses a 5x rebuild storm into one. dimsDirty also gets
+// flipped when the bridge's /config poll brings a new viewport while
+// aspectRatio is Auto, since SignalRGB has no callback for that path.
+let dimsDirty = true;
+export function ongridSizeChanged()     { dimsDirty = true; }
+export function onaspectRatioChanged()  { dimsDirty = true; }
+export function oncustomColsChanged()   { dimsDirty = true; }
+export function oncustomRowsChanged()   { dimsDirty = true; }
 export function onbridgePortChanged()   { openSocket(); }
 export function ontargetFpsChanged()    { applyFrameRateTarget(); }
 
@@ -302,12 +325,13 @@ export function Render() {
     const s = getState();
     if (!s.sock || !s.frameBuf) return;
 
-    // Cheap O(1) re-check: when Aspect Ratio = Auto and the bridge just
-    // published a fresh viewport for this screen, we rebuild the grid here
-    // — SignalRGB doesn't fire onChanged events for state that lives
-    // outside ControllableParameters, so we react on the next tick instead.
-    const want = computeGridDimensions();
-    if (want.cols !== s.cols || want.rows !== s.rows) {
+    // Only rebuild when something actually flipped the dirty flag.
+    // Render runs at 30/60 fps × N devices; computeGridDimensions itself
+    // is cheap, but skipping it (plus the early-bail check inside
+    // applyZoneSize) entirely on the steady-state path keeps the
+    // single-threaded SignalRGB JS sandbox free for other plugins.
+    if (dimsDirty) {
+        dimsDirty = false;
         applyZoneSize();
     }
 
@@ -457,7 +481,18 @@ export function DiscoveryService() {
                         const v = cfg.screens[i] || {};
                         const w = parseInt(v.viewportW) | 0;
                         const h = parseInt(v.viewportH) | 0;
-                        viewportsByScreen[i] = (w > 0 && h > 0) ? { w, h } : null;
+                        const next = (w > 0 && h > 0) ? { w, h } : null;
+                        const prev = viewportsByScreen[i];
+                        // Only flip the dirty flag when the viewport
+                        // actually changed for a screen — otherwise the
+                        // 2 s /config poll would cause an applyZoneSize()
+                        // rebuild every tick while the user has Aspect
+                        // Ratio = Auto on.
+                        if (!prev || !next ||
+                            prev.w !== next.w || prev.h !== next.h) {
+                            viewportsByScreen[i] = next;
+                            dimsDirty = true;
+                        }
                     }
                 }
                 const n = parseInt(cfg && cfg.screenCount);

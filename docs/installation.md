@@ -71,10 +71,14 @@ auto-copy when Steam is detected):
   deterministic folder names. Every subsequent installer run
   overwrites in place — no more *"delete and re-import after every
   update"* dance.
-- ☑ **Auto-install Lively Wallpaper if not already present** — when
-  Lively isn't on disk, the installer downloads the latest release
-  from GitHub and runs it silently *before* the auto-import step, so
-  you don't have to install Lively manually first.
+- ☐ **Auto-install Lively Wallpaper if not already present** — *opt-in.*
+  When ticked AND Lively isn't on disk, the installer downloads the
+  latest release from GitHub and runs it silently *before* the
+  auto-import step. Default off because it adds network egress at
+  install time and AV / SmartScreen can flag the silent install on
+  some setups — tick it only if you actually need Lively installed
+  for you. Users who already have Lively (or want to install it
+  separately from the MS Store) can leave this off.
 - ☑ **Wallpaper Engine** (Steam — auto-skipped if not detected) —
   copies the single combined `signalrgb-glow/` bundle into
   `…\steamapps\common\wallpaper_engine\projects\myprojects\`. You

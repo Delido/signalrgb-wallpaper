@@ -1058,6 +1058,30 @@ const WIDGET_CATALOG = {
     ],
     describe: () => "Lively/WE audio FFT",
   },
+  "hardware-sensor": {
+    label: "Hardware Sensor",
+    icon: '<svg viewBox="0 0 24 24"><path d="M4 4h6v6H4z"/>' +
+          '<path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/>' +
+          '<path d="M14 14h6v6h-6z"/></svg>',
+    schema: [
+      // sensorPath is populated dynamically from /hwmon/sensors. We
+      // declare it as a select here so the form-modal renderer reaches
+      // for the `options` field, then patch options in just before the
+      // modal opens (see openOptionsModal hook below). When LHM isn't
+      // running the dropdown shows a single "(LHM not detected)" entry
+      // and the value stays blank.
+      { key: "sensorPath",   label: "Sensor",   type: "select",
+        options: [{ value: "", label: "(loading…)" }] },
+      { key: "label",        label: "Label (override)",       type: "text" },
+      { key: "decimals",     label: "Decimals", type: "select",
+        options: [{ value: 0, label: "0" }, { value: 1, label: "1" },
+                  { value: 2, label: "2" }] },
+      { key: "tintFromGlow", label: "Tint with glow colour",  type: "boolean" },
+    ],
+    describe: (o) => o.sensorPath
+      ? (o.label || o.sensorPath.split(" / ").pop())
+      : "(no sensor picked)",
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1972,12 +1996,115 @@ function renderWidgetList() {
 
 let modalState = null;   // { id, options: {…edited fields} }
 
+// Build the sensor-dropdown's options list from a /hwmon/sensors
+// payload (or from an empty stub if the fetch hasn't returned yet
+// or LHM is offline). Pure-function — no side effects — so the
+// caller decides whether this overwrites `def.schema` (initial
+// build) or just repaints the <select> element (async refresh).
+function _buildSensorOptions(payload, currentValue) {
+  const items     = (payload && Array.isArray(payload.items))    ? payload.items    : [];
+  const status    = (payload && payload.status)                  ? payload.status   : {};
+  const online    = !!status.online;
+  const lastError = status.lastError || "";
+  const bytes     = status.lastPayloadBytes || 0;
+  const options = [];
+  if (items.length === 0) {
+    let placeholder;
+    if (!online && (lastError === "offline" || lastError === "")) {
+      placeholder = "(LibreHardwareMonitor not detected — see Help → Tips)";
+    } else if (online && bytes > 0) {
+      placeholder = "(LHM reachable, " + bytes + " B response, but 0 sensors parsed — check bridge log)";
+    } else if (lastError) {
+      placeholder = "(LHM error: " + lastError + ")";
+    } else {
+      placeholder = "(loading…)";
+    }
+    options.push({ value: "", label: placeholder });
+  } else {
+    options.push({ value: "", label: "(no sensor — leave widget blank)" });
+    for (const it of items) {
+      const tail = it.path.split(" / ").pop();
+      const unit = it.unit ? " " + it.unit : "";
+      const sample = (typeof it.value === "number")
+        ? " · " + it.value.toFixed(1) + unit
+        : "";
+      options.push({ value: it.path, label: tail + sample + " — " + it.path });
+    }
+  }
+  if (currentValue &&
+      !options.some((o) => o.value === currentValue)) {
+    options.unshift({ value: currentValue,
+                      label: currentValue.split(" / ").pop() + " (saved, currently offline)" });
+  }
+  return options;
+}
+
+// Async fetch + late-bind variant. Newer CEF / Chromium builds
+// block synchronous XHR on the main thread (the previous version
+// silently fell into its catch handler and showed "LHM not
+// detected" even when the bridge was returning 322 sensors fine).
+// Now we open the modal immediately with a "(loading…)" placeholder
+// and patch the <select>'s options when the async fetch comes back.
+function refreshHardwareSensorSchema(def, currentValue) {
+  const field = def.schema.find((f) => f.key === "sensorPath");
+  if (!field) return;
+  // Seed with a loading placeholder (or the user's saved-but-offline
+  // value if one exists). Renderer reads field.options synchronously
+  // immediately after this call returns.
+  field.options = _buildSensorOptions(null, currentValue);
+  // Kick off the real fetch. When it lands we mutate field.options
+  // again AND patch the live <select> element if the modal is still
+  // open with this widget's schema.
+  fetch("/hwmon/sensors", { cache: "no-store" })
+    .then((r) => r.ok ? r.json() : null)
+    .then((cfg) => {
+      const opts = _buildSensorOptions(cfg, currentValue);
+      field.options = opts;
+      // Repaint the live <select> if the modal is still open and
+      // we're still editing this widget's options. The renderer's
+      // dom id is "f-<key>" — see openOptionsModal.
+      const sel = document.getElementById("f-sensorPath");
+      if (!sel) return;
+      const prevValue = sel.value;
+      sel.innerHTML = "";
+      for (const o of opts) {
+        const opt = document.createElement("option");
+        opt.value = String(o.value);
+        opt.textContent = o.label;
+        sel.appendChild(opt);
+      }
+      // Preserve the dropdown's currently-shown selection across the
+      // refresh. If the saved value re-appears in the new options
+      // (LHM came back online), select that; otherwise leave the
+      // dropdown on whatever the user had focus on.
+      if (opts.some((o) => o.value === prevValue)) {
+        sel.value = prevValue;
+      } else if (currentValue &&
+                 opts.some((o) => o.value === currentValue)) {
+        sel.value = currentValue;
+      }
+    })
+    .catch(() => {
+      // Network / parse failure — leave the placeholder in place.
+    });
+}
+
 function openOptionsModal(widget) {
   const def = WIDGET_CATALOG[widget.type];
   if (!def) return;
   modalState = { id: widget.id, options: { ...(widget.options || {}) } };
   els.modalTitle.textContent = t("modal.configure", { label: def.label });
   els.modalBody.innerHTML = "";
+  // Hardware-sensor widget: repopulate the sensor-path dropdown from
+  // /hwmon/sensors right before each modal open, so a freshly-started
+  // LibreHardwareMonitor instance becomes visible without reloading
+  // the Configurator. When LHM isn't running we leave the placeholder
+  // option in place; the existing value (if any) keeps its
+  // backward-compat selection so old widgets don't reset to blank
+  // just because LHM crashed.
+  if (widget.type === "hardware-sensor") {
+    refreshHardwareSensorSchema(def, modalState.options.sensorPath || "");
+  }
   for (const field of def.schema) {
     const row = document.createElement("div");
     if (field.type === "boolean") {

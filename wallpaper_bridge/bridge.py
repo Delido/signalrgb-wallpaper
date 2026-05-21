@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.2-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -481,6 +481,18 @@ WIDGET_DEFAULTS = {
         "label":   "Audio spectrum",
         "x": 820, "y": 440, "w": 280, "h": 120,
         "options": {"tintFromGlow": False},
+    },
+    # Generic LibreHardwareMonitor-driven sensor display. Empty
+    # sensorPath = blank widget on the wallpaper; user opens the
+    # Configurator's options modal to pick a sensor from the dropdown
+    # populated by /hwmon/sensors. Decimals defaults to 1 (good for
+    # temps in °C and most voltages); explicit label override is empty
+    # so the widget falls back to the sensor's leaf-segment as label.
+    "hardware-sensor": {
+        "label":   "Hardware sensor",
+        "x": 600, "y": 580, "w": 220, "h": 140,
+        "options": {"sensorPath": "", "label": "", "decimals": 1,
+                    "tintFromGlow": False},
     },
 }
 WIDGET_TYPES = list(WIDGET_DEFAULTS.keys())
@@ -963,6 +975,11 @@ class Broadcaster:
         self.update_background = update_background  # callable(screen:int, png_bytes:bytes)->bool
         self.get_paused = get_paused            # callable()->bool (fullscreen-induced pause)
         self.on_widget_command = on_widget_command  # callable(screen:int, msg:dict)->None
+        # The hwmon provider is wired in after construction (BridgeRuntime
+        # builds the broadcaster before it builds the HwMonPoller). Stays
+        # None until then; the /hwmon/sensors endpoint just reports
+        # "online: false" if it's missing.
+        self.hwmon_provider = None             # set externally; HwMonPoller
         self.clients_by_screen: dict[int, set] = {}
         self._lock = asyncio.Lock()
 
@@ -1267,6 +1284,39 @@ class Broadcaster:
         # thumb bytes back; the Configurator builds img URLs off this
         # path. Path traversal is blocked by rejecting any name with a
         # path separator or dot-dot.
+        # /hwmon/sensors — flat list of every sensor LibreHardwareMonitor
+        # is reporting, plus a small status block. The Configurator's
+        # hardware-sensor widget options modal calls this to populate
+        # the sensor-path dropdown. Returns an empty list when LHM
+        # isn't running (status.online = false).
+        if method == "GET" and target.split("?", 1)[0] == "/hwmon/sensors":
+            try:
+                hw = getattr(self, "hwmon_provider", None)
+                snap = hw.get_snapshot() if hw else {}
+                status = hw.get_status() if hw else {"online": False, "sensorCount": 0}
+                items = [
+                    {"path": p, "value": entry.get("value"),
+                     "unit": entry.get("unit"), "raw": entry.get("raw")}
+                    for p, entry in sorted(snap.items())
+                ]
+                payload = json.dumps({"status": status, "items": items}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Access-Control-Allow-Origin: *\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
         if method == "GET" and target.split("?", 1)[0] == "/library/list":
             try:
                 lib_dir = library_dir()
@@ -1555,14 +1605,204 @@ class Broadcaster:
             await self.remove(writer)
 
 
+class HwMonPoller:
+    """Optionally polls LibreHardwareMonitor's built-in HTTP server
+    (default `http://localhost:8085/data.json`) for the full sensor tree
+    — CPU / GPU / mainboard temps, fan RPMs, voltages, drive temps and
+    power readings that psutil doesn't expose on its own.
+
+    LHM ships with a "Remote Web Server" toggle (Options → Remote Web
+    Server) that has to be on for this to work. If the user hasn't
+    installed LHM or hasn't enabled the server, we just skip — the rest
+    of the sysstats payload still ships, our hardware-sensor widgets
+    show `--` placeholders.
+
+    LHM's JSON is a deeply nested {id, Text, Value, Children} tree. We
+    flatten it to a `path: value` dict keyed by the slash-separated path
+    from the root (e.g. "AMD Ryzen 7 5800X / Temperatures / Core
+    (Tctl/Tdie)"), parsing the `Value` field's numeric prefix so the
+    wallpaper page can plot it as a sparkline. The original unit
+    (°C / RPM / V / W / %) is captured alongside so widgets can label
+    correctly without re-guessing.
+
+    License: LibreHardwareMonitor is MPL 2.0 — we don't bundle it, only
+    talk to its REST server when the user has it running, so no MPL
+    propagation into our MIT distribution.
+    """
+
+    DEFAULT_URL = "http://localhost:8085/data.json"
+    POLL_INTERVAL_S = 1.0
+    REQUEST_TIMEOUT_S = 0.8
+
+    def __init__(self):
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        # path -> {"value": float, "raw": "45.5 °C", "unit": "°C"}
+        self._snapshot: dict[str, dict] = {}
+        self._last_ok_ts: float = 0.0
+        self._last_error: str = ""
+        # Size of the last payload we received from LHM, for the
+        # "server reachable but 0 sensors parsed" diagnostic that the
+        # Configurator's sensor-picker surfaces in its placeholder
+        # option.
+        self._last_payload_bytes: int = 0
+        # Print a one-time hint when we first see a non-empty payload
+        # produce zero sensors — so the bridge log carries a copy of
+        # the JSON's root keys for the dev to look at, without
+        # spamming the log every poll.
+        self._warned_about_empty_parse = False
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True, name="hwmon-poll").start()
+        print(f"[hwmon] poller running (target {self.DEFAULT_URL}, "
+              f"{self.POLL_INTERVAL_S} Hz). Optional: requires "
+              "LibreHardwareMonitor with Remote Web Server enabled.")
+
+    def stop(self):
+        self._stop.set()
+
+    def get_snapshot(self) -> dict:
+        with self._lock:
+            return dict(self._snapshot)
+
+    def get_status(self) -> dict:
+        """Tiny status object for the Configurator's 'LHM detected?'
+        hint. Reports whether we last reached LHM, how long ago, and a
+        sensor count for sanity."""
+        with self._lock:
+            return {
+                "online":     bool(self._last_ok_ts) and
+                              (time.time() - self._last_ok_ts) < 5,
+                "lastOkTs":   int(self._last_ok_ts * 1000),
+                "sensorCount": len(self._snapshot),
+                "lastError":  self._last_error,
+                "lastPayloadBytes": self._last_payload_bytes,
+            }
+
+    def _run(self):
+        while not self._stop.is_set():
+            try:
+                req = urllib.request.Request(self.DEFAULT_URL,
+                                              headers={"User-Agent": "SignalRGBBridge"})
+                with urllib.request.urlopen(req, timeout=self.REQUEST_TIMEOUT_S) as resp:
+                    payload = resp.read()
+                tree = json.loads(payload)
+                flat = self._flatten(tree)
+                with self._lock:
+                    self._snapshot = flat
+                    self._last_ok_ts = time.time()
+                    self._last_payload_bytes = len(payload)
+                    if flat:
+                        self._last_error = ""
+                    else:
+                        # We reached LHM, got a payload, but parsed zero
+                        # sensors. Most likely the tree shape is
+                        # different from what _flatten walks. Surface it
+                        # so the Configurator's sensor-picker tells the
+                        # user instead of just listing zero items.
+                        self._last_error = "parsed 0 sensors from response"
+                        if not self._warned_about_empty_parse:
+                            self._warned_about_empty_parse = True
+                            try:
+                                top_keys = list(tree.keys())[:6]
+                                child0 = (tree.get("Children") or [{}])[0]
+                                child0_keys = list(child0.keys())[:6]
+                                print(f"[hwmon] reachable but parsed 0 sensors from "
+                                      f"{len(payload)} B. Root keys: {top_keys}, "
+                                      f"first-child keys: {child0_keys}, "
+                                      f"first-child Text: {child0.get('Text')!r}")
+                            except Exception:
+                                print(f"[hwmon] reachable but parsed 0 sensors from "
+                                      f"{len(payload)} B (and dumping diagnostics failed)")
+            except urllib.error.URLError:
+                # Connection refused = LHM server not running. Don't
+                # spam the log; just clear the snapshot so widgets show
+                # placeholders instead of stale data.
+                with self._lock:
+                    if self._snapshot:
+                        self._snapshot = {}
+                    self._last_error = "offline"
+            except Exception as e:
+                with self._lock:
+                    self._last_error = str(e)[:120]
+            if self._stop.wait(self.POLL_INTERVAL_S):
+                return
+
+    # ── JSON flattening ────────────────────────────────────────────────
+    # LHM's tree shape varies by build but the leaves are always
+    # nodes with a "Value" string like "45.5 °C" / "1234 RPM" /
+    # "0.92 V". The non-leaf wrappers (the outer "Sensor" node, the
+    # per-host computer name node, device / category groupings) carry
+    # an empty Value (or a non-numeric string like "Min", "Max").
+    #
+    # Rather than hard-coding the depth we just recurse from the root,
+    # treat any node that parses as a number as a sensor, and build
+    # paths from one level below the root (so we don't prefix every
+    # sensor with "Sensor /"). The "Computer / DESKTOP-…" wrapper
+    # stays in the path; with multiple PCs streaming into one LHM
+    # instance the per-host prefix is actually useful, and on a
+    # single-machine setup it's just one extra segment we accept.
+    #
+    # Numbers may use comma decimals on de_DE locales — handled by
+    # _NUM_RE replacing "," with "." before float().
+
+    _NUM_RE = re.compile(r"^([-+]?\d+(?:[.,]\d+)?)\s*(.*)$")
+
+    @classmethod
+    def _flatten(cls, tree: dict) -> dict:
+        out: dict[str, dict] = {}
+        # Walk every immediate child of the root. The root usually has
+        # Text="Sensor"; its children are the per-host computer
+        # wrappers. We skip the root's own Text but recurse from one
+        # level below so the path doesn't lead with "Sensor / …".
+        for child in (tree.get("Children") or []):
+            cls._walk(child, [], out)
+        return out
+
+    @classmethod
+    def _walk(cls, node: dict, path: list, out: dict) -> None:
+        text = node.get("Text") or "?"
+        new_path = path + [text]
+        kids = node.get("Children") or []
+        raw_value = node.get("Value")
+        # Treat any node whose Value parses as a number as a sensor
+        # leaf. Don't return after — wrappers technically CAN carry a
+        # Value (LHM sometimes echoes a summary value on a parent) but
+        # we still want to walk their children. The full path includes
+        # this node's own Text segment because the "Sensor" root is
+        # already stripped one level up.
+        if raw_value:
+            m = cls._NUM_RE.match(str(raw_value).strip())
+            if m:
+                num_str = m.group(1).replace(",", ".")
+                try:
+                    val = float(num_str)
+                except ValueError:
+                    val = None
+                unit = m.group(2).strip()
+                if val is not None:
+                    out[" / ".join(new_path)] = {
+                        "value": round(val, 2),
+                        "raw":   str(raw_value),
+                        "unit":  unit,
+                    }
+        for kid in kids:
+            cls._walk(kid, new_path, out)
+
+
 class SysStatsPoller:
     """Polls CPU / RAM / network counters via psutil once per second on its
     own daemon thread and pushes a snapshot through Broadcaster.push_sysstats.
     Disables itself (no-op) when psutil isn't available so the rest of the
-    bridge still runs."""
+    bridge still runs.
 
-    def __init__(self, broadcaster: 'Broadcaster'):
+    Optionally merges in an `hwmon` dict from a sibling HwMonPoller so
+    the wallpaper page sees CPU/GPU temps, fan RPMs and voltages in the
+    same payload its existing CPU/RAM widgets already drain."""
+
+    def __init__(self, broadcaster: 'Broadcaster', hwmon: 'HwMonPoller | None' = None):
         self.broadcaster = broadcaster
+        self.hwmon = hwmon
         self._stop = threading.Event()
         self._last_net = None       # (sent, recv) from previous tick
         self._last_net_ts = 0.0
@@ -1615,7 +1855,7 @@ class SysStatsPoller:
             net_up   = 0.0
         self._last_net    = (net.bytes_recv, net.bytes_sent)
         self._last_net_ts = now
-        return {
+        snap = {
             "cpu":     round(cpu, 1),
             "ram":     round(ram, 1),
             "netDown": round(net_down, 0),
@@ -1623,6 +1863,12 @@ class SysStatsPoller:
             "uptime":  int(time.time() - self._boot_time),
             "ts":      int(time.time() * 1000),
         }
+        if self.hwmon is not None:
+            # Per-sensor sub-dict: { "AMD Ryzen … / Temperatures / Core …":
+            # { value, raw, unit }, … }. Empty when LHM isn't running so
+            # widgets can show their `--` placeholder instead of stale data.
+            snap["hwmon"] = self.hwmon.get_snapshot()
+        return snap
 
 
 class UdpReceiver(asyncio.DatagramProtocol):
@@ -2123,7 +2369,17 @@ class BridgeRuntime:
         )
         # System-stats poller pushes 1 Hz snapshots over the WS once the
         # broadcaster is up. No-op if psutil wasn't bundled into this build.
-        self.sysstats = SysStatsPoller(self.broadcaster)
+        # The HwMon poller starts even when LHM isn't running — it'll just
+        # report `online: false` until the user starts LibreHardwareMonitor
+        # with its Remote Web Server enabled.
+        self.hwmon = HwMonPoller()
+        self.hwmon.start()
+        # Let the broadcaster's /hwmon/sensors HTTP handler reach the
+        # poller's snapshot + status. Set here rather than via __init__
+        # so the broadcaster doesn't need to know about hwmon at all if
+        # the user is on a build without it.
+        self.broadcaster.hwmon_provider = self.hwmon
+        self.sysstats = SysStatsPoller(self.broadcaster, hwmon=self.hwmon)
         self.sysstats.start()
         try:
             loop.run_until_complete(self._serve())

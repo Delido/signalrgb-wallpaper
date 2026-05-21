@@ -680,6 +680,20 @@ function connect() {
           lastSysStats = msg.data;
           sysstatsHistory.push(msg.data);
           if (sysstatsHistory.length > 120) sysstatsHistory.shift();
+          // Per-sensor history for the hardware-sensor widget's
+          // sparkline. We track every sensor we've seen; capped at 120
+          // samples each (≈ 2 min @ 1 Hz). Lazily allocated arrays so
+          // setups without LHM running don't pay any memory cost.
+          if (msg.data.hwmon) {
+            for (const path in msg.data.hwmon) {
+              const entry = msg.data.hwmon[path];
+              if (!entry || typeof entry.value !== "number") continue;
+              let hist = hwmonHistory[path];
+              if (!hist) { hist = []; hwmonHistory[path] = hist; }
+              hist.push(entry.value);
+              if (hist.length > 120) hist.shift();
+            }
+          }
         }
       } catch (e) {
         console.error("[wallpaper] bad text frame:", e);
@@ -1641,6 +1655,9 @@ function updateTintFromFrame(zoneColors) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 let lastSysStats = null;
+// path -> last 120 numeric samples. Drained by the hardware-sensor
+// widget's tick handler for its sparkline.
+const hwmonHistory = Object.create(null);
 const sysstatsHistory = [];
 let lastAudio = null;
 
@@ -2259,6 +2276,49 @@ WIDGET_REGISTRY["ram-meter"] = {
 // chart layout needed more work. The bridge still pushes netDown / netUp in
 // the sysstats frame so a future iteration can bring it back without a
 // protocol change.
+
+// Hardware sensor — generic reader for LibreHardwareMonitor's full
+// sensor tree (CPU/GPU temps, fan RPMs, voltages, drive temps, power
+// readings). Sensor path is picked in the Configurator's options modal
+// from /hwmon/sensors which lists everything LHM is currently
+// reporting. Falls back to "--" with the configured label when LHM is
+// offline or the chosen sensor has disappeared.
+WIDGET_REGISTRY["hardware-sensor"] = {
+  label: "Hardware Sensor",
+  icon: '<svg viewBox="0 0 24 24"><path d="M4 4h6v6H4z"/>' +
+        '<path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/>' +
+        '<path d="M14 14h6v6h-6z"/></svg>',
+  markup: () => '<div class="stat-head"><span class="hwmon-label">Hardware</span><span class="hwmon-unit"></span></div>' +
+                '<div class="stat-value hwmon-value">—</div><canvas></canvas>',
+  tick: (rec) => {
+    const path = rec.opts.sensorPath || "";
+    const entry = (lastSysStats && lastSysStats.hwmon)
+      ? lastSysStats.hwmon[path]
+      : null;
+    // Label: explicit override > last segment of path > generic
+    // fallback. The path uses " / " as separator (see
+    // HwMonPoller._flatten), so .pop() of the split gives the leaf.
+    const leaf = path ? path.split(" / ").pop() : "Hardware";
+    const label = rec.opts.label || leaf;
+    rec.el.querySelector(".hwmon-label").textContent = label;
+    if (entry && typeof entry.value === "number") {
+      const decimals = (rec.opts.decimals == null) ? 1 : (rec.opts.decimals | 0);
+      rec.el.querySelector(".hwmon-value").textContent =
+        entry.value.toFixed(decimals);
+      rec.el.querySelector(".hwmon-unit").textContent = entry.unit || "";
+    } else {
+      rec.el.querySelector(".hwmon-value").textContent = "—";
+      rec.el.querySelector(".hwmon-unit").textContent = "";
+    }
+    // Sparkline scaling: temps (°C) and RPMs both benefit from
+    // letting drawSparkline autoscale (maxV omitted). Voltages stay
+    // in a tight range, so autoscale works there too.
+    drawSparkline(rec.el.querySelector("canvas"),
+                  hwmonHistory[path] || [],
+                  rec.opts.tintFromGlow ? currentTintCss : "rgb(255, 175, 106)");
+  },
+  editOptions: null,
+};
 
 WIDGET_REGISTRY["audio-spectrum"] = {
   label: "Audio",

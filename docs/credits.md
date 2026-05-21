@@ -53,6 +53,15 @@ under which each ships is below.
 - **GitHub Releases API** — polled at startup + every 24 h by the in-app
   update checker.
   <https://docs.github.com/en/rest/releases/releases>
+- **LibreHardwareMonitor** — Mozilla Public License 2.0. Optional;
+  drives the *Hardware Sensor* widget family (CPU / GPU temps, fan
+  RPMs, voltages, drive temps, power). When the user has LHM running
+  with its *Remote Web Server* enabled (Options → Remote Web Server),
+  our bridge polls `http://localhost:8085/data.json` once per second
+  and pushes the flattened sensor tree to the wallpaper page alongside
+  the existing CPU / RAM stats. **We do not bundle LHM** — it has to
+  be installed separately by the user, so its MPL terms don't
+  propagate to our MIT distribution. <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>
 
 ## Hosts the wallpaper plays inside (not bundled)
 
@@ -88,6 +97,7 @@ MIT product is OK.
 | Open-Meteo data | CC-BY 4.0 | Attribution required at point of display. Done in the Weather widget footer (*"via Open-Meteo"*) and here. |
 | Quotable data | CC BY-SA | Attribution + share-alike on derivative datasets. We don't redistribute the data, we display it per call; attribution shown in the Quote widget footer (*"via Quotable"*) and here. |
 | GitHub Releases API | (Free public API) | Read-only, well under rate limits for unauthenticated requests, no terms we're violating. |
+| LibreHardwareMonitor | Mozilla Public License 2.0 | **Not bundled.** Polled at runtime via the user's own LHM install. MPL 2.0 is file-based weak copyleft — it would only impose obligations on us if we redistributed LHM's source files (modified or not). Since we just call its HTTP server like any other client, no propagation. |
 
 ### Hosts the wallpaper *runs inside* (we don't bundle them)
 
@@ -120,4 +130,4 @@ inside it.
     automatically).
 - No copyleft contamination of our own code.
 
-This audit was last refreshed for **v0.7.0** (2026-05-19).
+This audit was last refreshed for **v0.8.2-beta** (2026-05-20).

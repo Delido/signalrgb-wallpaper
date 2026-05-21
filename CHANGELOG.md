@@ -4,6 +4,99 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2-beta] - 2026-05-20
+
+> Adds an optional integration with **LibreHardwareMonitor** for the
+> hardware-sensor widget family, plus folds in the v0.8.1 perf
+> fix-up that was sitting un-tagged.
+
+### Added
+
+- **Hardware Sensor widget.** New generic widget type that reads
+  any sensor LibreHardwareMonitor is reporting — CPU / GPU temps,
+  fan RPMs, voltages, drive temps, power readings, etc. Picks the
+  sensor from a dropdown that's populated dynamically from a new
+  `GET /hwmon/sensors` endpoint, with live current-value previews
+  next to each path so you can find what you're looking for.
+  Sparkline tracks last ~2 min @ 1 Hz. Optional label override and
+  decimals control per widget. **LHM is not bundled** — users who
+  want temps/fans install LibreHardwareMonitor separately (free,
+  MPL 2.0) and enable its *Options → Remote Web Server*. When LHM
+  isn't running the widget shows `—` and the sensor dropdown shows
+  `(LHM not detected — see Help → Tips)`. Help page has a step-by-
+  step setup section under *Tips*. License audit + `docs/credits.md`
+  entry added; MPL 2.0 doesn't propagate because we don't
+  redistribute any LHM files.
+- **`/hwmon/sensors` HTTP endpoint** on the bridge — returns a
+  flat sorted list of every sensor (path, current value, unit) plus
+  a `status` block (online, sensorCount, lastError). Used by the
+  Configurator's options modal; could also drive future Hardware
+  Monitor dashboards from external tools.
+
+### Fixed (from the unreleased v0.8.1 perf work)
+
+- **SignalRGB-startup lag.** SignalRGB fires every `onXChanged`
+  callback once per `ControllableParameter` while a plugin
+  initialises — for our plugin that's `ongridSizeChanged`,
+  `onaspectRatioChanged`, `oncustomColsChanged` and
+  `oncustomRowsChanged`, each of which used to call `applyZoneSize`
+  directly. Combined with the one `applyZoneSize` from
+  `Initialize()`, every device rebuilt its `device.setControllableLeds`
+  registry **five times in a row** at startup. For an ultrawide on
+  `Auto + base=64` that's 5 × 14592 = ~73k LED operations per device
+  per startup — and SignalRGB's JS sandbox is single-threaded across
+  all plugins, so the whole tick stalled until ours finished.
+  - The four `onXChanged` exports now set a module-scope `dimsDirty`
+    flag instead of calling `applyZoneSize` directly. `Render()`
+    coalesces the burst into a single rebuild on its next tick.
+  - `applyZoneSize` itself gained an early-bail: if the resolved
+    dimensions match the current `s.cols/s.rows` and the frame
+    buffer is already allocated, it returns immediately — the
+    expensive `setControllableLeds` call is skipped.
+  - The `/config` poll only flips `dimsDirty` when the viewport for
+    a screen actually changes (was: flip on every 2 s poll while
+    Aspect = Auto, causing redundant rebuilds).
+  - `Render()` no longer calls `computeGridDimensions()` on every
+    frame — that was 30 fps × N devices = 120 calls / s of small but
+    pointless arithmetic on the steady-state path.
+
+  Together these are the difference between "noticeable hitch when
+  SignalRGB starts" and "no hitch at all" on the 4-monitor /
+  ultrawide setup.
+
+## [0.8.1] - 2026-05-20 *(never tagged — folded into 0.8.2-beta)*
+
+### Fixed
+
+- **SignalRGB-startup lag.** SignalRGB fires every `onXChanged`
+  callback once per `ControllableParameter` while a plugin
+  initialises — for our plugin that's `ongridSizeChanged`,
+  `onaspectRatioChanged`, `oncustomColsChanged` and
+  `oncustomRowsChanged`, each of which used to call `applyZoneSize`
+  directly. Combined with the one `applyZoneSize` from
+  `Initialize()`, every device rebuilt its `device.setControllableLeds`
+  registry **five times in a row** at startup. For an ultrawide on
+  `Auto + base=64` that's 5 × 14592 = ~73k LED operations per device
+  per startup — and SignalRGB's JS sandbox is single-threaded across
+  all plugins, so the whole tick stalled until ours finished.
+  - The four `onXChanged` exports now set a module-scope `dimsDirty`
+    flag instead of calling `applyZoneSize` directly. `Render()`
+    coalesces the burst into a single rebuild on its next tick.
+  - `applyZoneSize` itself gained an early-bail: if the resolved
+    dimensions match the current `s.cols/s.rows` and the frame
+    buffer is already allocated, it returns immediately — the
+    expensive `setControllableLeds` call is skipped.
+  - The `/config` poll only flips `dimsDirty` when the viewport for
+    a screen actually changes (was: flip on every 2 s poll while
+    Aspect = Auto, causing redundant rebuilds).
+  - `Render()` no longer calls `computeGridDimensions()` on every
+    frame — that was 30 fps × N devices = 120 calls / s of small but
+    pointless arithmetic on the steady-state path.
+
+  Together these are the difference between "noticeable hitch when
+  SignalRGB starts" and "no hitch at all" on the 4-monitor /
+  ultrawide setup.
+
 ## [0.8.0] - 2026-05-20
 
 > First stable after the long 0.7.x beta cycle. Rolls up every
