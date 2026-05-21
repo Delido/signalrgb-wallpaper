@@ -217,10 +217,85 @@ Full version-by-version breakdown: [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 
-*(Planned section is currently empty — every formerly-tracked item
-shipped in the 0.7.x beta cycle. Got a wish? Open an
-[issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
-and tag it `enhancement`.)*
+Open ideas grouped by impact-to-effort ratio. Effort estimates are
+the maintainer's order-of-magnitude — pull requests on any of these
+are very welcome. For the long-form version with per-item
+implementation notes + license-compatibility guidance, see
+[docs/roadmap.md](docs/roadmap.md).
+
+### 🎯 Tier 1 — Setup polish (biggest UX wins for least effort)
+
+- **Setup health check in the tray** — green/red status dots for
+  SignalRGB plugin loaded · bridge port reachable · wallpaper
+  assigned · LHM reachable. Each red dot has a one-click fix.
+  Should eliminate most "doesn't work" support traffic.
+- **Backup + restore config** — export everything
+  (`config.json` + Library + Presets + Widgets) as one ZIP,
+  re-import via drag-and-drop in the Configurator. Killer for
+  fresh-Windows installs / multi-PC users.
+- **Reset / undo** — "Reset this screen to defaults" per Screen
+  tab, plus Ctrl+Z for the last ~10 settings changes.
+- **First-run onboarding tour** — 30-second guided overlay the
+  first time the Configurator opens: Screens → Background → Glow
+  → Done.
+
+### ✨ Tier 2 — High-visibility user features
+
+- **Wallpaper shuffle / cycle** — Library toggle: cycle every X
+  minutes, randomise on logon, or pick a different image by time
+  of day.
+- **Preset hotkeys** — global `Ctrl+Shift+1..4` to swap between
+  the four per-screen preset slots without touching the
+  Configurator.
+- **Per-app / per-game profiles** — foreground-window watcher
+  that auto-switches presets when a specific exe runs (e.g. dim
+  glow plus a clock-only widget while Cyberpunk 2077 is
+  foreground).
+- **Now-playing widget** — current track from Spotify or any
+  Windows app that publishes through `SystemMediaTransportControls`.
+
+### 🛠️ Tier 3 — Power-user / polish
+
+- **Builder: AI cut-out tool** — small WebAssembly background-
+  removal model for a one-click "make all the bright stuff
+  transparent" mode.
+- **Winget package + auto-update** — `winget install
+  Delido.SignalRGBWallpaper` and a button in the update checker
+  to actually download + apply the update instead of just linking
+  to the release page.
+- **Mobile Configurator view** — make `/configurator` responsive
+  so you can change wallpaper settings from a phone on the same
+  network.
+- **Community wallpaper gallery** — central `wallpapers.json` in
+  a community repo; the Configurator pulls it and shows
+  community-submitted backgrounds alongside the local Library
+  strip. PR-based submissions.
+- **More ambient effects from MIT-licensed sources** — port a
+  few canvas / particle pieces from MIT-licensed CodePen authors
+  (e.g. [ykob](https://github.com/ykob)'s catalogue) as new
+  *Effects* presets — fireflies, geometric flow fields, stars,
+  etc. Per-pen license check + attribution in `docs/credits.md`
+  required.
+
+### 🔌 Tier 4 — Ecosystem / integration
+
+- **Home Assistant / MQTT bridge** — publish wallpaper state +
+  sensor values via MQTT so users can write HA automations
+  ("dim wallpaper when 'movie night' scene is active").
+- **REST API** — already partially possible (`/library`, `/config`,
+  `/hwmon/sensors`); formalise the full WS-equivalent surface for
+  Stream Deck / scripts / external tools to drive the wallpaper.
+- **Plugin API for third-party widgets** — `%LOCALAPPDATA%\
+  SignalRGBWallpaper\plugins\<name>\widget.js` with a defined
+  contract. Long road to a community widget library.
+- **Generic HTTP widget** — polls any URL on a schedule and
+  renders a configurable template. Covers Discord unread /
+  stocks / RSS / crypto / arbitrary REST APIs with one widget
+  type instead of one per service.
+
+Got a wish that isn't here?
+[Open an issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
+and tag it `enhancement`.
 
 ## Contributing
 
