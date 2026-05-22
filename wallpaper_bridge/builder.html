@@ -496,12 +496,28 @@
     border-radius: 6px;
     min-height: 120px;
     display: flex;
-    flex-wrap: wrap;
     gap: 6px;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
   }
-  .wall-canvas.layout-vertical { flex-direction: column; }
+  /* Horizontal row: never wrap — if the strip overflows the panel
+     width, scroll horizontally so the row stays a row. Previously
+     `flex-wrap: wrap` made horizontal layouts visually wrap to a
+     column on narrow panels (= worst of both worlds). */
+  .wall-canvas:not(.layout-vertical):not(.layout-2x2):not(.layout-free) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+  .wall-canvas.layout-2x2 {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .wall-canvas.layout-vertical {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
   /* Free-form mode: drop the flex layout and let frames be positioned
      absolutely. Workspace has a fixed visible height + light grid so
      drag arrangements feel like placing items on a desk. */

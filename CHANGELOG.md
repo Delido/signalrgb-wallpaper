@@ -4,6 +4,28 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.9-beta] - 2026-05-22
+
+> Quick fix for the Monitor Wall *Horizontal row* mode rendering as
+> a vertical stack on narrow right-panel widths.
+
+### Fixed
+
+- **Monitor Wall: horizontal layout now scrolls horizontally** instead
+  of wrapping to a column. Previously `flex-wrap: wrap` on the
+  wall canvas plus 260 px right-panel width meant two ~130 px
+  frames + gap exceeded the available room → second frame wrapped
+  to the next line. New rule pins horizontal mode to
+  `flex-wrap: nowrap; overflow-x: auto` so the row stays a row
+  and the strip scrolls when it doesn't fit. The 2×2 + vertical
+  layouts keep their existing wrap behaviour.
+
+> Roadmap: added a planned **Monitor-Wall-as-primary-right-panel-nav**
+> redesign for an upcoming release — promotes the Wall to the top
+> of the right panel, pre-fills each frame with the screen's current
+> background, adds a per-frame click menu, and collapses the now-
+> redundant *Apply to Screen N* + *Multi-monitor split* sections.
+
 ## [0.9.8-beta] - 2026-05-22
 
 > First Tier-3 item: **one-click update install**. The tray no longer

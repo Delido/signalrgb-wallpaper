@@ -134,6 +134,34 @@ one shot. Quick-config instead of N-times manual setting.
 
 ### ✅ Configurator: overview card with mini-thumbnails — shipped v0.8.7-beta
 
+### 🔲 Builder: Monitor Wall as primary right-panel nav — ~3-4 h
+
+The v0.9.0 Monitor Wall lives at the *bottom* of the right panel as
+one section among many (Load / Merge / Output / Apply to Screen N /
+Split / Wall). The user's mental model is the inverse: the wall
+*is* the multi-monitor workflow — pick layout → drop image per
+monitor → Apply. Everything else (Apply-to-Screen-N buttons,
+Multi-monitor split section) is now redundant.
+
+Also a real bug: in *Horizontal row* mode the frames calculated at
+sizes that exceed the 260 px right panel and `flex-wrap: wrap`
+stacks them vertically — opposite of the layout name.
+
+Planned changes:
+
+- Promote Monitor Wall to the **top** of the right panel; collapse
+  *Apply to Screen N* and *Multi-monitor split* into it.
+- Each frame **pre-fills with the screen's current `bgImage`** via
+  the `/image?path=` proxy so the user sees the actual current
+  desktop, not an empty box.
+- **Per-frame action menu** on click: Choose image · From library
+  · Use current canvas · Edit in Builder · Clear.
+- **Fix horizontal layout**: `flex-wrap: nowrap; overflow-x: auto`
+  so frames stay in one row and the strip scrolls when it
+  overflows the panel width.
+- Layout picker keeps the existing four modes (Horizontal / 2×2
+  / Vertical / Free).
+
 A new card at the top of the Configurator, above the tab bar:
 horizontal row of N small monitor-frame thumbnails (matching the
 screen count), each showing the current background image of its
