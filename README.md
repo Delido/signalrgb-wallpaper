@@ -213,6 +213,35 @@ the whole "0.7.0 → 0.8.0" feature wave:
 - 🆕 **Chunked UDP** transport — 128 × 128 RGB grids
 - 🆕 **In-app update checker** with beta-channel opt-in
 
+**Since v0.8.0** the 0.8.x beta cycle has piled workflow polish on
+top — turn beta updates on in the tray to get them automatically:
+
+- 🆕 **LibreHardwareMonitor integration** — new Hardware-Sensor
+  widget family (CPU/GPU temps, fan RPMs, drive temps, power…)
+  driven by a local LHM web server (v0.8.2-beta)
+- 🆕 **Gallery rebuild** — hover-preview with RGB-mock glow,
+  click-to-preview instead of click-to-apply, 5 s Undo toast,
+  right-click context menu (Apply / Edit in Builder / Rename /
+  Duplicate / Delete), pin-to-top, drag-and-drop reorder
+  (v0.8.3 + v0.8.4-beta)
+- 🆕 **Builder ↔ Library bridge** — *Open from library…* picker
+  next to *Choose image*, *Save to library* button, *From
+  library…* on the merge slots, deep-link via
+  `?library=<file>` (v0.8.3 + v0.8.5-beta)
+- 🆕 **Builder crop tool** — drag a rectangle and Confirm to
+  resize the canvas; in-progress mask edits survive
+  (v0.8.5-beta)
+- 🆕 **Builder live-glow preview** — toggle in the canvas toolbar
+  swaps the transparency checkerboard for an animated RGB
+  gradient so cut-out pixels preview the actual SignalRGB glow
+  (v0.8.4-beta)
+- 🆕 **Tab labels show resolution** — *Screen 2 — 3840×1080*
+  whenever a wallpaper page has connected (v0.8.5-beta)
+- 🐛 **Perf**: SignalRGB-startup lag fixed by coalescing 5×
+  redundant `applyZoneSize` rebuilds into one (v0.8.1)
+- 🐛 **Installer**: library.json no longer overwritten on
+  upgrade, so your uploads stay visible (v0.8.6-beta)
+
 Full version-by-version breakdown: [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap

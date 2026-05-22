@@ -14,17 +14,29 @@ Status legend:
 
 ---
 
-## 🖼️ Workflow polish — Gallery + Builder + multi-monitor (next beta)
+## 🖼️ Workflow polish — Gallery + Builder + multi-monitor
 
 Identified during v0.8.2-beta testing: the "find a wallpaper → cut
-transparency into it → use it on a screen" loop is more friction
-than it should be, and multi-monitor users have to redo the same
-settings on every tab manually.
+transparency into it → use it on a screen" loop was too much
+friction, and multi-monitor users had to redo settings on every
+tab manually.
 
-Split across two betas:
+Shipped across the v0.8.3 → v0.8.6 beta cycle:
 
-- **v0.8.3-beta — Gallery + Builder bridge** (~13 h)
-- **v0.8.4-beta — Multi-monitor convenience** (~9 h)
+- **v0.8.3-beta** — Gallery + Builder bridge (hover preview,
+  click-to-preview + Undo, right-click menu, Builder open/save
+  library, ?library deep-link)
+- **v0.8.4-beta** — Pin + sort + drag-reorder, Builder glow preview
+- **v0.8.5-beta** — Bug fixes, Builder crop tool, tab labels with
+  resolution, library picker on Builder merge slots
+- **v0.8.6-beta** — Installer-overwrite hotfix (library.json)
+
+Remaining (multi-monitor convenience — needs careful bridge-side
+invariant work):
+
+- Mirror mode per tab
+- "Apply to all screens" button per section
+- Overview card with mini-thumbnails
 
 ### ✅ Gallery: hover-preview large + RGB-mock glow behind — shipped v0.8.3-beta
 
@@ -131,11 +143,10 @@ screen. Click a thumbnail → jumps to that Screen's tab. Visual
 overview of which monitor shows what, without having to flip
 through tabs.
 
-### 🔲 Builder: Ctrl + Wheel zoom — ~1 h
+### ✅ Builder: Ctrl + Wheel zoom — shipped (pre-0.8.3-beta)
 
-Currently zoom is via a slider. Add `wheel` event handler with
-`ctrl` modifier → zoom in / out anchored at cursor position.
-Industry-standard editor feel.
+Already implemented in `builder.html` — `canvasArea` listens for
+`wheel` events and zooms in/out by 1.1× when `ctrlKey` is held.
 
 ### ✅ Builder: crop tool — shipped v0.8.5-beta
 
