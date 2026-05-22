@@ -4,6 +4,31 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6-beta] - 2026-05-22
+
+> Hotfix for widget gear-icon dialogs freezing the wallpaper page.
+
+### Fixed
+
+- **Widget edit-options dialogs froze the page** when the user
+  clicked a widget's gear icon. Built-in `window.prompt()` /
+  `alert()` calls block the JavaScript thread and, under
+  Lively/WE's CEF, occasionally render the dialog behind the
+  wallpaper or fail to dismiss — locking the entire page.
+- **`wpPrompt(label, default) → Promise<string|null>`** and
+  **`wpAlert(message) → Promise<void>`** — in-page replacements
+  rendered as a small DOM overlay (HTML inputs + OK/Cancel
+  buttons) styled to match the wallpaper UI. Enter / Esc /
+  click-outside dismiss; resolves with the entered value or
+  `null` on cancel.
+- All built-in widgets (clock, calendar, weather, sticky note,
+  countdown, picture frame) converted to **async `editOptions`**
+  using the new helpers. Their gear icons now open an in-page
+  modal instead of the browser's native prompt.
+- Click handler for the gear icon learned to `.catch` the
+  returned Promise so async rejections surface in the console
+  instead of dropping silently.
+
 ## [0.9.5-beta] - 2026-05-22
 
 > Fourth and final Tier-2 high-visibility feature: **per-app / per-game

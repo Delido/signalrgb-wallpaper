@@ -446,6 +446,62 @@
   .edit-mode .widget .widget-settings { display: block; }
   .widget .widget-settings:hover { background: rgba(106, 176, 255, 0.95); }
 
+  /* ── In-page prompt / alert overlay ──
+     Replacement for window.prompt()/alert() which freeze the page
+     entirely under Lively/WE's CEF (and pop a "This page says" header
+     users find confusing). All widget editOptions handlers route
+     through wpPrompt()/wpAlert() instead. */
+  .wp-prompt-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 9500;
+  }
+  .wp-prompt-overlay.show { display: flex; }
+  .wp-prompt {
+    background: rgba(20, 22, 30, 0.97);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px;
+    padding: 16px 18px;
+    width: min(420px, 80vw);
+    color: #fff;
+    font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+  }
+  .wp-prompt .wp-prompt-label {
+    display: block; margin-bottom: 10px; font-size: 13px; opacity: 0.85;
+  }
+  .wp-prompt input {
+    width: 100%; box-sizing: border-box;
+    padding: 7px 9px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    color: #fff;
+    font: inherit;
+  }
+  .wp-prompt .btn-row {
+    display: flex; gap: 8px; justify-content: flex-end;
+    margin-top: 14px;
+  }
+  .wp-prompt button {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    padding: 5px 14px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .wp-prompt button:hover { background: rgba(255,255,255,0.16); }
+  .wp-prompt button.primary {
+    background: #3a6ba8; border-color: #4a7bbf;
+  }
+  .wp-prompt button.primary:hover { background: #4a7bbf; }
+  .wp-prompt.no-input input { display: none; }
+  .wp-prompt.no-input .wp-prompt-cancel { display: none; }
+
   /* ── Widget picker (floating card, edit mode only) ── */
   #widget-picker {
     position: fixed;
@@ -1049,6 +1105,93 @@ setInterval(() => {
 }, 250);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// In-page prompt / alert. window.prompt() / alert() freeze the page on
+// Lively / WE's CEF builds and pop a "This page says" header that
+// confuses users — every widget's editOptions handler routes through
+// these async helpers instead. Promise resolves to the entered string
+// (OK) or null (Cancel / Esc / click-outside). wpAlert() returns void.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _ensureWpPrompt() {
+  let overlay = document.getElementById("wp-prompt-overlay");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "wp-prompt-overlay";
+  overlay.className = "wp-prompt-overlay";
+  overlay.innerHTML =
+    '<div class="wp-prompt">' +
+    '<label class="wp-prompt-label"></label>' +
+    '<input type="text" class="wp-prompt-input">' +
+    '<div class="btn-row">' +
+    '<button type="button" class="wp-prompt-cancel">Cancel</button>' +
+    '<button type="button" class="wp-prompt-ok primary">OK</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function wpPrompt(label, defaultValue) {
+  return new Promise((resolve) => {
+    const overlay = _ensureWpPrompt();
+    const card    = overlay.querySelector(".wp-prompt");
+    const labelEl = overlay.querySelector(".wp-prompt-label");
+    const input   = overlay.querySelector(".wp-prompt-input");
+    const okBtn   = overlay.querySelector(".wp-prompt-ok");
+    const cancel  = overlay.querySelector(".wp-prompt-cancel");
+    card.classList.remove("no-input");
+    labelEl.textContent = label;
+    input.value = defaultValue == null ? "" : String(defaultValue);
+    const finish = (value) => {
+      overlay.classList.remove("show");
+      okBtn.onclick = cancel.onclick = null;
+      input.onkeydown = null;
+      overlay.onclick = null;
+      resolve(value);
+    };
+    okBtn.onclick   = () => finish(input.value);
+    cancel.onclick  = () => finish(null);
+    input.onkeydown = (e) => {
+      if (e.key === "Enter")  { e.preventDefault(); finish(input.value); }
+      if (e.key === "Escape") { e.preventDefault(); finish(null); }
+    };
+    overlay.onclick = (e) => { if (e.target === overlay) finish(null); };
+    overlay.classList.add("show");
+    requestAnimationFrame(() => { try { input.focus(); input.select(); } catch (_) {} });
+  });
+}
+
+function wpAlert(message) {
+  return new Promise((resolve) => {
+    const overlay = _ensureWpPrompt();
+    const card    = overlay.querySelector(".wp-prompt");
+    const labelEl = overlay.querySelector(".wp-prompt-label");
+    const okBtn   = overlay.querySelector(".wp-prompt-ok");
+    const cancel  = overlay.querySelector(".wp-prompt-cancel");
+    // no-input mode hides the input + cancel button so the user only
+    // sees "OK". Otherwise alerts look like prompts with empty fields.
+    card.classList.add("no-input");
+    labelEl.textContent = message;
+    const finish = () => {
+      overlay.classList.remove("show");
+      okBtn.onclick = cancel.onclick = null;
+      overlay.onclick = null;
+      document.removeEventListener("keydown", onKey);
+      resolve();
+    };
+    const onKey = (e) => {
+      if (e.key === "Enter" || e.key === "Escape") {
+        e.preventDefault(); finish();
+      }
+    };
+    okBtn.onclick   = finish;
+    overlay.onclick = (e) => { if (e.target === overlay) finish(); };
+    document.addEventListener("keydown", onKey);
+    overlay.classList.add("show");
+    requestAnimationFrame(() => { try { okBtn.focus(); } catch (_) {} });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Widgets — placeable HTML modules. The WIDGET_REGISTRY below is the single
 // source of truth: adding a new widget type = one entry here + a matching
 // entry in bridge.py's WIDGET_DEFAULTS, and the in-page picker + tray "Add…"
@@ -1124,14 +1267,14 @@ const WIDGET_REGISTRY = {
           now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
       }
     },
-    editOptions: (rec) => {
+    editOptions: async (rec) => {
       const cur = (rec.opts && rec.opts.style) || "analog";
-      const v = prompt("Clock style — 'analog' or 'digital':", cur);
+      const v = await wpPrompt("Clock style — 'analog' or 'digital':", cur);
       if (v === null) return;
       const style = (v.trim().toLowerCase() === "digital") ? "digital" : "analog";
       let fmt24 = rec.opts.format24h !== false;
       if (style === "digital") {
-        const f = prompt("24-hour format? (yes / no)", fmt24 ? "yes" : "no");
+        const f = await wpPrompt("24-hour format? (yes / no)", fmt24 ? "yes" : "no");
         if (f === null) return;
         fmt24 = /^y/i.test(f.trim());
       }
@@ -1186,9 +1329,9 @@ const WIDGET_REGISTRY = {
       }
       rec.el.querySelector("tbody").innerHTML = rows.join("");
     },
-    editOptions: (rec) => {
+    editOptions: async (rec) => {
       const cur = rec.opts.weekStart === 0 ? "0" : "1";
-      const v = prompt("Week start — 0 = Sunday, 1 = Monday:", cur);
+      const v = await wpPrompt("Week start — 0 = Sunday, 1 = Monday:", cur);
       if (v === null) return;
       const weekStart = v.trim() === "0" ? 0 : 1;
       sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
@@ -1212,18 +1355,19 @@ const WIDGET_REGISTRY = {
         fetchWeather(rec);
       }
     },
-    editOptions: (rec) => {
-      const label = prompt("Location label:", rec.opts.label || "Berlin");
+    editOptions: async (rec) => {
+      const label = await wpPrompt("Location label:", rec.opts.label || "Berlin");
       if (label === null) return;
-      const latStr = prompt("Latitude:", String(rec.opts.lat ?? 52.52));
+      const latStr = await wpPrompt("Latitude:", String(rec.opts.lat ?? 52.52));
       if (latStr === null) return;
       const lat = parseFloat(latStr);
-      if (!Number.isFinite(lat)) { alert("Invalid latitude"); return; }
-      const lonStr = prompt("Longitude:", String(rec.opts.lon ?? 13.405));
+      if (!Number.isFinite(lat)) { await wpAlert("Invalid latitude"); return; }
+      const lonStr = await wpPrompt("Longitude:", String(rec.opts.lon ?? 13.405));
       if (lonStr === null) return;
       const lon = parseFloat(lonStr);
-      if (!Number.isFinite(lon)) { alert("Invalid longitude"); return; }
-      const u = prompt("Units — 'metric' or 'imperial':", rec.opts.units || "metric");
+      if (!Number.isFinite(lon)) { await wpAlert("Invalid longitude"); return; }
+      const u = await wpPrompt("Units — 'metric' or 'imperial':", rec.opts.units || "metric");
+      if (u === null) return;
       const units = (u && u.trim().toLowerCase() === "imperial") ? "imperial" : "metric";
       rec.cache = null; rec.lastFetch = 0;   // force a fresh fetch
       sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
@@ -1267,9 +1411,9 @@ const WIDGET_REGISTRY = {
       const color = COLORS.includes(rec.opts.color) ? rec.opts.color : "yellow";
       for (const c of COLORS) rec.el.classList.toggle("color-" + c, c === color);
     },
-    editOptions: (rec) => {
-      const c = prompt("Note colour — yellow / blue / pink / green:",
-                       rec.opts.color || "yellow");
+    editOptions: async (rec) => {
+      const c = await wpPrompt("Note colour — yellow / blue / pink / green:",
+                               rec.opts.color || "yellow");
       if (c === null) return;
       const v = (c || "").trim().toLowerCase();
       const color = ["yellow","blue","pink","green"].includes(v) ? v : "yellow";
@@ -1297,11 +1441,11 @@ const WIDGET_REGISTRY = {
       if (isNaN(t.getTime())) { time.textContent = "invalid"; return; }
       time.textContent = formatCountdown(t.getTime() - Date.now(), rec.opts.units || "smart");
     },
-    editOptions: (rec) => {
-      const tgt = prompt("Target date (YYYY-MM-DD or full ISO):",
-                         rec.opts.target || "");
+    editOptions: async (rec) => {
+      const tgt = await wpPrompt("Target date (YYYY-MM-DD or full ISO):",
+                                 rec.opts.target || "");
       if (tgt === null) return;
-      const lbl = prompt("Label:", rec.opts.label || "Event");
+      const lbl = await wpPrompt("Label:", rec.opts.label || "Event");
       if (lbl === null) return;
       sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
                       options: { target: tgt.trim(), label: lbl } });
@@ -1329,11 +1473,12 @@ const WIDGET_REGISTRY = {
       }
       rec.el.classList.toggle("rounded", rec.opts.rounded !== false);
     },
-    editOptions: (rec) => {
-      const url = prompt("Image URL (https://…) or absolute file path:",
-                         rec.opts.url || "");
+    editOptions: async (rec) => {
+      const url = await wpPrompt("Image URL (https://…) or absolute file path:",
+                                 rec.opts.url || "");
       if (url === null) return;
-      const fit = prompt("Fit — cover / contain / fill:", rec.opts.fit || "cover");
+      const fit = await wpPrompt("Fit — cover / contain / fill:", rec.opts.fit || "cover");
+      if (fit === null) return;
       const fv  = (fit || "").trim().toLowerCase();
       const fitVal = ["cover","contain","fill"].includes(fv) ? fv : "cover";
       sendWidgetCmd({ type: "widget-update", id: rec.el.dataset.id,
@@ -1417,7 +1562,15 @@ function createWidget(w) {
   if (reg.editOptions) {
     el.querySelector(".widget-settings").addEventListener("click", (e) => {
       e.stopPropagation();
-      try { reg.editOptions(rec); } catch (err) { console.warn("[widget editOptions]", err); }
+      try {
+        const r = reg.editOptions(rec);
+        // editOptions is now async on every built-in widget so it
+        // returns a Promise; surface rejections to the console
+        // instead of dropping silently.
+        if (r && typeof r.then === "function") {
+          r.catch((err) => console.warn("[widget editOptions]", err));
+        }
+      } catch (err) { console.warn("[widget editOptions]", err); }
     });
   }
   rec.tick = () => reg.tick(rec);
