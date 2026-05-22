@@ -4,6 +4,41 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7-beta] - 2026-05-22
+
+> Two of the three remaining Multi-monitor-convenience items from the
+> Workflow-polish slice. Mirror mode is the only Workflow-polish
+> entry still outstanding (deferred to v0.8.8-beta because it needs
+> bridge-side invariant enforcement that wants its own focused beta).
+
+### Added — Configurator
+
+- **Apply to all screens — per section.** Each Background / Glow /
+  Effects / Widgets card header now carries an *Apply to all* button
+  (visible only when `screenCount > 1`). Click → confirm → the
+  current screen's values for that section's keys get POSTed to
+  every other screen. Each section declares its own key set so the
+  one button works for one card without leaking into others.
+- **Overview card with mini-monitor thumbnails.** New row between
+  the tab strip and the first card (hidden for single-monitor
+  setups). One 130 × ~73 px thumbnail per screen showing the
+  current background image with a resolution overlay. Click jumps
+  to that screen's tab. Active screen gets a brighter border + 2 px
+  glow ring. Driven by the same `/config` poll that feeds the tab
+  resolution labels — single fetch, both views consistent.
+
+### Bridge
+
+- **`POST /screen/<N>/settings`** — batch setting update on screen
+  N. Body is a JSON object of `{key: value}` pairs; each key is
+  filtered through the same `_SETTABLE_SCREEN_KEYS` whitelist the
+  WS `setting-update` command uses, so the HTTP path adds no
+  attack surface. Used by the Configurator's Apply-to-all flow
+  because the WS connection is bound to one screen at a time.
+- **`/config` returns per-screen `bgImage`** alongside
+  `viewportW/H`. Used by the Overview card to paint mini-thumbnails
+  without opening a WS per screen.
+
 ## [0.8.6-beta] - 2026-05-22
 
 > Hotfix: installer was overwriting the user's `library.json`, which

@@ -141,6 +141,75 @@
   section.card.collapsed > header.section-head .chev { transform: rotate(-90deg); }
   section.card > .body { padding: 16px; }
   section.card.collapsed > .body { display: none; }
+  /* Apply-to-all button — injected into each section-head when screenCount
+     > 1. Right-aligned, doesn't fight the collapse-toggle click. */
+  section.card > header.section-head .apply-all {
+    margin-left: auto;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: color 0.12s, background 0.12s;
+  }
+  section.card > header.section-head .apply-all:hover {
+    color: var(--text); background: #2c323d;
+  }
+  section.card > header.section-head .apply-all.hidden { display: none; }
+
+  /* Multi-monitor overview card — appears between the tab strip and the
+     first settings card whenever screenCount > 1. Horizontal row of
+     mini-monitor thumbnails, one per screen, each showing the current
+     bgImage. Click jumps to that screen's tab. */
+  .overview-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .overview-card.hidden { display: none; }
+  .overview-card .overview-label {
+    flex: 0 0 auto;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 0.07em;
+    font-weight: 600;
+  }
+  .overview-thumbs {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    flex: 1;
+  }
+  .overview-thumb {
+    flex: 0 0 auto;
+    width: 130px;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #0c0e13 center / cover no-repeat;
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .overview-thumb:hover  { border-color: #3a6ba8; transform: translateY(-1px); }
+  .overview-thumb.active { border-color: #5b8fd1; box-shadow: 0 0 0 2px rgba(91,143,209,0.25); }
+  .overview-thumb .label {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.65);
+    color: #d8e6fc;
+    font-size: 11px; padding: 2px 4px;
+    border-radius: 0 0 3px 3px;
+    text-align: center;
+    pointer-events: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 
   /* ── Common form bits ─────────────────────────────────────────────── */
   .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -655,6 +724,11 @@
 
 <nav class="tabs" id="tabs"></nav>
 
+<div id="overview-card" class="overview-card hidden">
+  <span class="overview-label" data-i18n="overview.label">Overview</span>
+  <div class="overview-thumbs" id="overview-thumbs"></div>
+</div>
+
 <main>
 
   <!-- ── Presets ───────────────────────────────────────────────────── -->
@@ -967,6 +1041,14 @@ const TRANSLATIONS = {
   "bridge.screens":         { en: "Screens:",             de: "Bildschirme:" },
   "screens.label_simple":   { en: "Screen {n}",           de: "Bildschirm {n}" },
   "screens.label_with_res": { en: "Screen {n} — {w}×{h}", de: "Bildschirm {n} — {w}×{h}" },
+  "overview.label":         { en: "Overview",             de: "Übersicht" },
+  "apply_all.label":        { en: "Apply to all",         de: "Auf alle anwenden" },
+  "apply_all.confirm":      { en: "Copy {section} settings from Screen {n} to all other screens?",
+                              de: "{section}-Einstellungen von Bildschirm {n} auf alle anderen kopieren?" },
+  "apply_all.done":         { en: "{section} copied to {count} screen(s)",
+                              de: "{section} auf {count} Bildschirm(e) kopiert" },
+  "apply_all.failed":       { en: "Apply-to-all failed: {msg}",
+                              de: "Übernahme fehlgeschlagen: {msg}" },
   "section.presets":        { en: "Presets",              de: "Voreinstellungen" },
   "presets.hint":           {
     en: "Save the current background + glow + dim + blur + effects + widgets as a snapshot, then switch back with one click. Slots are per screen.",
@@ -1328,7 +1410,8 @@ for (let i = 0; i < N_SCREENS; i++) {
 // for that screen and reported its viewport. Falls back to the bare
 // "Screen N" label otherwise (no connected page yet). Polls /config
 // every few seconds so resolution changes on any monitor surface
-// without a hard refresh.
+// without a hard refresh. The same poll feeds the overview-card
+// mini-thumbnails — keeps both views consistent without a second fetch.
 async function refreshTabLabels() {
   try {
     const r = await fetch("/config", { cache: "no-store" });
@@ -1346,10 +1429,81 @@ async function refreshTabLabels() {
         tab.textContent = t("screens.label_simple", { n: i + 1 });
       }
     });
+    renderOverviewCard(screens);
   } catch (_) { /* leave existing labels */ }
 }
 refreshTabLabels();
 setInterval(refreshTabLabels, 5000);
+
+// Multi-monitor overview — one mini-thumb per screen, clicking jumps to
+// that tab. Hidden when screenCount < 2 (the overview card adds clutter
+// for single-monitor users). The thumb's background image comes from
+// /config's bgImage field via the /image proxy, same path the wallpaper
+// page itself uses.
+function renderOverviewCard(screens) {
+  const card  = document.getElementById("overview-card");
+  const grid  = document.getElementById("overview-thumbs");
+  if (!card || !grid) return;
+  const n = Math.min(screens.length, screenCount || screens.length);
+  if (n < 2) {
+    card.classList.add("hidden");
+    grid.innerHTML = "";
+    return;
+  }
+  card.classList.remove("hidden");
+
+  // Map existing thumbs by index so we patch in place instead of
+  // re-creating every poll (avoids image flicker every 5 s).
+  const existing = new Map();
+  grid.querySelectorAll(".overview-thumb").forEach((el) => {
+    const i = parseInt(el.dataset.screen, 10);
+    if (isFinite(i)) existing.set(i, el);
+  });
+  for (let i = 0; i < n; i++) {
+    let el = existing.get(i);
+    if (!el) {
+      el = document.createElement("button");
+      el.type = "button";
+      el.className = "overview-thumb";
+      el.dataset.screen = String(i);
+      const lbl = document.createElement("span");
+      lbl.className = "label";
+      el.appendChild(lbl);
+      el.addEventListener("click", () => switchScreen(i));
+      grid.appendChild(el);
+    }
+    const s   = screens[i] || {};
+    const lbl = el.querySelector(".label");
+    if (s.viewportW > 0 && s.viewportH > 0) {
+      lbl.textContent = t("screens.label_with_res",
+                          { n: i + 1, w: s.viewportW, h: s.viewportH });
+    } else {
+      lbl.textContent = t("screens.label_simple", { n: i + 1 });
+    }
+    // Mirror the wallpaper page's path-normaliser: HTTPS/data URLs pass
+    // through, file:// + absolute paths route through the /image proxy.
+    let thumbUrl = "";
+    if (s.bgImage) {
+      const p = String(s.bgImage).trim();
+      if (/^(https?:|data:)/i.test(p)) {
+        thumbUrl = p;
+      } else {
+        const cleaned = p.replace(/^file:\/{2,3}/i, "");
+        thumbUrl = "/image?path=" + encodeURIComponent(cleaned);
+      }
+    }
+    const desired = thumbUrl ? "url(" + thumbUrl + ")" : "";
+    if (el.style.backgroundImage !== desired) {
+      el.style.backgroundImage = desired;
+    }
+    el.classList.toggle("active", i === activeScreen);
+  }
+  // Trim excess thumbs if screenCount shrank.
+  grid.querySelectorAll(".overview-thumb").forEach((el) => {
+    const i = parseInt(el.dataset.screen, 10);
+    if (!isFinite(i) || i >= n) el.remove();
+  });
+}
 
 // Right-aligned screen-count picker. Replaces the legacy Tk dialog's
 // "Number of screens" knob — sends `bridge-setting-update screenCount`
@@ -1401,6 +1555,8 @@ function applyScreenCount(n) {
   // screen count), fall back to Screen 1 so the UI doesn't show stale
   // settings for an inactive screen.
   if (activeScreen >= n) switchScreen(0);
+  // Apply-to-all only makes sense with 2+ screens — re-evaluate.
+  if (typeof updateApplyAllVisibility === "function") updateApplyAllVisibility();
 }
 
 function switchScreen(n) {
@@ -1408,6 +1564,9 @@ function switchScreen(n) {
   activeScreen = n;
   document.querySelectorAll(".tab").forEach((t) => {
     t.classList.toggle("active", parseInt(t.dataset.screen, 10) === n);
+  });
+  document.querySelectorAll(".overview-thumb").forEach((el) => {
+    el.classList.toggle("active", parseInt(el.dataset.screen, 10) === n);
   });
   if (ws) { try { ws.close(); } catch (_) {} ws = null; }
   connect();
@@ -1989,6 +2148,92 @@ function summariseSnapshot(snap) {
 document.querySelectorAll("section.card > header.section-head[data-toggle]").forEach((h) => {
   h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed"));
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apply to all screens — per-section button in each card header. Each
+// card declares which settings keys belong to it; the button copies the
+// active screen's values for those keys to every other screen via
+// POST /screen/<N>/settings.
+// ─────────────────────────────────────────────────────────────────────────────
+const SECTION_KEYS = {
+  "card-bg":      { i18n: "section.bg",
+                    keys: ["bgImage", "bgFit", "bgDim", "showStatus"] },
+  "card-glow":    { i18n: "section.glow",
+                    keys: ["showBars", "barLayout", "glowStrength",
+                           "gridBlur",  "stripesBlur"] },
+  "card-effects": { i18n: "section.effects",
+                    keys: ["ambientEffect", "ambientTint", "ambientDensity",
+                           "pixelfx", "parallax3d",
+                           "audioGlow", "audioGlowIntensity", "audioGlowTint"] },
+  "card-widgets": { i18n: "section.widgets",
+                    keys: ["widgets", "widgetsLocked"] },
+};
+
+(function injectApplyAllButtons() {
+  for (const [cardId, spec] of Object.entries(SECTION_KEYS)) {
+    const card = document.getElementById(cardId);
+    if (!card) continue;
+    const head = card.querySelector("header.section-head");
+    if (!head) continue;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "apply-all hidden";
+    btn.dataset.i18n = "apply_all.label";
+    btn.textContent = t("apply_all.label");
+    btn.title = t("apply_all.label");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();   // don't collapse the section
+      applySectionToAll(cardId, spec);
+    });
+    head.appendChild(btn);
+  }
+  // Visibility is driven by screen count (handled in updateApplyAllVisibility).
+  updateApplyAllVisibility();
+})();
+
+function updateApplyAllVisibility() {
+  const visible = (screenCount || 1) > 1;
+  document.querySelectorAll(".apply-all").forEach((b) => {
+    b.classList.toggle("hidden", !visible);
+  });
+}
+
+async function applySectionToAll(cardId, spec) {
+  if (!settings || (screenCount || 1) <= 1) return;
+  const sectionName = t(spec.i18n);
+  const ok = confirm(t("apply_all.confirm",
+                       { section: sectionName, n: activeScreen + 1 }));
+  if (!ok) return;
+  const body = {};
+  for (const k of spec.keys) {
+    if (k in settings) body[k] = settings[k];
+  }
+  if (Object.keys(body).length === 0) {
+    toast(t("apply_all.done", { section: sectionName, count: 0 }), "good");
+    return;
+  }
+  let count = 0;
+  let firstError = null;
+  for (let i = 0; i < (screenCount || 1); i++) {
+    if (i === activeScreen) continue;
+    try {
+      const r = await fetch("/screen/" + i + "/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      count++;
+    } catch (e) {
+      if (!firstError) firstError = e;
+    }
+  }
+  if (firstError) {
+    toast(t("apply_all.failed", { msg: firstError.message }), "bad");
+  } else {
+    toast(t("apply_all.done", { section: sectionName, count }), "good");
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WebSocket

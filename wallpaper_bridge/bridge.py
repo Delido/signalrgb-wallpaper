@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.6-beta"
+APP_VERSION = "0.8.7-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1263,9 +1263,13 @@ class Broadcaster:
                         screens.append({
                             "viewportW": int(s.get("viewportW") or 0),
                             "viewportH": int(s.get("viewportH") or 0),
+                            # bgImage is included so the Configurator's
+                            # Overview card can paint mini-thumbnails for
+                            # every screen without opening a WS per tab.
+                            "bgImage":   str(s.get("bgImage") or ""),
                         })
                     except Exception:
-                        screens.append({"viewportW": 0, "viewportH": 0})
+                        screens.append({"viewportW": 0, "viewportH": 0, "bgImage": ""})
                 payload = json.dumps({
                     "screenCount": count,
                     "screens": screens,
@@ -1331,6 +1335,63 @@ class Broadcaster:
                         http_error(writer, 400, f"bad content-length: {content_length} (max {MAX_BACKGROUND_UPLOAD_BYTES})")
                 else:
                     http_error(writer, 404, f"unknown screen index: {screen_idx} (allowed 0..{N_SCREENS-1})")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+
+        # POST /screen/<N>/settings — body is JSON {key1: val1, key2: val2}
+        # for a batch setting update on screen N. Used by the Configurator's
+        # "Apply to all screens" buttons: the open WS is bound to one
+        # screen, so cross-screen updates need an out-of-band channel.
+        # Each key is filtered through the same _SETTABLE_SCREEN_KEYS
+        # whitelist `setting-update` uses, so the HTTP path can't grow
+        # the attack surface past what the WS already exposes.
+        if method == "POST" and target.startswith("/screen/"):
+            parts2 = target.split("?", 1)[0].strip("/").split("/")
+            if len(parts2) >= 3 and parts2[0] == "screen" and parts2[2] == "settings":
+                try:
+                    screen_idx = int(parts2[1])
+                except ValueError:
+                    screen_idx = -1
+                if 0 <= screen_idx < N_SCREENS:
+                    try:
+                        content_length = int(headers.get(b"content-length", b"0") or 0)
+                    except ValueError:
+                        content_length = 0
+                    if not (0 < content_length <= 65536):
+                        http_error(writer, 400, f"bad content-length: {content_length}")
+                        try: await writer.drain()
+                        except Exception: pass
+                        try: writer.close()
+                        except Exception: pass
+                        return
+                    try:
+                        body = await reader.readexactly(content_length)
+                        req = json.loads(body.decode("utf-8"))
+                        if not isinstance(req, dict):
+                            raise ValueError("body must be a JSON object")
+                        applied = 0
+                        for key, value in req.items():
+                            snap = self.update_screen_setting(screen_idx, str(key), value)
+                            if snap is not None:
+                                applied += 1
+                        payload = json.dumps({"ok": True, "applied": applied}).encode("utf-8")
+                        head = (
+                            "HTTP/1.1 200 OK\r\n"
+                            "Content-Type: application/json\r\n"
+                            f"Content-Length: {len(payload)}\r\n"
+                            "Cache-Control: no-store\r\n"
+                            "Connection: close\r\n\r\n"
+                        ).encode()
+                        writer.write(head + payload)
+                    except asyncio.IncompleteReadError:
+                        http_error(writer, 400, "incomplete body")
+                    except Exception as e:
+                        http_error(writer, 500, f"settings update failed: {e}")
+                else:
+                    http_error(writer, 404, f"unknown screen index: {screen_idx}")
                 try: await writer.drain()
                 except Exception: pass
                 try: writer.close()

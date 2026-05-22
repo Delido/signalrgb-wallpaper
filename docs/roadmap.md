@@ -21,7 +21,7 @@ transparency into it → use it on a screen" loop was too much
 friction, and multi-monitor users had to redo settings on every
 tab manually.
 
-Shipped across the v0.8.3 → v0.8.6 beta cycle:
+Shipped across the v0.8.3 → v0.8.7 beta cycle:
 
 - **v0.8.3-beta** — Gallery + Builder bridge (hover preview,
   click-to-preview + Undo, right-click menu, Builder open/save
@@ -30,13 +30,13 @@ Shipped across the v0.8.3 → v0.8.6 beta cycle:
 - **v0.8.5-beta** — Bug fixes, Builder crop tool, tab labels with
   resolution, library picker on Builder merge slots
 - **v0.8.6-beta** — Installer-overwrite hotfix (library.json)
+- **v0.8.7-beta** — Apply-to-all per section, overview card with
+  mini-monitor thumbnails
 
-Remaining (multi-monitor convenience — needs careful bridge-side
-invariant work):
+Remaining (deferred to v0.8.8-beta — needs careful bridge-side
+invariant enforcement):
 
 - Mirror mode per tab
-- "Apply to all screens" button per section
-- Overview card with mini-thumbnails
 
 ### ✅ Gallery: hover-preview large + RGB-mock glow behind — shipped v0.8.3-beta
 
@@ -127,14 +127,14 @@ Screen 1 also gets pushed to this screen. Persisted as
 mirror invariant on the server side so external clients (REST
 API in the future) can't bypass it.
 
-### 🔲 Configurator: "Apply to all screens" button per section — ~2 h
+### ✅ Configurator: "Apply to all screens" button per section — shipped v0.8.7-beta
 
 Small button at the right of each settings section header
 (Background, Glow, Effects, Widgets): *"Apply to all screens"*.
 Copies this screen's section's values to every other screen in
 one shot. Quick-config instead of N-times manual setting.
 
-### 🔲 Configurator: overview card with mini-thumbnails — ~3 h
+### ✅ Configurator: overview card with mini-thumbnails — shipped v0.8.7-beta
 
 A new card at the top of the Configurator, above the tab bar:
 horizontal row of N small monitor-frame thumbnails (matching the
