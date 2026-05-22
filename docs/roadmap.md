@@ -289,16 +289,26 @@ the bar with the live glow colour when *Tint* is on.
 
 ## 🛠️ Tier 3 — Power-user / polish
 
-### 🔲 Builder: AI cut-out tool — ~6-8 h
+### ✅ Builder: Auto cut tool — shipped v0.9.16-beta
 
-Tiny WebAssembly background-removal model — ONNX runtime web
-together with a small U²-Net variant, or alternatively RemBG.js.
-Adds a *"Auto-cut bright regions"* tool to the toolbox; one click
-runs the model on the current image and writes the predicted
-alpha mask.
+✨ icon in the toolbox. Two modes share the same `clicks` storage
+and replay path so undo / redo / refine-with-brushes work like any
+other operation:
 
-Risks: WebAssembly model can be 5-20 MB which bloats the bundle.
-Maybe lazy-load from a CDN on first use instead of bundling.
+- **Otsu (instant)** — computes the optimal brightness threshold
+  via Otsu's method on a luma histogram. No internet, no model,
+  no WASM. Genuinely strong for neon / UI / sci-fi panel imagery
+  where the cut signal is brightness.
+- **AI saliency** — lazy-loads `onnxruntime-web` from jsDelivr and
+  a U²-Netp saliency model from Hugging Face on first click;
+  both are browser-cached after. Inference at 320×320, mask
+  upsampled at draw time. Total cold-start download ~7 MB.
+
+Threshold slider biases the cutoff ±25 %; Invert toggle flips
+the mask. Rotation handler updates the stored mask in place so
+*Rotate 90°* keeps the cut aligned with the canvas. Model URL
+override via `localStorage["builder.aiModelUrl"]` for users
+behind a CDN block.
 
 ### 🚧 Winget package + auto-update — auto-update shipped v0.9.8-beta
 

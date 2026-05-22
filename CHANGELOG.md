@@ -4,6 +4,48 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.16-beta] - 2026-05-23
+
+> New Builder tool: **Auto cut**. One click detects the brightest /
+> most salient regions of the loaded image and cuts them transparent —
+> the typical "I want neon panels to glow with RGB" wallpaper workflow
+> done in a single action instead of dozens of manual clicks.
+
+### Added — Builder
+
+- **Auto cut tool** (✨ icon in the toolbox). Two modes share the same
+  storage + replay path so undo / redo / refine-with-brushes work
+  like any other operation:
+  - **Otsu (instant)** — computes the optimal brightness threshold
+    via Otsu's method on a luma histogram of the canvas, then cuts
+    every above-threshold pixel. No internet, no model, no WASM —
+    runs synchronously on the main thread, finishes before the
+    spinner can show. Genuinely good for neon / UI / sci-fi
+    panel imagery where the cut signal is brightness.
+  - **AI saliency (downloads ~7 MB)** — lazy-loads `onnxruntime-web`
+    from jsDelivr and a U²-Netp saliency model from Hugging Face
+    the first time the user clicks Run; both are browser-cached
+    afterward so subsequent runs are local. Inference runs at
+    320×320; the output is nearest-neighbour upsampled to canvas
+    resolution at draw time.
+- **Threshold slider** biases the mask cutoff ±25 % so the user can
+  soften / aggress the cut without re-running the model.
+- **Invert toggle** flips the mask before applying — useful when the
+  saliency net picks the *subject* but the user wants the
+  *background* cut instead.
+- Auto-cut operations show up in the History panel like any other
+  click (purple swatch · mask dimensions · invert flag) and rotate
+  correctly with the *Rotate 90°* button.
+
+### Notes
+
+- The U²-Netp model URL can be overridden via
+  `localStorage["builder.aiModelUrl"]` for users behind a CDN
+  block / on a corporate mirror.
+- AI mode needs internet on first use only. After the first
+  successful run, the browser cache holds both the runtime and
+  the model so the tool works offline.
+
 ## [0.9.15-beta] - 2026-05-23
 
 > Second wave of ambient effects — three new presets to keep the

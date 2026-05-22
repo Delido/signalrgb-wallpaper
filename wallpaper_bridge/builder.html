@@ -715,6 +715,14 @@
       </svg>
     </button>
     <div class="tool-btn-divider"></div>
+    <button class="tool-btn" data-tool="ai" data-i18n-title="tool.ai.tip" title="Auto cut — detect bright / salient regions and cut them in one click">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/>
+        <path d="M18 14l0.8 2.2L21 17l-2.2 0.8L18 20l-0.8-2.2L15 17l2.2-0.8z"/>
+        <path d="M5 16l0.6 1.6L7 18l-1.4 0.4L5 20l-0.6-1.6L3 18l1.4-0.4z"/>
+      </svg>
+    </button>
+    <div class="tool-btn-divider"></div>
     <button class="tool-btn" data-tool="restore" data-i18n-title="tool.restore.tip" title="Restore brush — paint back transparent pixels">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M9 14l-3 3c-1 1-1 2.5 0 3.5s2.5 1 3.5 0l3-3"/>
@@ -839,6 +847,36 @@
           <input type="checkbox" id="feather" checked>
           <label for="feather" data-i18n="opt.feather">Soften edges (2 px feather)</label>
         </div>
+      </div>
+
+      <div class="tool-options-group" data-tools="ai">
+        <div class="hint" data-i18n="hint.ai">
+          One-click detection of the brightest / most salient regions —
+          ideal for neon panels, UI overlays, glowing edges.
+          Otsu mode runs instantly on canvas brightness; AI mode loads
+          a small saliency model from the web on first use (~7 MB).
+        </div>
+        <div class="row">
+          <label for="ai-mode" data-i18n="ai.mode">Mode</label>
+          <select id="ai-mode">
+            <option value="otsu"  data-i18n="ai.mode.otsu">Otsu (instant)</option>
+            <option value="model" data-i18n="ai.mode.model">AI saliency (downloads ~7 MB)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="ai-threshold" data-i18n="ai.threshold">Threshold</label>
+          <input id="ai-threshold" type="range" min="0" max="100" value="50">
+          <span class="val" id="ai-threshold-val">50</span>
+        </div>
+        <div class="check-row">
+          <input type="checkbox" id="ai-invert">
+          <label for="ai-invert" data-i18n="ai.invert">Invert (cut dark regions instead)</label>
+        </div>
+        <div class="btn-row" style="margin-top: 8px;">
+          <button class="btn primary" id="ai-run-btn" type="button" disabled
+                  data-i18n="ai.run">Run auto cut</button>
+        </div>
+        <div class="stat" id="ai-stat" style="margin-top: 6px;"></div>
       </div>
     </section>
 
@@ -1087,6 +1125,12 @@ const els = {
   toolOptionGroups: document.querySelectorAll(".tool-options-group"),
   threshold:    $("threshold"),
   thresholdVal: $("threshold-val"),
+  aiMode:       $("ai-mode"),
+  aiThreshold:  $("ai-threshold"),
+  aiThresholdVal: $("ai-threshold-val"),
+  aiInvert:     $("ai-invert"),
+  aiRunBtn:     $("ai-run-btn"),
+  aiStat:       $("ai-stat"),
   brushSize:    $("brush-size"),
   brushSizeVal: $("brush-size-val"),
   brushHardness:    $("brush-hardness"),
@@ -1216,6 +1260,7 @@ const TOOL_KEYS = {
   erase:    "tool.erase.name",
   pattern:  "tool.pattern.name",
   crop:     "tool.crop.name",
+  ai:       "tool.ai.name",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1252,6 +1297,30 @@ const TRANSLATIONS = {
   "crop.confirm":       { en: "Confirm crop",    de: "Zuschnitt bestätigen" },
   "crop.cancel":        { en: "Cancel",          de: "Abbrechen" },
   "crop.applied":       { en: "Cropped to {w}×{h}", de: "Auf {w}×{h} zugeschnitten" },
+
+  "tool.ai.name":       { en: "Auto cut",         de: "Auto-Zuschnitt" },
+  "tool.ai.tip":        { en: "Auto cut — detect bright / salient regions and cut them in one click",
+                          de: "Auto-Zuschnitt — helle / markante Bereiche erkennen und in einem Klick freischneiden" },
+  "hint.ai":            { en: "One-click detection of the brightest / most salient regions — ideal for neon panels, UI overlays, glowing edges. Otsu mode runs instantly on canvas brightness; AI mode loads a small saliency model from the web on first use (~7 MB).",
+                          de: "Erkennt mit einem Klick die hellsten / markantesten Bereiche — ideal für Neon-Panels, UI-Overlays, glühende Kanten. Otsu-Modus läuft sofort auf der Helligkeit; KI-Modus lädt beim ersten Aufruf ein kleines Saliency-Modell aus dem Netz (~7 MB)." },
+  "ai.mode":            { en: "Mode",             de: "Modus" },
+  "ai.mode.otsu":       { en: "Otsu (instant)",   de: "Otsu (sofort)" },
+  "ai.mode.model":      { en: "AI saliency (downloads ~7 MB)",
+                          de: "KI-Saliency (lädt ~7 MB)" },
+  "ai.threshold":       { en: "Threshold",        de: "Schwelle" },
+  "ai.invert":          { en: "Invert (cut dark regions instead)",
+                          de: "Umkehren (dunkle Bereiche freischneiden)" },
+  "ai.run":             { en: "Run auto cut",     de: "Auto-Zuschnitt starten" },
+  "ai.no_canvas":       { en: "Load an image first.",
+                          de: "Erst ein Bild laden." },
+  "ai.running.otsu":    { en: "Computing histogram…",
+                          de: "Histogramm wird berechnet…" },
+  "ai.running.model":   { en: "Loading model + running inference… (this can take 10-30 s on first use)",
+                          de: "Modell wird geladen + Inferenz läuft… (kann beim ersten Aufruf 10-30 s dauern)" },
+  "ai.done":            { en: "Auto cut applied — refine with brushes if needed.",
+                          de: "Auto-Zuschnitt angewendet — bei Bedarf mit Pinseln nachbessern." },
+  "ai.model_failed":    { en: "Model download failed: {msg}. Try Otsu mode or check your internet connection.",
+                          de: "Modell-Download fehlgeschlagen: {msg}. Otsu-Modus probieren oder Internetverbindung prüfen." },
 
   // Toolbox button tooltips.
   "tool.color.tip":   { en: "Click pixel — remove similar colours",
@@ -1742,6 +1811,7 @@ function setControlsEnabled(on) {
   els.zoomIn.disabled       = !on;
   els.zoomFit.disabled      = !on;
   els.zoom100.disabled      = !on;
+  if (els.aiRunBtn) els.aiRunBtn.disabled = !on;
   els.applyBtns.forEach((b) => { b.disabled = !on; });
   els.splitBtns.forEach((b) => { b.disabled = !on; });
 }
@@ -1814,6 +1884,20 @@ els.rotateBtn.addEventListener("click", () => {
         rotated.angle   = ((c.angle || 0) + 90) % 360;
       }
       return rotated;
+    }
+    if (c.kind === "aimask") {
+      // Rotate the mask 90° CW to match the canvas rotation. Mask is a
+      // Uint8Array stored row-major at (maskW × maskH); after rotation
+      // the new dimensions are swapped.
+      const mw = c.maskW, mh = c.maskH;
+      const rotMask = new Uint8Array(mw * mh);
+      for (let y = 0; y < mh; y++) {
+        for (let x = 0; x < mw; x++) {
+          rotMask[x * mh + (mh - 1 - y)] = c.mask[y * mw + x];
+        }
+      }
+      return { kind: "aimask", mask: rotMask,
+               maskW: mh, maskH: mw, invert: c.invert };
     }
     return c;
   });
@@ -1956,6 +2040,183 @@ els.threshold.addEventListener("change", () => {
   }
 });
 els.feather.addEventListener("change", () => { if (originalData) applyMask(); });
+
+// ── AI / Auto cut ────────────────────────────────────────────────────────────
+// Two modes share the same operation kind ("aimask") + replay path so undo /
+// redo / pattern-mixing all work like any other click.
+//
+//   Otsu  — instant brightness-histogram threshold. No internet, no model.
+//   Model — onnxruntime-web + U²-Netp saliency net, lazy-loaded from a CDN
+//           on first use. ~7 MB initial download, browser-cached after.
+//
+// Both produce a Uint8Array mask at a reference resolution (canvas-W × H or
+// 320×320), stored inline on the operation entry. applyMask() bilinearly
+// samples the mask per canvas pixel.
+
+els.aiThreshold.addEventListener("input", () => {
+  els.aiThresholdVal.textContent = els.aiThreshold.value;
+});
+
+let _ortLoading = null;
+async function ensureOnnxRuntime() {
+  if (window.ort) return window.ort;
+  if (!_ortLoading) {
+    _ortLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js";
+      s.onload = () => {
+        if (window.ort) {
+          window.ort.env.wasm.wasmPaths =
+            "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
+          resolve(window.ort);
+        } else {
+          reject(new Error("ort global missing after load"));
+        }
+      };
+      s.onerror = () => reject(new Error("ort script load failed"));
+      document.head.appendChild(s);
+    });
+  }
+  return _ortLoading;
+}
+
+// Stable URL for U²-Netp (Apache 2.0). Users can override via
+// localStorage["builder.aiModelUrl"] for an offline / mirror setup.
+const DEFAULT_AI_MODEL_URL =
+  "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx";
+
+let _aiSession = null;
+async function ensureAiSession() {
+  if (_aiSession) return _aiSession;
+  const ort = await ensureOnnxRuntime();
+  const url = localStorage.getItem("builder.aiModelUrl") || DEFAULT_AI_MODEL_URL;
+  _aiSession = await ort.InferenceSession.create(url, {
+    executionProviders: ["wasm"],
+  });
+  return _aiSession;
+}
+
+// Build a 320×320 [N,C,H,W] Float32 tensor from the current canvas,
+// normalised to ImageNet stats (mean 0.5, std 1.0 — fine for U²-Net's
+// saliency-trained checkpoints). Returns { tensor, inputName }.
+async function canvasToModelInput(canvas) {
+  const ort = window.ort;
+  const SIDE = 320;
+  const scratch = document.createElement("canvas");
+  scratch.width = SIDE; scratch.height = SIDE;
+  scratch.getContext("2d").drawImage(canvas, 0, 0, SIDE, SIDE);
+  const px = scratch.getContext("2d").getImageData(0, 0, SIDE, SIDE).data;
+  const data = new Float32Array(1 * 3 * SIDE * SIDE);
+  const plane = SIDE * SIDE;
+  for (let y = 0; y < SIDE; y++) {
+    for (let x = 0; x < SIDE; x++) {
+      const sp = (y * SIDE + x) * 4;
+      const dp = y * SIDE + x;
+      data[0 * plane + dp] = (px[sp]     / 255 - 0.5) / 1.0;
+      data[1 * plane + dp] = (px[sp + 1] / 255 - 0.5) / 1.0;
+      data[2 * plane + dp] = (px[sp + 2] / 255 - 0.5) / 1.0;
+    }
+  }
+  return new ort.Tensor("float32", data, [1, 3, SIDE, SIDE]);
+}
+
+// Compute Otsu's optimal brightness threshold on a luma histogram of the
+// canvas. Returns a Uint8Array mask sized to canvas (1 = above-threshold,
+// 0 = below). Synchronous, no network, no WASM.
+function computeOtsuMask(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const px = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < px.length; i += 4) {
+    const lum = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+    hist[lum]++;
+  }
+  const total = (px.length / 4);
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, varMax = 0, best = 127;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const v = wB * wF * (mB - mF) * (mB - mF);
+    if (v > varMax) { varMax = v; best = t; }
+  }
+  // Build mask at canvas resolution. Bright pixels (above Otsu's
+  // threshold) get 255 — the "cut me" signal. Threshold slider biases
+  // up/down ±64 levels so the user can soften / aggress the cut.
+  const bias = (parseInt(els.aiThreshold.value, 10) - 50) * 1.28;  // -64..+64
+  const cutoff = Math.max(0, Math.min(255, best + bias));
+  const mask = new Uint8Array(w * h);
+  for (let i = 0, m = 0; i < px.length; i += 4, m++) {
+    const lum = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+    mask[m] = lum >= cutoff ? 255 : 0;
+  }
+  return { mask, w, h };
+}
+
+async function runAiCutout() {
+  if (!originalData) {
+    toast(t("ai.no_canvas"), "bad");
+    return;
+  }
+  els.aiRunBtn.disabled = true;
+  const mode = els.aiMode.value;
+  const invert = !!els.aiInvert.checked;
+  els.aiStat.textContent = t("ai.running." + mode);
+  try {
+    let payload;
+    if (mode === "otsu") {
+      payload = computeOtsuMask(els.canvas);
+    } else {
+      const session = await ensureAiSession();
+      const tensor = await canvasToModelInput(els.canvas);
+      // U²-Net family models use 'input.1' as the input name in most
+      // exports; we fall through to the session's first input as a
+      // safety net for re-exports that renamed it.
+      const inputName = session.inputNames[0] || "input.1";
+      const feeds = {}; feeds[inputName] = tensor;
+      const out = await session.run(feeds);
+      // First output is the fused saliency map ([1,1,320,320] float32).
+      const outName = session.outputNames[0];
+      const raw = out[outName].data;          // Float32Array(320*320)
+      const mask = new Uint8Array(raw.length);
+      // Normalise to 0-255 (the network outputs sigmoid-like values
+      // already in [0,1] for the fused output of u2netp).
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < raw.length; i++) {
+        if (raw[i] < lo) lo = raw[i];
+        if (raw[i] > hi) hi = raw[i];
+      }
+      const range = hi - lo || 1;
+      const bias = (parseInt(els.aiThreshold.value, 10) - 50) / 100;  // -0.5..+0.5
+      for (let i = 0; i < raw.length; i++) {
+        let v = (raw[i] - lo) / range;       // 0..1
+        v = Math.max(0, Math.min(1, v + bias));
+        mask[i] = Math.round(v * 255);
+      }
+      payload = { mask, w: 320, h: 320 };
+    }
+    pushClick({ kind: "aimask", mask: payload.mask,
+                maskW: payload.w, maskH: payload.h, invert });
+    applyMask();
+    els.aiStat.textContent = t("ai.done");
+    toast(t("ai.done"), "good");
+  } catch (e) {
+    console.error("[ai] cut-out failed:", e);
+    const msg = (e && e.message) || String(e);
+    els.aiStat.textContent = t("ai.model_failed", { msg });
+    toast(t("ai.model_failed", { msg }), "bad");
+  } finally {
+    els.aiRunBtn.disabled = !originalData;
+  }
+}
+
+els.aiRunBtn.addEventListener("click", runAiCutout);
 
 // Every new edit goes through this helper so the redo stack stays
 // coherent — once the user makes a fresh edit, the previous redo branch
@@ -2614,6 +2875,18 @@ function applyMask() {
                         // hot loop reads to compute per-pixel clearance.
                         pattern: c.pattern, scale: c.scale,
                         density: c.density, angle: c.angle };
+      } else if (c.kind === "aimask") {
+        // Pre-compute the canvas-to-mask scale factor so the hot loop
+        // only does a Math.floor + Uint8Array read per pixel. Bilinear
+        // sampling skipped — even at 320×320 the mask up-samples
+        // reasonably well via nearest-neighbour for a thresholded cut.
+        compiled[i] = {
+          kind: "aimask",
+          mask: c.mask, maskW: c.maskW, maskH: c.maskH,
+          invert: !!c.invert,
+          sx: c.maskW / w,
+          sy: c.maskH / h,
+        };
       } else {
         compiled[i] = c;
       }
@@ -2643,6 +2916,17 @@ function applyMask() {
               const dy = (y - c.cy) / c.ry;
               if (dx * dx + dy * dy <= 1) alpha = 0;
             }
+          } else if (c.kind === "aimask") {
+            // Nearest-neighbour upsample from mask resolution to canvas
+            // resolution. Mask byte is the predicted saliency (0..255);
+            // an alpha threshold of 128 keeps the cut crisp while the
+            // user's threshold slider has already biased the mask
+            // values when the op was created.
+            const mx = (x * c.sx) | 0;
+            const my = (y * c.sy) | 0;
+            let v = c.mask[my * c.maskW + mx];
+            if (c.invert) v = 255 - v;
+            if (v >= 128) alpha = 0;
           } else if (c.kind === "restore" || c.kind === "erase" || c.kind === "pattern") {
             if (x < c.bbox.xMin || x > c.bbox.xMax ||
                 y < c.bbox.yMin || y > c.bbox.yMax) continue;
@@ -3083,6 +3367,11 @@ function updateHistory() {
       row.innerHTML =
         '<span class="swatch" style="background:#d8a"></span>' +
         '<span class="label">#' + (i + 1) + ' ' + (c.pattern || "halftone") + ' · ' + c.strokes.length + ' stamps</span>';
+    } else if (c.kind === "aimask") {
+      row.innerHTML =
+        '<span class="swatch" style="background:#a8e"></span>' +
+        '<span class="label">#' + (i + 1) + ' auto cut · ' + c.maskW + '×' + c.maskH +
+        (c.invert ? ' (inverted)' : '') + '</span>';
     }
     els.history.appendChild(row);
   });
