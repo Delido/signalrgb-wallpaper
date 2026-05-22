@@ -4,6 +4,36 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.15-beta] - 2026-05-23
+
+> Second wave of ambient effects — three new presets to keep the
+> Effects picker filling out. All written from scratch in the
+> `AMBIENT_PRESETS` shape introduced by v0.9.12, so no per-pen
+> licence verification is needed.
+
+### Added — Ambient effects
+
+- **Plasma** — soft full-canvas hue-cycling blobs, lava-lamp style.
+  Each blob owns its hue clock so the colour wash is always
+  shifting. Distinct from `aurora` (which is confined to a
+  horizontal band). When *Tint* is on, drops the hue cycle and
+  runs the user's glow colour so the effect stays on-palette.
+- **Vortex** — particles spawn near the canvas edge and spiral
+  inward toward the centre with rising angular velocity, despawning
+  once they get close enough; new ones replace them at the
+  perimeter. Polar-coords internally so the spiral feels stable
+  on resize. Tinted variant uses the glow colour as the particle
+  body.
+- **Bubbles** — hollow-rim circles rising from the bottom with a
+  slight horizontal wobble, growing slightly as they rise.
+  Stroked rather than filled so the background image stays
+  visible inside each bubble; the small specular highlight on
+  the upper-left adds depth.
+
+Configurator's effect picker gains matching tile previews so the
+preset card looks right at first glance instead of needing the
+wallpaper page to be visible to judge the effect.
+
 ## [0.9.14-beta] - 2026-05-23
 
 > Builder right-panel rework — fixes the workflow-order + visual-feedback

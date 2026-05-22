@@ -2191,6 +2191,147 @@ const AMBIENT_PRESETS = {
       ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
     },
   },
+
+  // ── Plasma ──
+  // Soft full-canvas hue-cycling blobs, lava-lamp style. Distinct from
+  // aurora (which is confined to a horizontal band): plasma blobs roam
+  // the whole canvas and own their hue clock so the colour wash is
+  // always shifting.
+  plasma: {
+    targetCount: (d) => Math.max(4, Math.round(4 + d / 18)),
+    spawn: (w, h) => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.25,
+      vy: (Math.random() - 0.5) * 0.2,
+      r: 200 + Math.random() * 220,
+      hue: Math.random() * 360,
+      hueSpeed: 4 + Math.random() * 6,                 // deg / s
+    }),
+    step: (p, dt, w, h) => {
+      p.hue = (p.hue + p.hueSpeed * dt) % 360;
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      // Wrap so the blob count stays constant.
+      if (p.x < -p.r)    p.x = w + p.r;
+      if (p.x > w + p.r) p.x = -p.r;
+      if (p.y < -p.r)    p.y = h + p.r;
+      if (p.y > h + p.r) p.y = -p.r;
+      return true;
+    },
+    render: (ctx, p, tint) => {
+      const a = 0.18;
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      if (tint) {
+        // Tint mode: drop the hue cycle, run the user's glow colour at
+        // varying alpha across the blob's radius. Still feels alive
+        // thanks to the drift + size, but stays on-palette.
+        grad.addColorStop(0,    rgbToRgba(tint, a));
+        grad.addColorStop(0.55, rgbToRgba(tint, a * 0.35));
+        grad.addColorStop(1,    rgbToRgba(tint, 0));
+      } else {
+        grad.addColorStop(0,    "hsla(" + p.hue + ", 80%, 60%, " + a + ")");
+        grad.addColorStop(0.55, "hsla(" + p.hue + ", 80%, 60%, " + (a * 0.35) + ")");
+        grad.addColorStop(1,    "hsla(" + p.hue + ", 80%, 60%, 0)");
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+    },
+  },
+
+  // ── Vortex ──
+  // Particles spawn near the canvas edge, spiral inward toward the
+  // centre with rising angular velocity, and despawn once they get
+  // close enough. New ones replace them at the perimeter to keep the
+  // spiral alive. Each particle owns its angle / radius in polar
+  // coords; cartesian only computed at render time.
+  vortex: {
+    targetCount: (d, w, h) => Math.round((w * h) / 14000 * (d / 60)),
+    spawn: (w, h) => {
+      const maxR = Math.hypot(w, h) * 0.55;
+      return {
+        cx: w / 2, cy: h / 2,
+        angle:  Math.random() * Math.PI * 2,
+        radius: maxR * (0.7 + Math.random() * 0.3),
+        // Inward speed grows as the particle gets closer to centre,
+        // giving the visual a real "drain" feel. Tuned so the average
+        // particle lives ~10-15 s.
+        inSpeed: 18 + Math.random() * 14,              // px / s, base
+        spinSpeed: 0.4 + Math.random() * 0.4,          // rad / s at edge
+        r: 1.2 + Math.random() * 1.4,
+        alpha: 0.55 + Math.random() * 0.35,
+      };
+    },
+    step: (p, dt, w, h) => {
+      const maxR = Math.hypot(w, h) * 0.55;
+      // Angular velocity scales inversely with radius so the inner
+      // particles whip around faster — classic spiral feel.
+      const r = Math.max(8, p.radius);
+      p.angle  += p.spinSpeed * (maxR / r) * dt;
+      p.radius -= p.inSpeed * dt;
+      return p.radius > 6;
+    },
+    render: (ctx, p, tint) => {
+      const x = p.cx + Math.cos(p.angle) * p.radius;
+      const y = p.cy + Math.sin(p.angle) * p.radius;
+      ctx.fillStyle = tint ? rgbToRgba(tint, p.alpha)
+                           : "rgba(200,220,255," + p.alpha + ")";
+      ctx.beginPath();
+      ctx.arc(x, y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  },
+
+  // ── Bubbles ──
+  // Hollow-rim circles rising from the bottom with a slight horizontal
+  // wobble; grow a touch as they rise. Stroked, not filled, so the
+  // background image stays visible inside each bubble — useful as a
+  // gentle texture overlay rather than a screen-tint.
+  bubbles: {
+    targetCount: (d, w, h) => Math.round((w * h) / 22000 * (d / 60)),
+    spawn: (w, h) => ({
+      x:  Math.random() * w,
+      y:  h + 10 + Math.random() * 40,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: -(0.5 + Math.random() * 1.1),
+      r:  4 + Math.random() * 8,
+      growth: 0.4 + Math.random() * 0.6,               // px / s
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 1.2 + Math.random() * 1.4,
+      alpha: 0.35 + Math.random() * 0.35,
+    }),
+    step: (p, dt, w, h) => {
+      p.wobble += p.wobbleSpeed * dt;
+      p.x += (p.vx + Math.sin(p.wobble) * 0.35) * dt * 60;
+      p.y += p.vy * dt * 60;
+      p.r += p.growth * dt;
+      if (p.x < -20)    p.x = w + 20;
+      if (p.x > w + 20) p.x = -20;
+      return p.y > -p.r * 2;
+    },
+    render: (ctx, p, tint) => {
+      // Fade out near the top so bubbles don't pop visibly when they
+      // hit the despawn cutoff.
+      const topFade = Math.min(1, p.y / 80);
+      const a = p.alpha * topFade;
+      const rim = tint ? rgbToRgba(tint, a)
+                       : "rgba(200,225,255," + a + ")";
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Faint specular highlight on the upper-left, gives the bubble
+      // shape some depth.
+      ctx.strokeStyle = tint ? rgbToRgba(tint, a * 0.6)
+                             : "rgba(255,255,255," + (a * 0.55) + ")";
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(p.x - p.r * 0.35, p.y - p.r * 0.35,
+              p.r * 0.35, Math.PI * 0.9, Math.PI * 1.4);
+      ctx.stroke();
+    },
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
