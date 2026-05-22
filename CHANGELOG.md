@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.13-beta] - 2026-05-22
+
+> Closes the Builder merge ↔ Monitor Wall workflow gap (one-click
+> span across monitors) and adds a tray-side hot-reload path so the
+> next time wallpaper-page JS ships in a beta, users don't have to
+> re-import the Lively/WE bundle from scratch.
+
+### Added — Builder
+
+- **⇔ Span canvas across monitors.** New button in the Monitor Wall
+  toolbar. Slices the current canvas into one chunk per screen,
+  sized proportionally to each screen's physical width, and stages
+  every Wall frame in a single click. Fits the *merge two photos
+  side-by-side → 7680×2160 → spread across both 2560×1440
+  monitors* flow that previously needed manual cropping +
+  per-frame canvas grabs.
+- **Span-suggestion hint** under the Wall canvas. Lights up
+  whenever the loaded canvas's aspect ratio is within 5 % of the
+  wall's combined aspect (sum of screen widths over common
+  height), so the user spots the shortcut without reading the
+  toolbar.
+- Span button enables only when (a) a canvas is loaded and (b)
+  there are 2+ active screens; tracked via the new
+  `updateWallSpanState` helper that runs on canvas changes and
+  Apply Wall state ticks.
+
+### Added — Tray / Bridge
+
+- **"Reload wallpaper pages"** entry under tray → *Advanced*.
+  Bridge pushes `{type: "reload"}` over the WS to every connected
+  wallpaper page (configurator clients explicitly excluded so an
+  open settings tab doesn't get yanked). The wallpaper page handles
+  the new frame by calling `location.reload()`. Lets future
+  cosmetic / widget updates land without manually re-importing
+  the Lively / WE bundle for each release.
+  - Caveat: the listener has to ship in the *previous* installed
+    version. Wallpapers running from a pre-v0.9.13 bundle still
+    need the one-time manual re-import after upgrade; from
+    v0.9.13 onward the tray button does it.
+
 ## [0.9.12-beta] - 2026-05-22
 
 > Two new ambient effects in the spirit of the planned CodePen ports

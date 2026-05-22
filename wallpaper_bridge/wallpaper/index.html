@@ -763,6 +763,13 @@ function connect() {
           }
         } else if (msg && msg.type === "paused") {
           setPaused(!!msg.paused);
+        } else if (msg && msg.type === "reload") {
+          // Tray's *Reload wallpaper pages* command — hot-reload the
+          // wallpaper page so a fresh installer's index.html lands
+          // without the user having to re-import the Lively / WE
+          // bundle. Defer one tick so any queued WS frames flush.
+          console.log("[wallpaper] reload requested by bridge");
+          setTimeout(() => { try { location.reload(); } catch (_) {} }, 50);
         } else if (msg && msg.type === "sysstats" && msg.data) {
           lastSysStats = msg.data;
           sysstatsHistory.push(msg.data);

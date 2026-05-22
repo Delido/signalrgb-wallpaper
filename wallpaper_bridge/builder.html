@@ -864,9 +864,19 @@
         </select>
       </div>
       <div class="wall-canvas" id="wall-canvas"></div>
+      <div class="hint wall-span-hint" id="wall-span-hint"
+           style="margin-top: 8px; display: none;"
+           data-i18n="wall.span_suggestion">
+        Canvas aspect matches the wall — try Span across monitors.
+      </div>
       <div class="btn-row" style="margin-top: 8px;">
         <button class="btn primary" id="wall-apply" type="button" disabled
                 data-i18n="wall.apply">Apply Wall to screens</button>
+        <button class="btn" id="wall-span" type="button" disabled
+                data-i18n="wall.span_btn"
+                title="Slice the current canvas into one chunk per monitor and stage every frame at once.">
+          ⇔ Span canvas
+        </button>
         <button class="btn" id="wall-clear" type="button"
                 data-i18n="wall.clear">Clear</button>
         <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
@@ -1056,6 +1066,8 @@ const els = {
   wallLayout:   $("wall-layout"),
   wallCanvas:   $("wall-canvas"),
   wallApply:    $("wall-apply"),
+  wallSpan:     $("wall-span"),
+  wallSpanHint: $("wall-span-hint"),
   wallClear:    $("wall-clear"),
   wallResetPos: $("wall-reset-pos"),
   wallStat:     $("wall-stat"),
@@ -1276,6 +1288,16 @@ const TRANSLATIONS = {
   "wall.menu.library":  { en: "From library…",      de: "Aus Bibliothek…" },
   "wall.menu.canvas":   { en: "Use current canvas", de: "Aktuelle Leinwand nutzen" },
   "wall.menu.clear":    { en: "Clear",              de: "Leeren" },
+  "wall.span_btn":      { en: "⇔ Span canvas",
+                          de: "⇔ Canvas spannen" },
+  "wall.span_suggestion": { en: "Canvas aspect matches the wall — try Span across monitors.",
+                            de: "Canvas-Seitenverhältnis passt zur Wand — versuche „Canvas spannen“." },
+  "wall.span_no_canvas": { en: "Load an image into the canvas first.",
+                           de: "Erst ein Bild in die Leinwand laden." },
+  "wall.span_single_screen": { en: "Span needs at least 2 screens.",
+                               de: "„Spannen“ braucht mindestens 2 Bildschirme." },
+  "wall.span_done":     { en: "Canvas split across {n} screens — review and Apply Wall.",
+                          de: "Canvas auf {n} Bildschirme aufgeteilt — prüfen und „Wand anwenden“." },
   "wall.applied":       { en: "Applied {ok}/{total} screen(s)", de: "Auf {ok}/{total} Bildschirm(e) angewendet" },
   "wall.failed":        { en: "Apply Wall failed: {msg}", de: "Wand-Übernahme fehlgeschlagen: {msg}" },
   "wall.lib":           { en: "Library", de: "Bibliothek" },
@@ -1468,6 +1490,9 @@ function applySourceImage(displayName, source) {
   fitZoom();
   updateHistory();
   updateCanvasStat();
+  // Refresh Span button + suggestion hint now that canvas has new
+  // dimensions (its aspect ratio drives the hint).
+  if (typeof updateWallSpanState === "function") updateWallSpanState();
 }
 
 function fileToImage(file) {
@@ -3444,6 +3469,63 @@ function clearWallSlot(idx) {
   renderWall();
 }
 
+// Slice the current canvas into one chunk per screen, sized
+// proportionally to each screen's physical width. Stages every Wall
+// slot at once so a wide spanning image (merge of two photos, an
+// ultrawide downloaded panorama, etc.) goes onto all monitors with
+// one click instead of forcing the user to crop + assign each frame
+// manually.
+//
+// Math: each chunk's width = canvas.width × (screen.w / Σ screen.w).
+// Height = canvas.height (the canvas is assumed pre-cropped to the
+// wall's combined aspect ratio; if it isn't, each screen's bgFit
+// setting handles the residual squash).
+async function spanCanvasAcrossWall() {
+  if (!originalData) {
+    toast(t("wall.span_no_canvas"), "bad");
+    return;
+  }
+  if (wallScreenCount < 2) {
+    toast(t("wall.span_single_screen"), "bad");
+    return;
+  }
+  const totalW = wallScreens.reduce((s, scr) => s + (scr.w || 1920), 0);
+  let cursor = 0;
+  for (let i = 0; i < wallScreenCount; i++) {
+    const scr = wallScreens[i] || { w: 1920, h: 1080 };
+    const fraction = (scr.w || 1920) / totalW;
+    // Round chunk widths but absorb rounding error into the last
+    // chunk so cumulative offsets land flush at canvas.width.
+    const isLast = (i === wallScreenCount - 1);
+    const chunkW = isLast
+      ? els.canvas.width - cursor
+      : Math.round(els.canvas.width * fraction);
+    const chunkH = els.canvas.height;
+    try {
+      const scratch = document.createElement("canvas");
+      scratch.width  = chunkW;
+      scratch.height = chunkH;
+      scratch.getContext("2d").drawImage(
+        els.canvas, cursor, 0, chunkW, chunkH, 0, 0, chunkW, chunkH);
+      const pngBlob = await new Promise((res) => scratch.toBlob(res, "image/png"));
+      const img = await fileToImage(pngBlob);
+      const dataUrl = await blobToDataUrl(pngBlob);
+      wallSlots[i] = {
+        img,
+        name: (sourceName || "canvas") + "-span-" + (i + 1) + ".png",
+        blob: pngBlob,
+        dataUrl,
+        source: "span",
+      };
+    } catch (e) {
+      console.warn("[wall] span chunk", i, "failed:", e);
+    }
+    cursor += chunkW;
+  }
+  renderWall();
+  toast(t("wall.span_done", { n: wallScreenCount }), "good");
+}
+
 // localStorage-backed positions keyed by screen count so a layout for
 // 2 monitors survives switching temporarily to 3 and back.
 function _wallPositionsKey(n) { return "signalrgb.wall.positions." + n; }
@@ -3587,6 +3669,7 @@ function blobToDataUrl(blob) {
 function updateWallApplyState() {
   const any = wallSlots.some((s) => s);
   if (els.wallApply) els.wallApply.disabled = !any;
+  if (typeof updateWallSpanState === "function") updateWallSpanState();
 }
 
 // Apply each loaded slot to its matching screen. Slots without an
@@ -3644,6 +3727,7 @@ async function applyWall() {
 
 if (els.wallLayout)  els.wallLayout.addEventListener("change", renderWall);
 if (els.wallApply)   els.wallApply.addEventListener("click", applyWall);
+if (els.wallSpan)    els.wallSpan.addEventListener("click", spanCanvasAcrossWall);
 if (els.wallClear)   els.wallClear.addEventListener("click", () => {
   wallSlots = wallSlots.map(() => null);
   renderWall();
@@ -3653,6 +3737,36 @@ if (els.wallResetPos) els.wallResetPos.addEventListener("click", () => {
   clearWallPositions(wallScreenCount);
   renderWall();
 });
+
+// Enable / hint the Span button based on (a) canvas loaded and (b)
+// canvas aspect ratio close enough to the wall's total aspect that
+// splitting won't visibly distort. Called from updateWallApplyState
+// and whenever a new image lands on the canvas.
+function updateWallSpanState() {
+  if (!els.wallSpan) return;
+  const hasCanvas = !!originalData;
+  const multi = wallScreenCount >= 2;
+  els.wallSpan.disabled = !(hasCanvas && multi);
+  if (!els.wallSpanHint) return;
+  if (!hasCanvas || !multi) {
+    els.wallSpanHint.style.display = "none";
+    return;
+  }
+  // Compute wall's combined aspect (sum of widths / common height).
+  // We normalise each screen to a virtual unit-height first so an
+  // ultrawide + a vertical monitor mix doesn't favour the larger
+  // physical pixels.
+  let virtualW = 0;
+  for (const s of wallScreens) {
+    if (s && s.w > 0 && s.h > 0) virtualW += s.w / s.h;
+  }
+  if (virtualW <= 0) { els.wallSpanHint.style.display = "none"; return; }
+  const wallAR = virtualW;                                   // virtual h = 1
+  const canvasAR = els.canvas.width / Math.max(1, els.canvas.height);
+  // Suggest when within ±5%; below that, span would noticeably distort.
+  const within5pct = Math.abs(canvasAR - wallAR) / wallAR < 0.05;
+  els.wallSpanHint.style.display = within5pct ? "" : "none";
+}
 
 loadWallViewports();
 // Re-poll viewports periodically so changing screen count or

@@ -426,7 +426,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.12-beta"
+APP_VERSION = "0.9.13-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -995,6 +995,8 @@ TRANSLATIONS = {
     "tray.quick_add_widget":    {"en": "Quick add widget",        "de": "Widget schnell hinzufügen"},
     "tray.quick_effects":       {"en": "Quick effects",           "de": "Effekte (Schnellzugriff)"},
     "tray.reload_config":       {"en": "Reload config",           "de": "Konfig neu laden"},
+    "tray.reload_wallpapers":   {"en": "Reload wallpaper pages",
+                                 "de": "Wallpaper-Seiten neu laden"},
     "tray.preset_hotkeys":      {"en": "Preset hotkeys (Ctrl+Shift+1..4)",
                                  "de": "Preset-Hotkeys (Strg+Umschalt+1..4)"},
     "tray.updates":             {"en": "Updates",                 "de": "Updates"},
@@ -1471,6 +1473,33 @@ class Broadcaster:
 
     def push_pause_threadsafe(self, paused: bool):
         asyncio.run_coroutine_threadsafe(self.push_pause(paused), self.loop)
+
+    async def push_reload_all(self):
+        """Tell every connected wallpaper page to `location.reload()`.
+        Skips the Configurator (role=configurator) so we don't yank
+        the user's open settings tab from under them. Used by the
+        tray's *Reload wallpaper pages* entry to force a refresh
+        after a v0.X.Y upgrade so users don't have to manually re-
+        import the Lively/WE bundle for every JS update."""
+        msg = json.dumps({"type": "reload"})
+        frame = encode_text_frame(msg)
+        async with self._lock:
+            roles = getattr(self, "client_roles", {}) or {}
+            all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
+            # Filter to wallpaper-role clients only.
+            targets = [w for w in all_clients if roles.get(w, "wallpaper") == "wallpaper"]
+        dead = []
+        for w in targets:
+            try:
+                w.write(frame)
+            except Exception:
+                dead.append(w)
+        for w in dead:
+            await self.remove(w)
+        print(f"[push] reload -> {len(targets)} wallpaper page(s)")
+
+    def push_reload_all_threadsafe(self):
+        asyncio.run_coroutine_threadsafe(self.push_reload_all(), self.loop)
 
     async def push_settings(self, screen: int, settings: dict):
         async with self._lock:
@@ -4817,6 +4846,7 @@ class TrayApp:
                     self._toggle_preset_hotkeys,
                     checked=lambda _i: self._preset_hotkeys_enabled()),
                 pystray.MenuItem(tr("tray.reload_config"),    self._reload_config),
+                pystray.MenuItem(tr("tray.reload_wallpapers"), self._reload_wallpapers),
             )),
             pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
             pystray.Menu.SEPARATOR,
@@ -5262,6 +5292,20 @@ class TrayApp:
             print("[tray] config reloaded from disk")
         except Exception as e:
             print(f"[tray] reload failed: {e}")
+
+    def _reload_wallpapers(self, icon, item):
+        """Push a `reload` WS frame to every connected wallpaper page.
+        Skips configurator clients (won't yank an open settings tab).
+        Hot-reload path so a v0.X.Y → v0.X.Y+1 update with new
+        wallpaper-page code lands without manually re-importing the
+        Lively / WE bundle. Caveat: only works once the *previous*
+        version is at least v0.9.13-beta (older versions don't have
+        the reload listener yet) — Lively's cached extract still has
+        to be refreshed manually that one time."""
+        try:
+            self.bridge.broadcaster.push_reload_all_threadsafe()
+        except Exception as e:
+            print(f"[tray] reload-wallpapers failed: {e}")
 
     def _quit(self, icon, item):
         # Hard-kill the process immediately.
