@@ -399,6 +399,37 @@
     width: 100%; height: 100%; display: block;
   }
 
+  /* ── Now-playing widget — title + artist + progress bar ── */
+  .widget-now-playing {
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 10px 14px !important;
+    gap: 4px;
+  }
+  .widget-now-playing.np-empty .np-title { opacity: 0.4; }
+  .widget-now-playing .np-title {
+    font-size: 14px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: opacity 0.2s;
+  }
+  .widget-now-playing .np-artist {
+    font-size: 11px; opacity: 0.65;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .widget-now-playing .np-progress {
+    margin-top: 6px;
+    height: 3px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .widget-now-playing .np-bar {
+    height: 100%;
+    background: rgba(255,255,255,0.85);
+    width: 0%;
+    transition: width 0.3s linear, background 0.2s;
+  }
+
   /* ── Per-widget settings button (gear) ── */
   .widget .widget-settings {
     position: absolute; top: 2px; right: 26px;
@@ -2316,6 +2347,56 @@ WIDGET_REGISTRY["hardware-sensor"] = {
     drawSparkline(rec.el.querySelector("canvas"),
                   hwmonHistory[path] || [],
                   rec.opts.tintFromGlow ? currentTintCss : "rgb(255, 175, 106)");
+  },
+  editOptions: null,
+};
+
+// Now-playing widget. Reads `lastSysStats.nowPlaying` which the
+// bridge fills from Windows SMTC. Auto-hides itself when no media
+// session is active so the widget doesn't squat empty in the layout.
+WIDGET_REGISTRY["now-playing"] = {
+  label: "Now playing",
+  icon: '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/>' +
+        '<circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+  markup: () =>
+    '<div class="np-title">—</div>' +
+    '<div class="np-artist"></div>' +
+    '<div class="np-progress"><div class="np-bar"></div></div>',
+  tick: (rec) => {
+    const np = (lastSysStats && lastSysStats.nowPlaying) || null;
+    const el = rec.el;
+    const titleEl  = el.querySelector(".np-title");
+    const artistEl = el.querySelector(".np-artist");
+    const progEl   = el.querySelector(".np-progress");
+    const barEl    = el.querySelector(".np-bar");
+    // No session → grey out the widget but keep it placed so the user
+    // can still see it in the layout preview.
+    if (!np || !np.title) {
+      el.classList.add("np-empty");
+      titleEl.textContent = "—";
+      artistEl.textContent = "";
+      barEl.style.width = "0%";
+      return;
+    }
+    el.classList.remove("np-empty");
+    titleEl.textContent = np.title;
+    const showArtist = rec.opts.showArtist !== false;
+    artistEl.style.display = showArtist ? "" : "none";
+    if (showArtist) artistEl.textContent = np.artist || "";
+    const showProgress = rec.opts.showProgress !== false;
+    progEl.style.display = showProgress ? "" : "none";
+    if (showProgress) {
+      const dur = np.duration > 0 ? np.duration : 0;
+      const pos = Math.max(0, Math.min(dur, np.position || 0));
+      barEl.style.width = (dur > 0 ? (pos / dur * 100) : 0).toFixed(1) + "%";
+    }
+    // Subtle pause-state hint: when paused, dim the title slightly.
+    titleEl.style.opacity = np.paused ? "0.55" : "1";
+    if (rec.opts.tintFromGlow) {
+      barEl.style.background = currentTintCss;
+    } else {
+      barEl.style.background = "";
+    }
   },
   editOptions: null,
 };

@@ -315,7 +315,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.3-beta"
+APP_VERSION = "0.9.4-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -525,6 +525,15 @@ WIDGET_DEFAULTS = {
         "label":   "Hardware sensor",
         "x": 600, "y": 580, "w": 220, "h": 140,
         "options": {"sensorPath": "", "label": "", "decimals": 1,
+                    "tintFromGlow": False},
+    },
+    # Now-playing widget — reads the live media session published by
+    # NowPlayingPoller (Windows SMTC). Shows title + artist + a thin
+    # progress bar; auto-hides itself when no media session is active.
+    "now-playing": {
+        "label":   "Now playing",
+        "x": 1100, "y": 580, "w": 320, "h": 96,
+        "options": {"showProgress": True, "showArtist": True,
                     "tintFromGlow": False},
     },
 }
@@ -2275,6 +2284,122 @@ class HwMonPoller:
             cls._walk(kid, new_path, out)
 
 
+class NowPlayingPoller:
+    """Watches Windows' SystemMediaTransportControls for the active
+    media session and publishes `{title, artist, album, paused,
+    position, duration, ts}` so the now-playing widget can render
+    whatever's playing. Works with Spotify, Groove, Chrome+YouTube,
+    Edge, anything that registers an SMTC session.
+
+    Implementation: a dedicated asyncio loop on a daemon thread polls
+    `SMTCManager.request_async() → get_current_session()` every
+    second and runs `try_get_media_properties_async()`. The result is
+    cached in `_snapshot` and read lock-free by the sysstats poller
+    (single-writer / multiple-reader, dict-replace is atomic in
+    CPython).
+
+    When the `winrt-Windows.Media.Control` package isn't bundled
+    (e.g. dev runs without optional deps), start() prints a notice and
+    the snapshot stays empty — sysstats just won't include
+    `nowPlaying` and the widget renders its `--` placeholder.
+    """
+
+    POLL_INTERVAL_S = 1.0
+
+    def __init__(self):
+        self._stop     = threading.Event()
+        self._snapshot: dict = {}
+        self._thread: threading.Thread | None = None
+        self._available = False
+        try:
+            # Detect optional deps once at construction so we don't
+            # eat the import cost on every poll if they're missing.
+            import winrt.windows.media.control  # noqa: F401
+            self._available = True
+        except Exception as e:
+            print(f"[nowplaying] winrt missing — widget will show n/a ({e})")
+
+    def start(self):
+        if not self._available:
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="nowplaying-poll")
+        self._thread.start()
+        print("[nowplaying] poller running (1 Hz)")
+
+    def stop(self):
+        self._stop.set()
+
+    def get_snapshot(self) -> dict:
+        # CPython dict-attr read is atomic; no lock needed.
+        return self._snapshot
+
+    def _run(self):
+        # Dedicated asyncio loop so we can await the SMTC API without
+        # nesting on the main bridge loop.
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        except Exception as e:
+            print(f"[nowplaying] loop init failed: {e}")
+            return
+        try:
+            while not self._stop.is_set():
+                try:
+                    snap = loop.run_until_complete(self._tick())
+                    if snap is not None:
+                        self._snapshot = snap
+                except Exception as e:
+                    # Keep going even when SMTC throws — common during
+                    # session-switch (track change), the next tick recovers.
+                    if not isinstance(e, asyncio.CancelledError):
+                        print(f"[nowplaying] tick failed: {e}")
+                if self._stop.wait(self.POLL_INTERVAL_S):
+                    return
+        finally:
+            try: loop.close()
+            except Exception: pass
+
+    async def _tick(self) -> dict | None:
+        from winrt.windows.media.control import (
+            GlobalSystemMediaTransportControlsSessionManager as _Mgr,
+        )
+        mgr = await _Mgr.request_async()
+        session = mgr.get_current_session()
+        if session is None:
+            return {}   # no media playing
+        try:
+            props = await session.try_get_media_properties_async()
+        except Exception:
+            props = None
+        playback = session.get_playback_info()
+        timeline = session.get_timeline_properties()
+        # PlaybackStatus enum: 0=Closed, 1=Opened, 2=Changing, 3=Stopped,
+        # 4=Playing, 5=Paused. We only care "playing now?" — anything
+        # other than 4 counts as paused for the widget's pause icon.
+        playing = int(getattr(playback, "playback_status", 0)) == 4
+        # winrt's timespan exposes total_seconds() in newer builds; on
+        # older ones it's a python timedelta. Both have .total_seconds.
+        def _secs(x) -> float:
+            if x is None:
+                return 0.0
+            try: return float(x.total_seconds())
+            except Exception:
+                try: return float(x.duration.total_seconds())
+                except Exception: return 0.0
+        return {
+            "title":    (getattr(props, "title", "") or "") if props else "",
+            "artist":   (getattr(props, "artist", "") or "") if props else "",
+            "album":    (getattr(props, "album_title", "") or "") if props else "",
+            "paused":   (not playing),
+            "position": _secs(getattr(timeline, "position", None)),
+            "duration": _secs(getattr(timeline, "end_time", None)),
+            "ts":       int(time.time() * 1000),
+        }
+
+
 class SysStatsPoller:
     """Polls CPU / RAM / network counters via psutil once per second on its
     own daemon thread and pushes a snapshot through Broadcaster.push_sysstats.
@@ -2285,9 +2410,12 @@ class SysStatsPoller:
     the wallpaper page sees CPU/GPU temps, fan RPMs and voltages in the
     same payload its existing CPU/RAM widgets already drain."""
 
-    def __init__(self, broadcaster: 'Broadcaster', hwmon: 'HwMonPoller | None' = None):
+    def __init__(self, broadcaster: 'Broadcaster',
+                 hwmon: 'HwMonPoller | None' = None,
+                 nowplaying: 'NowPlayingPoller | None' = None):
         self.broadcaster = broadcaster
         self.hwmon = hwmon
+        self.nowplaying = nowplaying
         self._stop = threading.Event()
         self._last_net = None       # (sent, recv) from previous tick
         self._last_net_ts = 0.0
@@ -2353,6 +2481,10 @@ class SysStatsPoller:
             # { value, raw, unit }, … }. Empty when LHM isn't running so
             # widgets can show their `--` placeholder instead of stale data.
             snap["hwmon"] = self.hwmon.get_snapshot()
+        if self.nowplaying is not None:
+            np_snap = self.nowplaying.get_snapshot()
+            if np_snap:
+                snap["nowPlaying"] = np_snap
         return snap
 
 
@@ -3567,7 +3699,15 @@ class BridgeRuntime:
         with self.config_lock:
             if bool(self.config.get("presetHotkeysEnabled", False)):
                 self.hotkey_listener.start()
-        self.sysstats = SysStatsPoller(self.broadcaster, hwmon=self.hwmon)
+        # Windows SMTC poller — drains the "now playing" media session
+        # so the now-playing widget can render whatever the user has
+        # active (Spotify, Groove, browser HTML5 audio, etc.). No-op
+        # when the winrt-Windows.Media.Control package isn't bundled.
+        self.nowplaying = NowPlayingPoller()
+        self.nowplaying.start()
+        self.sysstats = SysStatsPoller(self.broadcaster,
+                                       hwmon=self.hwmon,
+                                       nowplaying=self.nowplaying)
         self.sysstats.start()
         try:
             loop.run_until_complete(self._serve())

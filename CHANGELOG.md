@@ -4,6 +4,43 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4-beta] - 2026-05-22
+
+> Third Tier-2 high-visibility feature: **now-playing widget**. Reads
+> Windows' SystemMediaTransportControls so the title + artist of
+> whatever the user is listening to (Spotify, Groove, browser HTML5
+> audio, Edge, anything that publishes SMTC) shows up on the
+> wallpaper.
+
+### Added — Bridge
+
+- **`NowPlayingPoller`** — dedicated asyncio-loop thread polls
+  `GlobalSystemMediaTransportControlsSessionManager.request_async`
+  every second, captures the current session's media properties
+  (title / artist / album), playback status, and timeline
+  (position / duration). Snapshot is merged into `SysStatsPoller`'s
+  payload as `nowPlaying` so the wallpaper page gets the data
+  through the existing 1 Hz WS push.
+- **`winrt-Windows.Media.Control`** + `winrt-Windows.Foundation` +
+  `winrt-runtime` bundled via PyInstaller `--collect-all winrt`.
+  When the package isn't present (older Python or build skipped
+  the dep), the poller logs a notice and stays a no-op so the rest
+  of the bridge keeps running.
+
+### Added — Widget catalog
+
+- **`now-playing`** widget type registered in three places: bridge
+  `WIDGET_DEFAULTS`, configurator `WIDGET_CATALOG`, wallpaper
+  `WIDGET_REGISTRY`. Options:
+  - *Show progress bar* (thin bar across the bottom, animates with
+    track position).
+  - *Show artist line* (second line under the title).
+  - *Tint with glow colour* (progress bar borrows the live tint).
+- **Auto-hide** when no media session is active: title fades to "—"
+  with reduced opacity instead of leaving an empty widget in the
+  layout. Playback paused → title dims to 55 % opacity as a
+  visual hint.
+
 ## [0.9.3-beta] - 2026-05-22
 
 > Second Tier-2 high-visibility feature: **global preset hotkeys**.

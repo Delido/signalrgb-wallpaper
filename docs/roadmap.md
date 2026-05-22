@@ -240,16 +240,14 @@ a new section to add / edit / remove rules.
 
 Pro-level feature; huge USP against ordinary wallpaper tools.
 
-### 🔲 Now-playing widget — ~3 h
+### ✅ Now-playing widget — shipped v0.9.4-beta
 
-Current track from Windows' `SystemMediaTransportControls` API
-(`Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager`).
-Works with Spotify, Groove, Chrome+YouTube, anything that publishes
-SMTC metadata.
-
-Python access via `winrt` package. Bridge polls every second,
-publishes `{title, artist, album, paused, position}` alongside
-sysstats. Widget shows title + artist + a tiny progress bar.
+`NowPlayingPoller` reads Windows SMTC via the `winrt-Windows.Media.
+Control` package (split-package successor of legacy `winsdk`), runs
+on a dedicated asyncio-loop thread, and merges its snapshot into
+the existing 1 Hz `sysstats` WS push. Widget rendering on the
+wallpaper page shows title + artist + optional progress bar; tints
+the bar with the live glow colour when *Tint* is on.
 
 ---
 

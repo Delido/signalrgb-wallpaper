@@ -58,6 +58,7 @@ try {
         --collect-all pystray `
         --collect-submodules PIL `
         --collect-all psutil `
+        --collect-all winrt `
         --add-data "builder.html;." `
         --add-data "configurator.html;." `
         --add-data "help.html;." `
