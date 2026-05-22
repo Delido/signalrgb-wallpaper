@@ -4,6 +4,31 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1-beta] - 2026-05-22
+
+> Monitor Wall gains a **Free-form** layout option — drag each monitor
+> frame to any position on a workspace, so non-standard setups
+> (e.g. one portrait monitor between two landscapes, L-shape, etc.)
+> can be arranged visually before applying.
+
+### Added — Builder
+
+- **Free-form Monitor Wall layout.** New option in the layout
+  dropdown next to *Horizontal row*, *2×2 grid*, *Vertical column*.
+  - Frames sit on a fixed-height workspace with a subtle 20 px grid
+    background so positions feel deliberate.
+  - Mouse-down on a frame → drag to reposition. Frames are clamped
+    inside the workspace so they can't drift off the edge.
+  - Drag is differentiated from click: small movements still open
+    the file picker (no false positives), real drags suppress the
+    click for 100 ms after release.
+  - **Positions persist in `localStorage`** keyed by screen count so
+    a layout for 2 monitors survives switching temporarily to 3 and
+    back.
+  - New **Reset positions** button (visible only in free-form mode)
+    wipes the saved layout and re-fans to a default horizontal
+    arrangement.
+
 ## [0.9.0-beta] - 2026-05-22
 
 > Builder gains a **Monitor Wall** section: visual layout of every

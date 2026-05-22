@@ -502,6 +502,24 @@
     align-items: center;
   }
   .wall-canvas.layout-vertical { flex-direction: column; }
+  /* Free-form mode: drop the flex layout and let frames be positioned
+     absolutely. Workspace has a fixed visible height + light grid so
+     drag arrangements feel like placing items on a desk. */
+  .wall-canvas.layout-free {
+    display: block;
+    position: relative;
+    height: 280px;
+    background:
+      linear-gradient(to right, #1a1d24 1px, transparent 1px) 0 0 / 20px 20px,
+      linear-gradient(to bottom, #1a1d24 1px, transparent 1px) 0 0 / 20px 20px,
+      #0c0e13;
+    overflow: hidden;
+  }
+  .wall-canvas.layout-free .wall-frame {
+    position: absolute;
+    cursor: grab;
+  }
+  .wall-canvas.layout-free .wall-frame.dragging { cursor: grabbing; z-index: 2; }
   .wall-frame {
     position: relative;
     background: #1d2128 center / cover no-repeat;
@@ -916,6 +934,7 @@
           <option value="horizontal" data-i18n="wall.layout.horizontal">Horizontal row (1×N)</option>
           <option value="2x2"        data-i18n="wall.layout.2x2">2×2 grid</option>
           <option value="vertical"   data-i18n="wall.layout.vertical">Vertical column (N×1)</option>
+          <option value="free"       data-i18n="wall.layout.free">Free-form (drag to arrange)</option>
         </select>
       </div>
       <div class="wall-canvas" id="wall-canvas"></div>
@@ -924,6 +943,8 @@
                 data-i18n="wall.apply">Apply Wall to screens</button>
         <button class="btn" id="wall-clear" type="button"
                 data-i18n="wall.clear">Clear</button>
+        <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
+                data-i18n="wall.reset_positions">Reset positions</button>
       </div>
       <div class="stat" id="wall-stat" style="margin-top: 6px;"></div>
     </section>
@@ -1020,6 +1041,7 @@ const els = {
   wallCanvas:   $("wall-canvas"),
   wallApply:    $("wall-apply"),
   wallClear:    $("wall-clear"),
+  wallResetPos: $("wall-reset-pos"),
   wallStat:     $("wall-stat"),
 
   canvasArea:   $("canvas-scroll"),
@@ -1224,6 +1246,9 @@ const TRANSLATIONS = {
   "wall.layout.horizontal": { en: "Horizontal row (1×N)", de: "Horizontale Reihe (1×N)" },
   "wall.layout.2x2":    { en: "2×2 grid",           de: "2×2-Raster" },
   "wall.layout.vertical": { en: "Vertical column (N×1)", de: "Vertikale Spalte (N×1)" },
+  "wall.layout.free":   { en: "Free-form (drag to arrange)", de: "Freie Anordnung (per Drag)" },
+  "wall.rotate":        { en: "Rotate 90°",          de: "90° drehen" },
+  "wall.reset_positions": { en: "Reset positions",   de: "Anordnung zurücksetzen" },
   "wall.apply":         { en: "Apply Wall to screens", de: "Wand anwenden" },
   "wall.clear":         { en: "Clear",              de: "Leeren" },
   "wall.drop_here":     { en: "Drop image / click to pick", de: "Bild ablegen / klicken" },
@@ -3191,7 +3216,14 @@ function renderWall() {
   const canvas = els.wallCanvas;
   if (!canvas) return;
   canvas.classList.toggle("layout-vertical", layout === "vertical");
+  canvas.classList.toggle("layout-free",     layout === "free");
+  if (els.wallResetPos) {
+    els.wallResetPos.style.display = (layout === "free") ? "" : "none";
+  }
   canvas.innerHTML = "";
+  // Free-form positions persist per screen-count so a 2-monitor user
+  // doesn't lose their layout when temporarily testing with 3.
+  const positions = (layout === "free") ? loadWallPositions(wallScreenCount) : null;
   for (let i = 0; i < wallScreenCount; i++) {
     const slot = wallSlots[i];
     const vp = wallViewports[i] || { w: 1920, h: 1080 };
@@ -3251,8 +3283,105 @@ function renderWall() {
     });
 
     canvas.appendChild(frame);
+
+    // Free-form mode: position absolutely + wire mousedown→drag.
+    if (layout === "free") {
+      const pos = positions[i] || defaultFreePosition(i, sz);
+      frame.style.left = pos.x + "px";
+      frame.style.top  = pos.y + "px";
+      attachFreeDrag(frame, i);
+    }
   }
   updateWallApplyState();
+}
+
+// localStorage-backed positions keyed by screen count so a layout for
+// 2 monitors survives switching temporarily to 3 and back.
+function _wallPositionsKey(n) { return "signalrgb.wall.positions." + n; }
+
+function loadWallPositions(n) {
+  try {
+    const raw = localStorage.getItem(_wallPositionsKey(n));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) { return []; }
+}
+function saveWallPositions(n, arr) {
+  try { localStorage.setItem(_wallPositionsKey(n), JSON.stringify(arr)); } catch (_) {}
+}
+function clearWallPositions(n) {
+  try { localStorage.removeItem(_wallPositionsKey(n)); } catch (_) {}
+}
+
+// Default fan-out position when no saved layout exists — start with a
+// horizontal row inside the free-form workspace.
+function defaultFreePosition(idx, sz) {
+  const gap = 12;
+  const x = 12 + idx * (sz.w + gap);
+  const y = 12;
+  return { x, y };
+}
+
+function attachFreeDrag(frame, idx) {
+  // Pointer-events drag. We listen on the frame itself so dragging
+  // inside the workspace doesn't fight with the file-drop overlay;
+  // mousedown sets a "dragging" flag that the click handler honours
+  // to suppress the file picker for genuine drags.
+  let startX = 0, startY = 0, baseX = 0, baseY = 0, moved = false;
+  let active = false;
+  const onDown = (e) => {
+    // Skip the Library hover-button (own click handler).
+    if (e.target.closest && e.target.closest(".actions")) return;
+    if (e.button !== 0) return;
+    active = true; moved = false;
+    startX = e.clientX; startY = e.clientY;
+    baseX = parseFloat(frame.style.left) || 0;
+    baseY = parseFloat(frame.style.top)  || 0;
+    frame.classList.add("dragging");
+    e.preventDefault();
+  };
+  const onMove = (e) => {
+    if (!active) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+    const parent = frame.parentElement;
+    const max_x = parent.clientWidth  - frame.offsetWidth;
+    const max_y = parent.clientHeight - frame.offsetHeight;
+    const nx = Math.max(0, Math.min(max_x, baseX + dx));
+    const ny = Math.max(0, Math.min(max_y, baseY + dy));
+    frame.style.left = nx + "px";
+    frame.style.top  = ny + "px";
+  };
+  const onUp = () => {
+    if (!active) return;
+    active = false;
+    frame.classList.remove("dragging");
+    if (moved) {
+      // Persist the latest positions across all frames.
+      const positions = loadWallPositions(wallScreenCount);
+      positions[idx] = {
+        x: parseFloat(frame.style.left) || 0,
+        y: parseFloat(frame.style.top)  || 0,
+      };
+      saveWallPositions(wallScreenCount, positions);
+      // Suppress the imminent click → file picker for a brief window.
+      frame.__suppressClick = true;
+      setTimeout(() => { frame.__suppressClick = false; }, 100);
+    }
+  };
+  frame.addEventListener("mousedown", onDown);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+  // Suppress the click handler that opens the file picker right after
+  // a drag — moved=true means the user was repositioning, not picking.
+  frame.addEventListener("click", (e) => {
+    if (frame.__suppressClick) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
 }
 
 function triggerWallFilePick(idx) {
@@ -3359,6 +3488,10 @@ if (els.wallClear)   els.wallClear.addEventListener("click", () => {
   wallSlots = wallSlots.map(() => null);
   renderWall();
   if (els.wallStat) els.wallStat.textContent = "";
+});
+if (els.wallResetPos) els.wallResetPos.addEventListener("click", () => {
+  clearWallPositions(wallScreenCount);
+  renderWall();
 });
 
 loadWallViewports();
