@@ -4,6 +4,56 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.11-beta] - 2026-05-22
+
+> Builder Monitor Wall is now the **primary right-panel navigation**.
+> Each tile pre-fills with its screen's current wallpaper and opens a
+> compact action menu on click; the old *Apply to Screen N* and
+> *Multi-monitor split* sections fold into it via *Use current canvas*.
+
+### Changed — Builder right panel
+
+- **Monitor Wall promoted to the top.** Was buried below *Apply* /
+  *Split*; the new order puts it first, matching how multi-monitor
+  workflows actually flow (pick layout → drop image per monitor →
+  Apply).
+- **Each frame pre-fills with the screen's current `bgImage`** via
+  the `/image?path=` proxy. Live snapshot of the desktop instead of
+  an empty box. Hover shows "Click to change" hint.
+- **Bigger frames** sized for primary-nav use (130 px wide in
+  horizontal mode, 150 px in 2×2 / free, 220 px in vertical).
+- **Per-frame click menu** replaces the old single-button row:
+  - 📁 **Choose file…** — system file picker
+  - 📚 **From library…** — same Library dialog *Open from library*
+    uses
+  - 🖼️ **Use current canvas** — snapshots the Builder's canvas
+    (with all in-progress mask edits) into the slot. Replaces the
+    old *Apply to Screen N* buttons.
+  - ✕ **Clear** — drops any staged image, frame reverts to current
+    wallpaper preview.
+  Menu positions below the clicked frame, clamps to viewport, and
+  Esc / click-outside dismiss.
+- **Apply Wall re-loads `/config` after success** so each frame
+  paints the just-applied background (the bridge stamps a new
+  timestamped filename so the proxy bypasses CEF caches).
+- **Loaded slot** now wears a soft green glow ring so staged-but-
+  not-yet-applied tiles read at a glance.
+
+### Removed
+
+- **"Apply to screen N" section** — folded into the Wall via the
+  *Use current canvas* menu action.
+- **"Multi-monitor split" section** — replaced by the Wall's
+  horizontal layout. Split-the-canvas-and-send-each-half workflow
+  is now: Wall with horizontal layout → *Use current canvas* on
+  the left tile → crop canvas to right half → *Use current canvas*
+  on the right tile → *Apply Wall*. Fewer one-shot buttons, one
+  workflow.
+
+The two legacy section names (`section.apply`, `section.split`)
+remain in the i18n table for backwards compat but are no longer
+referenced by any DOM.
+
 ## [0.9.10-beta] - 2026-05-22
 
 > **Tier 1 setup-polish slice complete.** Adds the two remaining

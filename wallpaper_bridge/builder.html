@@ -549,7 +549,9 @@
   }
   .wall-frame:hover     { border-color: #3a6ba8; transform: translateY(-1px); }
   .wall-frame.dragover  { border-color: #5b8fd1; background-color: #1a2438; }
-  .wall-frame.loaded    { border-color: #3aa86d; }
+  .wall-frame.loaded    { border-color: #3aa86d; box-shadow: inset 0 0 0 2px #0c0e13, 0 0 0 2px rgba(58,168,109,0.35), 0 2px 6px rgba(0,0,0,0.5); }
+  .wall-frame.has-current { opacity: 0.92; }
+  .wall-frame.empty     { border-style: dashed; }
   .wall-frame .label {
     position: absolute; left: 4px; top: 4px;
     background: rgba(0,0,0,0.75);
@@ -569,23 +571,47 @@
     pointer-events: none;
   }
   .wall-frame.loaded .hint { display: none; }
-  .wall-frame .actions {
-    position: absolute; right: 4px; top: 4px;
-    display: flex; gap: 3px;
-    opacity: 0;
-    transition: opacity 0.12s;
+  .wall-frame.has-current .hint {
+    opacity: 0; transition: opacity 0.12s;
   }
-  .wall-frame:hover .actions { opacity: 1; }
-  .wall-frame .actions button {
-    background: rgba(0,0,0,0.75);
-    color: #d8e6fc;
+  .wall-frame.has-current:hover .hint {
+    opacity: 1;
+    background: rgba(0,0,0,0.55);
+  }
+
+  /* Wall section is the primary nav now — give it a soft accent
+     border so users land on it before the secondary sections. */
+  .wall-section { margin-bottom: 16px; }
+  .wall-section > h2 { color: #d8e6fc; }
+
+  /* Per-frame action popup menu — File / Library / Canvas / Clear. */
+  .wall-frame-menu {
+    position: fixed;
+    z-index: 100;
+    display: none;
+    background: var(--panel-2);
     border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 2px 6px;
-    font-size: 10px;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    padding: 4px 0;
+    min-width: 200px;
+  }
+  .wall-frame-menu.show { display: block; }
+  .wall-frame-menu button {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; text-align: left;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    padding: 7px 14px;
+    font: inherit; font-size: 12.5px;
     cursor: pointer;
   }
-  .wall-frame .actions button:hover { background: rgba(58,107,168,0.5); }
+  .wall-frame-menu button:hover { background: rgba(58,107,168,0.25); }
+  .wall-frame-menu button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .wall-frame-menu button .icon {
+    width: 18px; display: inline-block; text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -821,6 +847,34 @@
 
   <!-- ── Files / Output / Apply (right) ─────────────────────────────────── -->
   <div class="panel right padded" id="files-panel">
+    <!-- ── Monitor Wall (primary nav) ─────────────────────────────────── -->
+    <section class="wall-section">
+      <h2 data-i18n="section.wall">Monitor Wall</h2>
+      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint2">
+        One tile per monitor. Click a tile to drop in an image (file /
+        library / current canvas). Hit Apply Wall when ready.
+      </div>
+      <div class="row">
+        <label for="wall-layout" data-i18n="wall.layout">Layout</label>
+        <select id="wall-layout">
+          <option value="horizontal" data-i18n="wall.layout.horizontal">Horizontal row (1×N)</option>
+          <option value="2x2"        data-i18n="wall.layout.2x2">2×2 grid</option>
+          <option value="vertical"   data-i18n="wall.layout.vertical">Vertical column (N×1)</option>
+          <option value="free"       data-i18n="wall.layout.free">Free-form (drag to arrange)</option>
+        </select>
+      </div>
+      <div class="wall-canvas" id="wall-canvas"></div>
+      <div class="btn-row" style="margin-top: 8px;">
+        <button class="btn primary" id="wall-apply" type="button" disabled
+                data-i18n="wall.apply">Apply Wall to screens</button>
+        <button class="btn" id="wall-clear" type="button"
+                data-i18n="wall.clear">Clear</button>
+        <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
+                data-i18n="wall.reset_positions">Reset positions</button>
+      </div>
+      <div class="stat" id="wall-stat" style="margin-top: 6px;"></div>
+    </section>
+
     <section>
       <h2 data-i18n="section.load">Load</h2>
       <div class="btn-row">
@@ -910,60 +964,6 @@
       </div>
     </section>
 
-    <section>
-      <h2 data-i18n="section.apply">Apply to screen</h2>
-      <div class="btn-row">
-        <button class="btn primary apply-screen" data-screen="0" disabled>→ 1</button>
-        <button class="btn primary apply-screen" data-screen="1" disabled>→ 2</button>
-        <button class="btn primary apply-screen" data-screen="2" disabled>→ 3</button>
-        <button class="btn primary apply-screen" data-screen="3" disabled>→ 4</button>
-      </div>
-    </section>
-
-    <section>
-      <h2 data-i18n="section.split">Multi-monitor split</h2>
-      <div class="check-row">
-        <input type="checkbox" id="split-preview">
-        <label for="split-preview" data-i18n="split.show_guide">Show split guide</label>
-      </div>
-      <div class="btn-row" style="margin-top: 6px;">
-        <button class="btn split-btn" data-left="0" data-right="1" disabled>Split → 1 + 2</button>
-      </div>
-      <div class="btn-row" style="margin-top: 6px;">
-        <button class="btn split-btn" data-left="1" data-right="2" disabled>Split → 2 + 3</button>
-      </div>
-      <div class="btn-row" style="margin-top: 6px;">
-        <button class="btn split-btn" data-left="2" data-right="3" disabled>Split → 3 + 4</button>
-      </div>
-    </section>
-
-    <section>
-      <h2 data-i18n="section.wall">Monitor Wall</h2>
-      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint">
-        Pick a layout, drop one image per monitor, then Apply Wall —
-        each tile goes to its matching screen. Frame aspect ratios use
-        the live viewport size for each screen.
-      </div>
-      <div class="row">
-        <label for="wall-layout" data-i18n="wall.layout">Layout</label>
-        <select id="wall-layout">
-          <option value="horizontal" data-i18n="wall.layout.horizontal">Horizontal row (1×N)</option>
-          <option value="2x2"        data-i18n="wall.layout.2x2">2×2 grid</option>
-          <option value="vertical"   data-i18n="wall.layout.vertical">Vertical column (N×1)</option>
-          <option value="free"       data-i18n="wall.layout.free">Free-form (drag to arrange)</option>
-        </select>
-      </div>
-      <div class="wall-canvas" id="wall-canvas"></div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn primary" id="wall-apply" type="button" disabled
-                data-i18n="wall.apply">Apply Wall to screens</button>
-        <button class="btn" id="wall-clear" type="button"
-                data-i18n="wall.clear">Clear</button>
-        <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
-                data-i18n="wall.reset_positions">Reset positions</button>
-      </div>
-      <div class="stat" id="wall-stat" style="margin-top: 6px;"></div>
-    </section>
   </div>
 </main>
 
@@ -1265,9 +1265,17 @@ const TRANSLATIONS = {
   "wall.layout.free":   { en: "Free-form (drag to arrange)", de: "Freie Anordnung (per Drag)" },
   "wall.rotate":        { en: "Rotate 90°",          de: "90° drehen" },
   "wall.reset_positions": { en: "Reset positions",   de: "Anordnung zurücksetzen" },
+  "wall.hint2":         { en: "One tile per monitor. Click a tile to drop in an image (file / library / current canvas). Hit Apply Wall when ready.",
+                          de: "Eine Kachel pro Monitor. Klick öffnet ein Menü (Datei / Bibliothek / aktuelle Leinwand). „Wand anwenden“ schickt's los." },
   "wall.apply":         { en: "Apply Wall to screens", de: "Wand anwenden" },
   "wall.clear":         { en: "Clear",              de: "Leeren" },
+  "wall.staged":        { en: "staged",             de: "vorgemerkt" },
+  "wall.click_to_change": { en: "Click to change",  de: "Klicken zum Ändern" },
   "wall.drop_here":     { en: "Drop image / click to pick", de: "Bild ablegen / klicken" },
+  "wall.menu.file":     { en: "Choose file…",       de: "Datei wählen…" },
+  "wall.menu.library":  { en: "From library…",      de: "Aus Bibliothek…" },
+  "wall.menu.canvas":   { en: "Use current canvas", de: "Aktuelle Leinwand nutzen" },
+  "wall.menu.clear":    { en: "Clear",              de: "Leeren" },
   "wall.applied":       { en: "Applied {ok}/{total} screen(s)", de: "Auf {ok}/{total} Bildschirm(e) angewendet" },
   "wall.failed":        { en: "Apply Wall failed: {msg}", de: "Wand-Übernahme fehlgeschlagen: {msg}" },
   "wall.lib":           { en: "Library", de: "Bibliothek" },
@@ -2935,22 +2943,20 @@ els.canvasArea.addEventListener("wheel", (e) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Split-line preview overlay
+//
+// Legacy: the Multi-monitor split section in the right panel used to
+// drive this; v0.9.11-beta folded that workflow into the Monitor
+// Wall's per-frame "Use canvas" action. The split-line DOM element
+// + CSS are kept as a no-op so anyone holding a stale reference
+// doesn't crash; `els.splitPreview` is null now, so the legacy
+// listener wiring is gone.
 // ─────────────────────────────────────────────────────────────────────────────
-
-els.splitPreview.addEventListener("change", () => {
-  els.canvasHost.classList.toggle("split-preview", els.splitPreview.checked);
-  positionSplitLine();
-});
 
 els.glowPreview.addEventListener("change", () => {
   els.canvasHost.classList.toggle("glow-preview", els.glowPreview.checked);
 });
 
-function positionSplitLine() {
-  if (!els.canvasHost.classList.contains("split-preview")) return;
-  // 50% of the canvas's rendered width.
-  els.splitLine.style.left = (els.canvas.offsetWidth / 2 - 1) + "px";
-}
+function positionSplitLine() { /* legacy no-op */ }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sidebar helpers
@@ -3182,8 +3188,8 @@ els.saveLibBtn.addEventListener("click", async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 let wallScreenCount = 1;
-let wallViewports   = [];           // [{w,h}, ...] per screen
-let wallSlots       = [];           // [{img, name, blob} | null, ...]
+let wallScreens     = [];           // [{w, h, bgImage}, ...] per screen
+let wallSlots       = [];           // [{img, name, blob, dataUrl, source} | null, ...]
 
 async function loadWallViewports() {
   try {
@@ -3191,13 +3197,17 @@ async function loadWallViewports() {
     if (!r.ok) return;
     const cfg = await r.json();
     wallScreenCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
-    wallViewports = [];
+    wallScreens = [];
     const arr = Array.isArray(cfg.screens) ? cfg.screens : [];
     for (let i = 0; i < wallScreenCount; i++) {
       const s = arr[i] || {};
       const w = parseInt(s.viewportW, 10) || 0;
       const h = parseInt(s.viewportH, 10) || 0;
-      wallViewports.push(w > 0 && h > 0 ? { w, h } : { w: 1920, h: 1080 });
+      wallScreens.push({
+        w: w > 0 ? w : 1920,
+        h: h > 0 ? h : 1080,
+        bgImage: String(s.bgImage || ""),
+      });
     }
     // Resize slot array to match new screen count.
     while (wallSlots.length < wallScreenCount) wallSlots.push(null);
@@ -3206,24 +3216,34 @@ async function loadWallViewports() {
   renderWall();
 }
 
+// Mirror the wallpaper page's path normaliser: http(s)/data URLs pass
+// through; file:// + absolute paths route through the /image proxy.
+// Used to paint each frame with the screen's current bgImage.
+function currentBgUrl(bgPath) {
+  if (!bgPath) return "";
+  const p = String(bgPath).trim();
+  if (!p) return "";
+  if (/^(https?:|data:)/i.test(p)) return p;
+  const cleaned = p.replace(/^file:\/{2,3}/i, "");
+  return "/image?path=" + encodeURIComponent(cleaned);
+}
+
 function frameSizeFor(viewport, layout) {
-  // Target visual width depends on layout: horizontal rows want
-  // smaller widths so multiple frames fit side-by-side. 2×2 fits
-  // larger frames. Vertical wants taller frames.
+  // Wall is now the primary nav, so frames are bigger than the
+  // earlier per-section thumbnails. Sizes tuned so the most common
+  // multi-monitor counts (2-3) fit a single horizontal row without
+  // scrolling at the default 260 px panel width.
   let base;
   if (layout === "horizontal") {
-    base = 110;
-  } else if (layout === "2x2") {
     base = 130;
-  } else {
-    base = 200; // vertical
+  } else if (layout === "2x2") {
+    base = 150;
+  } else if (layout === "vertical") {
+    base = 220;
+  } else {   // free
+    base = 150;
   }
-  const ar = viewport.w / viewport.h;
-  if (layout === "vertical") {
-    // Anchor on width = base; height proportional.
-    return { w: Math.round(base), h: Math.round(base / ar) };
-  }
-  // Anchor on width = base; height follows aspect ratio.
+  const ar = (viewport.w || 1920) / (viewport.h || 1080);
   return { w: Math.round(base), h: Math.round(base / ar) };
 }
 
@@ -3232,6 +3252,7 @@ function renderWall() {
   const canvas = els.wallCanvas;
   if (!canvas) return;
   canvas.classList.toggle("layout-vertical", layout === "vertical");
+  canvas.classList.toggle("layout-2x2",      layout === "2x2");
   canvas.classList.toggle("layout-free",     layout === "free");
   if (els.wallResetPos) {
     els.wallResetPos.style.display = (layout === "free") ? "" : "none";
@@ -3242,42 +3263,45 @@ function renderWall() {
   const positions = (layout === "free") ? loadWallPositions(wallScreenCount) : null;
   for (let i = 0; i < wallScreenCount; i++) {
     const slot = wallSlots[i];
-    const vp = wallViewports[i] || { w: 1920, h: 1080 };
-    const sz = frameSizeFor(vp, layout);
+    const scr  = wallScreens[i] || { w: 1920, h: 1080, bgImage: "" };
+    const sz   = frameSizeFor(scr, layout);
+    const curUrl = currentBgUrl(scr.bgImage);
 
     const frame = document.createElement("div");
-    frame.className = "wall-frame" + (slot ? " loaded" : "");
+    frame.className = "wall-frame" +
+      (slot ? " loaded" :
+        (curUrl ? " has-current" : " empty"));
     frame.style.width  = sz.w + "px";
     frame.style.height = sz.h + "px";
+    // Background priority: staged slot's preview > screen's current
+    // bgImage (via /image proxy) > empty placeholder.
     if (slot && slot.dataUrl) {
       frame.style.backgroundImage = "url(" + slot.dataUrl + ")";
+    } else if (curUrl) {
+      frame.style.backgroundImage = "url(" + curUrl + ")";
     }
 
     const label = document.createElement("span");
     label.className = "label";
-    label.textContent = `${i + 1} · ${vp.w}×${vp.h}`;
+    label.textContent = `${i + 1} · ${scr.w}×${scr.h}` +
+      (slot ? " · " + t("wall.staged") : "");
     frame.appendChild(label);
 
     const hint = document.createElement("div");
     hint.className = "hint";
-    hint.textContent = t("wall.drop_here");
+    hint.textContent = curUrl
+      ? t("wall.click_to_change")
+      : t("wall.drop_here");
     frame.appendChild(hint);
 
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    const libBtn = document.createElement("button");
-    libBtn.type = "button";
-    libBtn.textContent = t("wall.lib");
-    libBtn.addEventListener("click", (e) => {
+    // Click → action popup (file / library / current canvas / clear).
+    frame.addEventListener("click", (e) => {
+      // Suppress the click if a drag just ended (set by attachFreeDrag).
+      if (frame.__suppressClick) return;
       e.stopPropagation();
-      openLibraryDialog((item) => loadWallSlotFromLibrary(i, item.file));
+      showWallFrameMenu(i, frame);
     });
-    actions.appendChild(libBtn);
-    frame.appendChild(actions);
-
-    // Click anywhere on frame (not on Library button) → file picker.
-    frame.addEventListener("click", () => triggerWallFilePick(i));
-    // Drag-drop.
+    // Drag-drop a file directly onto the frame still works.
     ["dragenter", "dragover"].forEach((ev) => {
       frame.addEventListener(ev, (e) => {
         e.preventDefault();
@@ -3309,6 +3333,115 @@ function renderWall() {
     }
   }
   updateWallApplyState();
+}
+
+// ── Per-frame action menu (file / library / current canvas / clear) ──
+// Single reusable popup built lazily on first open. Position anchors
+// to the clicked frame's bottom-left and clamps inside the viewport.
+let _wallMenuEl  = null;
+let _wallMenuIdx = -1;
+
+function _buildWallMenu() {
+  if (_wallMenuEl) return _wallMenuEl;
+  const el = document.createElement("div");
+  el.id = "wall-frame-menu";
+  el.className = "wall-frame-menu";
+  el.innerHTML =
+    '<button type="button" data-action="file">' +
+      '<span class="icon">📁</span>' +
+      '<span data-i18n="wall.menu.file"></span></button>' +
+    '<button type="button" data-action="library">' +
+      '<span class="icon">📚</span>' +
+      '<span data-i18n="wall.menu.library"></span></button>' +
+    '<button type="button" data-action="canvas">' +
+      '<span class="icon">🖼️</span>' +
+      '<span data-i18n="wall.menu.canvas"></span></button>' +
+    '<button type="button" data-action="clear">' +
+      '<span class="icon">✕</span>' +
+      '<span data-i18n="wall.menu.clear"></span></button>';
+  document.body.appendChild(el);
+  el.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    e.stopPropagation();
+    const action = btn.dataset.action;
+    const idx = _wallMenuIdx;
+    _closeWallMenu();
+    if (idx < 0) return;
+    if      (action === "file")    triggerWallFilePick(idx);
+    else if (action === "library") openLibraryDialog((it) => loadWallSlotFromLibrary(idx, it.file));
+    else if (action === "canvas")  loadWallSlotFromCurrentCanvas(idx);
+    else if (action === "clear")   clearWallSlot(idx);
+  });
+  _wallMenuEl = el;
+  return el;
+}
+
+function showWallFrameMenu(idx, frame) {
+  _wallMenuIdx = idx;
+  const el = _buildWallMenu();
+  // Refresh per-open labels (i18n may have changed).
+  el.querySelector('[data-action="file"]    span:last-child').textContent = t("wall.menu.file");
+  el.querySelector('[data-action="library"] span:last-child').textContent = t("wall.menu.library");
+  el.querySelector('[data-action="canvas"]  span:last-child').textContent = t("wall.menu.canvas");
+  el.querySelector('[data-action="clear"]   span:last-child').textContent = t("wall.menu.clear");
+  // Disable Canvas when no image is loaded in the Builder, Clear when
+  // nothing is staged.
+  el.querySelector('[data-action="canvas"]').disabled = !originalData;
+  el.querySelector('[data-action="clear"]').disabled  = !wallSlots[idx];
+
+  el.classList.add("show");
+  // Position: prefer below + left-aligned with the frame. Clamp to
+  // viewport.
+  const r = frame.getBoundingClientRect();
+  const elR = el.getBoundingClientRect();   // post-show measurement
+  let left = r.left;
+  let top  = r.bottom + 6;
+  if (left + elR.width > window.innerWidth - 8) left = window.innerWidth - elR.width - 8;
+  if (top + elR.height > window.innerHeight - 8) top = Math.max(8, r.top - elR.height - 6);
+  el.style.left = Math.max(8, left) + "px";
+  el.style.top  = top + "px";
+}
+
+function _closeWallMenu() {
+  if (_wallMenuEl) _wallMenuEl.classList.remove("show");
+  _wallMenuIdx = -1;
+}
+
+// Click anywhere outside the menu or press Esc → close.
+document.addEventListener("mousedown", (e) => {
+  if (!_wallMenuEl || !_wallMenuEl.classList.contains("show")) return;
+  if (_wallMenuEl.contains(e.target)) return;
+  if (e.target.closest && e.target.closest(".wall-frame")) return;
+  _closeWallMenu();
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && _wallMenuEl && _wallMenuEl.classList.contains("show")) {
+    _closeWallMenu();
+  }
+});
+
+async function loadWallSlotFromCurrentCanvas(idx) {
+  if (!originalData) return;
+  try {
+    // Snapshot the canvas (with all current edits applied) into a PNG
+    // blob, exactly like the existing "Apply to Screen N" path did.
+    const blob = await canvasToBlob();
+    const img  = await fileToImage(blob);
+    const dataUrl = await blobToDataUrl(blob);
+    wallSlots[idx] = {
+      img, name: (sourceName || "canvas") + ".png",
+      blob, dataUrl, source: "canvas",
+    };
+    renderWall();
+  } catch (e) {
+    toast(t("toast.decode_failed", { name: "current canvas" }), "bad");
+  }
+}
+
+function clearWallSlot(idx) {
+  wallSlots[idx] = null;
+  renderWall();
 }
 
 // localStorage-backed positions keyed by screen count so a layout for
@@ -3495,6 +3628,17 @@ async function applyWall() {
     : t("wall.applied", { ok, total });
   if (els.wallStat) els.wallStat.textContent = msg;
   toast(msg, fail ? "bad" : "good");
+  // Drop applied slots so the frames revert to showing the new
+  // current bgImage instead of staying "staged".
+  for (let i = 0; i < wallSlots.length; i++) {
+    if (wallSlots[i] && wallSlots[i].source !== "error") {
+      wallSlots[i] = null;
+    }
+  }
+  // Re-fetch /config so each frame paints the just-applied background
+  // (the bridge generated a new timestamped path; the proxy needs
+  // the fresh path to bypass any CEF cache).
+  await loadWallViewports();
   updateWallApplyState();
 }
 
