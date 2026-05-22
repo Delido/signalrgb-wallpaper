@@ -4,6 +4,45 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2-beta] - 2026-05-22
+
+> First Tier-2 high-visibility feature: **wallpaper auto-cycle**. Each
+> screen can rotate through its library on a schedule, picking
+> sequentially or randomly from the full library or pinned-only pool.
+
+### Added — Bridge
+
+- **`CycleScheduler`** — single background thread, 30 s tick, walks
+  every screen and fires the next library entry through
+  `_update_background` when `cycle.enabled` is true and at least
+  `intervalMin` minutes have passed since the last apply.
+- **Mirror-aware** — mirrors are skipped explicitly so the source's
+  cycle drives them through the existing
+  `_replicate_to_mirrors` path; the mirror doesn't get its own
+  scheduler tick.
+- **Persistent bookkeeping** — `cycle.lastApplyMs` and `cycle.nextIdx`
+  live inside the config and survive a bridge restart, so the
+  rotation picks up where it left off.
+- **Partial-merge update path** — `_update_cycle` merges incoming
+  config changes onto the existing cycle dict so the
+  configurator can send just `enabled` or `intervalMin` without
+  zeroing the scheduler's pointers. Pool / order values are
+  whitelisted.
+
+### Added — Configurator
+
+- **Auto-cycle block** at the bottom of the Background card:
+  - Enable checkbox
+  - Interval (1-720 min)
+  - Pool — *All library* or *Pinned only*
+  - Order — *Sequential* or *Random*
+  - Hint line that counts down "Next change in {n} min" between
+    settings pushes (re-painted every 30 s without a full
+    settings roundtrip)
+- Cycle settings are **not mirrored** — every mirror still picks up
+  whichever wallpaper the source's cycle chose, since the resulting
+  `bgImage` replicates through the normal mirror path.
+
 ## [0.9.1-beta] - 2026-05-22
 
 > Monitor Wall gains a **Free-form** layout option — drag each monitor

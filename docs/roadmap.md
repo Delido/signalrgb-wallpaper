@@ -207,17 +207,15 @@ the existing `/screen/<N>/settings` batch endpoint.
 These are the features that get screenshotted and shared. Higher
 ratio of "wow factor" to implementation effort.
 
-### 🔲 Wallpaper shuffle / cycle — ~3 h
+### ✅ Wallpaper shuffle / cycle — shipped v0.9.2-beta
 
-Library-section toggle:
-
-- Cycle every X minutes
-- Random on logon
-- Pick by time of day (4 entries: dawn / day / dusk / night)
-
-Implementation: bridge poller picks next entry from
-`config.screens[N].cycle.pool` on schedule, fires the same
-`POST /screen/N/background` path the Library tile click uses.
+Per-screen *Auto-cycle* block inside the Background card.
+Configurable: enable, interval (1-720 min), pool (all library /
+pinned only), order (sequential / random). `CycleScheduler`
+background thread runs a 30 s tick; mirror screens are skipped
+since the source's cycle propagates to them via the existing
+mirror-replication path. Time-of-day pool (dawn / day / dusk /
+night) deferred to a follow-up.
 
 ### 🔲 Preset hotkeys — ~3 h
 

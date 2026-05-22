@@ -630,6 +630,15 @@
     flex: 1; align-self: center;
   }
 
+  /* Auto-cycle controls inside the Background card. */
+  .cycle-block {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .cycle-config { gap: 6px; flex-wrap: wrap; }
+  .cycle-config.disabled { opacity: 0.45; pointer-events: none; }
+
   /* Hover-preview popup for library tiles. Larger 16:9 view of the
      full-res PNG with an animated RGB gradient layer behind it — the
      transparent regions of the wallpaper let the colour cycle bleed
@@ -861,6 +870,33 @@
       <div class="check-row">
         <input type="checkbox" id="bg-debug">
         <label for="bg-debug" data-i18n="bg.debug_overlay">Show debug overlay (top-left status line on the wallpaper)</label>
+      </div>
+
+      <!-- ── Auto-cycle ───────────────────────────────────────── -->
+      <div class="cycle-block">
+        <div class="check-row">
+          <input type="checkbox" id="cycle-enabled">
+          <label for="cycle-enabled" data-i18n="cycle.enable">
+            Auto-cycle through library wallpapers
+          </label>
+        </div>
+        <div class="row cycle-config" id="cycle-config">
+          <label for="cycle-interval" data-i18n="cycle.interval">Every</label>
+          <input type="number" id="cycle-interval" min="1" max="720" step="1"
+                 style="width: 80px;">
+          <span class="val" data-i18n="cycle.minutes">min</span>
+          <label for="cycle-pool" data-i18n="cycle.pool" style="margin-left: 12px;">From</label>
+          <select id="cycle-pool">
+            <option value="all"    data-i18n="cycle.pool.all">All library</option>
+            <option value="pinned" data-i18n="cycle.pool.pinned">Pinned only</option>
+          </select>
+          <label for="cycle-order" data-i18n="cycle.order" style="margin-left: 12px;">Order</label>
+          <select id="cycle-order">
+            <option value="sequential" data-i18n="cycle.order.sequential">Sequential</option>
+            <option value="random"     data-i18n="cycle.order.random">Random</option>
+          </select>
+        </div>
+        <div class="hint" id="cycle-hint" style="margin-top: 6px;"></div>
       </div>
     </div>
   </section>
@@ -1143,6 +1179,21 @@ const TRANSLATIONS = {
   "bg.dim":                 { en: "Dim",                  de: "Abdunkeln" },
   "bg.debug_overlay":       { en: "Show debug overlay (top-left status line on the wallpaper)",
                               de: "Debug-Overlay anzeigen (Status-Zeile oben links im Wallpaper)" },
+  "cycle.enable":           { en: "Auto-cycle through library wallpapers",
+                              de: "Bibliotheks-Wallpaper automatisch durchwechseln" },
+  "cycle.interval":         { en: "Every",                de: "Alle" },
+  "cycle.minutes":          { en: "min",                  de: "Min." },
+  "cycle.pool":             { en: "From",                 de: "Aus" },
+  "cycle.pool.all":         { en: "All library",          de: "Ganze Bibliothek" },
+  "cycle.pool.pinned":      { en: "Pinned only",          de: "Nur angeheftete" },
+  "cycle.order":            { en: "Order",                de: "Reihenfolge" },
+  "cycle.order.sequential": { en: "Sequential",           de: "Der Reihe nach" },
+  "cycle.order.random":     { en: "Random",               de: "Zufällig" },
+  "cycle.next_in":          { en: "Next change in {min} min",
+                              de: "Nächster Wechsel in {min} Min." },
+  "cycle.due_soon":         { en: "Next change due any moment now",
+                              de: "Nächster Wechsel jeden Moment" },
+  "cycle.off":              { en: "Auto-cycle off",       de: "Auto-Wechsel aus" },
   "bridge.screens":         { en: "Screens:",             de: "Bildschirme:" },
   "screens.label_simple":   { en: "Screen {n}",           de: "Bildschirm {n}" },
   "screens.label_with_res": { en: "Screen {n} — {w}×{h}", de: "Bildschirm {n} — {w}×{h}" },
@@ -1451,6 +1502,12 @@ const els = {
   bgDim:          $("bg-dim"),
   bgDimVal:       $("bg-dim-val"),
   bgDebug:        $("bg-debug"),
+  cycleEnabled:   $("cycle-enabled"),
+  cycleConfig:    $("cycle-config"),
+  cycleInterval:  $("cycle-interval"),
+  cyclePool:      $("cycle-pool"),
+  cycleOrder:     $("cycle-order"),
+  cycleHint:      $("cycle-hint"),
   glowBars:       $("glow-bars"),
   glowLayout:     $("glow-layout"),
   glowStrength:   $("glow-strength"),
@@ -2546,6 +2603,72 @@ els.bgDim  .addEventListener("input",  () => {
 els.bgDim  .addEventListener("change", () => setSetting("bgDim", parseInt(els.bgDim.value, 10)));
 els.bgDebug.addEventListener("change", () => setSetting("showStatus", els.bgDebug.checked));
 
+// Auto-cycle controls. Each change sends a partial cycle dict to the
+// bridge; bridge merges it into the existing cycle config so scheduler
+// bookkeeping (lastApplyMs, nextIdx) survives.
+function _sendCycle(partial) {
+  setSetting("cycle", partial);
+}
+if (els.cycleEnabled) {
+  els.cycleEnabled.addEventListener("change",
+    () => _sendCycle({ enabled: els.cycleEnabled.checked }));
+}
+if (els.cycleInterval) {
+  els.cycleInterval.addEventListener("change", () => {
+    const n = Math.max(1, Math.min(720, parseInt(els.cycleInterval.value, 10) || 10));
+    els.cycleInterval.value = String(n);
+    _sendCycle({ intervalMin: n });
+  });
+}
+if (els.cyclePool) {
+  els.cyclePool.addEventListener("change",
+    () => _sendCycle({ pool: els.cyclePool.value }));
+}
+if (els.cycleOrder) {
+  els.cycleOrder.addEventListener("change",
+    () => _sendCycle({ order: els.cycleOrder.value }));
+}
+
+// Reflect the current `cycle` config in the UI; called from renderAll
+// on every settings push so the controls stay in sync across tabs.
+// Also paints a short hint with the time until the next change so the
+// user can see the scheduler is actually doing something.
+function renderCycleBar() {
+  const cy = (settings && settings.cycle) || {};
+  const enabled = !!cy.enabled;
+  if (els.cycleEnabled)  els.cycleEnabled.checked = enabled;
+  if (els.cycleInterval) els.cycleInterval.value  = String(cy.intervalMin || 10);
+  if (els.cyclePool)     els.cyclePool.value      = cy.pool  || "all";
+  if (els.cycleOrder)    els.cycleOrder.value     = cy.order || "sequential";
+  if (els.cycleConfig)   els.cycleConfig.classList.toggle("disabled", !enabled);
+  if (els.cycleHint) {
+    if (!enabled) {
+      els.cycleHint.dataset.i18n = "cycle.off";
+      els.cycleHint.textContent = t("cycle.off");
+    } else {
+      const intervalMs = Math.max(60_000, (cy.intervalMin || 10) * 60_000);
+      const last = parseInt(cy.lastApplyMs, 10) || 0;
+      const remain = last > 0
+        ? Math.max(0, intervalMs - (Date.now() - last))
+        : intervalMs;
+      const remainMin = Math.round(remain / 60_000);
+      if (remainMin <= 0) {
+        els.cycleHint.dataset.i18n = "cycle.due_soon";
+        els.cycleHint.textContent = t("cycle.due_soon");
+      } else {
+        els.cycleHint.dataset.i18n = "cycle.next_in";
+        els.cycleHint.textContent = t("cycle.next_in", { min: remainMin });
+      }
+    }
+  }
+}
+// Live-tick the "next change in N min" countdown without a full
+// renderAll roundtrip — every 30 s we just re-run the bar painter so
+// the hint stays accurate between settings pushes.
+setInterval(() => {
+  if (settings && settings.cycle && settings.cycle.enabled) renderCycleBar();
+}, 30000);
+
 // File picker: convert any image to PNG via canvas, POST to the bridge's
 // existing /screen/N/background endpoint (same one the builder uses for
 // "Apply to screen"). Bridge writes it to disk, updates bgImage, and pushes
@@ -3258,6 +3381,7 @@ function renderAll() {
   els.bgDim.value   = String(settings.bgDim ?? 0);
   els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";
   els.bgDebug.checked = !!settings.showStatus;
+  renderCycleBar();
   // Glow
   els.glowBars.checked   = settings.showBars !== false;
   els.glowLayout.value   = settings.barLayout || "lay-grid";

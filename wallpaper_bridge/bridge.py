@@ -46,6 +46,7 @@ import json
 import locale
 import mimetypes
 import os
+import random
 import re
 import struct
 import sys
@@ -314,7 +315,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.1-beta"
+APP_VERSION = "0.9.2-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -407,14 +408,30 @@ DEFAULT_SCREEN_SETTINGS = {
     # `None` means "not mirroring". Self-mirror and chains (A→B→C) are
     # rejected at the WS / HTTP entry point.
     "mirrorOf":        None,
+    # Auto-cycle through library entries on a schedule. When enabled,
+    # CycleScheduler picks the next pool entry every `intervalMin` minutes
+    # and applies it as the screen's background via _update_background.
+    # `pool` is one of "all" | "pinned"; `order` is "sequential" | "random".
+    # `lastApplyMs` / `nextIdx` are managed by the scheduler — exposed in
+    # the config so they survive a restart.
+    "cycle":           {
+        "enabled":     False,
+        "intervalMin": 10,
+        "pool":        "all",
+        "order":       "sequential",
+        "lastApplyMs": 0,
+        "nextIdx":     0,
+    },
 }
 
 # Keys that get replicated to mirror screens. Per-screen physical
 # attributes (viewport, mirrorOf itself) stay independent, otherwise
 # the mirror would lose its identity. Presets aren't mirrored because
-# they're user-curated per-screen scratch space.
+# they're user-curated per-screen scratch space. `cycle` isn't mirrored
+# — only the source's cycle runs; the mirror inherits the resulting
+# bgImage change through the existing replication path.
 _NON_MIRRORED_KEYS = frozenset({
-    "viewportW", "viewportH", "mirrorOf", "presets",
+    "viewportW", "viewportH", "mirrorOf", "presets", "cycle",
 })
 
 # Keys that get rolled up into a preset snapshot. Excludes anything the
@@ -2333,6 +2350,134 @@ class SysStatsPoller:
         return snap
 
 
+class CycleScheduler:
+    """Per-screen background poller that flips the active wallpaper to
+    the next library entry every `cycle.intervalMin` minutes when
+    enabled. Runs as a single thread that wakes every 30 s and walks
+    every active screen — cheap because each screen's check is just a
+    config read and a wall-clock compare.
+
+    Mirror screens are skipped explicitly: the source's cycle drives
+    their bgImage via the existing `_replicate_to_mirrors` path, so
+    running the cycle twice would just thrash the mirror with extra
+    file writes.
+    """
+
+    POLL_INTERVAL_S = 30.0
+
+    def __init__(self, bridge_runtime):
+        self.bridge = bridge_runtime
+        self._stop  = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="cycle-scheduler")
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        # First tick fires after one POLL_INTERVAL so a freshly-started
+        # bridge doesn't immediately shuffle on top of whatever the
+        # user last set manually.
+        while not self._stop.wait(self.POLL_INTERVAL_S):
+            try:
+                self._tick()
+            except Exception as e:
+                print(f"[cycle] tick crashed: {e}")
+
+    def _tick(self):
+        now_ms = int(time.time() * 1000)
+        screen_count = int(self.bridge.get_screen_count())
+        for i in range(screen_count):
+            try:
+                with self.bridge.config_lock:
+                    s = self.bridge.config.get("screens", {}).get(str(i))
+                    if not isinstance(s, dict):
+                        continue
+                    cycle = s.get("cycle") or {}
+                    if not cycle.get("enabled"):
+                        continue
+                    if s.get("mirrorOf") is not None:
+                        continue
+                    interval_ms = max(60_000,
+                                      int(cycle.get("intervalMin", 10)) * 60_000)
+                    last_ms     = int(cycle.get("lastApplyMs") or 0)
+                    if last_ms > 0 and (now_ms - last_ms) < interval_ms:
+                        continue
+                    pool_name = cycle.get("pool", "all")
+                    order     = cycle.get("order", "sequential")
+                    next_idx  = int(cycle.get("nextIdx") or 0)
+                self._cycle_screen(i, pool_name, order, next_idx, now_ms)
+            except Exception as e:
+                print(f"[cycle] screen={i} failed: {e}")
+
+    def _cycle_screen(self, screen: int, pool_name: str, order: str,
+                      next_idx: int, now_ms: int) -> None:
+        lib = library_dir()
+        cat_path = lib / "library.json"
+        if not cat_path.exists():
+            return
+        try:
+            cat = json.loads(cat_path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        items = cat.get("items", [])
+        if pool_name == "pinned":
+            items = [it for it in items if isinstance(it, dict) and it.get("pinned")]
+        else:
+            items = [it for it in items if isinstance(it, dict) and "file" in it]
+        if not items:
+            return
+        if order == "random":
+            # Pick any item except the one currently showing if we can
+            # tell from the current bgImage path.
+            with self.bridge.config_lock:
+                s = self.bridge.config["screens"].get(str(screen), {})
+                cur_path = str(s.get("bgImage") or "")
+            cur_name = os.path.basename(cur_path)
+            choices = [it for it in items if it.get("file") != cur_name] or items
+            pick = random.choice(choices)
+            chosen_idx = items.index(pick)
+        else:
+            chosen_idx = next_idx % len(items)
+            pick = items[chosen_idx]
+        file = pick.get("file")
+        if not file:
+            return
+        fp = lib / file
+        if not fp.is_file():
+            return
+        try:
+            data = fp.read_bytes()
+        except Exception as e:
+            print(f"[cycle] read {fp} failed: {e}")
+            return
+        # _update_background handles bgImage path + replication to
+        # mirrors + the new-config-pushed-to-WS dance.
+        ok = self.bridge._update_background(screen, data)
+        if not ok:
+            return
+        # Bookkeeping: record when we fired + advance the sequential
+        # pointer. These live inside `cycle` so they're persisted.
+        with self.bridge.config_lock:
+            s = self.bridge.config.get("screens", {}).get(str(screen))
+            if isinstance(s, dict):
+                cy = s.setdefault("cycle", {})
+                cy["lastApplyMs"] = now_ms
+                cy["nextIdx"] = (chosen_idx + 1) % len(items)
+                cfg_snapshot = json.loads(json.dumps(self.bridge.config))
+        try:
+            save_config(cfg_snapshot)
+        except Exception as e:
+            print(f"[cycle] save_config failed: {e}")
+        print(f"[cycle] screen={screen} -> {file} (pool={pool_name}, order={order})")
+
+
 class UdpReceiver(asyncio.DatagramProtocol):
     """Accepts two wire formats from the SignalRGB plugin:
 
@@ -2966,6 +3111,10 @@ class BridgeRuntime:
         # Mirror toggle — special-cased in update_screen_setting below
         # because activation copies the source's state onto self.
         "mirrorOf",
+        # Auto-cycle settings — partial-merge in _update_cycle below so
+        # the configurator can send just `enabled` or `intervalMin`
+        # without resetting `lastApplyMs`/`nextIdx`.
+        "cycle",
     }
 
     def _get_mirrors_of(self, source: int) -> list[int]:
@@ -2999,6 +3148,10 @@ class BridgeRuntime:
         # and don't replicate the toggle itself to other screens.
         if key == "mirrorOf":
             return self._set_mirror_of(screen, value)
+        # Cycle is a partial-merge to preserve scheduler bookkeeping
+        # (lastApplyMs / nextIdx) across config changes.
+        if key == "cycle":
+            return self._update_cycle(screen, value)
         # Mutations on a mirror are rejected at the bridge as a safety net
         # — the Configurator already disables UI controls, but a stale
         # tab or a future REST client mustn't be able to drift a mirror
@@ -3063,6 +3216,56 @@ class BridgeRuntime:
                 s[k] = v
             s["mirrorOf"] = tgt
         snap = self._mutate_screen(screen, activate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+        return snap
+
+    _CYCLE_USER_FIELDS = ("enabled", "intervalMin", "pool", "order")
+    _CYCLE_ALLOWED_POOLS  = {"all", "pinned"}
+    _CYCLE_ALLOWED_ORDERS = {"sequential", "random"}
+
+    def _update_cycle(self, screen: int, value) -> dict | None:
+        """Merge a partial cycle dict into the current settings without
+        clobbering the scheduler's own bookkeeping (lastApplyMs,
+        nextIdx). Validates pool / order against whitelists so a
+        misbehaving client can't write garbage. When the user flips
+        enabled on, we reset lastApplyMs to 0 so the very first cycle
+        tick triggers immediately rather than waiting a full interval."""
+        if not isinstance(value, dict):
+            return None
+        def mutate(s):
+            cur = s.get("cycle") or {}
+            if not isinstance(cur, dict):
+                cur = {}
+            # Start from a fresh deep-copy of defaults to handle older
+            # configs that never had cycle at all.
+            base = copy.deepcopy(DEFAULT_SCREEN_SETTINGS["cycle"])
+            base.update(cur)
+            # Only merge user-settable fields; reject anything else.
+            was_enabled = bool(base.get("enabled", False))
+            for k in self._CYCLE_USER_FIELDS:
+                if k not in value:
+                    continue
+                v = value[k]
+                if k == "enabled":
+                    base["enabled"] = bool(v)
+                elif k == "intervalMin":
+                    try:
+                        base["intervalMin"] = max(1, min(720, int(v)))
+                    except (TypeError, ValueError):
+                        pass
+                elif k == "pool":
+                    if isinstance(v, str) and v in self._CYCLE_ALLOWED_POOLS:
+                        base["pool"] = v
+                elif k == "order":
+                    if isinstance(v, str) and v in self._CYCLE_ALLOWED_ORDERS:
+                        base["order"] = v
+            # If the user just turned cycling on, kick the first tick
+            # immediately by zeroing lastApplyMs.
+            if base["enabled"] and not was_enabled:
+                base["lastApplyMs"] = 0
+            s["cycle"] = base
+        snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
         return snap
@@ -3201,6 +3404,10 @@ class BridgeRuntime:
         # call back into config + persistence without needing the
         # methods passed individually through the constructor.
         self.broadcaster.bridge_runtime = self
+        # Wallpaper-shuffle poller — wakes every 30 s and cycles each
+        # screen whose `cycle.enabled` is true past its `intervalMin`.
+        self.cycle_scheduler = CycleScheduler(self)
+        self.cycle_scheduler.start()
         self.sysstats = SysStatsPoller(self.broadcaster, hwmon=self.hwmon)
         self.sysstats.start()
         try:
