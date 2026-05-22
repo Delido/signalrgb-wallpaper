@@ -482,6 +482,23 @@
     opacity: 0; transition: opacity 0.12s;
   }
   .lib-tile:hover .del { opacity: 1; }
+  .lib-tile.pinned::before {
+    content: "★";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    background: rgba(58, 107, 168, 0.92);
+    color: #fff;
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .lib-tile.dragging { opacity: 0.5; }
+  .lib-tile.drop-before { box-shadow: inset 4px 0 0 #5588cc; }
+  .lib-tile.drop-after  { box-shadow: inset -4px 0 0 #5588cc; }
   .lib-empty {
     color: var(--text-dim); font-size: 12px; font-style: italic;
     flex: 1; align-self: center;
@@ -925,9 +942,14 @@ const TRANSLATIONS = {
   "bg.library.undone":      { en: "Reverted",             de: "Zurückgesetzt" },
   "bg.library.ctx.apply":     { en: "Apply",              de: "Anwenden" },
   "bg.library.ctx.edit":      { en: "Edit in Builder…",   de: "Im Builder öffnen…" },
+  "bg.library.ctx.pin":       { en: "Pin to top",         de: "Oben anheften" },
+  "bg.library.ctx.unpin":     { en: "Unpin",              de: "Lösen" },
   "bg.library.ctx.rename":    { en: "Rename…",            de: "Umbenennen…" },
   "bg.library.ctx.duplicate": { en: "Duplicate",          de: "Duplizieren" },
   "bg.library.ctx.delete":    { en: "Delete…",            de: "Löschen…" },
+  "bg.library.pinned_toast":  { en: "Pinned {label}",     de: "{label} angeheftet" },
+  "bg.library.unpinned_toast":{ en: "Unpinned {label}",   de: "{label} gelöst" },
+  "bg.library.reorder_failed":{ en: "Reorder failed: {msg}", de: "Sortierung fehlgeschlagen: {msg}" },
   "bg.library.rename_prompt": { en: "New name:",          de: "Neuer Name:" },
   "bg.library.renamed":     { en: "Renamed {from} → {to}",
                               de: "{from} → {to} umbenannt" },
@@ -1432,6 +1454,27 @@ let libraryCatalogue = null;
   renderLibraryStrip();
 })();
 
+// Apply the library sort: pinned tiles first, then explicit user
+// order (set by drag-reorder), then by addedAt descending so newest
+// uploads bubble to the top, finally by label alphabetical as a
+// stable tie-break. Pure function; takes and returns an array.
+function sortLibraryItems(items) {
+  return items.slice().sort((a, b) => {
+    const ap = a.pinned ? 1 : 0;
+    const bp = b.pinned ? 1 : 0;
+    if (ap !== bp) return bp - ap;
+    const aHasOrder = typeof a.order === "number";
+    const bHasOrder = typeof b.order === "number";
+    if (aHasOrder && bHasOrder) return a.order - b.order;
+    if (aHasOrder) return -1;
+    if (bHasOrder) return 1;
+    const aA = typeof a.addedAt === "number" ? a.addedAt : 0;
+    const bA = typeof b.addedAt === "number" ? b.addedAt : 0;
+    if (aA !== bA) return bA - aA;
+    return (a.label || a.id || "").localeCompare(b.label || b.id || "");
+  });
+}
+
 function renderLibraryStrip() {
   if (!els.libraryStrip) return;
   els.libraryStrip.innerHTML = "";
@@ -1443,10 +1486,12 @@ function renderLibraryStrip() {
     els.libraryStrip.appendChild(empty);
     return;
   }
-  for (const item of libraryCatalogue) {
+  for (const item of sortLibraryItems(libraryCatalogue)) {
     const btn = document.createElement("button");
-    btn.className = "lib-tile";
+    btn.className = "lib-tile" + (item.pinned ? " pinned" : "");
     btn.title = item.label || item.id;
+    btn.dataset.file = item.file;
+    btn.draggable = true;
     btn.style.backgroundImage = "url(/library/" + encodeURIComponent(item.thumb || item.file) + ")";
     const lbl = document.createElement("span");
     lbl.className = "label";
@@ -1484,6 +1529,42 @@ function renderLibraryStrip() {
       hideLibraryPreview();
       showLibraryContextMenu(item, e.clientX, e.clientY);
     });
+    btn.addEventListener("dragstart", (e) => {
+      _libDragFile = item.file;
+      btn.classList.add("dragging");
+      hideLibraryPreview();
+      hideLibraryContextMenu();
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", item.file);
+      } catch (_) {}
+    });
+    btn.addEventListener("dragend", () => {
+      btn.classList.remove("dragging");
+      _libDragFile = null;
+      els.libraryStrip.querySelectorAll(".lib-tile.drop-before, .lib-tile.drop-after")
+        .forEach((t) => t.classList.remove("drop-before", "drop-after"));
+    });
+    btn.addEventListener("dragover", (e) => {
+      if (!_libDragFile) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const r = btn.getBoundingClientRect();
+      const after = (e.clientX - r.left) > r.width / 2;
+      btn.classList.toggle("drop-before", !after);
+      btn.classList.toggle("drop-after",   after);
+    });
+    btn.addEventListener("dragleave", () => {
+      btn.classList.remove("drop-before", "drop-after");
+    });
+    btn.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const src = _libDragFile || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
+      const after = btn.classList.contains("drop-after");
+      btn.classList.remove("drop-before", "drop-after");
+      if (!src || src === item.file) return;
+      reorderLibrary(src, item.file, after);
+    });
     els.libraryStrip.appendChild(btn);
   }
 }
@@ -1498,6 +1579,7 @@ let _libPreviewEl = null;
 let _libPreviewHideTimer = null;
 let _libPreviewItem = null;
 let _libPreviewPinned = false;
+let _libDragFile = null;
 
 function ensureLibraryPreviewPopup() {
   if (_libPreviewEl) return _libPreviewEl;
@@ -1625,6 +1707,10 @@ function showLibraryContextMenu(item, x, y) {
   el.appendChild(make(t("bg.library.ctx.apply"),     () => applyLibraryItem(item)));
   el.appendChild(make(t("bg.library.ctx.edit"),      () => editLibraryItemInBuilder(item)));
   el.appendChild(sep());
+  const pinLabel = item.pinned
+    ? t("bg.library.ctx.unpin")
+    : t("bg.library.ctx.pin");
+  el.appendChild(make(pinLabel,                      () => pinLibraryItem(item, !item.pinned)));
   el.appendChild(make(t("bg.library.ctx.rename"),    () => renameLibraryItem(item)));
   el.appendChild(make(t("bg.library.ctx.duplicate"), () => duplicateLibraryItem(item)));
   el.appendChild(sep());
@@ -1698,6 +1784,49 @@ async function duplicateLibraryItem(item) {
     await refreshLibrary();
   } catch (e) {
     toast("Duplicate failed: " + e.message, "bad");
+  }
+}
+
+// Toggle the pin state for one library entry. Bridge persists the
+// flag inside library.json. We mutate the in-memory catalogue too
+// so the strip re-renders without a /library/list round-trip.
+async function pinLibraryItem(item, pinned) {
+  try {
+    const r = await fetch("/library/pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: item.file, pinned: !!pinned }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    item.pinned = !!pinned;
+    renderLibraryStrip();
+    toast(t(pinned ? "bg.library.pinned_toast" : "bg.library.unpinned_toast",
+            { label: item.label || item.id }), "good");
+  } catch (e) {
+    toast("Pin failed: " + e.message, "bad");
+  }
+}
+
+// Drag-reorder: place srcFile before/after dstFile in the visible
+// sort order. We compute the new order client-side from the already-
+// sorted strip, POST it, then refresh so the bridge's truth wins.
+async function reorderLibrary(srcFile, dstFile, after) {
+  if (!libraryCatalogue || srcFile === dstFile) return;
+  const sorted = sortLibraryItems(libraryCatalogue);
+  const order = sorted.map((it) => it.file).filter((f) => f !== srcFile);
+  const dstIdx = order.indexOf(dstFile);
+  if (dstIdx < 0) return;
+  order.splice(dstIdx + (after ? 1 : 0), 0, srcFile);
+  try {
+    const r = await fetch("/library/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    await refreshLibrary();
+  } catch (e) {
+    toast(t("bg.library.reorder_failed", { msg: e.message }), "bad");
   }
 }
 

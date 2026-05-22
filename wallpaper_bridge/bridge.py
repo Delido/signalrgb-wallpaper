@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.3-beta"
+APP_VERSION = "0.8.4-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -553,7 +553,24 @@ def _library_rebuild_catalogue(lib: Path) -> None:
     """Rescan the library folder and rewrite library.json with one entry
     per image. Files matching `<stem>.thumb.png` are paired as thumbs
     with their main image; everything else becomes a tile without an
-    explicit thumb (the Configurator falls back to the main file)."""
+    explicit thumb (the Configurator falls back to the main file).
+
+    User-state fields (`pinned`, `order`, `addedAt`) are preserved from
+    the previous catalogue if the file still exists — that way an
+    upload/delete/rename doesn't wipe the user's pin and drag-reorder
+    state. `addedAt` is initialised from file mtime for new entries so
+    "sort by newest first" works out of the box for fresh uploads."""
+    prev_by_file: dict[str, dict] = {}
+    cat_path = lib / "library.json"
+    if cat_path.exists():
+        try:
+            prev = json.loads(cat_path.read_text(encoding="utf-8"))
+            for it in prev.get("items", []):
+                if isinstance(it, dict) and "file" in it:
+                    prev_by_file[it["file"]] = it
+        except Exception:
+            pass
+
     items = []
     files = sorted([p for p in lib.iterdir()
                     if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")])
@@ -568,17 +585,87 @@ def _library_rebuild_catalogue(lib: Path) -> None:
             if cand in stems:
                 thumb = cand
                 break
-        items.append({
-            "id":    stem,
-            "label": stem.replace("-", " ").replace("_", " ").title(),
-            "file":  fp.name,
-            "thumb": thumb or fp.name,
-        })
-    cat_path = lib / "library.json"
+        prev_it = prev_by_file.get(fp.name) or {}
+        try:
+            added_at_default = int(fp.stat().st_mtime * 1000)
+        except OSError:
+            added_at_default = int(time.time() * 1000)
+        entry = {
+            "id":      stem,
+            "label":   stem.replace("-", " ").replace("_", " ").title(),
+            "file":    fp.name,
+            "thumb":   thumb or fp.name,
+            "pinned":  bool(prev_it.get("pinned", False)),
+            "order":   prev_it.get("order"),
+            "addedAt": prev_it.get("addedAt", added_at_default),
+        }
+        if entry["order"] is None:
+            del entry["order"]
+        items.append(entry)
+
     cat_path.write_text(
         json.dumps({"version": 1, "items": items}, indent=2),
         encoding="utf-8",
     )
+
+
+def _library_update_item(lib: Path, file: str, mutator) -> dict | None:
+    """Apply mutator(entry_dict) to the library.json item matching
+    `file`, persist, and return the updated entry. Returns None if no
+    such entry exists. Used by the pin/reorder endpoints — they touch
+    user-state fields but not the directory contents, so a full
+    catalogue rebuild isn't needed."""
+    cat_path = lib / "library.json"
+    if not cat_path.exists():
+        return None
+    try:
+        cat = json.loads(cat_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    items = cat.get("items", [])
+    target = None
+    for it in items:
+        if isinstance(it, dict) and it.get("file") == file:
+            target = it
+            break
+    if target is None:
+        return None
+    mutator(target)
+    cat["items"] = items
+    cat_path.write_text(json.dumps(cat, indent=2), encoding="utf-8")
+    return target
+
+
+def _library_apply_order(lib: Path, order: list[str]) -> int:
+    """Assign sequential `order` indices to entries whose `file` field
+    matches the given list. Entries not in the list keep their
+    existing order (if any) but are pushed past the end of the new
+    list. Returns the number of items that received an order."""
+    cat_path = lib / "library.json"
+    if not cat_path.exists():
+        return 0
+    try:
+        cat = json.loads(cat_path.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+    items = cat.get("items", [])
+    by_file = {it.get("file"): it for it in items if isinstance(it, dict)}
+    n = 0
+    for idx, file in enumerate(order):
+        it = by_file.get(file)
+        if it is not None:
+            it["order"] = idx
+            n += 1
+    # Entries not in the new order: push past the end so they sort
+    # last but stay reachable. Stable across multiple reorder rounds.
+    tail = len(order)
+    for it in items:
+        if isinstance(it, dict) and it.get("file") not in order:
+            it["order"] = tail
+            tail += 1
+    cat["items"] = items
+    cat_path.write_text(json.dumps(cat, indent=2), encoding="utf-8")
+    return n
 
 
 def library_dir() -> Path:
@@ -1471,6 +1558,107 @@ class Broadcaster:
                 writer.write(head + payload)
             except Exception as e:
                 http_error(writer, 500, f"delete failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # POST /library/pin — body is JSON {"file": "...", "pinned": bool}.
+        # Toggles the pin flag on a library entry without re-scanning the
+        # directory; the Configurator's right-click Pin/Unpin menu hits
+        # this. Returns the updated entry.
+        if method == "POST" and target.split("?", 1)[0] == "/library/pin":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 8192):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                file = str(req.get("file", ""))
+                pinned = bool(req.get("pinned", False))
+                if not file or "/" in file or "\\" in file or ".." in file:
+                    http_error(writer, 400, "bad file name")
+                    try: await writer.drain()
+                    except Exception: pass
+                    try: writer.close()
+                    except Exception: pass
+                    return
+                updated = _library_update_item(
+                    library_dir(), file, lambda it: it.update({"pinned": pinned})
+                )
+                if updated is None:
+                    http_error(writer, 404, f"library entry not found: {file}")
+                else:
+                    payload = json.dumps({"ok": True, "item": updated}).encode("utf-8")
+                    head = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json\r\n"
+                        f"Content-Length: {len(payload)}\r\n"
+                        "Cache-Control: no-store\r\n"
+                        "Connection: close\r\n\r\n"
+                    ).encode()
+                    writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 500, f"pin failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # POST /library/reorder — body is JSON {"order": ["a.png", "b.png", ...]}.
+        # Assigns sequential `order` indices to matching entries. The
+        # Configurator drags-and-drops tiles in the Library strip and
+        # POSTs the new order here.
+        if method == "POST" and target.split("?", 1)[0] == "/library/reorder":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 65536):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                raw_order = req.get("order", [])
+                if not isinstance(raw_order, list):
+                    raise ValueError("`order` must be a list")
+                order = []
+                for f in raw_order:
+                    s = str(f)
+                    if not s or "/" in s or "\\" in s or ".." in s:
+                        raise ValueError(f"bad file name in order: {s!r}")
+                    order.append(s)
+                n = _library_apply_order(library_dir(), order)
+                payload = json.dumps({"ok": True, "applied": n}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 500, f"reorder failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()

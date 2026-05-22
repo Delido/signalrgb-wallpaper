@@ -59,14 +59,14 @@ already has the styling chops for it):
   catalogue entry
 - Delete → same path as the existing hover-× button
 
-### 🔲 Gallery: sort + pin favourites — ~1 h
+### ✅ Gallery: sort + pin favourites — shipped v0.8.4-beta
 
 `library.json` gains optional `pinned: true` and `addedAt`
 timestamps. Render order: pinned first → built-in starters →
 user uploads sorted by addedAt descending. Right-click → Pin /
 Unpin toggle.
 
-### 🔲 Gallery: drag-and-drop reorder — ~2 h
+### ✅ Gallery: drag-and-drop reorder — shipped v0.8.4-beta
 
 HTML5 drag API on Library tiles. On drop: bridge gets a
 `POST /library/reorder` with the new `order` array; persisted as
@@ -90,7 +90,7 @@ New action next to *Apply to Screen N* / *Save as PNG*:
 - *Update library entry* → only enabled when the user opened
   this image from Library; overwrites in place
 
-### 🔲 Builder: live RGB preview behind the canvas — ~3 h
+### ✅ Builder: live RGB preview behind the canvas — shipped v0.8.4-beta
 
 Toggle in the Builder's top bar: *"Show glow preview"*. When on,
 a CSS layer underneath the canvas runs an animated RGB cycle

@@ -4,6 +4,53 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4-beta] - 2026-05-22
+
+> Closes the Workflow-polish slice on the Gallery side and lands the
+> long-promised Builder *Show glow preview* toggle. Multi-monitor
+> convenience (Mirror mode, Apply-to-all, overview card, tab
+> resolutions) is the focus of the next beta.
+
+### Added — Configurator library
+
+- **Pin to top.** New *Pin / Unpin* entry in the right-click context
+  menu. Pinned tiles render first, ahead of starters and uploads, with
+  a small star badge in the upper-left corner. Persisted as
+  `pinned: true` inside `library.json`; bridge merges the flag back
+  into the catalogue on every directory rescan (upload / rename /
+  duplicate / delete no longer wipe pin state).
+- **Sort order: pinned → user order → newest → label.** The strip now
+  sorts by: pinned first, then user-set `order` from drag-reorder,
+  then `addedAt` descending (newest upload bubbles up), then label
+  alphabetical as a stable tie-break. `addedAt` is stamped on every
+  entry from file mtime so fresh uploads sort correctly even before
+  the user touches anything.
+- **Drag-and-drop reorder.** Each tile is `draggable=true`. Drop on
+  the left/right half of a target tile to insert before/after with a
+  visible drop-indicator (4 px coloured edge). New order POSTs to
+  `/library/reorder` which assigns sequential `order` indices in
+  `library.json`. Works across pinned + unpinned items.
+
+### Added — Builder
+
+- **Show glow preview toggle** in the canvas toolbar (right side,
+  next to the canvas-stat). Swaps the canvas's transparency
+  checkerboard for an animated RGB-cycle gradient layered behind, so
+  cut-out pixels show what the SignalRGB glow will look like as you
+  edit. Off by default (the checkerboard is still the canonical view
+  for spotting unintended transparency).
+
+### Bridge
+
+- `POST /library/pin` — body `{file, pinned}`, toggles the pin flag
+  on one entry without re-scanning the directory.
+- `POST /library/reorder` — body `{order: [file1, file2, …]}`,
+  assigns sequential order indices to listed entries; unlisted
+  entries are pushed past the end so they stay reachable.
+- `_library_rebuild_catalogue` preserves user-state fields
+  (`pinned`, `order`, `addedAt`) across rebuilds. `addedAt` is
+  stamped from file mtime for fresh entries.
+
 ## [0.8.3-beta] - 2026-05-22
 
 > Workflow polish for the **Configurator's Library** and the **Builder**

@@ -231,6 +231,32 @@
     position: relative;
     line-height: 0; /* eliminate inline-img baseline gap */
   }
+  /* Animated RGB layer behind the canvas. When .glow-preview is on we
+     swap the canvas's checkerboard background for transparent so the
+     gradient bleeds through cut-out pixels — a live mock of how the
+     SignalRGB glow will paint through the eventual transparency. */
+  .canvas-host::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(45deg,
+      #ff2d6e, #ffaa00, #ffe600, #00ff88, #00d4ff, #6c5cff, #ff2d6e);
+    background-size: 400% 400%;
+    filter: blur(8px) saturate(1.2);
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .canvas-host.glow-preview::before {
+    opacity: 1;
+    animation: canvasGlow 8s linear infinite;
+  }
+  .canvas-host.glow-preview canvas { background: transparent; }
+  @keyframes canvasGlow {
+    0%   { background-position:   0% 50%; }
+    100% { background-position: 400% 50%; }
+  }
   .canvas-host canvas {
     background:
       repeating-conic-gradient(#444 0% 25%, #888 0% 50%) 50% / 16px 16px;
@@ -632,6 +658,10 @@
       <button class="btn btn-icon" id="zoom-in"    disabled data-i18n-title="zoom.in" title="Zoom in">+</button>
       <span class="zoom-display" id="zoom-display">—</span>
       <div class="spacer"></div>
+      <label class="check-row" style="margin-right: 12px; gap: 6px;">
+        <input type="checkbox" id="glow-preview">
+        <span data-i18n="glow.preview_label">Show glow preview</span>
+      </label>
       <span class="stat" id="canvas-stat"></span>
     </div>
     <div class="canvas-scroll" id="canvas-scroll">
@@ -818,6 +848,7 @@ const els = {
   applyBtns:    document.querySelectorAll(".apply-screen"),
   splitBtns:    document.querySelectorAll(".split-btn"),
   splitPreview: $("split-preview"),
+  glowPreview:  $("glow-preview"),
 
   canvasArea:   $("canvas-scroll"),
   canvasHost:   $("canvas-host"),
@@ -1004,6 +1035,8 @@ const TRANSLATIONS = {
   "btn.choose_image": { en: "Choose image…",   de: "Bild auswählen…" },
   "btn.open_library": { en: "Open from library…", de: "Aus Bibliothek öffnen…" },
   "btn.save_library": { en: "Save to library",    de: "In Bibliothek speichern" },
+  "glow.preview_label": { en: "Show glow preview",
+                          de: "Glow-Vorschau anzeigen" },
   "lib.dialog.title": { en: "Library",             de: "Bibliothek" },
   "lib.dialog.empty": { en: "Library is empty. Add wallpapers in the Configurator's Background section first.",
                         de: "Bibliothek ist leer. Erst im Konfigurator unter Hintergrund Wallpaper hinzufügen." },
@@ -2524,6 +2557,10 @@ els.canvasArea.addEventListener("wheel", (e) => {
 els.splitPreview.addEventListener("change", () => {
   els.canvasHost.classList.toggle("split-preview", els.splitPreview.checked);
   positionSplitLine();
+});
+
+els.glowPreview.addEventListener("change", () => {
+  els.canvasHost.classList.toggle("glow-preview", els.glowPreview.checked);
 });
 
 function positionSplitLine() {
