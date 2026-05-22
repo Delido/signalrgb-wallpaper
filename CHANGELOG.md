@@ -4,6 +4,43 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.18-beta] - 2026-05-23
+
+> Licence-cleanup release: swaps the AI cut-out default model from
+> RMBG-1.4 (BRIA, non-commercial) to U²-Netp (Apache 2.0). Commercial
+> wallpaper / streaming / studio users no longer get steered into a
+> paid-licence dependency just by clicking *AI saliency*.
+>
+> The v0.9.16 + v0.9.17 release tags were yanked from GitHub
+> Releases for the same reason; users on those builds should either
+> wait for their tray auto-update to pick this version up, or
+> manually download the v0.9.18 installer from the latest release.
+
+### Changed — Builder Auto-cut
+
+- **Default model: U²-Netp (Apache 2.0)** at 320×320 input —
+  permissive licence, free for any use including commercial.
+  Replaces the v0.9.16 / v0.9.17 default which was RMBG-1.4
+  (BRIA RMBG v1.4 License v1.0, non-commercial only).
+- The user-facing workflow is identical: pick *AI saliency*,
+  click *Run*, get a salient-region mask. The model is smaller
+  (4 MB vs ~44 MB), inference is faster, and there's no licence
+  trap waiting for commercial users.
+- `localStorage["builder.aiModelUrl"]` + `["builder.aiInputSize"]`
+  overrides still work if a user wants to point at a different
+  model. Otsu mode is the default-selected option in the picker
+  and uses no model / network at all.
+
+### Docs
+
+- `docs/credits.md` updated: U²-Netp attribution added, RMBG-1.4
+  warning removed (no longer the default), audit date bumped to
+  v0.9.18.
+- README + roadmap re-aligned to the v0.9.x cycle reality (Tier
+  1 + 2 shipped, Builder Auto-cut shipped, the Builder Wall
+  workflow shipped). Outdated v0.8.0-first-stable language
+  replaced.
+
 ## [0.9.17-beta] - 2026-05-23
 
 > Bug-fix release for v0.9.16's Auto cut tool + the long-standing

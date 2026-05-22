@@ -2080,14 +2080,16 @@ async function ensureOnnxRuntime() {
   return _ortLoading;
 }
 
-// Default model is RMBG-1.4 (1024×1024 input). Users can override both
-// the URL and the input size via localStorage so a different model
-// (e.g. U²-Netp @ 320, MODNet @ 512) works without code changes.
+// Default model: U²-Netp (Apache 2.0) — permissive licence, free
+// for personal AND commercial use. Picked over the earlier RMBG-1.4
+// default (BRIA non-commercial licence) so commercial users aren't
+// silently steered into a paid-licence requirement. Users can
+// override both URL and input size via localStorage:
 //   localStorage["builder.aiModelUrl"]   — model URL
-//   localStorage["builder.aiInputSize"]  — input H = W (default 1024)
+//   localStorage["builder.aiInputSize"]  — input H = W (default 320)
 const DEFAULT_AI_MODEL_URL =
-  "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx";
-const DEFAULT_AI_INPUT_SIZE = 1024;
+  "https://huggingface.co/Xenova/u2netp/resolve/main/onnx/model.onnx";
+const DEFAULT_AI_INPUT_SIZE = 320;
 
 function getAiModelConfig() {
   const url = localStorage.getItem("builder.aiModelUrl") || DEFAULT_AI_MODEL_URL;

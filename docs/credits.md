@@ -83,20 +83,23 @@ from the upstream when they choose to use the feature.
   `ort.min.js` + the matching `.wasm` files from jsDelivr's
   npm mirror on first AI-mode click. About 3 MB total, browser-cached
   after. <https://github.com/microsoft/onnxruntime>
-- **RMBG-1.4 (BRIA AI)** — ⚠️ **non-commercial use only** under
-  BRIA's *RMBG v1.4 License v1.0*. This is the default saliency model
-  the AI mode points at; the model file is fetched from Hugging Face
-  on first click (~4 MB). The licence allows free personal /
-  research use; commercial deployment requires a paid licence from
-  BRIA. **We do not redistribute the model**: each user's browser
-  pulls it from BRIA's official Hugging Face repo at runtime, so the
-  licence terms attach to the user, not to our MIT distribution.
-  Users who don't want to accept BRIA's terms can either skip AI
-  mode entirely (Otsu mode is always available and uses no model)
-  or point at any other ONNX saliency / segmentation model via
-  `localStorage["builder.aiModelUrl"]` — the input size is
-  configurable via `localStorage["builder.aiInputSize"]`.
-  <https://huggingface.co/briaai/RMBG-1.4>
+- **U²-Netp (saliency model)** — Apache License 2.0. *"U²-Net:
+  Going Deeper with Nested U-Structure for Salient Object
+  Detection"* by Qin et al. The "p" variant is the small / fast
+  version (~4 MB, 320×320 input). v0.9.18 made this the default
+  AI-mode model — Apache 2.0 is permissive and explicitly allows
+  commercial use, so the AI cut-out feature is now free for any
+  user regardless of whether their wallpaper setup is private or
+  commercial. The model file is fetched from Hugging Face by the
+  user's browser on first click; we do not bundle or redistribute
+  it. <https://github.com/xuebinqin/U-2-Net>
+  Earlier v0.9.16 + v0.9.17 betas pointed at *RMBG-1.4* (BRIA
+  RMBG v1.4 License v1.0, **non-commercial only**); those tags
+  were yanked from Releases to avoid steering commercial users
+  into BRIA's licence. If a user manually overrides
+  `localStorage["builder.aiModelUrl"]` to a non-permissive model,
+  the licence attaches to *them* (their browser is what downloads
+  the model), not to our MIT distribution.
 - **CDN providers (jsDelivr, Hugging Face)** — fetch endpoints, not
   bundled assets. Both have free public access tiers our usage sits
   well inside (one fetch per user per AI cold-start).
@@ -138,7 +141,7 @@ MIT product is OK.
 | GitHub Releases API | (Free public API) | Read-only, well under rate limits for unauthenticated requests, no terms we're violating. |
 | LibreHardwareMonitor | Mozilla Public License 2.0 | **Not bundled.** Polled at runtime via the user's own LHM install. MPL 2.0 is file-based weak copyleft — it would only impose obligations on us if we redistributed LHM's source files (modified or not). Since we just call its HTTP server like any other client, no propagation. |
 | onnxruntime-web | MIT | **Not bundled.** Fetched from jsDelivr at runtime when the user opts into Builder Auto-cut → AI mode. Permissive, attribution above. |
-| RMBG-1.4 model (BRIA) | BRIA RMBG-1.4 License v1.0 — **non-commercial** | **Not bundled.** Fetched from Hugging Face by the user's browser when they opt into AI mode. The licence binds the *user* on download, not our MIT distribution. Users in commercial settings should either avoid AI mode (Otsu mode covers the same workflow) or swap the model via `localStorage["builder.aiModelUrl"]` to something permissively licensed (e.g. U²-Net Apache 2.0). |
+| U²-Netp saliency model | Apache 2.0 | **Not bundled.** Fetched from Hugging Face by the user's browser on first AI-mode click. Apache 2.0 is permissive and explicitly commercial-use-OK; attribution above (in the lazy-load section). Default since v0.9.18. |
 
 ### Hosts the wallpaper *runs inside* (we don't bundle them)
 
@@ -171,4 +174,4 @@ inside it.
     automatically).
 - No copyleft contamination of our own code.
 
-This audit was last refreshed for **v0.9.17-beta** (2026-05-23).
+This audit was last refreshed for **v0.9.18-beta** (2026-05-23).
