@@ -4,6 +4,37 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0-beta] - 2026-05-22
+
+> Builder gains a **Monitor Wall** section: visual layout of every
+> connected screen with per-tile image picker and a single
+> *Apply Wall* batch upload. Generalises the per-screen Apply
+> buttons + Split tools into one workflow that matches how users
+> actually think about multi-monitor wallpapers.
+
+### Added — Builder
+
+- **Monitor Wall section** (right panel, below *Multi-monitor split*).
+  - **Layout dropdown**: *Horizontal row (1×N)*, *2×2 grid*, *Vertical
+    column (N×1)*. Slot count derives from the live `screenCount`
+    in `/config`.
+  - **Frame aspect ratios** use each screen's reported `viewportW/H`
+    so an ultrawide tile actually renders ultrawide. Falls back to
+    16:9 when no wallpaper page has connected to that screen yet.
+  - **Per-frame image pickers**: drop a file on a frame, click the
+    frame to pick from disk, or hit the *Library* hover-action to
+    pull from the Configurator library — same dialog the existing
+    *Open from library…* button uses.
+  - **Apply Wall** batch-uploads each loaded slot to its matching
+    screen via the existing `POST /screen/<N>/background` endpoint.
+    Empty slots skip — lets the user push only the screens they
+    care about. Re-encodes through canvas → PNG so JPEG/WebP
+    inputs land in a consistent format.
+  - **Clear** resets every slot in one click.
+  - Layout / viewport state is re-polled every 10 s, so changing
+    screen count or monitor resolution updates the Wall section
+    without a reload.
+
 ## [0.8.10-beta] - 2026-05-22
 
 > Two fixes against the v0.8.9-beta System-status dialog: plugin
