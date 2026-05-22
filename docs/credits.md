@@ -19,6 +19,11 @@ under which each ships is below.
 - **psutil** (cross-platform process / system stats) — BSD-3-Clause. Used by
   the SysStats poller behind the CPU / RAM widgets.
   <https://github.com/giampaolo/psutil>
+- **winrt-Windows.Media.Control** (Now-playing widget data source) — MIT.
+  Microsoft's split-package WinRT projection for Python; replaces the legacy
+  `winsdk` and feeds the SMTC snapshot (title / artist / progress) into the
+  1 Hz sysstats push the wallpaper consumes.
+  <https://github.com/pywinrt/python-winsdk>
 - **PyInstaller** (single-file packager — used at build time, the bootloader
   stub it embeds ships in this exe) — GPL 2.0+ with linking exception
   (commercial / closed-source apps OK).
@@ -47,9 +52,12 @@ under which each ships is below.
   the end-user's CEF / WebView. This project does not centrally proxy or
   re-host the data; Open-Meteo sees many independent low-volume callers,
   one per user, well inside their free non-commercial tier.
-- **Quotable** — random-quote API behind the *Quote* widget. Data is
-  CC BY-SA; the widget footer says *"via Quotable"*.
-  <https://github.com/lukePeavey/quotable>
+- **Quote pool — local, bundled.** The *Quote* widget previously hit
+  `api.quotable.io`, but the service went dark in early 2026. v0.9.x
+  replaced the live fetch with a 50-entry pool of public-domain /
+  unattributed quotations baked into `wallpaper/index.html`. No
+  external network call, no third-party data dependency, no
+  attribution requirement.
 - **GitHub Releases API** — polled at startup + every 24 h by the in-app
   update checker.
   <https://docs.github.com/en/rest/releases/releases>
@@ -62,6 +70,36 @@ under which each ships is below.
   the existing CPU / RAM stats. **We do not bundle LHM** — it has to
   be installed separately by the user, so its MPL terms don't
   propagate to our MIT distribution. <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>
+
+## Lazy-loaded in the browser (Builder Auto-cut, not bundled)
+
+The Builder's *Auto-cut → AI saliency* mode (v0.9.16+) fetches its
+runtime + model on first click. Nothing is bundled with our installer
+or our wallpaper zips; each user's browser fetches these directly
+from the upstream when they choose to use the feature.
+
+- **onnxruntime-web** — MIT. Microsoft's ONNX inference runtime for
+  the web (WebAssembly + optional WebGPU backends). We pull
+  `ort.min.js` + the matching `.wasm` files from jsDelivr's
+  npm mirror on first AI-mode click. About 3 MB total, browser-cached
+  after. <https://github.com/microsoft/onnxruntime>
+- **RMBG-1.4 (BRIA AI)** — ⚠️ **non-commercial use only** under
+  BRIA's *RMBG v1.4 License v1.0*. This is the default saliency model
+  the AI mode points at; the model file is fetched from Hugging Face
+  on first click (~4 MB). The licence allows free personal /
+  research use; commercial deployment requires a paid licence from
+  BRIA. **We do not redistribute the model**: each user's browser
+  pulls it from BRIA's official Hugging Face repo at runtime, so the
+  licence terms attach to the user, not to our MIT distribution.
+  Users who don't want to accept BRIA's terms can either skip AI
+  mode entirely (Otsu mode is always available and uses no model)
+  or point at any other ONNX saliency / segmentation model via
+  `localStorage["builder.aiModelUrl"]` — the input size is
+  configurable via `localStorage["builder.aiInputSize"]`.
+  <https://huggingface.co/briaai/RMBG-1.4>
+- **CDN providers (jsDelivr, Hugging Face)** — fetch endpoints, not
+  bundled assets. Both have free public access tiers our usage sits
+  well inside (one fetch per user per AI cold-start).
 
 ## Hosts the wallpaper plays inside (not bundled)
 
@@ -92,12 +130,15 @@ MIT product is OK.
 | pystray | LGPL 3.0 | LGPL allows linking from non-LGPL apps. Attribution above is the required notice; users wanting to swap pystray can replace the bundled module files inside the PyInstaller extraction. |
 | Pillow / PIL | MIT-CMU (HPND) | Permissive — same shape as MIT; just include the notice (we do, here). |
 | psutil | BSD-3-Clause | Permissive — include notice (here) and don't claim endorsement (we don't). |
+| winrt-Windows.Media.Control | MIT | Permissive — used to read SMTC for the Now-playing widget. Just attribution. |
 | PyInstaller bootloader stub | GPL 2.0+ **with bootloader linking exception** | The exception (see PyInstaller's `COPYING.txt`) explicitly allows building closed-source / commercial / non-GPL applications. Our app is MIT, well inside the carve-out. |
 | interact.js | MIT | Permissive — we ship `interact.LICENSE.txt` next to the .js in every wallpaper bundle. |
 | Open-Meteo data | CC-BY 4.0 | Attribution required at point of display. Done in the Weather widget footer (*"via Open-Meteo"*) and here. |
-| Quotable data | CC BY-SA | Attribution + share-alike on derivative datasets. We don't redistribute the data, we display it per call; attribution shown in the Quote widget footer (*"via Quotable"*) and here. |
+| Local quote pool (Quote widget) | Public domain / unattributed | No external service — 50 short quotations bundled in `wallpaper/index.html`. No licensing or rate-limit obligations attach. |
 | GitHub Releases API | (Free public API) | Read-only, well under rate limits for unauthenticated requests, no terms we're violating. |
 | LibreHardwareMonitor | Mozilla Public License 2.0 | **Not bundled.** Polled at runtime via the user's own LHM install. MPL 2.0 is file-based weak copyleft — it would only impose obligations on us if we redistributed LHM's source files (modified or not). Since we just call its HTTP server like any other client, no propagation. |
+| onnxruntime-web | MIT | **Not bundled.** Fetched from jsDelivr at runtime when the user opts into Builder Auto-cut → AI mode. Permissive, attribution above. |
+| RMBG-1.4 model (BRIA) | BRIA RMBG-1.4 License v1.0 — **non-commercial** | **Not bundled.** Fetched from Hugging Face by the user's browser when they opt into AI mode. The licence binds the *user* on download, not our MIT distribution. Users in commercial settings should either avoid AI mode (Otsu mode covers the same workflow) or swap the model via `localStorage["builder.aiModelUrl"]` to something permissively licensed (e.g. U²-Net Apache 2.0). |
 
 ### Hosts the wallpaper *runs inside* (we don't bundle them)
 
@@ -130,4 +171,4 @@ inside it.
     automatically).
 - No copyleft contamination of our own code.
 
-This audit was last refreshed for **v0.8.2-beta** (2026-05-20).
+This audit was last refreshed for **v0.9.17-beta** (2026-05-23).

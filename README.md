@@ -29,8 +29,12 @@ Runs on top of [Lively Wallpaper](https://www.rocksdanister.com/lively/)
 Steam). The one-click installer sets everything up — no Python, no
 manual file copies, no terminal.
 
-> **v0.8.0** is the first stable release after a long beta cycle.
-> Full release notes in the [CHANGELOG](CHANGELOG.md).
+> Currently in the **v0.9.x stabilisation cycle** — the v0.8.x betas
+> piled workflow polish on top of v0.8.0 (the first stable), and the
+> v0.9.x betas added the bigger features (auto-cycle, hotkeys,
+> per-app profiles, now-playing, Auto-cut Builder tool, multi-monitor
+> wall, etc.). Turn on *Allow betas* in the tray to get them
+> automatically. Full notes: [CHANGELOG](CHANGELOG.md).
 
 ## What you get
 
@@ -192,119 +196,101 @@ about it.
 
 ## What's new
 
-**v0.8.0** is the first stable after the 0.7.x beta cycle and rolls up
-the whole "0.7.0 → 0.8.0" feature wave:
+**v0.9.x** is the current beta cycle and rolls up the bigger
+post-v0.8 features — automation, more effects, and a much-improved
+multi-monitor Builder workflow. Highlights since v0.8.0:
 
-- 🆕 **In-browser Help page** — scenario walkthroughs for every monitor
-  setup (tray → *Help…*)
-- 🆕 **Wallpaper library** with upload + delete from the Configurator
-- 🆕 **Per-screen preset slots** — save / apply / clear with one click
-- 🆕 **Pattern-fill brush** in the Builder (halftone / dither / hatching)
-- 🆕 **Whole-screen audio-reactive glow layer** — Pulse / Spectrum /
-  Waveform
-- 🆕 **4-monitor support** + ultrawide-friendly aspect ratios
-  (Auto / 16:9 / 21:9 / 32:9 / 9:16 / Custom)
-- 🆕 **Auto-Lively bootstrapper** in the installer — Lively isn't even a
-  prerequisite anymore
-- 🆕 **Single Wallpaper Engine bundle** with *Screen index* property
-  (one Workshop item covers any monitor count)
-- 🆕 **DE / EN** localisation across Configurator, Builder, About, Help
-- 🆕 **3D parallax** background-against-cursor effect
-- 🆕 **Chunked UDP** transport — 128 × 128 RGB grids
-- 🆕 **In-app update checker** with beta-channel opt-in
+### Automation / convenience
 
-**Since v0.8.0** the 0.8.x beta cycle has piled workflow polish on
-top — turn beta updates on in the tray to get them automatically:
+- 🆕 **Wallpaper auto-cycle** — per-screen *Auto-cycle* block in
+  the Background card, configurable interval / pool / order
+  (v0.9.2-beta)
+- 🆕 **Preset hotkeys** — global `Ctrl+Shift+1..4` swap presets
+  on every active screen, toggle under tray → Advanced
+  (v0.9.3-beta)
+- 🆕 **Per-app / per-game profiles** — foreground-window watcher
+  auto-switches presets when a specific exe runs; snapshots
+  prior state and reverts on focus-out (v0.9.5-beta)
+- 🆕 **Now-playing widget** — Windows SMTC; title + artist +
+  optional progress bar, glow-tinted (v0.9.4-beta)
+- 🆕 **In-app auto-update** — tray downloads and runs the new
+  installer silently; tray button replaces the "go to releases
+  page" prompt (v0.9.8-beta)
 
-- 🆕 **LibreHardwareMonitor integration** — new Hardware-Sensor
-  widget family (CPU/GPU temps, fan RPMs, drive temps, power…)
-  driven by a local LHM web server (v0.8.2-beta)
-- 🆕 **Gallery rebuild** — hover-preview with RGB-mock glow,
-  click-to-preview instead of click-to-apply, 5 s Undo toast,
-  right-click context menu (Apply / Edit in Builder / Rename /
-  Duplicate / Delete), pin-to-top, drag-and-drop reorder
-  (v0.8.3 + v0.8.4-beta)
-- 🆕 **Builder ↔ Library bridge** — *Open from library…* picker
-  next to *Choose image*, *Save to library* button, *From
-  library…* on the merge slots, deep-link via
-  `?library=<file>` (v0.8.3 + v0.8.5-beta)
-- 🆕 **Builder crop tool** — drag a rectangle and Confirm to
-  resize the canvas; in-progress mask edits survive
-  (v0.8.5-beta)
-- 🆕 **Builder live-glow preview** — toggle in the canvas toolbar
-  swaps the transparency checkerboard for an animated RGB
-  gradient so cut-out pixels preview the actual SignalRGB glow
-  (v0.8.4-beta)
-- 🆕 **Tab labels show resolution** — *Screen 2 — 3840×1080*
-  whenever a wallpaper page has connected (v0.8.5-beta)
+### Builder / Monitor Wall
+
+- 🆕 **Monitor Wall** as primary right-panel nav — one tile per
+  monitor, click drops in file / library / current canvas
+  (v0.9.11-beta)
+- 🆕 **⇔ Span canvas across monitors** — single click slices the
+  current canvas into one chunk per screen, sized to each
+  monitor's physical width; closes the merge → wall workflow
+  gap for the *photos side-by-side → 7680×2160 → onto 2 ×
+  2560×1440* flow (v0.9.13-beta)
+- 🆕 **Right-panel rework** — Source → Wall → Output flow,
+  Merge collapsed by default, Apply Wall full-width primary
+  (v0.9.14-beta)
+- 🆕 **Auto cut tool** ✨ — Otsu instant mode (no internet) +
+  AI saliency mode that lazy-loads `onnxruntime-web` + RMBG-1.4
+  on first click (v0.9.16 + v0.9.17 dim/undo fixes)
+
+### Effects + UI
+
+- 🆕 **5 new ambient effects** — Constellation, Fireflies
+  (v0.9.12-beta) plus Plasma, Vortex, Bubbles (v0.9.15-beta).
+  All written from scratch in the project's `AMBIENT_PRESETS`
+  shape, no per-pen licence verification needed.
+- 🆕 **First-run onboarding tour** — Configurator-side overlay
+  with 7 steps, spotlight ring + tooltip on the live DOM;
+  *Tour* button in the header replays (v0.9.10-beta)
+- 🆕 **Ctrl+Z undo across settings** — per-screen ring buffer,
+  20 entries (v0.9.10-beta)
+- 🆕 **Setup health-check + Backup/Restore + Reset-screen** —
+  tray *System status…* dialog and Configurator *Backup &
+  Restore* card (v0.8.9-beta)
+- 🆕 **Mirror mode per tab** — any screen can mirror any other;
+  invariant enforced via `_block_if_mirror` /
+  `_replicate_to_mirrors` (v0.8.8-beta)
+
+### Bug fixes from the 0.8.x cycle
+
 - 🐛 **Perf**: SignalRGB-startup lag fixed by coalescing 5×
   redundant `applyZoneSize` rebuilds into one (v0.8.1)
 - 🐛 **Installer**: library.json no longer overwritten on
-  upgrade, so your uploads stay visible (v0.8.6-beta)
+  upgrade — your uploads survive (v0.8.6-beta)
+- 🐛 **Tray auto-update**: ShellExecuteW spawn replaces
+  subprocess.Popen with DETACHED_PROCESS so the installer
+  actually launches reliably (v0.9.17-beta)
 
 Full version-by-version breakdown: [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 
-Open ideas grouped by impact-to-effort ratio. Effort estimates are
-the maintainer's order-of-magnitude — pull requests on any of these
-are very welcome. For the long-form version with per-item
-implementation notes + license-compatibility guidance, see
-[docs/roadmap.md](docs/roadmap.md).
+Open ideas grouped by impact-to-effort ratio. Pull requests welcome.
+For the long-form version with per-item implementation notes +
+licence-compatibility guidance, see [docs/roadmap.md](docs/roadmap.md).
 
-### 🎯 Tier 1 — Setup polish (biggest UX wins for least effort)
+> ✅ **Tiers 1 + 2 are fully shipped** as part of the v0.8.9 → v0.9.10
+> beta cycle (setup health-check, backup/restore, Ctrl+Z undo,
+> first-run tour, auto-cycle, preset hotkeys, per-app profiles,
+> now-playing widget). Tier 3's Builder Auto-cut tool, auto-update,
+> and the first two ambient batches have also shipped (v0.9.12 →
+> v0.9.17). What's left below is the genuinely open work.
 
-- **Setup health check in the tray** — green/red status dots for
-  SignalRGB plugin loaded · bridge port reachable · wallpaper
-  assigned · LHM reachable. Each red dot has a one-click fix.
-  Should eliminate most "doesn't work" support traffic.
-- **Backup + restore config** — export everything
-  (`config.json` + Library + Presets + Widgets) as one ZIP,
-  re-import via drag-and-drop in the Configurator. Killer for
-  fresh-Windows installs / multi-PC users.
-- **Reset / undo** — "Reset this screen to defaults" per Screen
-  tab, plus Ctrl+Z for the last ~10 settings changes.
-- **First-run onboarding tour** — 30-second guided overlay the
-  first time the Configurator opens: Screens → Background → Glow
-  → Done.
+### 🛠️ Tier 3 — Power-user / polish (partial)
 
-### ✨ Tier 2 — High-visibility user features
-
-- **Wallpaper shuffle / cycle** — Library toggle: cycle every X
-  minutes, randomise on logon, or pick a different image by time
-  of day.
-- **Preset hotkeys** — global `Ctrl+Shift+1..4` to swap between
-  the four per-screen preset slots without touching the
-  Configurator.
-- **Per-app / per-game profiles** — foreground-window watcher
-  that auto-switches presets when a specific exe runs (e.g. dim
-  glow plus a clock-only widget while Cyberpunk 2077 is
-  foreground).
-- **Now-playing widget** — current track from Spotify or any
-  Windows app that publishes through `SystemMediaTransportControls`.
-
-### 🛠️ Tier 3 — Power-user / polish
-
-- **Builder: AI cut-out tool** — small WebAssembly background-
-  removal model for a one-click "make all the bright stuff
-  transparent" mode.
-- **Winget package + auto-update** — `winget install
-  Delido.SignalRGBWallpaper` and a button in the update checker
-  to actually download + apply the update instead of just linking
-  to the release page.
-- **Mobile Configurator view** — make `/configurator` responsive
-  so you can change wallpaper settings from a phone on the same
-  network.
-- **Community wallpaper gallery** — central `wallpapers.json` in
-  a community repo; the Configurator pulls it and shows
-  community-submitted backgrounds alongside the local Library
-  strip. PR-based submissions.
-- **More ambient effects from MIT-licensed sources** — port a
-  few canvas / particle pieces from MIT-licensed CodePen authors
-  (e.g. [ykob](https://github.com/ykob)'s catalogue) as new
-  *Effects* presets — fireflies, geometric flow fields, stars,
-  etc. Per-pen license check + attribution in `docs/credits.md`
-  required.
+- **More ambient effects from MIT-licensed sources** — Constellation
+  and Fireflies (v0.9.12), Plasma, Vortex and Bubbles (v0.9.15)
+  shipped as the first two batches; further ports from
+  [ykob](https://github.com/ykob)'s catalogue and similar MIT-
+  licensed pens still on the menu. Per-pen licence check and
+  attribution in [docs/credits.md](docs/credits.md) required for
+  each one ported directly.
+- **Winget package** — auto-update is done (tray downloads + runs
+  the installer); the missing piece is a Winget manifest submission
+  to `microsoft/winget-pkgs` so `winget install
+  Delido.SignalRGBWallpaper` works. Needs an ongoing per-release
+  manifest update.
 
 ### 🔌 Tier 4 — Ecosystem / integration
 
@@ -312,15 +298,27 @@ implementation notes + license-compatibility guidance, see
   sensor values via MQTT so users can write HA automations
   ("dim wallpaper when 'movie night' scene is active").
 - **REST API** — already partially possible (`/library`, `/config`,
-  `/hwmon/sensors`); formalise the full WS-equivalent surface for
-  Stream Deck / scripts / external tools to drive the wallpaper.
+  `/hwmon/sensors`); formalise the full WS-equivalent surface with
+  an OpenAPI spec + token auth so Stream Deck / scripts / external
+  tools can drive the wallpaper without poking the WebSocket.
 - **Plugin API for third-party widgets** — `%LOCALAPPDATA%\
   SignalRGBWallpaper\plugins\<name>\widget.js` with a defined
-  contract. Long road to a community widget library.
+  contract. Long road to a community widget library; depends on
+  the REST-API formalisation above.
 - **Generic HTTP widget** — polls any URL on a schedule and
-  renders a configurable template. Covers Discord unread /
+  renders a configurable Mustache template. Covers Discord unread /
   stocks / RSS / crypto / arbitrary REST APIs with one widget
-  type instead of one per service.
+  type instead of one per service. ~5-6 h.
+
+### 🅿️ Parked
+
+- **Mobile Configurator view** — would need the bridge to bind to
+  `0.0.0.0` with a "this exposes your wallpaper config to the LAN"
+  opt-in, and most users sit at the PC the wallpaper runs on.
+- **Community wallpaper gallery** — high copyright-infringement
+  risk for an unfiltered public submission flow (brand IP, anime
+  stills, game art). The bundled starter library + per-user
+  upload remain the supported path.
 
 Got a wish that isn't here?
 [Open an issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
