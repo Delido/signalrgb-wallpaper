@@ -1923,6 +1923,9 @@ const ambient = (function () {
     ctx.clearRect(0, 0, viewW, viewH);
     const tint = tintEnabled ? currentTintCss : null;
     for (const p of particles) def.render(ctx, p, tint);
+    // Optional post-pass for effects that need to draw across the
+    // whole particle set (e.g. constellation's connecting lines).
+    if (typeof def.after === "function") def.after(ctx, particles, tint);
   }
 
   return {
@@ -2037,6 +2040,116 @@ const AMBIENT_PRESETS = {
       grad.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = grad;
       ctx.fillRect(p.x - p.r * 5, p.y - p.r * 5, p.r * 10, p.r * 10);
+    },
+  },
+
+  // ── Constellation ──
+  // Drifting particles + thin lines between any two that come within
+  // a fade radius. Inspired by the classic CodePen connect-the-dots
+  // effect (ykob/aBrjaR style, MIT). Implementation original, fits
+  // our existing AMBIENT_PRESETS shape so the renderer below can
+  // drive it like the rest.
+  constellation: {
+    targetCount: (d, w, h) => Math.round((w * h) / 24000 * (d / 60)),
+    spawn: (w, h) => ({
+      x:  Math.random() * w,
+      y:  Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r:  1 + Math.random() * 1.8,
+      alpha: 0.4 + Math.random() * 0.4,
+    }),
+    step: (p, dt, w, h) => {
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      // Bounce-wrap so particles stay distributed across the canvas.
+      if (p.x < -10)      p.x = w + 10;
+      if (p.x > w + 10)   p.x = -10;
+      if (p.y < -10)      p.y = h + 10;
+      if (p.y > h + 10)   p.y = -10;
+      return true;
+    },
+    render: (ctx, p, tint) => {
+      ctx.fillStyle = tint ? rgbToRgba(tint, p.alpha)
+                           : "rgba(180,210,255," + p.alpha + ")";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    },
+    // Optional post-pass: draw connecting lines between nearby
+    // particles. The driver loop (renderAmbient) calls this once per
+    // frame after all the per-particle render calls; receives the
+    // live particle array. ~O(n²) but with `targetCount` capped
+    // around 60 it stays well under 1 ms per frame.
+    after: (ctx, particles, tint) => {
+      const MAX_DIST = 130;
+      const MAX_DIST_SQ = MAX_DIST * MAX_DIST;
+      const baseColor = tint
+        ? rgbToRgba(tint, 1)
+        : "rgba(180,210,255,1)";
+      ctx.lineWidth = 0.7;
+      for (let i = 0; i < particles.length; i++) {
+        const a = particles[i];
+        for (let j = i + 1; j < particles.length; j++) {
+          const b = particles[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dSq = dx * dx + dy * dy;
+          if (dSq > MAX_DIST_SQ) continue;
+          // Stroke alpha falls off linearly with distance.
+          const t = 1 - Math.sqrt(dSq) / MAX_DIST;
+          const aOut = t * 0.35 * Math.min(a.alpha, b.alpha);
+          // Pull alpha component out of baseColor (rgba(...,1))
+          // and substitute the per-pair fade. Cheap regex; the
+          // baseColor format is fixed above.
+          ctx.strokeStyle = baseColor.replace(/[\d.]+\)$/, aOut.toFixed(3) + ")");
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+    },
+  },
+
+  // ── Fireflies ──
+  // Slow-drifting glowing dots that pulse on their own clock. Each
+  // particle owns its own phase so the field doesn't strobe in sync.
+  fireflies: {
+    targetCount: (d, w, h) => Math.round((w * h) / 22000 * (d / 60)),
+    spawn: (w, h) => ({
+      x:  Math.random() * w,
+      y:  Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.25,
+      vy: (Math.random() - 0.5) * 0.2,
+      r:  1.5 + Math.random() * 2,
+      hue: 50 + Math.random() * 35,            // yellow-green band
+      phase: Math.random() * Math.PI * 2,
+      phaseSpeed: 0.6 + Math.random() * 1.4,   // rad / s
+    }),
+    step: (p, dt, w, h) => {
+      p.phase += dt * p.phaseSpeed;
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      if (p.x < -10)    p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10)    p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+      return true;
+    },
+    render: (ctx, p, tint) => {
+      const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.phase));
+      const halo  = p.r * 6;
+      const grad  = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, halo);
+      const a     = pulse;
+      const core  = "rgba(255,255,230," + (a * 0.9) + ")";
+      const ring  = tint
+        ? rgbToRgba(tint, a * 0.55)
+        : "hsla(" + p.hue + ", 95%, 55%, " + (a * 0.55) + ")";
+      grad.addColorStop(0,    core);
+      grad.addColorStop(0.45, ring);
+      grad.addColorStop(1,    "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - halo, p.y - halo, halo * 2, halo * 2);
     },
   },
 

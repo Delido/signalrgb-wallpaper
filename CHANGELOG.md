@@ -4,6 +4,30 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.12-beta] - 2026-05-22
+
+> Two new ambient effects in the spirit of the planned CodePen ports
+> from the roadmap. Implementations written from scratch to fit our
+> existing `AMBIENT_PRESETS` shape (no third-party code carried in),
+> so there's no per-pen licence verification to track.
+
+### Added — Ambient effects
+
+- **Constellation** — particles drift across the canvas; thin lines
+  appear between any two particles within a fade radius. Inspired
+  by the classic *connect-the-dots* effect (ykob/aBrjaR style).
+  Triggered the addition of an optional `def.after(ctx, particles,
+  tint)` post-pass hook to the ambient renderer so effects can draw
+  across the whole particle set instead of one-at-a-time. Existing
+  presets are untouched (no `after` defined → no-op).
+- **Fireflies** — slow-drifting glow dots that pulse on their own
+  per-particle phase clocks (yellow-green band by default; *Tint
+  with the live glow colour* overrides). Pre-tinted variant lands
+  nicely on dark backgrounds.
+
+Both presets appear in the Configurator's *Ambient preset* tile
+grid with the same mini-canvas preview the existing effects have.
+
 ## [0.9.11-beta] - 2026-05-22
 
 > Builder Monitor Wall is now the **primary right-panel navigation**.

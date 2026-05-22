@@ -3157,7 +3157,7 @@ els.audioGlowTint.addEventListener("change", () => setSetting("audioGlowTint", e
 // Effects section
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora"];
+const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies"];
 const PIXELFX_MODES   = [
   { value: "off",    label: "Off" },
   { value: "trail",  label: "Trail" },
@@ -3216,7 +3216,8 @@ function startTilePreview(canvas, preset) {
       if (!def.step(particles[i], dt, w, h)) particles.splice(i, 1);
     }
     ctx.clearRect(0, 0, w, h);
-    for (const p of particles) def.render(ctx, p);
+    for (const p of particles) def.render(ctx, p, particles);
+    if (typeof def.after === "function") def.after(ctx, particles);
   }
   requestAnimationFrame(tick);
 }
@@ -3298,6 +3299,70 @@ const TILE_PRESETS = {
       grad.addColorStop(1,   "hsla(" + p.hue + ", 80%, 60%, 0)");
       ctx.fillStyle = grad;
       ctx.fillRect(p.x - p.r, p.y - p.r, p.r*2, p.r*2);
+    },
+  },
+  // ── Constellation tile preview ──
+  // Drifts ~8-15 dots with line connections so the tile reads as
+  // "particles + lines" at a glance. Renderer adds line pass after
+  // the per-particle draw, matching the wallpaper-side `after()`.
+  constellation: {
+    targetCount: (w, h) => Math.max(8, Math.round(w * h / 1800)),
+    spawn: (w, h) => ({ x: Math.random()*w, y: Math.random()*h,
+                        vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3,
+                        r: 1 + Math.random()*1.2, a: 0.6 + Math.random()*0.3 }),
+    step: (p, dt, w, h) => {
+      p.x += p.vx * dt * 40; p.y += p.vy * dt * 40;
+      if (p.x < 0)  p.x = w; if (p.x > w) p.x = 0;
+      if (p.y < 0)  p.y = h; if (p.y > h) p.y = 0;
+      return true;
+    },
+    render: (ctx, p, _all) => {
+      ctx.fillStyle = "rgba(180,210,255," + p.a + ")";
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    },
+    after: (ctx, all) => {
+      ctx.lineWidth = 0.5;
+      const MAX = 40;
+      for (let i = 0; i < all.length; i++) {
+        for (let j = i + 1; j < all.length; j++) {
+          const dx = all[i].x - all[j].x, dy = all[i].y - all[j].y;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d > MAX) continue;
+          ctx.strokeStyle = "rgba(180,210,255," + ((1 - d / MAX) * 0.3).toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.moveTo(all[i].x, all[i].y);
+          ctx.lineTo(all[j].x, all[j].y);
+          ctx.stroke();
+        }
+      }
+    },
+  },
+  // ── Fireflies tile preview ──
+  // Glowing yellow-green dots that pulse on independent phases.
+  fireflies: {
+    targetCount: (w, h) => Math.max(6, Math.round(w * h / 2400)),
+    spawn: (w, h) => ({ x: Math.random()*w, y: Math.random()*h,
+                        vx: (Math.random()-0.5)*0.2, vy: (Math.random()-0.5)*0.15,
+                        r: 1 + Math.random()*1.2,
+                        hue: 50 + Math.random()*30,
+                        phase: Math.random() * Math.PI*2,
+                        phaseSpeed: 0.8 + Math.random()*1.4 }),
+    step: (p, dt, w, h) => {
+      p.phase += dt * p.phaseSpeed;
+      p.x += p.vx * dt * 40; p.y += p.vy * dt * 40;
+      if (p.x < 0)  p.x = w; if (p.x > w) p.x = 0;
+      if (p.y < 0)  p.y = h; if (p.y > h) p.y = 0;
+      return true;
+    },
+    render: (ctx, p) => {
+      const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.phase));
+      const halo = p.r * 5;
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, halo);
+      grad.addColorStop(0,    "rgba(255,255,220," + (pulse*0.9) + ")");
+      grad.addColorStop(0.45, "hsla(" + p.hue + ", 95%, 55%, " + (pulse*0.55) + ")");
+      grad.addColorStop(1,    "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(p.x - halo, p.y - halo, halo*2, halo*2);
     },
   },
 };

@@ -304,7 +304,16 @@ etc.) — moderating a public submission flow would dwarf the
 useful curation work. The bundled starter library + per-user
 upload remain the supported path.
 
-### 🔲 Ambient effects: port MIT-licensed CodePen pens — ~2-3 h per effect
+### 🚧 Ambient effects: port MIT-licensed CodePen pens — first batch v0.9.12-beta
+
+v0.9.12-beta added **Constellation** + **Fireflies** ambient presets,
+written from scratch in the project's own `AMBIENT_PRESETS` shape so
+no per-pen licence verification was needed. The renderer learned an
+optional `def.after(ctx, particles, tint)` post-pass hook for
+effects that draw across the whole particle set (used by
+Constellation's connecting lines).
+
+Further direct ports from individual CodePen pens still pending —
 
 [ykob](https://github.com/ykob)'s catalog is explicitly MIT
 ("If you want to use some code, you can use these freely by
