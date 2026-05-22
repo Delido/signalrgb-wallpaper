@@ -387,6 +387,63 @@
   }
   #toast.good { border-color: #2f5a35; color: #b8efb8; }
   #toast.bad  { border-color: #6a2828; color: #ffb8b8; }
+
+  /* Library picker dialog — full-screen overlay, centred grid of tiles. */
+  #lib-dialog {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  #lib-dialog.show { display: flex; }
+  .lib-dialog-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+    padding: 16px;
+    width: min(80vw, 720px);
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+  }
+  .lib-dialog-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .lib-dialog-head h2 { font-size: 14px; margin: 0; color: var(--text); }
+  .lib-dialog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .lib-dialog-tile {
+    width: 100%; aspect-ratio: 16 / 9;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #0c0e13 center / cover no-repeat;
+    cursor: pointer; padding: 0;
+    position: relative;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .lib-dialog-tile:hover {
+    border-color: #3a6ba8; transform: translateY(-1px);
+  }
+  .lib-dialog-tile .label {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.65);
+    color: #d8e6fc;
+    font-size: 11px; padding: 2px 4px;
+    border-radius: 0 0 3px 3px;
+    text-align: center;
+    pointer-events: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lib-dialog-empty {
+    color: var(--text-dim); font-size: 12.5px; font-style: italic;
+    padding: 24px 8px; text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -607,6 +664,8 @@
       <div class="btn-row">
         <label class="btn primary" for="file-input" data-i18n="btn.choose_image">Choose image…</label>
         <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+        <button class="btn" id="open-library-btn" type="button"
+                data-i18n="btn.open_library">Open from library…</button>
       </div>
       <div class="stat" id="img-stat" data-i18n="stat.no_image">No image loaded.</div>
       <div class="btn-row" style="margin-top: 8px;">
@@ -655,6 +714,8 @@
       </div>
       <div class="btn-row" style="margin-top: 8px;">
         <button class="btn primary" id="save-btn" disabled data-i18n="btn.save_png">Save as PNG…</button>
+        <button class="btn" id="save-library-btn" type="button" disabled
+                data-i18n="btn.save_library">Save to library</button>
       </div>
     </section>
 
@@ -689,6 +750,17 @@
 
 <div id="toast"></div>
 
+<div id="lib-dialog" role="dialog" aria-modal="true">
+  <div class="lib-dialog-card">
+    <div class="lib-dialog-head">
+      <h2 data-i18n="lib.dialog.title">Library</h2>
+      <button class="btn" id="lib-dialog-close" type="button"
+              data-i18n="lib.dialog.close">Close</button>
+    </div>
+    <div class="lib-dialog-grid" id="lib-dialog-grid"></div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -699,6 +771,7 @@
 const $ = (id) => document.getElementById(id);
 const els = {
   fileInput:    $("file-input"),
+  openLibBtn:   $("open-library-btn"),
   imgStat:      $("img-stat"),
   rotateBtn:    $("rotate-btn"),
 
@@ -737,6 +810,10 @@ const els = {
 
   maxSize:      $("max-size"),
   saveBtn:      $("save-btn"),
+  saveLibBtn:   $("save-library-btn"),
+  libDialog:    $("lib-dialog"),
+  libDialogGrid:  $("lib-dialog-grid"),
+  libDialogClose: $("lib-dialog-close"),
 
   applyBtns:    document.querySelectorAll(".apply-screen"),
   splitBtns:    document.querySelectorAll(".split-btn"),
@@ -925,6 +1002,14 @@ const TRANSLATIONS = {
   // Right panel — Load.
   "section.load":     { en: "Load",            de: "Laden" },
   "btn.choose_image": { en: "Choose image…",   de: "Bild auswählen…" },
+  "btn.open_library": { en: "Open from library…", de: "Aus Bibliothek öffnen…" },
+  "btn.save_library": { en: "Save to library",    de: "In Bibliothek speichern" },
+  "lib.dialog.title": { en: "Library",             de: "Bibliothek" },
+  "lib.dialog.empty": { en: "Library is empty. Add wallpapers in the Configurator's Background section first.",
+                        de: "Bibliothek ist leer. Erst im Konfigurator unter Hintergrund Wallpaper hinzufügen." },
+  "lib.dialog.close": { en: "Close",               de: "Schließen" },
+  "lib.save.prompt":  { en: "Save under name:",    de: "Unter Namen speichern:" },
+  "lib.save.done":    { en: "Saved {label} to library", de: "{label} in Bibliothek gespeichert" },
   "stat.no_image":    { en: "No image loaded.",de: "Kein Bild geladen." },
   "btn.rotate":       { en: "Rotate 90°",      de: "90° drehen" },
 
@@ -1214,6 +1299,7 @@ els.mergeGo.addEventListener("click", () => {
 function setControlsEnabled(on) {
   els.rotateBtn.disabled    = !on;
   els.saveBtn.disabled      = !on;
+  els.saveLibBtn.disabled   = !on;
   els.zoomOut.disabled      = !on;
   els.zoomIn.disabled       = !on;
   els.zoomFit.disabled      = !on;
@@ -2524,6 +2610,106 @@ function escapeHtml(s) {
 selectTool(currentTool);
 syncBrushCursorSize();
 updateMergeUI();
+
+// Fetch a library file and feed it into the same pipeline `loadFile()`
+// uses for the file picker. Source name is the library filename so saves
+// land back under that label.
+async function loadLibraryItemIntoBuilder(libFile) {
+  try {
+    const resp = await fetch("/library/" + encodeURIComponent(libFile));
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const blob = await resp.blob();
+    const img = await fileToImage(blob);
+    applySourceImage(libFile, img);
+  } catch (e) {
+    if (els.imgStat) els.imgStat.textContent = "Failed to load: " + e.message;
+  }
+}
+
+// ── Library picker dialog ────────────────────────────────────────────────
+async function openLibraryDialog() {
+  els.libDialogGrid.innerHTML = "";
+  els.libDialog.classList.add("show");
+  let items = [];
+  try {
+    const r = await fetch("/library/list", { cache: "no-store" });
+    const cat = await r.json();
+    items = Array.isArray(cat.items) ? cat.items : [];
+  } catch (_) { /* show empty state */ }
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "lib-dialog-empty";
+    empty.textContent = t("lib.dialog.empty");
+    els.libDialogGrid.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "lib-dialog-tile";
+    tile.title = item.label || item.id;
+    tile.style.backgroundImage =
+      "url(/library/" + encodeURIComponent(item.thumb || item.file) + ")";
+    const lbl = document.createElement("span");
+    lbl.className = "label";
+    lbl.textContent = item.label || item.id;
+    tile.appendChild(lbl);
+    tile.addEventListener("click", () => {
+      closeLibraryDialog();
+      loadLibraryItemIntoBuilder(item.file);
+    });
+    els.libDialogGrid.appendChild(tile);
+  }
+}
+
+function closeLibraryDialog() {
+  els.libDialog.classList.remove("show");
+}
+
+els.openLibBtn.addEventListener("click", openLibraryDialog);
+els.libDialogClose.addEventListener("click", closeLibraryDialog);
+els.libDialog.addEventListener("click", (e) => {
+  if (e.target === els.libDialog) closeLibraryDialog();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && els.libDialog.classList.contains("show")) {
+    closeLibraryDialog();
+  }
+});
+
+// ── Save to library ──────────────────────────────────────────────────────
+// Reuse the same canvasToBlob → POST /library/upload?name=… flow the
+// Configurator's upload button uses. Default name is the current
+// sourceName, so re-opening a library item, editing, and saving lands
+// the result back into the library under "<old> Edit" by default.
+els.saveLibBtn.addEventListener("click", async () => {
+  if (!originalData) return;
+  const proposed = (sourceName || "wallpaper").replace(/\.[^.]+$/, "");
+  const name = prompt(t("lib.save.prompt"), proposed);
+  if (name == null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  try {
+    const blob = await canvasToBlob();
+    const up = await fetch("/library/upload?name=" + encodeURIComponent(trimmed), {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: blob,
+    });
+    if (!up.ok) throw new Error("HTTP " + up.status);
+    toast(t("lib.save.done", { label: trimmed }), "good");
+  } catch (e) {
+    toast("Save failed: " + e.message, "bad");
+  }
+});
+
+// Configurator's right-click "Edit in Builder" opens us with ?library=<file>.
+(function bootstrapFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const lib = params.get("library");
+  if (lib) loadLibraryItemIntoBuilder(lib);
+})();
 </script>
 </body>
 </html>

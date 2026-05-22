@@ -487,6 +487,93 @@
     flex: 1; align-self: center;
   }
 
+  /* Hover-preview popup for library tiles. Larger 16:9 view of the
+     full-res PNG with an animated RGB gradient layer behind it — the
+     transparent regions of the wallpaper let the colour cycle bleed
+     through, giving a live mock of how the glow will look once the
+     SignalRGB canvas paints on top. */
+  .lib-preview-popup {
+    position: fixed;
+    z-index: 9000;
+    display: none;
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+    overflow: hidden;
+    pointer-events: auto;
+  }
+  .lib-preview-popup.show { display: block; }
+  .lib-preview-glow {
+    position: absolute; inset: 0;
+    background: linear-gradient(45deg,
+      #ff2d6e, #ffaa00, #ffe600, #00ff88, #00d4ff, #6c5cff, #ff2d6e);
+    background-size: 400% 400%;
+    animation: libPreviewGlow 8s linear infinite;
+    filter: blur(6px) saturate(1.25);
+  }
+  @keyframes libPreviewGlow {
+    0%   { background-position:   0% 50%; }
+    100% { background-position: 400% 50%; }
+  }
+  .lib-preview-img {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: calc(100% - 32px);
+    object-fit: contain;
+    pointer-events: none;
+  }
+  .lib-preview-bar {
+    position: relative;
+    height: 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+    padding: 0 10px;
+    background: rgba(12, 14, 19, 0.92);
+    border-top: 1px solid var(--border);
+  }
+  .lib-preview-label {
+    font-size: 12px; color: #d8e6fc;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1;
+  }
+  .lib-preview-apply {
+    background: #3a6ba8; color: #fff;
+    border: none; border-radius: 4px;
+    padding: 4px 12px; font-size: 12px;
+    cursor: pointer;
+  }
+  .lib-preview-apply:hover { background: #4a7bbf; }
+
+  /* Right-click context menu for library tiles. */
+  .lib-ctx-menu {
+    position: fixed;
+    z-index: 9100;
+    display: none;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    padding: 4px 0;
+    min-width: 180px;
+  }
+  .lib-ctx-menu.show { display: block; }
+  .lib-ctx-item {
+    display: block; width: 100%;
+    background: transparent; border: none;
+    color: inherit;
+    text-align: left;
+    padding: 6px 14px; font-size: 12.5px;
+    cursor: pointer;
+  }
+  .lib-ctx-item:hover { background: rgba(58, 107, 168, 0.25); }
+  .lib-ctx-item.danger { color: #ffbcbc; }
+  .lib-ctx-item.danger:hover { background: rgba(180, 50, 50, 0.3); }
+  .lib-ctx-sep {
+    height: 1px; background: var(--border); margin: 4px 0;
+  }
+
   /* Preset slot rows — one per saved combo. Filled slots show a short
      summary (counts of widgets + active effects); empty slots hide
      Apply/Clear so only Save is offered. */
@@ -526,6 +613,18 @@
   }
   #toast.good { border-color: #2f5a35; color: #b8efb8; }
   #toast.bad  { border-color: #6a2828; color: #ffb8b8; }
+  #toast .toast-undo-btn {
+    margin-left: 12px;
+    background: transparent;
+    border: 1px solid currentColor;
+    color: inherit;
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  #toast .toast-undo-btn:hover { background: rgba(255,255,255,0.08); }
 </style>
 </head>
 <body>
@@ -821,6 +920,19 @@ const TRANSLATIONS = {
     en: "Delete {label} from the library? This removes the file from %LOCALAPPDATA%\\SignalRGBWallpaper\\library and cannot be undone.",
     de: "{label} aus der Bibliothek löschen? Datei wird aus %LOCALAPPDATA%\\SignalRGBWallpaper\\library entfernt und kann nicht wiederhergestellt werden." },
   "bg.library.deleted":     { en: "Removed {label}",      de: "{label} entfernt" },
+  "bg.library.apply":       { en: "Apply",                de: "Anwenden" },
+  "bg.library.undo":        { en: "Undo",                 de: "Rückgängig" },
+  "bg.library.undone":      { en: "Reverted",             de: "Zurückgesetzt" },
+  "bg.library.ctx.apply":     { en: "Apply",              de: "Anwenden" },
+  "bg.library.ctx.edit":      { en: "Edit in Builder…",   de: "Im Builder öffnen…" },
+  "bg.library.ctx.rename":    { en: "Rename…",            de: "Umbenennen…" },
+  "bg.library.ctx.duplicate": { en: "Duplicate",          de: "Duplizieren" },
+  "bg.library.ctx.delete":    { en: "Delete…",            de: "Löschen…" },
+  "bg.library.rename_prompt": { en: "New name:",          de: "Neuer Name:" },
+  "bg.library.renamed":     { en: "Renamed {from} → {to}",
+                              de: "{from} → {to} umbenannt" },
+  "bg.library.duplicated":  { en: "Duplicated as {label}",
+                              de: "Als {label} dupliziert" },
   "bg.choose":              { en: "Choose image…",        de: "Bild auswählen…" },
   "bg.open_builder":        { en: "Open Builder…",        de: "Builder öffnen…" },
   "bg.fit":                 { en: "Fit",                  de: "Anpassen" },
@@ -1145,12 +1257,31 @@ const els = {
 };
 
 let _toastTimer = null;
-function toast(msg, kind) {
-  els.toast.textContent = msg;
+function toast(msg, kind, undoAction) {
+  // Plain text path (no Undo): use textContent for safety.
+  // Undo path: build the message + button as nodes.
+  els.toast.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  els.toast.appendChild(span);
+  let dwell = 3500;
+  if (typeof undoAction === "function") {
+    const btn = document.createElement("button");
+    btn.className = "toast-undo-btn";
+    btn.type = "button";
+    btn.textContent = t("bg.library.undo");
+    btn.addEventListener("click", () => {
+      els.toast.style.display = "none";
+      if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+      undoAction();
+    });
+    els.toast.appendChild(btn);
+    dwell = 5000;
+  }
   els.toast.className = kind || "";
   els.toast.style.display = "block";
   if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => { els.toast.style.display = "none"; }, 3500);
+  _toastTimer = setTimeout(() => { els.toast.style.display = "none"; }, dwell);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1330,8 +1461,243 @@ function renderLibraryStrip() {
       deleteLibraryItem(item);
     });
     btn.appendChild(del);
-    btn.addEventListener("click", () => applyLibraryItem(item));
+    // Click pins the preview (no auto-dismiss on mouseleave). Apply
+    // happens only via the dedicated button inside the preview — that
+    // way a stray click can't replace the user's wallpaper.
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (_libPreviewHideTimer) {
+        clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
+      }
+      showLibraryPreview(item, btn.getBoundingClientRect(), true);
+    });
+    btn.addEventListener("mouseenter", () => {
+      if (_libPreviewPinned) return;
+      if (_libPreviewHideTimer) {
+        clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
+      }
+      showLibraryPreview(item, btn.getBoundingClientRect(), false);
+    });
+    btn.addEventListener("mouseleave", () => scheduleHideLibraryPreview(180));
+    btn.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      hideLibraryPreview();
+      showLibraryContextMenu(item, e.clientX, e.clientY);
+    });
     els.libraryStrip.appendChild(btn);
+  }
+}
+
+// ── Library hover-preview ────────────────────────────────────────────────
+// A single reusable popup that follows the hovered tile and shows a
+// larger 16:9 view of the wallpaper with an animated RGB gradient
+// behind. Since wallpapers carry transparent cut-outs (the entire point
+// of this app), the gradient bleeds through and previews how the
+// SignalRGB glow will look.
+let _libPreviewEl = null;
+let _libPreviewHideTimer = null;
+let _libPreviewItem = null;
+let _libPreviewPinned = false;
+
+function ensureLibraryPreviewPopup() {
+  if (_libPreviewEl) return _libPreviewEl;
+  const el = document.createElement("div");
+  el.className = "lib-preview-popup";
+  el.innerHTML =
+    '<div class="lib-preview-glow"></div>' +
+    '<img class="lib-preview-img" alt="">' +
+    '<div class="lib-preview-bar">' +
+      '<span class="lib-preview-label"></span>' +
+      '<button class="lib-preview-apply" type="button"></button>' +
+    '</div>';
+  el.addEventListener("mouseenter", () => {
+    if (_libPreviewHideTimer) {
+      clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
+    }
+  });
+  el.addEventListener("mouseleave", () => scheduleHideLibraryPreview(180));
+  const applyBtn = el.querySelector(".lib-preview-apply");
+  applyBtn.addEventListener("click", () => {
+    const item = _libPreviewItem;
+    hideLibraryPreview();
+    if (item) applyLibraryItem(item);
+  });
+  document.body.appendChild(el);
+  _libPreviewEl = el;
+  return el;
+}
+
+function scheduleHideLibraryPreview(delay) {
+  if (_libPreviewPinned) return;
+  if (_libPreviewHideTimer) clearTimeout(_libPreviewHideTimer);
+  _libPreviewHideTimer = setTimeout(() => hideLibraryPreview(), delay);
+}
+
+function hideLibraryPreview() {
+  if (_libPreviewEl) {
+    _libPreviewEl.classList.remove("show");
+    _libPreviewEl.classList.remove("pinned");
+  }
+  _libPreviewItem = null;
+  _libPreviewPinned = false;
+  if (_libPreviewHideTimer) {
+    clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
+  }
+}
+
+function showLibraryPreview(item, anchorRect, pinned) {
+  const el = ensureLibraryPreviewPopup();
+  _libPreviewItem = item;
+  _libPreviewPinned = !!pinned;
+  el.classList.toggle("pinned", _libPreviewPinned);
+  el.querySelector(".lib-preview-img").src =
+    "/library/" + encodeURIComponent(item.file);
+  el.querySelector(".lib-preview-label").textContent = item.label || item.id;
+  el.querySelector(".lib-preview-apply").textContent = t("bg.library.apply");
+
+  // 16:9 image area + 32px footer. Clamp to viewport with 12px margin.
+  const margin = 12;
+  const W = Math.min(480, window.innerWidth  - margin * 2);
+  const H = Math.min(302, window.innerHeight - margin * 2);
+  let x = anchorRect.left + (anchorRect.width / 2) - W / 2;
+  x = Math.max(margin, Math.min(window.innerWidth - W - margin, x));
+  let y = anchorRect.bottom + 8;
+  if (y + H > window.innerHeight - margin) {
+    y = anchorRect.top - H - 8;
+    if (y < margin) y = margin;
+  }
+  el.style.left   = x + "px";
+  el.style.top    = y + "px";
+  el.style.width  = W + "px";
+  el.style.height = H + "px";
+  el.classList.add("show");
+}
+
+// Dismiss on Escape, scroll, or click anywhere outside the popup.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") hideLibraryPreview();
+});
+window.addEventListener("scroll", () => hideLibraryPreview(), true);
+document.addEventListener("mousedown", (e) => {
+  if (!_libPreviewEl || !_libPreviewEl.classList.contains("show")) return;
+  if (_libPreviewEl.contains(e.target)) return;
+  if (e.target.closest && e.target.closest(".lib-tile")) return;
+  hideLibraryPreview();
+});
+
+// ── Library right-click context menu ────────────────────────────────────
+let _libCtxEl = null;
+
+function ensureLibraryContextMenu() {
+  if (_libCtxEl) return _libCtxEl;
+  const el = document.createElement("div");
+  el.className = "lib-ctx-menu";
+  document.body.appendChild(el);
+  _libCtxEl = el;
+  return el;
+}
+
+function hideLibraryContextMenu() {
+  if (_libCtxEl) _libCtxEl.classList.remove("show");
+}
+
+function showLibraryContextMenu(item, x, y) {
+  const el = ensureLibraryContextMenu();
+  el.innerHTML = "";
+
+  const make = (label, action, danger) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "lib-ctx-item" + (danger ? " danger" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      hideLibraryContextMenu();
+      action();
+    });
+    return b;
+  };
+  const sep = () => {
+    const s = document.createElement("div");
+    s.className = "lib-ctx-sep";
+    return s;
+  };
+
+  el.appendChild(make(t("bg.library.ctx.apply"),     () => applyLibraryItem(item)));
+  el.appendChild(make(t("bg.library.ctx.edit"),      () => editLibraryItemInBuilder(item)));
+  el.appendChild(sep());
+  el.appendChild(make(t("bg.library.ctx.rename"),    () => renameLibraryItem(item)));
+  el.appendChild(make(t("bg.library.ctx.duplicate"), () => duplicateLibraryItem(item)));
+  el.appendChild(sep());
+  el.appendChild(make(t("bg.library.ctx.delete"),    () => deleteLibraryItem(item), true));
+
+  // Show first (so we can measure), then clamp to viewport.
+  el.classList.add("show");
+  const r = el.getBoundingClientRect();
+  let nx = x, ny = y;
+  if (nx + r.width  > window.innerWidth  - 8) nx = window.innerWidth  - r.width  - 8;
+  if (ny + r.height > window.innerHeight - 8) ny = window.innerHeight - r.height - 8;
+  el.style.left = Math.max(8, nx) + "px";
+  el.style.top  = Math.max(8, ny) + "px";
+}
+
+document.addEventListener("mousedown", (e) => {
+  if (!_libCtxEl || !_libCtxEl.classList.contains("show")) return;
+  if (_libCtxEl.contains(e.target)) return;
+  hideLibraryContextMenu();
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") hideLibraryContextMenu();
+});
+window.addEventListener("scroll", () => hideLibraryContextMenu(), true);
+
+function editLibraryItemInBuilder(item) {
+  // The Builder reads ?library=<file> on load and pre-fills the canvas
+  // with that PNG. See builder.html init.
+  window.open("/builder?library=" + encodeURIComponent(item.file), "_blank");
+}
+
+async function renameLibraryItem(item) {
+  const oldLabel = item.label || item.id;
+  const newLabel = prompt(t("bg.library.rename_prompt"), oldLabel);
+  if (newLabel == null) return;
+  const trimmed = newLabel.trim();
+  if (!trimmed || trimmed === oldLabel) return;
+  try {
+    const r = await fetch("/library/" + encodeURIComponent(item.file));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const blob = await r.blob();
+    const up = await fetch("/library/upload?name=" + encodeURIComponent(trimmed), {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "image/png" },
+      body: blob,
+    });
+    if (!up.ok) throw new Error("upload HTTP " + up.status);
+    const del = await fetch("/library/" + encodeURIComponent(item.file),
+                            { method: "DELETE" });
+    if (!del.ok) console.warn("rename: old file delete failed", del.status);
+    toast(t("bg.library.renamed", { from: oldLabel, to: trimmed }), "good");
+    await refreshLibrary();
+  } catch (e) {
+    toast("Rename failed: " + e.message, "bad");
+  }
+}
+
+async function duplicateLibraryItem(item) {
+  const newLabel = (item.label || item.id) + " Copy";
+  try {
+    const r = await fetch("/library/" + encodeURIComponent(item.file));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const blob = await r.blob();
+    const up = await fetch("/library/upload?name=" + encodeURIComponent(newLabel), {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "image/png" },
+      body: blob,
+    });
+    if (!up.ok) throw new Error("upload HTTP " + up.status);
+    toast(t("bg.library.duplicated", { label: newLabel }), "good");
+    await refreshLibrary();
+  } catch (e) {
+    toast("Duplicate failed: " + e.message, "bad");
   }
 }
 
@@ -1391,7 +1757,25 @@ async function applyLibraryItem(item) {
   // Pull the full-res PNG and POST it to the bridge as the screen's
   // background. Same endpoint Builder uses; bridge then echoes the new
   // bgImage path back over WS so the wallpaper page refreshes.
+  //
+  // Before overwriting, we snapshot the current background bytes via
+  // the /image proxy so a 5-second Undo toast can POST them back if the
+  // user changes their mind. The bridge deletes the previous screen-N-*
+  // file on each apply, so the snapshot must happen *before* the new
+  // POST — there is no other way to recover the bytes afterwards.
   try {
+    let undoBlob = null;
+    const prevPath = settings.bgImage || "";
+    if (prevPath) {
+      try {
+        const r = await fetch(
+          "/image?path=" + encodeURIComponent(prevPath),
+          { cache: "no-store" }
+        );
+        if (r.ok) undoBlob = await r.blob();
+      } catch (_) { /* undo just won't be offered */ }
+    }
+
     const resp = await fetch("/library/" + encodeURIComponent(item.file));
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const blob = await resp.blob();
@@ -1401,7 +1785,27 @@ async function applyLibraryItem(item) {
       body: blob,
     });
     if (!up.ok) throw new Error("upload HTTP " + up.status);
-    toast(t("bg.library.applied", { label: item.label || item.id }), "good");
+
+    const msg = t("bg.library.applied", { label: item.label || item.id });
+    if (undoBlob && undoBlob.size > 0) {
+      const screenAtApply = activeScreen;
+      toast(msg, "good", async () => {
+        try {
+          const undoResp = await fetch(
+            "/screen/" + screenAtApply + "/background",
+            { method: "POST",
+              headers: { "Content-Type": "image/png" },
+              body: undoBlob }
+          );
+          if (!undoResp.ok) throw new Error("HTTP " + undoResp.status);
+          toast(t("bg.library.undone"), "good");
+        } catch (e) {
+          toast("Undo failed: " + e.message, "bad");
+        }
+      });
+    } else {
+      toast(msg, "good");
+    }
   } catch (e) {
     toast("Library apply failed: " + e.message, "bad");
   }

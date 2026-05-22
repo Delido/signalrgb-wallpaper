@@ -4,6 +4,68 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3-beta] - 2026-05-22
+
+> Workflow polish for the **Configurator's Library** and the **Builder**
+> — first half of the planned Workflow polish slice from `docs/roadmap.md`.
+> Makes browsing, picking, editing, and saving library wallpapers feel
+> like a real gallery instead of a click-and-pray strip.
+
+### Added — Configurator library
+
+- **Hover preview popup.** Hovering a library tile opens a larger 16:9
+  preview (480×302) anchored to the tile, with an animated RGB
+  gradient layer behind. Since wallpapers carry transparent cut-outs
+  (the entire point of this app), the gradient bleeds through and
+  previews how the SignalRGB glow will look once paint lands on top.
+  Auto-dismisses with a small grace period when the mouse leaves;
+  Escape, scroll, or click-outside also dismiss.
+- **Click-to-preview (pinned).** Clicking a tile no longer
+  immediately replaces the screen's background. Instead the preview
+  pins open — auto-hide on mouseleave is disabled while pinned, and a
+  dedicated **Apply** button inside the popup actually commits.
+  Removes a long-standing footgun where a stray click could wipe the
+  current wallpaper.
+- **5-second Undo toast.** When a library item is applied, the toast
+  shows for 5 s with an inline **Undo** button. Clicking Undo POSTs
+  the previously-active background bytes back to the screen. We
+  snapshot the bytes via the `/image?path=…` proxy *before* the new
+  POST — necessary because the bridge deletes the old `screen-N-*.png`
+  file on each apply, so the only way to recover is to capture the
+  bytes first.
+- **Right-click context menu** on every tile with: **Apply** · **Edit
+  in Builder…** (opens `/builder?library=<file>`) · **Rename…**
+  (prompts for new label, re-uploads + deletes old) · **Duplicate**
+  (creates `<label> Copy`) · **Delete…** (existing confirm dialog).
+  Menu auto-clamps to the viewport and closes on Escape, scroll, or
+  click-outside.
+
+### Added — Builder
+
+- **Open from library… picker.** New button next to *Choose image…*
+  opens a centred modal grid of every library tile. Click one to load
+  it as the source image — same code path the file-picker uses, so
+  edits / merges / saves work identically. Reads `/library/list` on
+  open (no caching).
+- **Save to library button.** Once an image is loaded, the new
+  *Save to library* button POSTs the current canvas to
+  `/library/upload?name=…` with a prompt-supplied label, defaulting
+  to the source filename. Useful for round-tripping a Builder edit
+  back into the Configurator's library strip without going through
+  the OS file system.
+- **`?library=<file>` URL parameter.** Builder honours
+  `?library=foo.png` on load and fetches that file from `/library/`
+  through the standard pipeline. Used by the Configurator's
+  *Edit in Builder…* context-menu item.
+
+### Internal
+
+- **Reusable preview popup / context menu / library dialog.** Each
+  is a single DOM element built on first use and re-used across
+  invocations (item, position, label). Click-outside / Escape /
+  scroll dismissal is centralised. No per-tile listener leaks
+  on `renderLibraryStrip` re-renders.
+
 ## [0.8.2-beta] - 2026-05-20
 
 > Adds an optional integration with **LibreHardwareMonitor** for the

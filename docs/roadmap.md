@@ -26,7 +26,7 @@ Split across two betas:
 - **v0.8.3-beta — Gallery + Builder bridge** (~13 h)
 - **v0.8.4-beta — Multi-monitor convenience** (~9 h)
 
-### 🔲 Gallery: hover-preview large + RGB-mock glow behind — ~3-4 h
+### ✅ Gallery: hover-preview large + RGB-mock glow behind — shipped v0.8.3-beta
 
 Hovering a Library tile pops a larger preview (around 800 × 450)
 with an animated RGB-cycle gradient behind the transparent
@@ -35,7 +35,7 @@ is already running). You see what the wallpaper *actually looks
 like* before you commit. Click anywhere outside or press Esc to
 dismiss; Apply button inside the preview to commit.
 
-### 🔲 Gallery: click is preview, Apply is separate + 5 s Undo-Toast — ~1 h
+### ✅ Gallery: click is preview, Apply is separate + 5 s Undo-Toast — shipped v0.8.3-beta
 
 Currently a single click wipes the screen's existing background.
 Split into a *preview* click (popup as above) + a deliberate
@@ -44,7 +44,7 @@ Split into a *preview* click (popup as above) + a deliberate
 Configurator. Reverts via the same `POST /screen/N/background`
 path using a cached prev-bg blob.
 
-### 🔲 Gallery: right-click context menu — ~3 h
+### ✅ Gallery: right-click context menu — shipped v0.8.3-beta
 
 `contextmenu` event on Library tiles → custom menu (Configurator
 already has the styling chops for it):
@@ -73,7 +73,7 @@ HTML5 drag API on Library tiles. On drop: bridge gets a
 an `order` field per entry in `library.json`. Render order falls
 back to addedAt when `order` is absent (backwards-compatible).
 
-### 🔲 Builder: "Open from library" picker — ~2 h
+### ✅ Builder: "Open from library" picker — shipped v0.8.3-beta
 
 Currently Builder only accepts *Choose image…* + drag-and-drop.
 Adds a dropdown next to those that lists every Library item;
@@ -81,7 +81,7 @@ pick one and the Builder loads it as the active image. Also
 honours `?image=<path>` query string so Configurator's
 *Edit in Builder* context-menu entry can deep-link.
 
-### 🔲 Builder: "Save to library" button — ~2 h
+### ✅ Builder: "Save to library" button — shipped v0.8.3-beta
 
 New action next to *Apply to Screen N* / *Save as PNG*:
 
