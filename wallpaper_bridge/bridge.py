@@ -315,7 +315,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.4-beta"
+APP_VERSION = "0.9.5-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -819,6 +819,11 @@ def default_config() -> dict:
         # screen. Disabled by default so we don't grab shortcuts the user
         # might already have wired up; tray menu flips it on.
         "presetHotkeysEnabled": False,
+        # Per-app / per-game profile rules. ProfileWatcher polls
+        # GetForegroundWindow every 1 s; matching rules swap the
+        # target screen's preset and revert when the foreground
+        # changes away. List of dicts (see ProfileWatcher).
+        "profiles": [],
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -1243,7 +1248,8 @@ class Broadcaster:
         if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
                  "setting-update", "viewport", "bridge-setting-update",
                  "preset-save", "preset-apply", "preset-clear",
-                 "screen-reset"):
+                 "screen-reset",
+                 "profile-add", "profile-update", "profile-remove"):
             try:
                 self.on_widget_command(screen, msg)
             except Exception as e:
@@ -1272,6 +1278,7 @@ class Broadcaster:
                 "type": "settings", "screen": screen,
                 "data": settings, "language": _CURRENT_LANG,
                 "screenCount": int(self.get_screen_count()),
+                "profiles": self._get_profiles_for_push(),
             })))
         except Exception as e:
             print(f"[ws] initial settings push failed: {e}")
@@ -1349,7 +1356,8 @@ class Broadcaster:
         # the Configurator can localise itself off a single push.
         msg = json.dumps({"type": "settings", "screen": screen,
                           "data": settings, "language": _CURRENT_LANG,
-                          "screenCount": int(self.get_screen_count())})
+                          "screenCount": int(self.get_screen_count()),
+                          "profiles": self._get_profiles_for_push()})
         frame = encode_text_frame(msg)
         dead = []
         for w in clients:
@@ -1365,6 +1373,20 @@ class Broadcaster:
 
     def push_settings_threadsafe(self, screen: int, settings: dict):
         asyncio.run_coroutine_threadsafe(self.push_settings(screen, settings), self.loop)
+
+    def _get_profiles_for_push(self) -> list:
+        """Pull the latest profiles list from the runtime config. Returns
+        an empty list when the runtime hasn't been wired in yet (defensive
+        — the Broadcaster's request handlers and the WS-open path can fire
+        before bridge_runtime is set in start())."""
+        rt = getattr(self, "bridge_runtime", None)
+        if rt is None:
+            return []
+        try:
+            with rt.config_lock:
+                return list(rt.config.get("profiles", []) or [])
+        except Exception:
+            return []
 
     async def push_sysstats(self, snapshot: dict):
         """Broadcast a single sysstats payload to every connected client.
@@ -2740,6 +2762,180 @@ class HotkeyListener:
         print(f"[hotkey] slot={slot} applied to {applied}/{count} screen(s)")
 
 
+class ProfileWatcher:
+    """Foreground-window watcher that swaps presets based on which exe
+    is currently focused. Rule schema:
+
+        {
+          "id":         "p_…",   # unique
+          "enabled":    True,
+          "exe":        "cyberpunk2077.exe",   # case-insensitive
+          "screen":     0,                     # 0..N-1 or None (= all)
+          "presetSlot": 1,                     # 0..3
+          "label":      "Cyberpunk 2077"       # user-friendly, optional
+        }
+
+    Stored under `config.profiles` (list). The watcher polls
+    `GetForegroundWindow → QueryFullProcessImageName` every second,
+    activates the first matching rule, and snapshots the previous
+    per-screen state so deactivation restores it. Only one rule is
+    active at a time — when the foreground changes to something else
+    matched by a different rule, we revert + activate cleanly.
+
+    Mirrored screens are handled implicitly: `apply_preset` rejects on
+    mirrors, so the source's preset apply naturally fans out via
+    `_replicate_to_mirrors`.
+    """
+
+    POLL_INTERVAL_S = 1.0
+
+    def __init__(self, bridge_runtime):
+        self.bridge   = bridge_runtime
+        self._stop    = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._active_rule_id: str | None = None
+        # screen -> snapshot dict (full screen settings at activation time).
+        # On revert we restore PRESET_SNAPSHOT_KEYS only — the same key
+        # set save/apply_preset uses, so we don't drift fields the rule
+        # didn't touch.
+        self._stash: dict[int, dict] = {}
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="profile-watcher")
+        self._thread.start()
+        print("[profiles] watcher running (1 Hz)")
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        while not self._stop.wait(self.POLL_INTERVAL_S):
+            try:
+                self._tick()
+            except Exception as e:
+                print(f"[profiles] tick failed: {e}")
+
+    def _tick(self):
+        with self.bridge.config_lock:
+            raw_rules = list(self.bridge.config.get("profiles", []) or [])
+        enabled = [r for r in raw_rules
+                   if isinstance(r, dict) and r.get("enabled") and r.get("exe")]
+        if not enabled:
+            if self._active_rule_id is not None:
+                self._revert()
+            return
+        exe = self._foreground_exe()
+        matched = None
+        for r in enabled:
+            target = str(r.get("exe", "")).strip().lower()
+            if target and target == exe:
+                matched = r
+                break
+        if matched is None:
+            if self._active_rule_id is not None:
+                self._revert()
+            return
+        rule_id = str(matched.get("id") or "")
+        if rule_id == self._active_rule_id:
+            return   # already active, nothing to do
+        # Different rule → swap. Revert previous first so the stash
+        # snapshot reflects the user's manual state, not the prior
+        # rule's preset.
+        if self._active_rule_id is not None:
+            self._revert()
+        self._activate(matched)
+
+    def _foreground_exe(self) -> str:
+        if not _user32:
+            return ""
+        try:
+            kernel32 = ctypes.windll.kernel32
+            hwnd = _user32.GetForegroundWindow()
+            if not hwnd:
+                return ""
+            pid = wintypes.DWORD()
+            _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if not pid.value:
+                return ""
+            # PROCESS_QUERY_LIMITED_INFORMATION = 0x1000 — works on
+            # processes the bridge can't fully open (e.g. system
+            # processes), which is what we want for foreground check.
+            h = kernel32.OpenProcess(0x1000, False, pid.value)
+            if not h:
+                return ""
+            try:
+                buf = ctypes.create_unicode_buffer(1024)
+                size = wintypes.DWORD(len(buf))
+                if not kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                    return ""
+                return os.path.basename(buf.value).lower()
+            finally:
+                kernel32.CloseHandle(h)
+        except Exception:
+            return ""
+
+    def _screens_for_rule(self, rule: dict) -> list[int]:
+        screen = rule.get("screen")
+        count  = int(self.bridge._get_screen_count())
+        if screen is None or screen == "" or screen == "all":
+            return list(range(count))
+        try:
+            n = int(screen)
+        except (TypeError, ValueError):
+            return list(range(count))
+        if 0 <= n < count:
+            return [n]
+        return []
+
+    def _activate(self, rule: dict):
+        slot = int(rule.get("presetSlot", 0) or 0)
+        if not (0 <= slot < PRESET_SLOTS):
+            return
+        screens = self._screens_for_rule(rule)
+        # Snapshot current state for each target screen BEFORE applying
+        # so revert restores precisely what the user had.
+        for s in screens:
+            try:
+                with self.bridge.config_lock:
+                    cur = self.bridge.config.get("screens", {}).get(str(s)) or {}
+                    self._stash[s] = copy.deepcopy(cur)
+            except Exception:
+                pass
+        applied = 0
+        for s in screens:
+            if self.bridge.apply_preset(s, slot) is not None:
+                applied += 1
+        self._active_rule_id = str(rule.get("id") or "")
+        label = rule.get("label") or rule.get("exe") or "(rule)"
+        print(f"[profiles] activated {label!r} -> slot {slot} on {applied}/{len(screens)} screen(s)")
+
+    def _revert(self):
+        if not self._stash:
+            self._active_rule_id = None
+            return
+        # Write back the snapshot's PRESET_SNAPSHOT_KEYS values to each
+        # stashed screen + push the new settings.
+        for s, stash in list(self._stash.items()):
+            try:
+                def mutate(cur, _snap=stash):
+                    for k in PRESET_SNAPSHOT_KEYS:
+                        if k in _snap:
+                            cur[k] = copy.deepcopy(_snap[k])
+                snap = self.bridge._mutate_screen(s, mutate)
+                if snap is not None:
+                    self.bridge.push_settings(s, snap)
+                    self.bridge._replicate_to_mirrors(s)
+            except Exception as e:
+                print(f"[profiles] revert screen={s} failed: {e}")
+        self._stash.clear()
+        prior = self._active_rule_id
+        self._active_rule_id = None
+        print(f"[profiles] reverted (was {prior!r})")
+
+
 class UdpReceiver(asyncio.DatagramProtocol):
     """Accepts two wire formats from the SignalRGB plugin:
 
@@ -3146,6 +3342,111 @@ class BridgeRuntime:
             self.push_settings(screen, snap)
             self._replicate_to_mirrors(screen)
         return snap
+
+    # ── Profile rules CRUD ───────────────────────────────────────────────
+    def _persist_profiles(self):
+        """Save config + push every screen's current settings so any
+        connected Configurator tab sees the new profile list (profiles
+        ride in the settings payload as a top-level field)."""
+        with self.config_lock:
+            snapshot = json.loads(json.dumps(self.config))
+        try:
+            save_config(snapshot)
+        except Exception as e:
+            print(f"[profiles] save_config failed: {e}")
+        # Re-push settings to every active screen so the Configurator
+        # picks up the new profiles list on its current WS frame.
+        for i in range(N_SCREENS):
+            try:
+                self.push_settings(i, snapshot["screens"][str(i)])
+            except Exception:
+                pass
+
+    def add_profile(self, exe: str, label: str | None,
+                    screen, preset_slot: int) -> dict | None:
+        exe = (exe or "").strip().lower()
+        if not exe:
+            return None
+        try:
+            preset_slot = int(preset_slot)
+        except (TypeError, ValueError):
+            return None
+        if not (0 <= preset_slot < PRESET_SLOTS):
+            return None
+        # Normalise screen target: None / "all" → null (= all screens),
+        # otherwise integer 0..N-1.
+        if screen in (None, "", "all"):
+            screen_val = None
+        else:
+            try:
+                n = int(screen)
+                screen_val = n if 0 <= n < N_SCREENS else None
+            except (TypeError, ValueError):
+                screen_val = None
+        rid = f"p_{int(time.time() * 1000) % 10_000_000}"
+        rule = {
+            "id":         rid,
+            "enabled":    True,
+            "exe":        exe,
+            "label":      (label or "").strip() or exe,
+            "screen":     screen_val,
+            "presetSlot": preset_slot,
+        }
+        with self.config_lock:
+            self.config.setdefault("profiles", []).append(rule)
+        self._persist_profiles()
+        return rule
+
+    def update_profile(self, rid: str, fields: dict) -> dict | None:
+        allowed = {"enabled", "exe", "label", "screen", "presetSlot"}
+        target = None
+        with self.config_lock:
+            for r in self.config.get("profiles", []):
+                if r.get("id") == rid:
+                    target = r
+                    break
+            if target is None:
+                return None
+            for k, v in fields.items():
+                if k not in allowed:
+                    continue
+                if k == "enabled":
+                    target["enabled"] = bool(v)
+                elif k == "exe":
+                    target["exe"] = str(v or "").strip().lower()
+                elif k == "label":
+                    target["label"] = str(v or "").strip()
+                elif k == "screen":
+                    if v in (None, "", "all"):
+                        target["screen"] = None
+                    else:
+                        try:
+                            n = int(v)
+                            target["screen"] = n if 0 <= n < N_SCREENS else None
+                        except (TypeError, ValueError):
+                            target["screen"] = None
+                elif k == "presetSlot":
+                    try:
+                        n = int(v)
+                        if 0 <= n < PRESET_SLOTS:
+                            target["presetSlot"] = n
+                    except (TypeError, ValueError):
+                        pass
+            updated = json.loads(json.dumps(target))
+        self._persist_profiles()
+        return updated
+
+    def remove_profile(self, rid: str) -> bool:
+        with self.config_lock:
+            before = list(self.config.get("profiles", []))
+            after = [r for r in before if r.get("id") != rid]
+            if len(after) == len(before):
+                return False
+            self.config["profiles"] = after
+        # If the removed rule was the currently-active one, ProfileWatcher's
+        # next tick (empty match) will revert on its own.
+        self._persist_profiles()
+        return True
 
     # ── Backup + Restore ─────────────────────────────────────────────────
     def build_backup_zip(self) -> bytes:
@@ -3624,6 +3925,23 @@ class BridgeRuntime:
                 self.clear_preset(screen, int(msg.get("slot", -1)))
             elif t == "screen-reset":
                 self.reset_screen(screen)
+            elif t == "profile-add":
+                self.add_profile(
+                    exe        = str(msg.get("exe", "")),
+                    label      = msg.get("label"),
+                    screen     = msg.get("screen"),
+                    preset_slot= int(msg.get("presetSlot", 0)))
+            elif t == "profile-update":
+                rid = str(msg.get("id", ""))
+                if rid:
+                    fields = {k: msg[k] for k in
+                              ("enabled", "exe", "label", "screen", "presetSlot")
+                              if k in msg}
+                    self.update_profile(rid, fields)
+            elif t == "profile-remove":
+                rid = str(msg.get("id", ""))
+                if rid:
+                    self.remove_profile(rid)
         threading.Thread(target=run, daemon=True, name="widget-mutate").start()
 
     def update_viewport(self, screen: int, w, h) -> dict | None:
@@ -3699,6 +4017,12 @@ class BridgeRuntime:
         with self.config_lock:
             if bool(self.config.get("presetHotkeysEnabled", False)):
                 self.hotkey_listener.start()
+        # Per-app / per-game profiles — foreground-window watcher.
+        # Runs unconditionally; the cost is one syscall per second and
+        # the rules list defaults to empty so it's a no-op until the
+        # user adds some.
+        self.profile_watcher = ProfileWatcher(self)
+        self.profile_watcher.start()
         # Windows SMTC poller — drains the "now playing" media session
         # so the now-playing widget can render whatever the user has
         # active (Spotify, Groove, browser HTML5 audio, etc.). No-op

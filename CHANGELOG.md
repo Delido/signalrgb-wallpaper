@@ -4,6 +4,55 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5-beta] - 2026-05-22
+
+> Fourth and final Tier-2 high-visibility feature: **per-app / per-game
+> profiles**. When a matching `.exe` is in the foreground, the bridge
+> auto-applies a preset slot; reverts cleanly when the foreground
+> changes away. Pro-tier USP against ordinary wallpaper tools.
+
+### Added — Bridge
+
+- **`ProfileWatcher`** — 1 Hz foreground-window poller. Reads the
+  active window via Win32 `GetForegroundWindow` →
+  `QueryFullProcessImageNameW`, extracts the basename, and matches
+  it (case-insensitive) against the user-configured `config.profiles`
+  rule list.
+- **Activation snapshot** — on first match, the watcher snapshots
+  every target screen's current settings before applying the rule's
+  preset. On deactivation (foreground exe no longer matches any
+  enabled rule), the snapshot is restored via `PRESET_SNAPSHOT_KEYS`
+  so only the preset-relevant fields revert — the user's mirror
+  setup, viewport, etc. stay intact.
+- **One active rule at a time** — when the foreground switches from
+  rule A's exe to rule B's exe, A reverts first (with A's snapshot)
+  before B activates (with a fresh snapshot of the now-current
+  state).
+- **Rule CRUD** — `add_profile` / `update_profile` / `remove_profile`,
+  routed via new `profile-add` / `profile-update` / `profile-remove`
+  WS commands. Each mutation persists `config.json` and re-pushes
+  every screen's settings so other open Configurator tabs sync.
+- **Mirror-aware**: the watcher relies on `apply_preset` which is
+  blocked on mirrors via `_block_if_mirror`; the source screen's
+  preset apply propagates to mirrors through the existing
+  `_replicate_to_mirrors` path.
+
+### Added — Configurator
+
+- **Per-app profiles card** at the bottom of the main column,
+  collapsed by default. Each rule row carries:
+  - Enable checkbox
+  - Exe field (e.g. `cyberpunk2077.exe`, case-insensitive)
+  - Optional human-readable label
+  - Target screen — *All screens* or a specific tab
+  - Preset slot (1..4)
+  - Delete button (with confirm)
+- **Add rule…** button appends a default-shaped rule
+  (`example.exe`, all screens, slot 1) that the user then edits in
+  place.
+- **Live sync** — the `profiles` list rides alongside `data` in
+  every settings push, so two open Configurator tabs stay in sync.
+
 ## [0.9.4-beta] - 2026-05-22
 
 > Third Tier-2 high-visibility feature: **now-playing widget**. Reads

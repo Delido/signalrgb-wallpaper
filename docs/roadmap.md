@@ -226,19 +226,16 @@ dispatch. Tray toggle under Advanced flips
 `config.presetHotkeysEnabled`; off by default so we don't grab
 shortcuts the user might already be using.
 
-### 🔲 Per-app / per-game profiles — ~5-6 h
+### ✅ Per-app / per-game profiles — shipped v0.9.5-beta
 
-Foreground-window watcher in the bridge (polls
-`GetForegroundWindow` + `GetWindowThreadProcessId` every 500 ms
-when at least one profile rule exists). When the foreground exe
-matches a profile, swap to that profile's preset; revert when it
-goes away.
-
-Profile rules live in `config.profiles = [{ exe: "cyberpunk2077.exe",
-screen: 0, preset: 1, dimAmbient: true }, …]`. Configurator gets
-a new section to add / edit / remove rules.
-
-Pro-level feature; huge USP against ordinary wallpaper tools.
+`ProfileWatcher` polls foreground at 1 Hz via
+`GetForegroundWindow → QueryFullProcessImageNameW`, matches basename
+against `config.profiles` rules (case-insensitive), and applies the
+rule's preset slot to the chosen screen(s). Snapshots prior state
+on activation; reverts to it when the foreground changes away. Only
+one rule active at a time. Configurator's *Per-app profiles* card
+adds / edits / removes rules; CRUD over new
+`profile-add`/`profile-update`/`profile-remove` WS commands.
 
 ### ✅ Now-playing widget — shipped v0.9.4-beta
 

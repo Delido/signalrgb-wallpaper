@@ -639,6 +639,31 @@
   .cycle-config { gap: 6px; flex-wrap: wrap; }
   .cycle-config.disabled { opacity: 0.45; pointer-events: none; }
 
+  /* Per-app profile rules — one row per rule. */
+  .profile-list { display: flex; flex-direction: column; gap: 6px; }
+  .profile-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .profile-row.disabled { opacity: 0.55; }
+  .profile-row input[type="text"] { flex: 1 1 200px; min-width: 0; }
+  .profile-row select { padding: 3px 6px; }
+  .profile-row .danger {
+    background: transparent; border: none;
+    color: #ffbcbc;
+    cursor: pointer; font-size: 16px; line-height: 1;
+    padding: 0 4px;
+  }
+  .profile-row .danger:hover { color: #ff7878; }
+  .profile-empty {
+    color: var(--text-dim); font-size: 12px; font-style: italic;
+    padding: 12px 8px; text-align: center;
+  }
+
   /* Hover-preview popup for library tiles. Larger 16:9 view of the
      full-res PNG with an animated RGB gradient layer behind it — the
      transparent regions of the wallpaper let the colour cycle bleed
@@ -1063,6 +1088,27 @@
     </div>
   </section>
 
+  <!-- ── Per-app profiles ────────────────────────────────────────────── -->
+  <section class="card collapsed" id="card-profiles">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.profiles">Per-app profiles</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="profiles.hint">
+        When a matching .exe is focused, swap the chosen screen's
+        preset slot automatically. Reverts to the previous state when
+        the foreground changes away. One rule active at a time —
+        order in the list = priority on conflict.
+      </div>
+      <div id="profile-list" class="profile-list" style="margin-top: 10px;"></div>
+      <div class="btn-row" style="margin-top: 10px;">
+        <button class="btn primary" id="profile-add-btn" type="button"
+                data-i18n="profiles.add">Add rule…</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Backup & Restore ───────────────────────────────────────────── -->
   <section class="card collapsed" id="card-backup">
     <header class="section-head" data-toggle>
@@ -1128,6 +1174,19 @@ const TRANSLATIONS = {
   "section.glow":           { en: "Glow",                 de: "Glow" },
   "section.effects":        { en: "Effects",              de: "Effekte" },
   "section.widgets":        { en: "Widgets",              de: "Widgets" },
+  "section.profiles":       { en: "Per-app profiles",     de: "Pro-App-Profile" },
+  "profiles.hint":          { en: "When a matching .exe is focused, swap the chosen screen's preset slot automatically. Reverts to the previous state when the foreground changes away. One rule active at a time — order in the list = priority on conflict.",
+                              de: "Wenn eine passende .exe im Vordergrund ist, wird der gewählte Preset-Slot automatisch angewendet. Beim Wechsel weg von der App wird der vorherige Zustand wiederhergestellt. Es ist immer nur eine Regel aktiv — die Reihenfolge in der Liste ist die Priorität bei Konflikten." },
+  "profiles.add":           { en: "Add rule…",            de: "Regel hinzufügen…" },
+  "profiles.empty":         { en: "No rules yet — add one to auto-switch presets when an app launches.",
+                              de: "Noch keine Regeln — eine hinzufügen, um Presets bei App-Start automatisch zu wechseln." },
+  "profiles.exe":           { en: "Exe (e.g. cyberpunk2077.exe)",
+                              de: "Exe (z. B. cyberpunk2077.exe)" },
+  "profiles.label_ph":      { en: "Label (optional)",     de: "Bezeichnung (optional)" },
+  "profiles.screen_all":    { en: "All screens",          de: "Alle Bildschirme" },
+  "profiles.screen_n":      { en: "Screen {n}",           de: "Bildschirm {n}" },
+  "profiles.slot":          { en: "Slot {n}",             de: "Slot {n}" },
+  "profiles.remove_confirm":{ en: "Remove rule {exe}?",   de: "Regel {exe} entfernen?" },
   "section.backup":         { en: "Backup & Restore",     de: "Sichern & Wiederherstellen" },
   "backup.hint":            { en: "Export every setting plus the wallpaper library and per-screen backgrounds as one ZIP. Restore drops the ZIP back into %LOCALAPPDATA%\\SignalRGBWallpaper and reloads — useful for fresh installs, multi-PC setups, or \"try something risky\" recovery.",
                               de: "Alle Einstellungen plus Wallpaper-Bibliothek und Bildschirm-Hintergründe als ein ZIP exportieren. Wiederherstellen entpackt das ZIP nach %LOCALAPPDATA%\\SignalRGBWallpaper und lädt neu — gut für frische Installationen, mehrere PCs oder „etwas Riskantes ausprobieren“-Recovery." },
@@ -1561,6 +1620,8 @@ const els = {
   resetScreenBtn: $("reset-screen-btn"),
   restoreUpload:  $("restore-upload"),
   backupStat:     $("backup-stat"),
+  profileList:    $("profile-list"),
+  profileAddBtn:  $("profile-add-btn"),
   toast:          $("toast"),
 };
 
@@ -2585,6 +2646,7 @@ function connect() {
         settings = msg.data;
         if (msg.language) setLanguage(msg.language);
         if (typeof msg.screenCount === "number") applyScreenCount(msg.screenCount);
+        if (Array.isArray(msg.profiles)) profilesList = msg.profiles;
         renderAll();
       }
     } catch (_) {}
@@ -3379,11 +3441,115 @@ els.modal.addEventListener("click", (e) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Render — pull settings into the form controls.
 // ─────────────────────────────────────────────────────────────────────────────
+// Per-app profile rules. Synced from the bridge's settings push
+// `msg.profiles` (top-level alongside `msg.data`), edited via the
+// `profile-add/update/remove` WS commands. The list is global across
+// screens — same rules drive all tabs.
+let profilesList = [];
+
+function renderProfilesCard() {
+  const wrap = els.profileList;
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!profilesList.length) {
+    const empty = document.createElement("div");
+    empty.className = "profile-empty";
+    empty.dataset.i18n = "profiles.empty";
+    empty.textContent = t("profiles.empty");
+    wrap.appendChild(empty);
+    return;
+  }
+  for (const rule of profilesList) {
+    const row = document.createElement("div");
+    row.className = "profile-row" + (rule.enabled ? "" : " disabled");
+
+    const enable = document.createElement("input");
+    enable.type = "checkbox";
+    enable.checked = !!rule.enabled;
+    enable.addEventListener("change", () =>
+      sendCmd({ type: "profile-update", id: rule.id, enabled: enable.checked }));
+    row.appendChild(enable);
+
+    const exeIn = document.createElement("input");
+    exeIn.type = "text";
+    exeIn.value = rule.exe || "";
+    exeIn.placeholder = t("profiles.exe");
+    exeIn.addEventListener("change", () =>
+      sendCmd({ type: "profile-update", id: rule.id, exe: exeIn.value }));
+    row.appendChild(exeIn);
+
+    const labelIn = document.createElement("input");
+    labelIn.type = "text";
+    labelIn.value = rule.label || "";
+    labelIn.placeholder = t("profiles.label_ph");
+    labelIn.style.maxWidth = "120px";
+    labelIn.addEventListener("change", () =>
+      sendCmd({ type: "profile-update", id: rule.id, label: labelIn.value }));
+    row.appendChild(labelIn);
+
+    const screenSel = document.createElement("select");
+    {
+      const optAll = document.createElement("option");
+      optAll.value = "";
+      optAll.textContent = t("profiles.screen_all");
+      screenSel.appendChild(optAll);
+      for (let i = 0; i < (screenCount || 1); i++) {
+        const o = document.createElement("option");
+        o.value = String(i);
+        o.textContent = t("profiles.screen_n", { n: i + 1 });
+        screenSel.appendChild(o);
+      }
+      screenSel.value = (rule.screen == null) ? "" : String(rule.screen);
+    }
+    screenSel.addEventListener("change", () =>
+      sendCmd({ type: "profile-update", id: rule.id,
+                screen: screenSel.value === "" ? null : parseInt(screenSel.value, 10) }));
+    row.appendChild(screenSel);
+
+    const slotSel = document.createElement("select");
+    for (let i = 0; i < 4; i++) {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = t("profiles.slot", { n: i + 1 });
+      slotSel.appendChild(o);
+    }
+    slotSel.value = String(rule.presetSlot || 0);
+    slotSel.addEventListener("change", () =>
+      sendCmd({ type: "profile-update", id: rule.id,
+                presetSlot: parseInt(slotSel.value, 10) }));
+    row.appendChild(slotSel);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger";
+    del.textContent = "×";
+    del.title = "Remove";
+    del.addEventListener("click", () => {
+      if (!confirm(t("profiles.remove_confirm", { exe: rule.exe || "?" }))) return;
+      sendCmd({ type: "profile-remove", id: rule.id });
+    });
+    row.appendChild(del);
+
+    wrap.appendChild(row);
+  }
+}
+
+if (els.profileAddBtn) {
+  els.profileAddBtn.addEventListener("click", () => {
+    sendCmd({ type: "profile-add",
+              exe: "example.exe",
+              label: "",
+              screen: null,
+              presetSlot: 0 });
+  });
+}
+
 function renderAll() {
   // Mirror state first — the cards-disabled class on <main> gates
   // interactive controls everywhere else, so we want it in place before
   // the per-section render functions touch anything.
   renderMirrorBar();
+  renderProfilesCard();
   // Presets (rendered first because they live above Background in the UI)
   renderPresets();
   // Background
