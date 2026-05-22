@@ -146,6 +146,31 @@ success so frames immediately show the just-applied backgrounds.
 Horizontal layout's `nowrap; overflow-x: auto` fix from v0.9.9
 carried forward.
 
+### ✅ Builder: ⇔ Span canvas across monitors — shipped v0.9.13-beta
+
+Single button in the Wall toolbar slices the current canvas into
+one chunk per monitor (sized proportionally to each screen's
+physical width) and stages every frame at once. Closes the merge
+→ wall workflow gap: a 7680×2160 canvas built from two photos
+can now go onto a 2 × 2560×1440 wall in one click instead of
+manual per-frame cropping. Hint under the wall canvas lights up
+whenever the canvas's aspect ratio is within 5 % of the wall's
+combined aspect so the shortcut is discoverable. Shipped alongside
+a tray *Reload wallpaper pages* command for future hot-reload of
+the wallpaper JS without re-import.
+
+### ✅ Builder: right-panel rework (Source → Wall → Output) — shipped v0.9.14-beta
+
+Section order corrected so the user's natural flow (load /
+merge first, then push to the wall) maps to top-to-bottom panel
+scrolling. Two-image / 2×2 merge controls collapsed into a
+`<details>` since the single-image happy path doesn't need
+four file-pick slots in view. *Wand anwenden* promoted to a
+full-width primary button with Span / Clear in a secondary row;
+*Clear* now disables itself when nothing is staged. Staged-ready
+hint replaces the *try Span* banner the moment any slot fills, so
+the UI no longer suggests an action the user has just performed.
+
 A new card at the top of the Configurator, above the tab bar:
 horizontal row of N small monitor-frame thumbnails (matching the
 screen count), each showing the current background image of its
@@ -308,7 +333,7 @@ upload remain the supported path.
 
 v0.9.12-beta added **Constellation** + **Fireflies** ambient presets,
 written from scratch in the project's own `AMBIENT_PRESETS` shape so
-no per-pen licence verification was needed. The renderer learned an
+no per-pen licence verification was needed. Renderer learned an
 optional `def.after(ctx, particles, tint)` post-pass hook for
 effects that draw across the whole particle set (used by
 Constellation's connecting lines).
