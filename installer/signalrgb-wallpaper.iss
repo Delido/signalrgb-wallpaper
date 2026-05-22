@@ -246,10 +246,14 @@ Filename: "{app}\Wallpaper Engine wallpapers"; Verb: open; \
   Description: "Open the Wallpaper Engine bundle folder (drag 'signalrgb-glow' into Wallpaper Engine manually)"; \
   Flags: postinstall skipifsilent shellexec nowait; \
   Tasks: installwallpaperengine; Check: WallpaperEngineNotDetected
-; ── Start the bridge right away (only if user kept autostart)
+; ── Start the bridge right away (only if user kept autostart). Dropping
+;    `skipifsilent` means in silent mode (used by the tray's
+;    "Download + install update" flow) the bridge auto-restarts after
+;    the new exe is in place. In interactive mode the `postinstall`
+;    checkbox still gates this on user opt-in.
 Filename: "{app}\{#MyAppExeName}"; \
   Description: "Start the SignalRGB Wallpaper Bridge now"; \
-  Flags: postinstall skipifsilent nowait; Tasks: autostart
+  Flags: postinstall nowait; Tasks: autostart
 ; ── Configurator: open the in-browser settings UI so the user can pick
 ;    a wallpaper from the bundled Library, set up screens, etc., right
 ;    after install. Gated on the new openconfigurator task.

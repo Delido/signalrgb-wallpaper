@@ -217,6 +217,11 @@ class UpdateChecker:
         self._stop = threading.Event()
         self._available_tag: str | None = None
         self._available_url: str | None = None
+        # Direct download URL for the installer asset on the newer
+        # release — lets the tray "Download + install" flow grab the
+        # exe without re-querying the GitHub API.
+        self._available_asset_url: str | None = None
+        self._available_asset_size: int = 0
         self._last_checked_ts: float = 0.0
         self._last_error: str | None = None
 
@@ -232,6 +237,14 @@ class UpdateChecker:
             return (self._available_tag, self._available_url or UPDATE_RELEASES_HTML)
         return None
 
+    def available_asset(self) -> tuple[str, int] | None:
+        """Direct URL + content-length for the newer release's installer
+        asset, or None when no update is pending or the release didn't
+        include an installer attachment."""
+        if self._available_tag and self._available_asset_url:
+            return (self._available_asset_url, self._available_asset_size)
+        return None
+
     def last_checked(self) -> float:
         return self._last_checked_ts
 
@@ -240,6 +253,83 @@ class UpdateChecker:
 
     def check_now(self):
         threading.Thread(target=self._safe_check, daemon=True, name="update-check-now").start()
+
+    def download_and_install(self, on_progress=None, on_done=None) -> None:
+        """Download the pending update's installer to %TEMP%, launch it
+        silently with /VERYSILENT /SUPPRESSMSGBOXES, then exit the bridge
+        so the installer can replace SignalRGBBridge.exe.
+
+        on_progress(bytes_done, total_bytes) is called periodically.
+        on_done(path | None, error | None) fires when the install spawn
+        succeeds (path) or the flow aborts (error)."""
+        threading.Thread(
+            target=self._download_install_worker,
+            args=(on_progress, on_done),
+            daemon=True, name="update-install").start()
+
+    def _download_install_worker(self, on_progress, on_done):
+        asset = self.available_asset()
+        if not asset:
+            if on_done: on_done(None, "no installer asset on the latest release")
+            return
+        url, declared_size = asset
+        try:
+            tmp_dir  = Path(os.environ.get("TEMP", str(Path.home() / "AppData" / "Local" / "Temp")))
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            # Stamp the file with the version tag so a partial download
+            # from a previous attempt doesn't masquerade as the new one.
+            tag_clean = re.sub(r"[^A-Za-z0-9._-]", "", self._available_tag or "update")
+            target = tmp_dir / f"SignalRGBWallpaperSetup-{tag_clean}.exe"
+            if target.exists():
+                try: target.unlink()
+                except OSError: pass
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"SignalRGBWallpaper-Updater/{APP_VERSION}"})
+            with urllib.request.urlopen(req, timeout=30) as resp, open(target, "wb") as fp:
+                total = int(resp.headers.get("Content-Length") or declared_size or 0)
+                done = 0
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    fp.write(chunk)
+                    done += len(chunk)
+                    if on_progress:
+                        try: on_progress(done, total)
+                        except Exception: pass
+            print(f"[update] downloaded {done:,} bytes → {target}")
+        except Exception as e:
+            print(f"[update] download failed: {e}")
+            if on_done: on_done(None, str(e))
+            return
+        # Spawn the installer detached, then exit so it can replace our
+        # exe. /VERYSILENT runs without a UI; /SUPPRESSMSGBOXES kills
+        # the "are you sure?" prompts. The bridge tray icon will
+        # disappear; the new exe re-launches it on install completion
+        # via the [Run] section the installer already has.
+        try:
+            import subprocess
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            subprocess.Popen(
+                [str(target), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                close_fds=True,
+                creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            print(f"[update] installer spawned; exiting bridge to release file locks")
+        except Exception as e:
+            print(f"[update] installer spawn failed: {e}")
+            if on_done: on_done(None, str(e))
+            return
+        if on_done:
+            try: on_done(str(target), None)
+            except Exception: pass
+        # Give the spawned installer a moment to grab its handles
+        # before we kill the bridge process.
+        time.sleep(1.5)
+        # Hard-exit — graceful shutdown would let other threads block
+        # the installer's overwrite of SignalRGBBridge.exe.
+        os._exit(0)
 
     # ── internals ───────────────────────────────────────────────────────
     def _enabled(self) -> bool:
@@ -284,6 +374,8 @@ class UpdateChecker:
         best: tuple = current
         best_tag = ""
         best_url = ""
+        best_asset_url = ""
+        best_asset_size = 0
         for rel in data:
             if not isinstance(rel, dict) or rel.get("draft"):
                 continue
@@ -295,10 +387,27 @@ class UpdateChecker:
                 best = v
                 best_tag = tag
                 best_url = rel.get("html_url") or UPDATE_RELEASES_HTML
+                # Find the installer asset on this release. Match by
+                # the canonical filename prefix so we ignore zips,
+                # source tarballs, and any future extra artefacts.
+                assets = rel.get("assets") or []
+                best_asset_url = ""
+                best_asset_size = 0
+                for a in assets:
+                    if not isinstance(a, dict):
+                        continue
+                    name = (a.get("name") or "")
+                    if (name.lower().startswith("signalrgbwallpapersetup")
+                            and name.lower().endswith(".exe")):
+                        best_asset_url  = a.get("browser_download_url") or ""
+                        best_asset_size = int(a.get("size") or 0)
+                        break
         if best > current:
             prev = self._available_tag
-            self._available_tag = best_tag
-            self._available_url = best_url
+            self._available_tag        = best_tag
+            self._available_url        = best_url
+            self._available_asset_url  = best_asset_url or None
+            self._available_asset_size = best_asset_size
             if prev != best_tag:    # only fire on first detection / new bump
                 print(f"[update] newer release available: {best_tag} (current {APP_VERSION})")
                 try: self.on_update_available(best_tag, best_url)
@@ -306,6 +415,8 @@ class UpdateChecker:
         else:
             self._available_tag = None
             self._available_url = None
+            self._available_asset_url = None
+            self._available_asset_size = 0
             print(f"[update] no newer release; current {APP_VERSION} is up to date "
                   f"(allow_betas={allow_betas})")
 
@@ -315,7 +426,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.7-beta"
+APP_VERSION = "0.9.8-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -901,6 +1012,20 @@ TRANSLATIONS = {
     "updates.not_checked":      {"en": "Not yet checked",         "de": "Noch nicht geprüft"},
     "updates.last_failed":      {"en": "Last check failed: {err}",
                                  "de": "Letzte Prüfung fehlgeschlagen: {err}"},
+    "updates.install_now":      {"en": "⬇  Download + install {tag}",
+                                 "de": "⬇  {tag} herunterladen + installieren"},
+    "updates.installing_title": {"en": "Installing {tag}",
+                                 "de": "Installiere {tag}"},
+    "updates.installing_start": {"en": "Starting download…",
+                                 "de": "Download startet…"},
+    "updates.installing_progress": {"en": "Downloading… {pct}%  ({done_mb} / {total_mb} MB)",
+                                 "de": "Lade herunter… {pct}%  ({done_mb} / {total_mb} MB)"},
+    "updates.installing_done":  {"en": "Installer launched — bridge will restart automatically.",
+                                 "de": "Installer gestartet — Bridge wird automatisch neugestartet."},
+    "updates.installing_failed": {"en": "Update failed: {msg}",
+                                 "de": "Update fehlgeschlagen: {msg}"},
+    "updates.installing_hint":  {"en": "The bridge will exit when the installer takes over. Don't close this window manually.",
+                                 "de": "Die Bridge wird sich beenden, sobald der Installer übernimmt. Bitte dieses Fenster nicht manuell schließen."},
     "updates.available_top":    {"en": "⬆  Update available: {tag} — open release page",
                                  "de": "⬆  Update verfügbar: {tag} — Release-Seite öffnen"},
     "updates.installed":        {"en": "Installed: v{ver}",       "de": "Installiert: v{ver}"},
@@ -4661,9 +4786,16 @@ class TrayApp:
         avail = self.update_checker.available()
         if avail:
             tag, _ = avail
+            has_installer = self.update_checker.available_asset() is not None
             items.append(pystray.MenuItem(
                 tr("updates.available_top", tag=tag),
                 self._open_update_page))
+            # Only offer the one-click install when the release ships
+            # an installer asset (older betas didn't always).
+            if has_installer:
+                items.append(pystray.MenuItem(
+                    tr("updates.install_now", tag=tag),
+                    self._download_and_install_update))
             items.append(pystray.Menu.SEPARATOR)
         # Cheap snapshot of the lock state across active screens so the
         # Lock/Unlock entry can switch label without opening a submenu.
@@ -4859,6 +4991,54 @@ class TrayApp:
         url = avail[1] if avail else UPDATE_RELEASES_HTML
         try: webbrowser.open(url, new=2)
         except Exception as e: print(f"[tray] open release page failed: {e}")
+
+    def _download_and_install_update(self, icon, item):
+        """Tray entry: download the pending update's installer to %TEMP%
+        and launch it silently. The bridge exits once the installer is
+        running so it can replace SignalRGBBridge.exe in place; the
+        installer's [Run] section re-launches the new bridge."""
+        avail = self.update_checker.available()
+        if not avail:
+            return
+        tag = avail[0]
+        # Use a tiny Tk window for progress so the user knows the
+        # download is happening (the installer asset is ~20 MB so a
+        # cold-cache download can take a few seconds). Falls back to a
+        # console-only path if Tk isn't available for some reason.
+        def show_progress_window():
+            root = tk.Tk()
+            root.title(tr("updates.installing_title", tag=tag))
+            root.geometry("440x140")
+            root.resizable(False, False)
+            label_var = tk.StringVar(value=tr("updates.installing_start"))
+            ttk.Label(root, textvariable=label_var,
+                      wraplength=400, justify="left").pack(
+                          anchor="w", padx=18, pady=(18, 6))
+            pb = ttk.Progressbar(root, mode="determinate", length=400, maximum=100)
+            pb.pack(padx=18, pady=6)
+            ttk.Label(root, text=tr("updates.installing_hint"),
+                      foreground="#888",
+                      wraplength=400).pack(anchor="w", padx=18, pady=(0, 10))
+            def on_progress(done, total):
+                pct = (done * 100 / total) if total > 0 else 0
+                root.after(0, lambda: (
+                    pb.configure(value=pct),
+                    label_var.set(tr("updates.installing_progress",
+                                     pct=int(pct),
+                                     done_mb=done // (1024*1024),
+                                     total_mb=(total // (1024*1024)) if total else 0))
+                ))
+            def on_done(path, err):
+                root.after(0, lambda: (
+                    label_var.set(tr("updates.installing_done") if path
+                                  else tr("updates.installing_failed", msg=err or "")),
+                ))
+                # Don't auto-close — the os._exit kills this window too
+                # when the bridge dies.
+            self.update_checker.download_and_install(on_progress, on_done)
+            root.mainloop()
+        threading.Thread(target=show_progress_window, daemon=True,
+                         name="update-progress").start()
 
     def _toggle_update_enabled(self, icon, item):
         with self.config_lock:

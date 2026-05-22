@@ -4,6 +4,43 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.8-beta] - 2026-05-22
+
+> First Tier-3 item: **one-click update install**. The tray no longer
+> just links you to the release page — it downloads the new installer
+> and runs it silently while the old bridge bows out, then the new
+> bridge auto-restarts.
+
+### Added — Tray
+
+- **"⬇ Download + install {tag}"** entry at the top of the tray menu,
+  shown whenever an update is pending and the release ships an
+  installer asset (i.e. every official build). The existing
+  "open release page" entry stays for users who want to read
+  release notes first.
+- **Tk progress window** during download — shows percentage and
+  bytes-done / bytes-total. Doesn't auto-close; the process exits
+  when the installer takes over.
+
+### Added — UpdateChecker
+
+- **Asset URL capture** during the daily release-poll: scans
+  `assets[]` for the canonical `SignalRGBWallpaperSetup*.exe` name
+  and stores the direct download URL + content-length alongside the
+  release tag.
+- **`download_and_install(on_progress, on_done)`** — streams the
+  installer into `%TEMP%`, spawns it with
+  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART` (detached + own process
+  group), waits 1.5 s for the installer to grab its handles, then
+  `os._exit(0)` so it can replace `SignalRGBBridge.exe` in place.
+
+### Changed — Installer
+
+- **Dropped `skipifsilent`** from the bridge auto-launch `[Run]`
+  entry. In silent mode (used by the new tray flow) the bridge
+  now auto-restarts after install; in interactive mode the
+  `postinstall` checkbox still gates user opt-in.
+
 ## [0.9.7-beta] - 2026-05-22
 
 > Two follow-ups to v0.9.6: keyboard input still didn't reach the

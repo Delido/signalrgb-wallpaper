@@ -261,15 +261,19 @@ alpha mask.
 Risks: WebAssembly model can be 5-20 MB which bloats the bundle.
 Maybe lazy-load from a CDN on first use instead of bundling.
 
-### 🔲 Winget package + auto-update — ~3 h
+### 🚧 Winget package + auto-update — auto-update shipped v0.9.8-beta
 
-- Submit a manifest to `microsoft/winget-pkgs`:
-  `winget install Delido.SignalRGBWallpaper`
-- Add a *"Download + install update"* button in the Updates tray
-  submenu (currently we only link to the release page). The bridge
-  downloads the new installer to `%TEMP%`, runs it silently with
-  `/VERYSILENT /SUPPRESSMSGBOXES`, then exits to let the installer
-  do the rest.
+In-app auto-update flow is done: tray entry *"⬇ Download + install
+{tag}"* streams the installer into `%TEMP%`, spawns it with
+`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, then `os._exit(0)`s so
+the installer can replace `SignalRGBBridge.exe`. Installer's `[Run]`
+entry now auto-restarts the bridge in silent mode. Progress shown
+via a small Tk window during download.
+
+Still 🔲: Winget manifest submission to `microsoft/winget-pkgs` —
+needs a PR through their submission flow + ongoing manifest
+updates per release. Left as a manual task for the maintainer
+when there's audience for it.
 
 ### 🔲 Mobile Configurator view — ~4 h
 
