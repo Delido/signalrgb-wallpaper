@@ -4,6 +4,30 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3-beta] - 2026-05-22
+
+> Second Tier-2 high-visibility feature: **global preset hotkeys**.
+> `Ctrl+Shift+1..4` applies the matching preset slot on every active
+> screen at once — full desktop look swap in a single keystroke.
+
+### Added
+
+- **`HotkeyListener`** background thread on the bridge — registers
+  `Ctrl+Shift+1`, `Ctrl+Shift+2`, `Ctrl+Shift+3`, `Ctrl+Shift+4`
+  via Win32 `RegisterHotKey` on its own thread, pumps GetMessage,
+  and on WM_HOTKEY fires `apply_preset` on every active screen for
+  the matching slot. Mirrors are skipped by the existing
+  `_block_if_mirror` guard, so they update via replication from
+  their source instead of locally.
+- **Tray toggle** under *Advanced → Preset hotkeys (Ctrl+Shift+1..4)*.
+  Checkmark reflects the live state. Off by default so we don't
+  grab shortcuts the user might have wired up elsewhere — flip it
+  on once and it persists across restarts via
+  `config.presetHotkeysEnabled`.
+- **Graceful unregister** on toggle off: `Stop()` posts WM_QUIT to
+  the listener thread which unregisters all hotkeys before
+  returning, so other apps can reclaim the shortcuts cleanly.
+
 ## [0.9.2-beta] - 2026-05-22
 
 > First Tier-2 high-visibility feature: **wallpaper auto-cycle**. Each

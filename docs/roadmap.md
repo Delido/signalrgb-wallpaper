@@ -217,15 +217,14 @@ since the source's cycle propagates to them via the existing
 mirror-replication path. Time-of-day pool (dawn / day / dusk /
 night) deferred to a follow-up.
 
-### 🔲 Preset hotkeys — ~3 h
+### ✅ Preset hotkeys — shipped v0.9.3-beta
 
-Global `Ctrl+Shift+1..4` to swap between the four per-screen
-preset slots without touching the Configurator.
-
-Windows-side: register hotkeys via the bridge's main thread using
-`RegisterHotKey` (Win32 API; we already have the bridge process
-running so it's the natural home). On press, fire the same
-`preset-apply` WS command the Configurator's Apply button uses.
+Global `Ctrl+Shift+1..4` applies preset slot N on every active
+screen. `HotkeyListener` runs on its own thread, uses
+`RegisterHotKey` for each hotkey and a GetMessage loop for
+dispatch. Tray toggle under Advanced flips
+`config.presetHotkeysEnabled`; off by default so we don't grab
+shortcuts the user might already be using.
 
 ### 🔲 Per-app / per-game profiles — ~5-6 h
 

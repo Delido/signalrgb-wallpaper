@@ -315,7 +315,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.2-beta"
+APP_VERSION = "0.9.3-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -806,6 +806,10 @@ def default_config() -> dict:
         "updateCheckEnabled": True,
         "allowBetas":         False,   # include GitHub prerelease tags in update checks
         "language":           "auto",  # "auto" | "en" | "de" — UI language
+        # Global Ctrl+Shift+1..4 → apply preset slot 1..4 on every active
+        # screen. Disabled by default so we don't grab shortcuts the user
+        # might already have wired up; tray menu flips it on.
+        "presetHotkeysEnabled": False,
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -866,6 +870,8 @@ TRANSLATIONS = {
     "tray.quick_add_widget":    {"en": "Quick add widget",        "de": "Widget schnell hinzufügen"},
     "tray.quick_effects":       {"en": "Quick effects",           "de": "Effekte (Schnellzugriff)"},
     "tray.reload_config":       {"en": "Reload config",           "de": "Konfig neu laden"},
+    "tray.preset_hotkeys":      {"en": "Preset hotkeys (Ctrl+Shift+1..4)",
+                                 "de": "Preset-Hotkeys (Strg+Umschalt+1..4)"},
     "tray.updates":             {"en": "Updates",                 "de": "Updates"},
     "tray.about":               {"en": "About…",                  "de": "Über…"},
     "tray.quit":                {"en": "Quit",                    "de": "Beenden"},
@@ -2478,6 +2484,130 @@ class CycleScheduler:
         print(f"[cycle] screen={screen} -> {file} (pool={pool_name}, order={order})")
 
 
+class HotkeyListener:
+    """Win32 global hotkey registration + dispatch. Registers
+    Ctrl+Shift+1..4 to fire preset-apply on each screen's matching
+    slot — one hotkey activates that slot's snapshot on every
+    active screen at once, so the whole desktop's look swaps in a
+    single keystroke.
+
+    Implementation: each hotkey lives on this listener thread via
+    `RegisterHotKey(NULL, id, MOD_CTRL|MOD_SHIFT, vk)`; the thread
+    pumps GetMessage to receive WM_HOTKEY. Stop posts WM_QUIT so the
+    blocking GetMessage returns and the loop exits.
+
+    Disabled: Stop() unregisters the hotkeys so other apps can grab
+    Ctrl+Shift+1..4 again. Re-enable by Start()ing a fresh listener.
+    """
+
+    # Modifier flags from WinUser.h.
+    _MOD_SHIFT   = 0x0004
+    _MOD_CONTROL = 0x0002
+    _WM_HOTKEY   = 0x0312
+    _WM_QUIT     = 0x0012
+
+    # (hotkey-id, modifiers, virtual-key, preset-slot).
+    _HOTKEYS = [
+        (1, _MOD_CONTROL | _MOD_SHIFT, 0x31, 0),  # Ctrl+Shift+1 -> slot 0
+        (2, _MOD_CONTROL | _MOD_SHIFT, 0x32, 1),  # Ctrl+Shift+2 -> slot 1
+        (3, _MOD_CONTROL | _MOD_SHIFT, 0x33, 2),  # Ctrl+Shift+3 -> slot 2
+        (4, _MOD_CONTROL | _MOD_SHIFT, 0x34, 3),  # Ctrl+Shift+4 -> slot 3
+    ]
+
+    def __init__(self, bridge_runtime):
+        self.bridge   = bridge_runtime
+        self._thread: threading.Thread | None = None
+        self._tid     = 0
+        self._enabled = False
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._enabled = True
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="hotkey-listener")
+        self._thread.start()
+
+    def stop(self):
+        self._enabled = False
+        if not self._thread or not self._tid:
+            return
+        try:
+            user32 = ctypes.windll.user32
+            # Post WM_QUIT to break the blocking GetMessage in _run.
+            user32.PostThreadMessageW(self._tid, self._WM_QUIT, 0, 0)
+        except Exception as e:
+            print(f"[hotkey] stop post failed: {e}")
+
+    def is_running(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
+    def _run(self):
+        try:
+            user32  = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+        except Exception as e:
+            print(f"[hotkey] ctypes unavailable: {e}")
+            return
+        self._tid = kernel32.GetCurrentThreadId()
+        registered: list[int] = []
+        for hk_id, mods, vk, _slot in self._HOTKEYS:
+            try:
+                # `hwnd=None` registers the hotkey for the calling
+                # thread; messages arrive in this thread's queue.
+                if user32.RegisterHotKey(None, hk_id, mods, vk):
+                    registered.append(hk_id)
+                else:
+                    print(f"[hotkey] register id={hk_id} failed "
+                          f"(probably already in use by another app)")
+            except Exception as e:
+                print(f"[hotkey] register id={hk_id} crashed: {e}")
+        if not registered:
+            print("[hotkey] no hotkeys registered; listener idle")
+            return
+        print(f"[hotkey] active — Ctrl+Shift+1..{len(registered)} = preset slot 1..{len(registered)}")
+        try:
+            from ctypes import wintypes
+            msg = wintypes.MSG()
+            while self._enabled:
+                # GetMessageW returns 0 on WM_QUIT, -1 on error, >0 otherwise.
+                bret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+                if bret <= 0:
+                    break
+                if msg.message == self._WM_HOTKEY:
+                    slot = self._slot_for_id(int(msg.wParam))
+                    if slot is not None:
+                        self._fire_preset(slot)
+        finally:
+            for hk_id in registered:
+                try: user32.UnregisterHotKey(None, hk_id)
+                except Exception: pass
+            self._tid = 0
+
+    def _slot_for_id(self, hk_id: int) -> int | None:
+        for id_, _mods, _vk, slot in self._HOTKEYS:
+            if id_ == hk_id:
+                return slot
+        return None
+
+    def _fire_preset(self, slot: int) -> None:
+        """Apply the matching preset slot on every active screen.
+        Mirrors are already skipped by `apply_preset` via
+        `_block_if_mirror`, so we don't double-fire there."""
+        try:
+            count = int(self.bridge._get_screen_count())
+        except Exception:
+            count = 1
+        applied = 0
+        for i in range(count):
+            try:
+                if self.bridge.apply_preset(i, slot) is not None:
+                    applied += 1
+            except Exception as e:
+                print(f"[hotkey] apply_preset screen={i} slot={slot} failed: {e}")
+        print(f"[hotkey] slot={slot} applied to {applied}/{count} screen(s)")
+
+
 class UdpReceiver(asyncio.DatagramProtocol):
     """Accepts two wire formats from the SignalRGB plugin:
 
@@ -3273,12 +3403,13 @@ class BridgeRuntime:
     # Whitelist of global (bridge-scoped) keys the Configurator may set via
     # the `bridge-setting-update` WS command. Per-screen keys go through
     # `update_screen_setting` above; this is the global counterpart.
-    _SETTABLE_BRIDGE_KEYS = {"screenCount"}
+    _SETTABLE_BRIDGE_KEYS = {"screenCount", "presetHotkeysEnabled"}
 
     def update_bridge_setting(self, key: str, value):
         """Mutate a top-level (non-per-screen) config field. Currently
-        screenCount only — the Configurator uses this to retire the
-        legacy Tk dialog as the sole source of that knob.
+        screenCount + presetHotkeysEnabled — the Configurator + tray
+        use this to retire the legacy Tk dialog as the sole source
+        of those knobs.
 
         Re-pushes every screen's settings so the live screenCount field
         in the settings payload propagates to all connected pages
@@ -3308,6 +3439,27 @@ class BridgeRuntime:
                 except Exception as e:
                     print(f"[settings] push after screenCount failed: {e}")
             print(f"[settings] screenCount -> {n}")
+        elif key == "presetHotkeysEnabled":
+            enabled = bool(value)
+            with self.config_lock:
+                if bool(self.config.get("presetHotkeysEnabled", False)) == enabled:
+                    return
+                self.config["presetHotkeysEnabled"] = enabled
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            # Spin the listener up or down to match. New listener
+            # instance after a stop so the daemon thread can fully
+            # terminate before we re-register the hotkeys.
+            if enabled:
+                if not self.hotkey_listener.is_running():
+                    self.hotkey_listener.start()
+            else:
+                self.hotkey_listener.stop()
+                self.hotkey_listener = HotkeyListener(self)
+            print(f"[settings] presetHotkeysEnabled -> {enabled}")
 
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
@@ -3408,6 +3560,13 @@ class BridgeRuntime:
         # screen whose `cycle.enabled` is true past its `intervalMin`.
         self.cycle_scheduler = CycleScheduler(self)
         self.cycle_scheduler.start()
+        # Global Ctrl+Shift+1..4 → apply preset slot N on every screen.
+        # Off by default; tray toggle flips it on. Stays in this attr
+        # even when disabled so the toggle path is symmetrical.
+        self.hotkey_listener = HotkeyListener(self)
+        with self.config_lock:
+            if bool(self.config.get("presetHotkeysEnabled", False)):
+                self.hotkey_listener.start()
         self.sysstats = SysStatsPoller(self.broadcaster, hwmon=self.hwmon)
         self.sysstats.start()
         try:
@@ -4057,6 +4216,10 @@ class TrayApp:
             pystray.MenuItem(tr("tray.advanced"), pystray.Menu(
                 pystray.MenuItem(tr("tray.quick_add_widget"), pystray.Menu(self._widget_menu_items)),
                 pystray.MenuItem(tr("tray.quick_effects"),    pystray.Menu(self._effects_menu_items)),
+                pystray.MenuItem(
+                    tr("tray.preset_hotkeys"),
+                    self._toggle_preset_hotkeys,
+                    checked=lambda _i: self._preset_hotkeys_enabled()),
                 pystray.MenuItem(tr("tray.reload_config"),    self._reload_config),
             )),
             pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
@@ -4093,6 +4256,18 @@ class TrayApp:
         for i in range(n):
             self.bridge.set_widgets_locked(i, target_locked)
         print(f"[tray] all screens widgetsLocked → {target_locked}")
+
+    def _preset_hotkeys_enabled(self) -> bool:
+        with self.config_lock:
+            return bool(self.config.get("presetHotkeysEnabled", False))
+
+    def _toggle_preset_hotkeys(self, icon, item):
+        new_value = not self._preset_hotkeys_enabled()
+        self.bridge.update_bridge_setting("presetHotkeysEnabled", new_value)
+        # pystray queries `checked` lazily; redraw the menu so the
+        # checkmark reflects the new state without a Windows mouse-out.
+        try: icon.update_menu()
+        except Exception: pass
 
     # -- menu callbacks (fire on pystray's worker thread) -------------------
 
