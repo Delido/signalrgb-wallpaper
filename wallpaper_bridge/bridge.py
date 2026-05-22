@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.9-beta"
+APP_VERSION = "0.8.10-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -537,6 +537,83 @@ def config_path() -> Path:
     folder = Path(base) / "SignalRGBWallpaper"
     folder.mkdir(parents=True, exist_ok=True)
     return folder / "config.json"
+
+
+def _candidate_documents_dirs() -> list[Path]:
+    """Every plausible location for the user's "Documents" folder, in
+    preference order. Windows redirects Documents to OneDrive on a lot
+    of installs — `Path.home() / "Documents"` will exist but be empty
+    when that happens, while Inno Setup's `{userdocs}` token routes
+    through `SHGetFolderPath(CSIDL_PERSONAL)` and writes to the actual
+    OneDrive-backed path. We mirror that resolution here so the
+    System-status dialog finds the plugin file in the same place the
+    installer dropped it.
+
+    Order:
+      1. HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\
+         Shell Folders\\Personal — authoritative, matches `{userdocs}`
+      2. Detected `~/OneDrive*/Documents` and `~/OneDrive*/Dokumente`
+         siblings for users where the registry value lags a sync
+      3. Plain `~/Documents` / `~/Dokumente` as the legacy fallback
+    """
+    seen: set[str] = set()
+    out: list[Path] = []
+    def add(p: Path | None):
+        if p is None:
+            return
+        try:
+            resolved = p.resolve()
+        except Exception:
+            resolved = p
+        key = str(resolved).lower()
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(resolved)
+
+    # 1) Registry "Personal" value — the one Windows itself uses.
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+        ) as k:
+            value, _ = winreg.QueryValueEx(k, "Personal")
+            add(Path(os.path.expandvars(value)))
+    except Exception:
+        pass
+    # User Shell Folders carries the unexpanded version (with env vars
+    # like %USERPROFILE%) which can be more accurate when the cache
+    # in Shell Folders is stale.
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+        ) as k:
+            value, _ = winreg.QueryValueEx(k, "Personal")
+            add(Path(os.path.expandvars(value)))
+    except Exception:
+        pass
+
+    # 2) Any OneDrive root under the home folder (personal + corp).
+    try:
+        home = Path.home()
+        for child in home.iterdir():
+            name = child.name
+            if name.lower().startswith("onedrive") and child.is_dir():
+                for doc_name in ("Documents", "Dokumente"):
+                    cand = child / doc_name
+                    if cand.is_dir():
+                        add(cand)
+    except Exception:
+        pass
+
+    # 3) Plain home/Documents and the German variant.
+    for doc_name in ("Documents", "Dokumente"):
+        add(Path.home() / doc_name)
+
+    return out
 
 
 def screens_dir() -> Path:
@@ -1086,6 +1163,20 @@ def parse_query_screen(target: str) -> int:
     return n
 
 
+def parse_query_role(target: str) -> str:
+    """Identify what kind of client opened this WS — `wallpaper` (the
+    page Lively/WE renders, default for legacy clients) or
+    `configurator` (the in-browser settings UI). The Status dialog
+    counts only `wallpaper` clients so the user sees actual rendered
+    pages, not their own open Configurator tab."""
+    if "?" not in target:
+        return "wallpaper"
+    _, _, query = target.partition("?")
+    params = urllib.parse.parse_qs(query)
+    role = (params.get("role", ["wallpaper"])[0] or "wallpaper").lower()
+    return role if role in ("wallpaper", "configurator") else "wallpaper"
+
+
 # ============================================================================
 # Broadcaster — UDP fan-out + settings push
 # ============================================================================
@@ -1130,11 +1221,17 @@ class Broadcaster:
 
     # ----- client lifecycle -----
 
-    async def add(self, writer, screen: int):
+    async def add(self, writer, screen: int, role: str = "wallpaper"):
         async with self._lock:
             self.clients_by_screen.setdefault(screen, set()).add(writer)
+            # Side-table for client roles so the Status dialog can
+            # count only the actual wallpaper pages and not e.g. the
+            # user's own open Configurator tab.
+            if not hasattr(self, "client_roles"):
+                self.client_roles = {}
+            self.client_roles[writer] = role
             total = sum(len(s) for s in self.clients_by_screen.values())
-        print(f"[+] ws screen={screen} (total: {total})")
+        print(f"[+] ws screen={screen} role={role} (total: {total})")
         # Push current settings immediately so the page can paint with the
         # right background / layout before the first frame arrives.
         try:
@@ -1156,6 +1253,8 @@ class Broadcaster:
 
     async def remove(self, writer):
         async with self._lock:
+            if hasattr(self, "client_roles"):
+                self.client_roles.pop(writer, None)
             for screen, clients in list(self.clients_by_screen.items()):
                 if writer in clients:
                     clients.discard(writer)
@@ -1948,7 +2047,8 @@ class Broadcaster:
         writer.write(response)
         await writer.drain()
         screen = parse_query_screen(target)
-        await self.add(writer, screen)
+        role = parse_query_role(target)
+        await self.add(writer, screen, role)
         try:
             while not writer.is_closing():
                 text = await read_client_text_frame(reader)
@@ -2748,11 +2848,23 @@ class BridgeRuntime:
         """Snapshot of "is the install actually working?" signals for
         the tray's System-status dialog. Cheap to compute — meant to
         be called on-demand from the dialog open path."""
-        # SignalRGB plugin file in the user's WhirlwindFX/Plugins dir.
-        try:
-            plugin_path = Path.home() / "Documents" / "WhirlwindFX" / "Plugins" / "SignalRGB_Desktop_Wallpaper.js"
-        except Exception:
-            plugin_path = None
+        # SignalRGB plugin file. Windows redirects the Documents folder
+        # to OneDrive on a lot of installs, so `Path.home() / "Documents"`
+        # is *not* where Inno Setup's {userdocs} actually put the
+        # plugin. Walk a list of candidate roots (registry Personal,
+        # OneDrive paths, plain Documents) and pick the first one that
+        # has the file — fall back to the registry-preferred path for
+        # the "Open plugins folder" button when nothing matches.
+        plugin_rel = Path("WhirlwindFX") / "Plugins" / "SignalRGB_Desktop_Wallpaper.js"
+        candidate_roots = _candidate_documents_dirs()
+        plugin_path = None
+        for root in candidate_roots:
+            fp = root / plugin_rel
+            if fp.is_file():
+                plugin_path = fp
+                break
+        if plugin_path is None and candidate_roots:
+            plugin_path = candidate_roots[0] / plugin_rel
         plugin_present = bool(plugin_path and plugin_path.is_file())
 
         # SignalRGB.exe / SignalRgb / SignalRGBLauncher running.
@@ -2767,11 +2879,19 @@ class BridgeRuntime:
             pass
 
         # Wallpaper pages connected via WS (one per active monitor).
+        # `client_roles` distinguishes the Configurator's own WS from
+        # actual wallpaper pages — without it, the user sees their own
+        # open Configurator tab counted, which is misleading.
         pages_connected = 0
         if self.broadcaster:
             try:
-                pages_connected = sum(
-                    len(s) for s in self.broadcaster.clients_by_screen.values())
+                roles = getattr(self.broadcaster, "client_roles", {}) or {}
+                if roles:
+                    pages_connected = sum(
+                        1 for r in roles.values() if r == "wallpaper")
+                else:
+                    pages_connected = sum(
+                        len(s) for s in self.broadcaster.clients_by_screen.values())
             except Exception:
                 pass
 

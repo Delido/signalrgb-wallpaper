@@ -2487,8 +2487,11 @@ async function applySectionToAll(cardId, spec) {
 // WebSocket
 // ─────────────────────────────────────────────────────────────────────────────
 function connect() {
+  // role=configurator tells the bridge this WS isn't a wallpaper page —
+  // the System-status dialog uses the flag so an open Configurator tab
+  // doesn't pad the "connected pages" count.
   const url = "ws://" + location.hostname + ":" + (location.port || 17320) +
-              "/?screen=" + activeScreen;
+              "/?screen=" + activeScreen + "&role=configurator";
   els.conn.textContent = t("conn.connecting");
   els.conn.className = "conn bad";
   try { ws = new WebSocket(url); }

@@ -4,6 +4,37 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.10-beta] - 2026-05-22
+
+> Two fixes against the v0.8.9-beta System-status dialog: plugin
+> file not found on OneDrive-redirected Documents folders, and the
+> Configurator's own WS tab inflating the "connected pages" count.
+
+### Fixed
+
+- **System status: SignalRGB plugin file shown as missing** even
+  though the installer dropped it correctly. On Windows installs
+  with OneDrive Documents redirection, `Path.home() / "Documents"`
+  resolves to an empty/legacy folder while Inno Setup's
+  `{userdocs}` token routes through `SHGetFolderPath` and writes
+  to the actual OneDrive-backed path. New `_candidate_documents_dirs`
+  helper walks (in order): HKCU\\Software\\Microsoft\\Windows\\
+  CurrentVersion\\Explorer\\Shell Folders\\Personal (the value
+  Windows uses internally, matches `{userdocs}`), then any
+  `~/OneDrive*/Documents` and `~/OneDrive*/Dokumente` siblings,
+  finally plain `~/Documents` / `~/Dokumente`. The dialog now
+  finds the plugin file in the same folder the installer wrote
+  it, and the *Open plugins folder* button opens that location.
+- **System status: "Connected pages" count off by one (or more).**
+  The Configurator's own open browser tab opens a WebSocket and
+  was counted as a wallpaper page, so a user with two monitors
+  who had the Configurator open saw "3 connected pages" instead
+  of 2. WS clients now declare a `role` query parameter
+  (`wallpaper` by default, `configurator` for the settings UI);
+  the status dialog counts only `wallpaper`-role clients.
+  Wallpaper-page WS clients without an explicit role default to
+  `wallpaper` so legacy pages keep counting correctly.
+
 ## [0.8.9-beta] - 2026-05-22
 
 > Tier 1 setup-polish bundle: tray System-status dialog with one-click
