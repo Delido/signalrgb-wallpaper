@@ -230,9 +230,13 @@ multi-monitor Builder workflow. Highlights since v0.8.0:
 - 🆕 **Right-panel rework** — Source → Wall → Output flow,
   Merge collapsed by default, Apply Wall full-width primary
   (v0.9.14-beta)
-- 🆕 **Auto cut tool** ✨ — Otsu instant mode (no internet) +
-  AI saliency mode that lazy-loads `onnxruntime-web` + RMBG-1.4
-  on first click (v0.9.16 + v0.9.17 dim/undo fixes)
+- 🆕 **Auto cut tool** ✨ — one-click detection of bright /
+  salient regions for cutting. Two pure-JS modes: **Auto
+  saliency** (Achanta-2009 frequency-tuned algorithm) and
+  **Brightness (Otsu)**, both ~50 ms, offline, no model
+  download, no licence concerns. Power users can opt into a
+  custom ONNX model via `localStorage` if they want
+  (v0.9.16 → v0.9.20)
 
 ### Effects + UI
 
@@ -252,15 +256,18 @@ multi-monitor Builder workflow. Highlights since v0.8.0:
   invariant enforced via `_block_if_mirror` /
   `_replicate_to_mirrors` (v0.8.8-beta)
 
-### Bug fixes from the 0.8.x cycle
+### Bug fixes from the 0.8.x / 0.9.x cycle
 
 - 🐛 **Perf**: SignalRGB-startup lag fixed by coalescing 5×
   redundant `applyZoneSize` rebuilds into one (v0.8.1)
 - 🐛 **Installer**: library.json no longer overwritten on
   upgrade — your uploads survive (v0.8.6-beta)
-- 🐛 **Tray auto-update**: ShellExecuteW spawn replaces
-  subprocess.Popen with DETACHED_PROCESS so the installer
-  actually launches reliably (v0.9.17-beta)
+- 🐛 **Tray auto-update**: three-step debugging — `subprocess.
+  Popen + DETACHED_PROCESS` → `ShellExecuteW` (v0.9.17) →
+  `CloseApplications=force` in the Inno script (v0.9.19) to
+  stop the silent installer deadlocking on a user-confirm
+  dialog that's already been killed by `/SUPPRESSMSGBOXES`.
+  Tray *Download + install update* now works reliably
 
 Full version-by-version breakdown: [CHANGELOG.md](CHANGELOG.md).
 

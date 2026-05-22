@@ -289,35 +289,59 @@ the bar with the live glow colour when *Tint* is on.
 
 ## 🛠️ Tier 3 — Power-user / polish
 
-### ✅ Builder: Auto cut tool — shipped v0.9.16-beta
+### ✅ Builder: Auto cut tool — shipped v0.9.16-beta, finalised v0.9.20-beta
 
 ✨ icon in the toolbox. Two modes share the same `clicks` storage
 and replay path so undo / redo / refine-with-brushes work like any
 other operation:
 
-- **Otsu (instant)** — computes the optimal brightness threshold
-  via Otsu's method on a luma histogram. No internet, no model,
-  no WASM. Genuinely strong for neon / UI / sci-fi panel imagery
-  where the cut signal is brightness.
-- **AI saliency** — lazy-loads `onnxruntime-web` from jsDelivr and
-  a U²-Netp saliency model from Hugging Face on first click;
-  both are browser-cached after. Inference at 320×320, mask
-  upsampled at draw time. Total cold-start download ~7 MB.
+- **Auto saliency (instant)** — frequency-tuned saliency *(Achanta,
+  Hemami, Estrada, Süsstrunk 2009, published academic algorithm)*.
+  For each pixel: Euclidean colour distance from the image's mean
+  RGB plus a brightness-above-mean premium; adaptive threshold.
+  Pure JS, ~50 ms on a typical canvas, offline, no licence
+  concerns. Strong on the neon / UI-overlay / glowing-edge case
+  because those regions are precisely where colour deviates most
+  from the image's overall palette.
+- **Brightness (Otsu)** — Otsu's method on a luma histogram for
+  cases where pure-brightness thresholding fits better.
 
-Threshold slider biases the cutoff ±25 %; Invert toggle flips
-the mask. Rotation handler updates the stored mask in place so
-*Rotate 90°* keeps the cut aligned with the canvas. Model URL
-override via `localStorage["builder.aiModelUrl"]` for users
-behind a CDN block.
+Threshold slider biases the cutoff; Invert toggle flips the
+mask. Rotation handler updates the stored mask in place so
+*Rotate 90°* keeps the cut aligned with the canvas.
 
-### 🚧 Winget package + auto-update — auto-update shipped v0.9.8-beta
+**Power-user opt-in**: setting
+`localStorage["builder.aiEnabled"] = "1"` (or supplying a URL via
+`["builder.aiModelUrl"]`) injects a third *Custom ONNX model* entry
+into the dropdown that lazy-loads `onnxruntime-web` from jsDelivr
+and runs the user's model. Hidden by default after the v0.9.16 →
+v0.9.20 default-URL saga (RMBG-1.4 was non-commercial; subsequent
+Apache-2.0 URLs either 404'd or referenced external-data files
+ORT couldn't auto-resolve). Going classical for the default case
+solved all three constraints — works offline, licence-clean,
+zero download — in one shot.
 
-In-app auto-update flow is done: tray entry *"⬇ Download + install
-{tag}"* streams the installer into `%TEMP%`, spawns it with
-`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, then `os._exit(0)`s so
-the installer can replace `SignalRGBBridge.exe`. Installer's `[Run]`
-entry now auto-restarts the bridge in silent mode. Progress shown
-via a small Tk window during download.
+### 🚧 Winget package + auto-update — auto-update finalised v0.9.19-beta
+
+In-app auto-update is done. Tray entry *"⬇ Download + install
+{tag}"* streams the installer into `%TEMP%`, spawns it via
+`ShellExecuteW` (`/SILENT /SUPPRESSMSGBOXES /NORESTART`), then
+`os._exit(0)`s. The installer has `CloseApplications=force` so it
+kills the running bridge cleanly before overwriting
+`SignalRGBBridge.exe`; the `[Run]` section relaunches the new exe
+silently. Each step writes to `%TEMP%/signalrgb-update.log` for
+post-mortem diagnosis. Progress shown via a small Tk window
+during download.
+
+Originally shipped v0.9.8 with `subprocess.Popen(...,
+DETACHED_PROCESS)`; v0.9.17 swapped that for `ShellExecuteW`
+after reports of the spawned installer dying with the parent;
+v0.9.19 added `CloseApplications=force` after the
+`/SUPPRESSMSGBOXES` plus `CloseApplications=yes` interaction was
+found to deadlock the silent path (Inno waits on a user-confirm
+dialog that's already been killed). Three-step debugging — kept the changes documented
+in the changelog so future regressions in this area have a clear
+diff to look at.
 
 Still 🔲: Winget manifest submission to `microsoft/winget-pkgs` —
 needs a PR through their submission flow + ongoing manifest
