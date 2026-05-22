@@ -258,6 +258,64 @@
   }
   .mirror-bar .btn-reset.hidden { display: none; }
   .mirror-bar > .hidden { display: none; }
+
+  /* First-run onboarding tour — overlay + spotlight ring + tooltip.
+     Activates once on first Configurator open; the spotlight points
+     at the live element being highlighted in each step. */
+  .tour-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 9700;
+    display: none;
+  }
+  .tour-overlay.show { display: block; }
+  .tour-spotlight {
+    position: fixed;
+    border: 2px solid #5b8fd1;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.65);
+    pointer-events: none;
+    transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s;
+    z-index: 9701;
+  }
+  .tour-tooltip {
+    position: fixed;
+    background: var(--panel-2);
+    border: 1px solid #5b8fd1;
+    border-radius: 8px;
+    padding: 14px 16px;
+    width: 320px;
+    box-sizing: border-box;
+    color: var(--text);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+    z-index: 9702;
+  }
+  .tour-tooltip .tour-title {
+    font-size: 14px; font-weight: 600; margin-bottom: 6px;
+    color: #d8e6fc;
+  }
+  .tour-tooltip .tour-body {
+    font-size: 12.5px; opacity: 0.88; line-height: 1.5;
+  }
+  .tour-tooltip .tour-actions {
+    display: flex; gap: 8px; align-items: center;
+    margin-top: 12px;
+  }
+  .tour-tooltip .tour-progress {
+    font-size: 11px; opacity: 0.6; flex: 1;
+  }
+  .tour-tooltip .tour-btn {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .tour-tooltip .tour-btn.primary {
+    background: #3a6ba8; border-color: #4a7bbf; color: #fff;
+  }
+  .tour-tooltip .tour-btn:hover { filter: brightness(1.15); }
   main.cards-disabled section.card .body {
     pointer-events: none;
     opacity: 0.45;
@@ -810,6 +868,9 @@
   <h1 data-i18n="header.title">SignalRGB Wallpaper Configurator</h1>
   <span class="spacer"></span>
   <span class="conn bad" id="conn" data-i18n="conn.connecting">connecting…</span>
+  <button class="btn" id="header-replay-tour" type="button"
+          title="Show the first-run tour again"
+          data-i18n="header.replay_tour">Tour</button>
   <a class="btn" href="/builder" target="_blank" data-i18n="header.open_builder">Open Builder…</a>
 </header>
 
@@ -1269,6 +1330,37 @@ const TRANSLATIONS = {
                               de: "Alle Einstellungen auf Bildschirm {n} auf Standard zurücksetzen? Voreinstellungen und Spiegel-Status bleiben erhalten; Widgets, Glow, Effekte und Hintergrund werden geleert." },
   "reset_screen.done":      { en: "Screen {n} reset to defaults",
                               de: "Bildschirm {n} auf Standard zurückgesetzt" },
+  "undo.applied":           { en: "Undid last change (Ctrl+Y to redo)",
+                              de: "Letzte Änderung rückgängig (Strg+Y für Wiederholen)" },
+  "redo.applied":           { en: "Redid change",
+                              de: "Änderung wiederholt" },
+  "header.replay_tour":     { en: "Tour",                 de: "Tour" },
+  "tour.skip":              { en: "Skip",                 de: "Überspringen" },
+  "tour.next":              { en: "Next",                 de: "Weiter" },
+  "tour.done":              { en: "Got it",               de: "Verstanden" },
+  "tour.progress":          { en: "{n} / {total}",        de: "{n} / {total}" },
+  "tour.welcome.title":     { en: "Welcome to SignalRGB Wallpaper",
+                              de: "Willkommen bei SignalRGB Wallpaper" },
+  "tour.welcome.body":      { en: "30-second tour of the Configurator. Hit Skip any time to dismiss.",
+                              de: "30-Sekunden-Tour durch den Konfigurator. Mit „Überspringen“ jederzeit beenden." },
+  "tour.tabs.title":        { en: "Screens",              de: "Bildschirme" },
+  "tour.tabs.body":         { en: "Each monitor has its own settings. Switch between them with these tabs.",
+                              de: "Jeder Monitor hat eigene Einstellungen. Mit diesen Tabs wechseln." },
+  "tour.overview.title":    { en: "Overview",             de: "Übersicht" },
+  "tour.overview.body":     { en: "On multi-monitor setups: thumbnails of every screen's current background. Click one to jump to its tab.",
+                              de: "Bei mehreren Monitoren: Vorschau jedes Bildschirmhintergrunds. Klick wechselt zum Tab." },
+  "tour.bg.title":          { en: "Background",           de: "Hintergrund" },
+  "tour.bg.body":           { en: "Pick a wallpaper from the library, upload your own, or open the Builder to cut glow-transparent regions into one.",
+                              de: "Wallpaper aus der Bibliothek wählen, eigenes hochladen, oder im Builder Glow-Transparenzen rausschneiden." },
+  "tour.presets.title":     { en: "Presets",              de: "Voreinstellungen" },
+  "tour.presets.body":      { en: "Save 4 setting combinations per screen. One-click swap — or Ctrl+Shift+1..4 if you turn the hotkeys on in the tray.",
+                              de: "4 Einstellungskombinationen pro Bildschirm sichern. Ein-Klick-Wechsel — oder Strg+Umschalt+1..4 wenn du die Hotkeys im Tray aktivierst." },
+  "tour.builder.title":     { en: "Build Wallpaper",      de: "Wallpaper bauen" },
+  "tour.builder.body":      { en: "Need glow to actually show? Open the Builder, click bright regions in an image to make them transparent, then send to a screen.",
+                              de: "Damit Glow durchscheint, im Builder helle Bildbereiche transparent klicken und auf einen Bildschirm anwenden." },
+  "tour.done.title":        { en: "You're set",           de: "Fertig" },
+  "tour.done.body":         { en: "Ctrl+Z undoes the last setting, Ctrl+Y redoes. Tray icon has Help, System status, About, and the update checker.",
+                              de: "Strg+Z macht die letzte Einstellung rückgängig, Strg+Y wiederholt. Im Tray-Icon: Hilfe, Systemstatus, Über, Update-Checker." },
   "apply_all.label":        { en: "Apply to all",         de: "Auf alle anwenden" },
   "apply_all.confirm":      { en: "Copy {section} settings from Screen {n} to all other screens?",
                               de: "{section}-Einstellungen von Bildschirm {n} auf alle anderen kopieren?" },
@@ -2531,6 +2623,10 @@ if (els.resetScreenBtn) {
     const ok = confirm(t("reset_screen.confirm", { n: activeScreen + 1 }));
     if (!ok) return;
     sendCmd({ type: "screen-reset" });
+    // A full reset wipes the per-screen state; the prior undo entries
+    // would revert to settings that no longer exist on this screen.
+    _undoRings[activeScreen] = [];
+    _redoRings[activeScreen] = [];
     toast(t("reset_screen.done", { n: activeScreen + 1 }), "good");
   });
 }
@@ -2653,6 +2749,9 @@ function connect() {
         // (after the renderAll) so the modal can pick the widget out
         // of the freshly-rendered list.
         handleEditWidgetDeepLink();
+        // First-run tour: fires once on first settings push so the
+        // screen count + overview thumbnails are in place.
+        _tryFirstRunTour();
       }
     } catch (_) {}
   };
@@ -2666,8 +2765,256 @@ function sendCmd(obj) {
 function setSetting(key, value) {
   // Optimistic local update so the UI stays responsive even before the
   // bridge echoes the settings push back.
+  pushUndo(activeScreen, key, settings[key]);
   settings[key] = value;
   sendCmd({ type: "setting-update", key, value });
+}
+
+// ── Ctrl+Z undo / Ctrl+Y redo ────────────────────────────────────────────
+// Per-screen ring buffer of {key, prev} entries. setSetting captures
+// the prior value before applying; Ctrl+Z pops the last entry and
+// reverts. Each undo also pushes onto a redo stack so the user can
+// step forward again. A fresh manual edit clears the redo stack
+// (linear-history model, like every editor's undo).
+const UNDO_LIMIT  = 20;
+const _undoRings  = {};   // { screen: [{key, prev}, ...] }
+const _redoRings  = {};
+let   _undoingNow = false;
+
+function pushUndo(screen, key, prev) {
+  if (_undoingNow) return;
+  // Skip no-op edits (range slider firing change without value change).
+  const cur = settings ? settings[key] : undefined;
+  if (JSON.stringify(prev) === JSON.stringify(cur)) {
+    // First-time set: only push if there's actually a prior value to revert to.
+    if (prev === undefined) return;
+  }
+  const ring = (_undoRings[screen] = _undoRings[screen] || []);
+  ring.push({ key, prev });
+  if (ring.length > UNDO_LIMIT) ring.shift();
+  // Any manual edit invalidates the redo stack — once you branch off,
+  // the "forward" history can't reasonably be reached anymore.
+  _redoRings[screen] = [];
+}
+
+function undoOnce() {
+  const ring = _undoRings[activeScreen];
+  if (!ring || !ring.length) return;
+  const last = ring.pop();
+  const cur  = settings[last.key];
+  // Capture the value we're about to overwrite on the redo stack so
+  // Ctrl+Y / Ctrl+Shift+Z can step forward again.
+  const redo = (_redoRings[activeScreen] = _redoRings[activeScreen] || []);
+  redo.push({ key: last.key, prev: cur });
+  if (redo.length > UNDO_LIMIT) redo.shift();
+  _undoingNow = true;
+  try {
+    settings[last.key] = last.prev;
+    sendCmd({ type: "setting-update", key: last.key, value: last.prev });
+  } finally {
+    _undoingNow = false;
+  }
+  toast(t("undo.applied"), "good");
+  renderAll();
+}
+
+function redoOnce() {
+  const ring = _redoRings[activeScreen];
+  if (!ring || !ring.length) return;
+  const last = ring.pop();
+  const cur  = settings[last.key];
+  const undo = (_undoRings[activeScreen] = _undoRings[activeScreen] || []);
+  undo.push({ key: last.key, prev: cur });
+  if (undo.length > UNDO_LIMIT) undo.shift();
+  _undoingNow = true;
+  try {
+    settings[last.key] = last.prev;
+    sendCmd({ type: "setting-update", key: last.key, value: last.prev });
+  } finally {
+    _undoingNow = false;
+  }
+  toast(t("redo.applied"), "good");
+  renderAll();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  // Don't hijack text editing in modals / library upload prompts.
+  const tag = ((e.target && e.target.tagName) || "").toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const k = (e.key || "").toLowerCase();
+  if (k === "z" && !e.shiftKey) {
+    e.preventDefault();
+    undoOnce();
+  } else if ((k === "z" && e.shiftKey) || k === "y") {
+    e.preventDefault();
+    redoOnce();
+  }
+});
+
+// ── First-run onboarding tour ────────────────────────────────────────────
+// Steps point at live DOM elements; the spotlight ring and tooltip
+// follow each step's `selector`. Set `selector: null` for a centred
+// dialog with no highlight (welcome + closing screens). The
+// `signalrgb.tour_seen` localStorage key keeps the tour to a one-shot.
+const TOUR_KEY = "signalrgb.tour_seen";
+let _tourStep = 0;
+const TOUR_STEPS = [
+  { selector: null,                  i18n: "welcome" },
+  { selector: "#tabs",               i18n: "tabs" },
+  { selector: "#overview-card",      i18n: "overview", optional: true },
+  { selector: "#card-bg",            i18n: "bg" },
+  { selector: "#card-presets",       i18n: "presets" },
+  { selector: ".btn[href='/builder']", i18n: "builder", optional: true },
+  { selector: null,                  i18n: "done" },
+];
+
+function _buildTourDom() {
+  if (document.getElementById("tour-overlay")) return;
+  const overlay = document.createElement("div");
+  overlay.id = "tour-overlay";
+  overlay.className = "tour-overlay show";
+  document.body.appendChild(overlay);
+
+  const spot = document.createElement("div");
+  spot.id = "tour-spotlight";
+  spot.className = "tour-spotlight";
+  spot.style.display = "none";
+  document.body.appendChild(spot);
+
+  const tip = document.createElement("div");
+  tip.id = "tour-tooltip";
+  tip.className = "tour-tooltip";
+  tip.innerHTML =
+    '<div class="tour-title"></div>' +
+    '<div class="tour-body"></div>' +
+    '<div class="tour-actions">' +
+    '<button class="tour-btn" id="tour-skip"></button>' +
+    '<span class="tour-progress"></span>' +
+    '<button class="tour-btn primary" id="tour-next"></button>' +
+    '</div>';
+  document.body.appendChild(tip);
+  tip.querySelector("#tour-skip").onclick = () => dismissTour();
+  tip.querySelector("#tour-next").onclick = () => advanceTour();
+  // Esc dismisses; click-outside on overlay also dismisses.
+  overlay.addEventListener("click", () => dismissTour());
+  document.addEventListener("keydown", _tourEscHandler);
+}
+
+function _tourEscHandler(e) {
+  if (e.key === "Escape" && document.getElementById("tour-overlay")) {
+    dismissTour();
+  }
+}
+
+function _renderTourStep() {
+  const step = TOUR_STEPS[_tourStep];
+  if (!step) { dismissTour(); return; }
+  const spot = document.getElementById("tour-spotlight");
+  const tip  = document.getElementById("tour-tooltip");
+  if (!spot || !tip) return;
+  const title = "tour." + step.i18n + ".title";
+  const body  = "tour." + step.i18n + ".body";
+  tip.querySelector(".tour-title").textContent = t(title);
+  tip.querySelector(".tour-body").textContent  = t(body);
+  tip.querySelector(".tour-progress").textContent = t("tour.progress",
+    { n: _tourStep + 1, total: TOUR_STEPS.length });
+  tip.querySelector("#tour-skip").textContent = t("tour.skip");
+  tip.querySelector("#tour-next").textContent =
+    (_tourStep === TOUR_STEPS.length - 1) ? t("tour.done") : t("tour.next");
+
+  if (!step.selector) {
+    spot.style.display = "none";
+    tip.style.left = "50%";
+    tip.style.top  = "50%";
+    tip.style.right = "";
+    tip.style.bottom = "";
+    tip.style.transform = "translate(-50%, -50%)";
+    return;
+  }
+  const el = document.querySelector(step.selector);
+  if (!el || el.getBoundingClientRect().height === 0) {
+    // Element missing or hidden — skip optional steps; fail-soft on others.
+    if (step.optional) { advanceTour(); return; }
+    spot.style.display = "none";
+    return;
+  }
+  try { el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+  catch (_) {}
+  // Give the smooth-scroll a tick to settle before measuring.
+  setTimeout(() => {
+    const r = el.getBoundingClientRect();
+    spot.style.display = "block";
+    spot.style.left   = (r.left - 6)   + "px";
+    spot.style.top    = (r.top  - 6)   + "px";
+    spot.style.width  = (r.width  + 12) + "px";
+    spot.style.height = (r.height + 12) + "px";
+    // Place the tooltip below the spotlight when there's room, else above.
+    const tipW = 320, tipH = tip.offsetHeight || 180;
+    const wantBelow = r.bottom + 14 + tipH <= window.innerHeight - 10;
+    tip.style.transform = "";
+    tip.style.right = "";
+    tip.style.bottom = "";
+    let left = r.left;
+    if (left + tipW > window.innerWidth - 10) left = window.innerWidth - tipW - 10;
+    if (left < 10) left = 10;
+    tip.style.left = left + "px";
+    if (wantBelow) {
+      tip.style.top = (r.bottom + 14) + "px";
+    } else {
+      tip.style.top = Math.max(10, r.top - tipH - 14) + "px";
+    }
+  }, 280);
+}
+
+function advanceTour() {
+  _tourStep++;
+  if (_tourStep >= TOUR_STEPS.length) { dismissTour(); return; }
+  _renderTourStep();
+}
+
+function dismissTour() {
+  try { localStorage.setItem(TOUR_KEY, "1"); } catch (_) {}
+  document.removeEventListener("keydown", _tourEscHandler);
+  const ids = ["tour-overlay", "tour-spotlight", "tour-tooltip"];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+}
+
+function maybeShowTour() {
+  try {
+    if (localStorage.getItem(TOUR_KEY)) return;
+  } catch (_) { return; }   // privacy-mode browsers without localStorage
+  if (document.getElementById("tour-overlay")) return;
+  _tourStep = 0;
+  // Wait one frame so first paint of the Configurator finishes
+  // before the overlay darkens the screen.
+  setTimeout(() => {
+    _buildTourDom();
+    _renderTourStep();
+  }, 600);
+}
+
+function replayTour() {
+  try { localStorage.removeItem(TOUR_KEY); } catch (_) {}
+  if (document.getElementById("tour-overlay")) return;
+  _tourStep = 0;
+  _buildTourDom();
+  _renderTourStep();
+}
+
+const _replayBtn = document.getElementById("header-replay-tour");
+if (_replayBtn) _replayBtn.addEventListener("click", replayTour);
+
+// Fire once when the first settings push arrives (so the screenCount
+// and any overview thumbnails are in place when the tour highlights them).
+let _tourTriedOnce = false;
+function _tryFirstRunTour() {
+  if (_tourTriedOnce) return;
+  _tourTriedOnce = true;
+  maybeShowTour();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -211,22 +211,24 @@ the live dirs (won't nuke unmatched local files), rebuilds the
 library catalogue, and pushes new settings to every screen.
 `help_images/` not yet included since users don't customise it.
 
-### 🚧 Reset + undo — partially shipped v0.8.9-beta
+### ✅ Reset + undo — shipped v0.8.9-beta + v0.9.10-beta
 
-*Reset this screen to defaults* button shipped in v0.8.9-beta (per
-tab, in the mirror bar). Ctrl+Z undo across the last N settings
-changes is still 🔲 — needs a per-screen ring buffer of snapshots
-plus a Ctrl+Z handler that POSTs the previous snapshot back via
-the existing `/screen/<N>/settings` batch endpoint.
+*Reset this screen to defaults* button in the mirror bar
+(v0.8.9-beta). **Ctrl+Z undo** + **Ctrl+Y / Ctrl+Shift+Z redo**
+across the last 20 setting changes per screen
+(v0.9.10-beta) — per-screen ring buffer, captured in `setSetting`
+before each write. Manual edits invalidate the redo stack
+(linear-history model). Doesn't cover widgets / presets /
+mirror / cycle, which have their own scoped flows.
 
-### 🔲 First-run onboarding tour — ~4 h
+### ✅ First-run onboarding tour — shipped v0.9.10-beta
 
-- Detect first launch (no key in `localStorage`)
-- Overlay with 4 steps: screen count picker → background library →
-  glow strength → done
-- Each step highlights the relevant UI element with a soft
-  border + tooltip + Next button
-- Skippable; persists "tour completed" in localStorage
+Configurator-side overlay that fires on first WS settings push when
+`signalrgb.tour_seen` isn't set in `localStorage`. Seven steps
+(Welcome → Tabs → Overview → Background → Presets → Builder →
+Done), each with a spotlight ring + floating tooltip on the live
+DOM element. Skip / Esc / overlay click dismiss; *Tour* button in
+the header replays it on demand. Tier 1 complete.
 
 ---
 
@@ -303,28 +305,20 @@ needs a PR through their submission flow + ongoing manifest
 updates per release. Left as a manual task for the maintainer
 when there's audience for it.
 
-### 🔲 Mobile Configurator view — ~4 h
+### 🅿️ Mobile Configurator view — parked
 
-Make `/configurator` responsive (CSS media queries, hide the
-draggable layout-preview canvas on small screens, swap the tab
-bar for a dropdown). Phone in the same Wi-Fi network can then
-hit `http://<pc-ip>:17320/configurator` and change wallpaper
-settings — niche but a fun party trick.
+Removed from the roadmap: niche use case, would need the bridge
+to bind to 0.0.0.0 with a "this exposes your wallpaper config
+to the LAN" opt-in, and most users sit at the PC the wallpaper
+runs on anyway.
 
-Caveat: the bridge currently binds to 127.0.0.1 only. Mobile
-access would need an opt-in toggle to bind to 0.0.0.0 (with a
-loud "this exposes your wallpaper config to the LAN" warning).
+### 🅿️ Community wallpaper gallery — parked
 
-### 🔲 Community wallpaper gallery — ~10-15 h
-
-A second repo (`signalrgb-wallpaper-community`) with a curated
-`wallpapers.json` index pointing at PNG release-asset URLs. The
-Configurator's Library section gets a *Browse community* tab that
-fetches the index and shows thumbnails. Users submit via PR with
-a CC-licensed image + an entry in the JSON.
-
-Bridge proxies download requests so the CEF doesn't have to deal
-with cross-origin issues.
+Removed from the roadmap: high copyright-infringement risk
+(unfiltered user uploads of brand IP, anime stills, game art,
+etc.) — moderating a public submission flow would dwarf the
+useful curation work. The bundled starter library + per-user
+upload remain the supported path.
 
 ### 🔲 Ambient effects: port MIT-licensed CodePen pens — ~2-3 h per effect
 

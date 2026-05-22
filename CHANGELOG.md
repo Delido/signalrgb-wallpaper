@@ -4,6 +4,42 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.10-beta] - 2026-05-22
+
+> **Tier 1 setup-polish slice complete.** Adds the two remaining
+> items — Ctrl+Z undo and the first-run onboarding tour — and
+> trims the roadmap of two items that didn't pan out.
+
+### Added — Configurator
+
+- **Ctrl+Z undo / Ctrl+Y (or Ctrl+Shift+Z) redo** for the last 20
+  setting changes per screen. Per-screen ring buffer captured in
+  `setSetting` before each write; redo stack invalidates on the
+  next manual edit (linear-history model — same as every editor's
+  undo). Toast on each apply tells the user which key was
+  reverted. Doesn't cover widget add/remove/move, presets,
+  mirror, or cycle — those have their own scoped reversal flows.
+  Reset-this-screen wipes both rings since the prior entries
+  would revert to fields that no longer exist.
+- **First-run onboarding tour.** Fires on first WS settings push
+  when `localStorage.signalrgb.tour_seen` is absent. Seven steps:
+  *Welcome → Tabs → Overview card → Background → Presets →
+  Builder → Done*, each with a spotlight ring + floating tooltip
+  pointed at the live DOM element being explained. Skip / Esc /
+  overlay click all dismiss; the *Tour* button in the header
+  re-fires it on demand.
+
+### Removed (roadmap cleanup)
+
+- **Mobile Configurator view** — niche, would have needed a LAN-
+  bind opt-in with security ergonomics. Most users sit at the PC
+  the wallpaper runs on. Marked 🅿️ parked.
+- **Community wallpaper gallery** — high copyright-infringement
+  risk (unfiltered user uploads of brand IP, anime stills, game
+  art etc.). Moderating a public submission flow would dwarf the
+  curation value. Marked 🅿️ parked. Bundled starter library +
+  per-user upload remain the supported path.
+
 ## [0.9.9-beta] - 2026-05-22
 
 > Quick fix for the Monitor Wall *Horizontal row* mode rendering as
