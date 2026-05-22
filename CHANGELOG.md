@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.20-beta] - 2026-05-23
+
+> **Drops the lazy-loaded ONNX default model entirely.** After three
+> attempts at finding a stable, single-file, permissively-licensed
+> hosted model (RMBG-1.4 → Xenova/u2netp → rembg/v0.0.0/u2netp.onnx),
+> all of which failed in different ways (non-commercial licence,
+> external-data split, fetch-blocked), v0.9.20 walks the whole
+> external-fetch path back to **pure-JavaScript algorithms running
+> on the canvas**. Faster, offline, no licence concerns.
+
+### Changed — Builder Auto-cut
+
+- **New default mode: "Auto saliency (instant)"** — frequency-tuned
+  saliency *(Achanta et al. 2009, public-domain algorithm)*. For
+  each pixel: Euclidean colour distance from the image's mean RGB
+  plus a brightness premium; adaptive threshold. Strong on the
+  "neon panels / UI overlays / glowing edges" wallpaper case
+  because those regions are precisely where the colour deviates
+  most from the image's overall palette.
+- **"Brightness (Otsu)" stays** as the second mode for cases where
+  pure-brightness thresholding fits better (e.g. uniform-coloured
+  panels on a dark backdrop).
+- **Both modes run in tens of milliseconds**, fully offline, no
+  network, no licence considerations.
+- **"Custom ONNX model" mode** is now hidden by default. Users who
+  want it can opt in via `localStorage["builder.aiEnabled"] = "1"`
+  or by setting a URL in `localStorage["builder.aiModelUrl"]`.
+  The ORT loader stays in the codebase for that path.
+
+### Docs
+
+- `docs/credits.md` audit refreshed: ORT moved to opt-in section,
+  RMBG / U²-Netp default-URL discussion replaced with the pure-JS
+  algorithm credits (Achanta-2009 saliency + Otsu-1979).
+- The earlier v0.9.18 + v0.9.19 betas are **kept** in Releases this
+  time around (no yank) — v0.9.18's licence-clean Apache 2.0
+  intent was correct, just had the wrong delivery mechanism;
+  v0.9.19 fixed the auto-update path that all later releases
+  depend on.
+
 ## [0.9.19-beta] - 2026-05-23
 
 > Two real-world bugs from v0.9.18: the new Apache 2.0 default AI

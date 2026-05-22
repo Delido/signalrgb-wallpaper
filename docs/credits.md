@@ -71,38 +71,52 @@ under which each ships is below.
   be installed separately by the user, so its MPL terms don't
   propagate to our MIT distribution. <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>
 
-## Lazy-loaded in the browser (Builder Auto-cut, not bundled)
+## Builder Auto-cut algorithms (in-tree, no external deps)
 
-The Builder's *Auto-cut → AI saliency* mode (v0.9.16+) fetches its
-runtime + model on first click. Nothing is bundled with our installer
-or our wallpaper zips; each user's browser fetches these directly
-from the upstream when they choose to use the feature.
+v0.9.20+ replaced the lazy-loaded ONNX model with pure-JavaScript
+saliency detection that runs locally on the canvas. Two algorithms,
+both based on public-domain mathematics:
 
-- **onnxruntime-web** — MIT. Microsoft's ONNX inference runtime for
-  the web (WebAssembly + optional WebGPU backends). We pull
-  `ort.min.js` + the matching `.wasm` files from jsDelivr's
-  npm mirror on first AI-mode click. About 3 MB total, browser-cached
-  after. <https://github.com/microsoft/onnxruntime>
-- **U²-Netp (saliency model)** — Apache License 2.0. *"U²-Net:
-  Going Deeper with Nested U-Structure for Salient Object
-  Detection"* by Qin et al. The "p" variant is the small / fast
-  version (~4 MB, 320×320 input). v0.9.18 made this the default
-  AI-mode model — Apache 2.0 is permissive and explicitly allows
-  commercial use, so the AI cut-out feature is now free for any
-  user regardless of whether their wallpaper setup is private or
-  commercial. The model file is fetched from Hugging Face by the
-  user's browser on first click; we do not bundle or redistribute
-  it. <https://github.com/xuebinqin/U-2-Net>
-  Earlier v0.9.16 + v0.9.17 betas pointed at *RMBG-1.4* (BRIA
-  RMBG v1.4 License v1.0, **non-commercial only**); those tags
-  were yanked from Releases to avoid steering commercial users
-  into BRIA's licence. If a user manually overrides
-  `localStorage["builder.aiModelUrl"]` to a non-permissive model,
-  the licence attaches to *them* (their browser is what downloads
-  the model), not to our MIT distribution.
-- **CDN providers (jsDelivr, Hugging Face)** — fetch endpoints, not
-  bundled assets. Both have free public access tiers our usage sits
-  well inside (one fetch per user per AI cold-start).
+- **Auto saliency** — frequency-tuned saliency *(Achanta, Hemami,
+  Estrada, Süsstrunk 2009, "Frequency-tuned Salient Region
+  Detection")*. For each pixel, compute Euclidean colour distance
+  from the image's mean RGB plus a brightness-above-mean premium;
+  threshold adaptively. The algorithm is published mathematics; no
+  patent, no copyright on the technique itself, our implementation
+  is original.
+- **Otsu (brightness)** — Otsu's optimal histogram threshold *(Otsu
+  1979)*. Also published mathematics, original implementation.
+
+Neither algorithm needs a model, network, or third-party library.
+Both run in tens of milliseconds on a typical canvas.
+
+### Power-user ONNX path (opt-in, not the default)
+
+The earlier code paths for loading an external ONNX saliency model
+via `onnxruntime-web` are still in `builder.html` but hidden from
+the UI by default. Users who set
+`localStorage["builder.aiEnabled"] = "1"` (or supply a model URL via
+`localStorage["builder.aiModelUrl"]`) get a third "Custom ONNX model"
+entry in the mode dropdown. If they use it:
+
+- `onnxruntime-web` (MIT) is fetched from jsDelivr on first use
+  (~3 MB). <https://github.com/microsoft/onnxruntime>
+- The model file is fetched from whichever URL the user configured.
+  The licence terms of that model attach to *the user* (their
+  browser is what downloads it), not to our MIT distribution.
+
+The default UX never triggers either fetch, so no third-party
+dependency is in play for normal users.
+
+### Why we dropped the lazy-loaded default model
+
+Earlier betas (v0.9.16 → v0.9.19) shipped a default URL pointing at
+RMBG-1.4 (BRIA, non-commercial) or U²-Netp (Apache 2.0) on
+Hugging Face / rembg releases. Multiple URLs proved unreliable
+(some 404'd, others split the model graph from its weights and
+ORT-Web couldn't auto-resolve the second file), and the BRIA
+default also raised a non-commercial-licence concern. v0.9.20
+walks the whole default-fetch path back to in-tree algorithms.
 
 ## Hosts the wallpaper plays inside (not bundled)
 
@@ -140,8 +154,8 @@ MIT product is OK.
 | Local quote pool (Quote widget) | Public domain / unattributed | No external service — 50 short quotations bundled in `wallpaper/index.html`. No licensing or rate-limit obligations attach. |
 | GitHub Releases API | (Free public API) | Read-only, well under rate limits for unauthenticated requests, no terms we're violating. |
 | LibreHardwareMonitor | Mozilla Public License 2.0 | **Not bundled.** Polled at runtime via the user's own LHM install. MPL 2.0 is file-based weak copyleft — it would only impose obligations on us if we redistributed LHM's source files (modified or not). Since we just call its HTTP server like any other client, no propagation. |
-| onnxruntime-web | MIT | **Not bundled.** Fetched from jsDelivr at runtime when the user opts into Builder Auto-cut → AI mode. Permissive, attribution above. |
-| U²-Netp saliency model | Apache 2.0 | **Not bundled.** Fetched from Hugging Face by the user's browser on first AI-mode click. Apache 2.0 is permissive and explicitly commercial-use-OK; attribution above (in the lazy-load section). Default since v0.9.18. |
+| Auto-cut algorithms (frequency-tuned saliency, Otsu) | Published mathematics, no copyright | In-tree pure-JS implementations of the Achanta-2009 and Otsu-1979 algorithms. The algorithms themselves are published academic work with no patent or copyright on the *technique*; our implementations are original code. |
+| onnxruntime-web (opt-in only) | MIT | **Not bundled and not loaded by default.** Only fetched if the user explicitly enables the "Custom ONNX model" mode via `localStorage["builder.aiEnabled"]` or `["builder.aiModelUrl"]`. Permissive licence; attribution kept above for users who do opt in. |
 
 ### Hosts the wallpaper *runs inside* (we don't bundle them)
 

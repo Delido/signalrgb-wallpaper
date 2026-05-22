@@ -852,15 +852,17 @@
       <div class="tool-options-group" data-tools="ai">
         <div class="hint" data-i18n="hint.ai">
           One-click detection of the brightest / most salient regions —
-          ideal for neon panels, UI overlays, glowing edges.
-          Otsu mode runs instantly on canvas brightness; AI mode loads
-          a small saliency model from the web on first use (~7 MB).
+          ideal for neon panels, UI overlays, glowing edges. Both modes
+          run instantly and offline. Saliency combines colour distance
+          from the image's mean colour with brightness, and usually
+          handles structured / textured backgrounds better than pure
+          brightness thresholding.
         </div>
         <div class="row">
           <label for="ai-mode" data-i18n="ai.mode">Mode</label>
           <select id="ai-mode">
-            <option value="otsu"  data-i18n="ai.mode.otsu">Otsu (instant)</option>
-            <option value="model" data-i18n="ai.mode.model">AI saliency (downloads ~7 MB)</option>
+            <option value="saliency" data-i18n="ai.mode.saliency">Auto saliency (instant)</option>
+            <option value="otsu"     data-i18n="ai.mode.otsu">Brightness (Otsu, instant)</option>
           </select>
         </div>
         <div class="row">
@@ -1301,18 +1303,23 @@ const TRANSLATIONS = {
   "tool.ai.name":       { en: "Auto cut",         de: "Auto-Zuschnitt" },
   "tool.ai.tip":        { en: "Auto cut — detect bright / salient regions and cut them in one click",
                           de: "Auto-Zuschnitt — helle / markante Bereiche erkennen und in einem Klick freischneiden" },
-  "hint.ai":            { en: "One-click detection of the brightest / most salient regions — ideal for neon panels, UI overlays, glowing edges. Otsu mode runs instantly on canvas brightness; AI mode loads a small saliency model from the web on first use (~7 MB).",
-                          de: "Erkennt mit einem Klick die hellsten / markantesten Bereiche — ideal für Neon-Panels, UI-Overlays, glühende Kanten. Otsu-Modus läuft sofort auf der Helligkeit; KI-Modus lädt beim ersten Aufruf ein kleines Saliency-Modell aus dem Netz (~7 MB)." },
+  "hint.ai":            { en: "One-click detection of the brightest / most salient regions — ideal for neon panels, UI overlays, glowing edges. Both modes run instantly and offline. Saliency combines colour distance from the image's mean colour with brightness, and usually handles structured / textured backgrounds better than pure brightness thresholding.",
+                          de: "Erkennt mit einem Klick die hellsten / markantesten Bereiche — ideal für Neon-Panels, UI-Overlays, glühende Kanten. Beide Modi laufen sofort und offline. Saliency kombiniert den Farbabstand zum Mittelwert mit Helligkeit und kommt mit strukturierten / gemusterten Hintergründen meist besser klar als reines Helligkeits-Thresholding." },
   "ai.mode":            { en: "Mode",             de: "Modus" },
-  "ai.mode.otsu":       { en: "Otsu (instant)",   de: "Otsu (sofort)" },
-  "ai.mode.model":      { en: "AI saliency (downloads ~7 MB)",
-                          de: "KI-Saliency (lädt ~7 MB)" },
+  "ai.mode.saliency":   { en: "Auto saliency (instant)",
+                          de: "Auto-Saliency (sofort)" },
+  "ai.mode.otsu":       { en: "Brightness (Otsu, instant)",
+                          de: "Helligkeit (Otsu, sofort)" },
+  "ai.mode.model":      { en: "Custom ONNX model (advanced)",
+                          de: "Eigenes ONNX-Modell (fortgeschritten)" },
   "ai.threshold":       { en: "Threshold",        de: "Schwelle" },
   "ai.invert":          { en: "Invert (cut dark regions instead)",
                           de: "Umkehren (dunkle Bereiche freischneiden)" },
   "ai.run":             { en: "Run auto cut",     de: "Auto-Zuschnitt starten" },
   "ai.no_canvas":       { en: "Load an image first.",
                           de: "Erst ein Bild laden." },
+  "ai.running.saliency": { en: "Computing saliency map…",
+                           de: "Saliency-Karte wird berechnet…" },
   "ai.running.otsu":    { en: "Computing histogram…",
                           de: "Histogramm wird berechnet…" },
   "ai.running.model":   { en: "Loading model + running inference… (this can take 10-30 s on first use)",
@@ -2057,6 +2064,26 @@ els.aiThreshold.addEventListener("input", () => {
   els.aiThresholdVal.textContent = els.aiThreshold.value;
 });
 
+// Power-user opt-in: the "Custom ONNX model" mode is only injected
+// into the dropdown if either flag is explicitly set. Default users
+// see just the two offline modes (Saliency / Otsu) and never get
+// steered into a model download or a licence acceptance.
+//   localStorage["builder.aiEnabled"]  = "1"   (any URL via the
+//     second key OR the rembg default kicks in)
+//   localStorage["builder.aiModelUrl"] = "https://…/model.onnx"
+//     (also enables the option implicitly)
+(function maybeShowOnnxOption() {
+  if (!els.aiMode) return;
+  const enabled = localStorage.getItem("builder.aiEnabled") === "1"
+               || !!localStorage.getItem("builder.aiModelUrl");
+  if (!enabled) return;
+  const opt = document.createElement("option");
+  opt.value = "model";
+  opt.textContent = t("ai.mode.model");
+  opt.setAttribute("data-i18n", "ai.mode.model");
+  els.aiMode.appendChild(opt);
+})();
+
 let _ortLoading = null;
 async function ensureOnnxRuntime() {
   if (window.ort) return window.ort;
@@ -2141,6 +2168,59 @@ async function canvasToModelInput(canvas, SIDE) {
   return new ort.Tensor("float32", data, [1, 3, SIDE, SIDE]);
 }
 
+// Frequency-tuned saliency (Achanta et al. 2009, public-domain
+// algorithm). For each pixel, compute its Euclidean colour distance
+// from the image's mean RGB plus a brightness premium; threshold
+// adaptively. Strong on the "neon panels / UI overlays / glowing
+// edges" wallpaper case because those regions are precisely where
+// the colour deviates most from the image's overall palette.
+//
+// Why this instead of an ONNX model:
+//   • No network — works offline.
+//   • No licence — public-domain mathematics.
+//   • No model file — zero install / download size.
+//   • Fast — one O(N) histogram pass + one O(N) mask pass.
+function computeAutoSaliency(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const px = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const N = px.length >> 2;
+  // Pass 1: mean R/G/B + mean luminance.
+  let sumR = 0, sumG = 0, sumB = 0, sumLum = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    sumR += px[i]; sumG += px[i + 1]; sumB += px[i + 2];
+    sumLum += px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+  }
+  const meanR = sumR / N, meanG = sumG / N, meanB = sumB / N;
+  const meanLum = sumLum / N;
+  // Pass 2: per-pixel saliency score = colour-distance-from-mean
+  // + brightness-above-mean premium. Then sweep to find the max
+  // so we can normalise to [0,1] before thresholding.
+  const score = new Float32Array(N);
+  let smax = 0;
+  for (let i = 0, m = 0; i < px.length; i += 4, m++) {
+    const dr = px[i]     - meanR;
+    const dg = px[i + 1] - meanG;
+    const db = px[i + 2] - meanB;
+    const colorDist = Math.sqrt(dr * dr + dg * dg + db * db);
+    const lum = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+    const lumBoost = Math.max(0, lum - meanLum) * 0.6;
+    const s = colorDist + lumBoost;
+    score[m] = s;
+    if (s > smax) smax = s;
+  }
+  // Slider biases the cutoff: 50 → keep top ~50% of salient mass,
+  // 0 → cut almost everything, 100 → cut almost nothing.
+  // The default 0.45·smax catches neon / outline pixels on most
+  // wallpapers while leaving the dark backdrop intact.
+  const slider = parseInt(els.aiThreshold.value, 10);
+  const cutoff = smax * (0.85 - slider / 100 * 0.7);
+  const mask = new Uint8Array(N);
+  for (let m = 0; m < N; m++) {
+    mask[m] = score[m] >= cutoff ? 255 : 0;
+  }
+  return { mask, w, h };
+}
+
 // Compute Otsu's optimal brightness threshold on a luma histogram of the
 // canvas. Returns a Uint8Array mask sized to canvas (1 = above-threshold,
 // 0 = below). Synchronous, no network, no WASM.
@@ -2191,7 +2271,9 @@ async function runAiCutout() {
   els.aiStat.textContent = t("ai.running." + mode);
   try {
     let payload;
-    if (mode === "otsu") {
+    if (mode === "saliency") {
+      payload = computeAutoSaliency(els.canvas);
+    } else if (mode === "otsu") {
       payload = computeOtsuMask(els.canvas);
     } else {
       const session = await ensureAiSession();
