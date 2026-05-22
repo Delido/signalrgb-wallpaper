@@ -4,6 +4,47 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5-beta] - 2026-05-22
+
+> Bug-fix-and-polish pass over v0.8.4-beta plus the Builder crop tool.
+> Heavier multi-monitor items (Mirror mode, Apply-to-all,
+> Overview card) are deferred to a future beta because they need
+> careful invariant work on the bridge side.
+
+### Fixed
+
+- **Glow preview painted on top of the canvas** instead of through
+  the transparent regions. `::before` lived above the canvas in the
+  positioned stack; `isolation: isolate` on `.canvas-host` plus
+  `z-index: -1` on the glow layer scopes it correctly behind the
+  canvas content without escaping past the host's own box.
+- **Tool panel buttons clipped past the column edge** for long
+  localised labels (e.g. "Alle Änderungen zurücksetzen" in the
+  narrow 232 px Tools column). `.btn-row .btn` now allows wrap +
+  `min-width: 0` so labels break to a second line instead of
+  overflowing.
+
+### Added — Builder
+
+- **Library picker on Merge slots A and B.** *From library…* button
+  next to each *Pick* file picker opens the same modal grid the
+  *Open from library…* button uses; the picked tile lands in the
+  merge slot rather than the main canvas.
+- **Crop tool.** New toolbox entry (icon: crop corners). Drag a
+  rectangle, then Confirm to resize the canvas to that region —
+  pulls pixels through a scratch canvas so all in-progress mask
+  edits survive. Click history resets on commit since the click
+  coords no longer match. Switching tools mid-pending-crop cancels
+  the rectangle.
+
+### Added — Configurator
+
+- **Tab labels show resolution** when a wallpaper page has connected
+  for that screen — "Screen 2 — 3840×1080" instead of bare
+  "Screen 2". Falls back to the bare label when no page is
+  connected yet. Polls `/config` every 5 s so a monitor switching
+  resolution shows up without a hard refresh.
+
 ## [0.8.4-beta] - 2026-05-22
 
 > Closes the Workflow-polish slice on the Gallery side and lands the

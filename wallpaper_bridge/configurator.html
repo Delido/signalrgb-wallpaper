@@ -965,6 +965,8 @@ const TRANSLATIONS = {
   "bg.debug_overlay":       { en: "Show debug overlay (top-left status line on the wallpaper)",
                               de: "Debug-Overlay anzeigen (Status-Zeile oben links im Wallpaper)" },
   "bridge.screens":         { en: "Screens:",             de: "Bildschirme:" },
+  "screens.label_simple":   { en: "Screen {n}",           de: "Bildschirm {n}" },
+  "screens.label_with_res": { en: "Screen {n} — {w}×{h}", de: "Bildschirm {n} — {w}×{h}" },
   "section.presets":        { en: "Presets",              de: "Voreinstellungen" },
   "presets.hint":           {
     en: "Save the current background + glow + dim + blur + effects + widgets as a snapshot, then switch back with one click. Slots are per screen.",
@@ -1312,13 +1314,42 @@ function toast(msg, kind, undoAction) {
 let screenCount = N_SCREENS;   // overridden by every settings push
 
 for (let i = 0; i < N_SCREENS; i++) {
-  const t = document.createElement("button");
-  t.className = "tab" + (i === 0 ? " active" : "");
-  t.dataset.screen = i;
-  t.textContent = "Screen " + (i + 1);
-  t.addEventListener("click", () => switchScreen(i));
-  els.tabs.appendChild(t);
+  const tab = document.createElement("button");
+  tab.className = "tab" + (i === 0 ? " active" : "");
+  tab.dataset.screen = i;
+  // Label is filled by refreshTabLabels() once /config tells us the
+  // per-screen viewport — defaults to "Screen N" until then.
+  tab.textContent = t("screens.label_simple", { n: i + 1 });
+  tab.addEventListener("click", () => switchScreen(i));
+  els.tabs.appendChild(tab);
 }
+
+// Each tab shows "Screen N — WxH" when a wallpaper page has connected
+// for that screen and reported its viewport. Falls back to the bare
+// "Screen N" label otherwise (no connected page yet). Polls /config
+// every few seconds so resolution changes on any monitor surface
+// without a hard refresh.
+async function refreshTabLabels() {
+  try {
+    const r = await fetch("/config", { cache: "no-store" });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    const screens = Array.isArray(cfg.screens) ? cfg.screens : [];
+    document.querySelectorAll(".tab").forEach((tab) => {
+      const i = parseInt(tab.dataset.screen, 10);
+      if (!isFinite(i)) return;
+      const s = screens[i];
+      if (s && s.viewportW > 0 && s.viewportH > 0) {
+        tab.textContent = t("screens.label_with_res",
+                            { n: i + 1, w: s.viewportW, h: s.viewportH });
+      } else {
+        tab.textContent = t("screens.label_simple", { n: i + 1 });
+      }
+    });
+  } catch (_) { /* leave existing labels */ }
+}
+refreshTabLabels();
+setInterval(refreshTabLabels, 5000);
 
 // Right-aligned screen-count picker. Replaces the legacy Tk dialog's
 // "Number of screens" knob — sends `bridge-setting-update screenCount`

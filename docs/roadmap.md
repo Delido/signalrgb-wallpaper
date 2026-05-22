@@ -99,7 +99,7 @@ the user sees what their cut-outs look like against actual
 shifting colour as they work. Defaults to off to keep the
 edit canvas clean.
 
-### 🔲 Configurator: tab labels with resolution — ~30 min
+### ✅ Configurator: tab labels with resolution — shipped v0.8.5-beta
 
 Tab text becomes "Screen 1 — 3840×1080" using `viewportW/H` from
 the screen's settings (the bridge already tracks this for the
@@ -137,7 +137,7 @@ Currently zoom is via a slider. Add `wheel` event handler with
 `ctrl` modifier → zoom in / out anchored at cursor position.
 Industry-standard editor feel.
 
-### 🔲 Builder: crop tool — ~3 h
+### ✅ Builder: crop tool — shipped v0.8.5-beta
 
 New toolbox entry: *Crop*. Drag a rectangle; on confirm, the
 canvas resizes to that rectangle. Pre-fills the rectangle to
