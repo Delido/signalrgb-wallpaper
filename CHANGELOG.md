@@ -4,6 +4,39 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7-beta] - 2026-05-22
+
+> Two follow-ups to v0.9.6: keyboard input still didn't reach the
+> in-page prompt under Lively/WE (fundamental CEF wallpaper-window
+> limitation, not a 0.9.6 regression), and the Quote widget's
+> `api.quotable.io` source has been dead since mid-2024.
+
+### Fixed
+
+- **Widget gear icons now open the Configurator** in a new tab
+  instead of an in-page modal. Lively/WE forward mouse events to
+  wallpaper pages (so the gear click worked) but **keyboard events
+  go to whichever window has OS focus** — the wallpaper is never
+  the foreground window, so typed characters never reached the
+  in-page input. The 0.9.6 wpPrompt overlay looked right but
+  silently dropped keystrokes.
+  - Each built-in widget's `editOptions` now points at a single
+    `openWidgetInConfigurator(rec)` that does
+    `window.open("/configurator?editWidget=<id>&editScreen=<n>")`.
+  - **Configurator** parses those query params on load, switches
+    to the matching screen tab, and opens the existing options
+    modal for that widget id once the WS settings push arrives.
+    Query params are stripped from the URL on first read so a
+    hard reload doesn't re-fire the modal.
+- **Quote widget — bundled local quote list.** `api.quotable.io` has
+  been DNS-dead since mid-2024 (every fetch errored, every Quote
+  widget rendered "couldn't fetch a quote"). Now ships with 50
+  curated public-domain quotes (Einstein / Twain / Tolkien / da
+  Vinci / Linus / Knuth / Dijkstra / …). No external HTTP call —
+  works under WE's CEF block on outgoing fetch too. Per-tick
+  refresh logic still picks a fresh entry per day. *via Quotable*
+  footer removed.
+
 ## [0.9.6-beta] - 2026-05-22
 
 > Hotfix for widget gear-icon dialogs freezing the wallpaper page.

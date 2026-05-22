@@ -2648,6 +2648,11 @@ function connect() {
         if (typeof msg.screenCount === "number") applyScreenCount(msg.screenCount);
         if (Array.isArray(msg.profiles)) profilesList = msg.profiles;
         renderAll();
+        // Deep-link from a wallpaper-page gear icon: open the matching
+        // widget's options modal once its settings are in. Handled here
+        // (after the renderAll) so the modal can pick the widget out
+        // of the freshly-rendered list.
+        handleEditWidgetDeepLink();
       }
     } catch (_) {}
   };
@@ -3343,6 +3348,68 @@ function refreshHardwareSensorSchema(def, currentValue) {
     .catch(() => {
       // Network / parse failure — leave the placeholder in place.
     });
+}
+
+// Wallpaper-page gear icon → opens Configurator with
+// ?editWidget=<id>&editScreen=<n>. We can't open the modal until both
+// (a) the right screen tab is active so settings.widgets has the
+// matching id, AND (b) the WS push has arrived. handleEditWidgetDeepLink
+// runs after every settings push; once it finds the widget it clears
+// the flag so further pushes don't keep re-opening the modal.
+let _pendingEditWidgetId = null;
+
+(function _parseEditWidgetFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const wid = params.get("editWidget");
+    const scr = params.get("editScreen");
+    if (!wid) return;
+    _pendingEditWidgetId = wid;
+    // Switch to the requested screen immediately so the next settings
+    // push lands on the right tab. Defer until the WS is set up.
+    if (scr != null) {
+      const n = parseInt(scr, 10);
+      if (Number.isFinite(n) && n >= 0 && n < N_SCREENS) {
+        // switchScreen() runs *after* tabs are built (above) but we
+        // might still be before connect(). Setting activeScreen here
+        // is enough — connect() reads it.
+        if (n !== activeScreen) {
+          activeScreen = n;
+          document.querySelectorAll(".tab").forEach((t) => {
+            t.classList.toggle("active", parseInt(t.dataset.screen, 10) === n);
+          });
+        }
+      }
+    }
+    // Clean the URL so a hard reload doesn't re-fire the deep-link.
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("editWidget");
+      u.searchParams.delete("editScreen");
+      window.history.replaceState({}, "", u.toString());
+    } catch (_) {}
+  } catch (_) {}
+})();
+
+function handleEditWidgetDeepLink() {
+  if (!_pendingEditWidgetId) return;
+  const widgets = (settings && Array.isArray(settings.widgets)) ? settings.widgets : [];
+  const w = widgets.find((it) => it && it.id === _pendingEditWidgetId);
+  if (!w) {
+    // Widget not on this screen yet — could be a mismatched
+    // editScreen, or settings still inbound. Clear so we don't
+    // pin forever; the user can retry from the wallpaper.
+    _pendingEditWidgetId = null;
+    return;
+  }
+  _pendingEditWidgetId = null;
+  openOptionsModal(w);
+  // Scroll the Widgets card into view so the modal feels anchored
+  // to the surrounding context.
+  try {
+    const card = document.getElementById("card-widgets");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (_) {}
 }
 
 function openOptionsModal(widget) {
