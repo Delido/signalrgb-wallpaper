@@ -4,6 +4,53 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.17-beta] - 2026-05-23
+
+> Bug-fix release for v0.9.16's Auto cut tool + the long-standing
+> tray-side auto-update flow. Three concrete issues from real-world
+> use.
+
+### Fixed — Builder Auto cut
+
+- **AI mode dimension mismatch.** Default model is RMBG-1.4 which
+  expects 1024×1024 inputs; the v0.9.16 code fed 320×320 and the
+  ORT session bailed with "Got invalid dimensions for input". Now
+  feeds the model at its native resolution (1024×1024) and exposes
+  both the URL and the input size via `localStorage` so users can
+  bring their own model:
+  - `localStorage["builder.aiModelUrl"]` — full model URL
+  - `localStorage["builder.aiInputSize"]` — input H = W (1-2048)
+- **Undo button stayed disabled** after an Auto-cut. `runAiCutout`
+  was missing the `updateHistory()` call that every other operation
+  makes, so the history sidebar didn't refresh and Ctrl+Z / the
+  Rückgängig button stayed greyed out. The op was already in the
+  clicks array — only the UI was wrong; existing v0.9.16 sessions
+  can recover by adding any other edit (which triggers
+  updateHistory) then Ctrl+Z'ing twice.
+- Dropped the ImageNet-style mean/std normalisation since RMBG-1.4
+  and the usual U²-Net exports both want raw [0,1] floats; the
+  Threshold slider absorbs any residual per-channel offset.
+
+### Fixed — Tray auto-update
+
+- **Installer never visibly started after download.** The
+  `subprocess.Popen(..., creationflags=DETACHED_PROCESS)` path was
+  reportedly silently failing on some Windows / SmartScreen setups,
+  leaving the user with a closed bridge and no install. Switched
+  to `ShellExecuteW` via ctypes — goes through the user shell,
+  SmartScreen gets the right provenance context, and the child is
+  a fully independent process from instruction zero. Subprocess
+  fallback retained if the API call fails.
+- **`/VERYSILENT` → `/SILENT`** so the Inno-Setup progress bar is
+  visible during install. The user gets immediate confirmation
+  the install is really running, and any Inno error dialog is
+  shown instead of swallowed.
+- **Sleep before `os._exit` bumped 1.5 s → 3.0 s** so AV real-time
+  scan of the just-downloaded exe has time to complete before the
+  parent dies.
+- Each step now writes to `%TEMP%/signalrgb-update.log` so future
+  failures are diagnosable post-mortem.
+
 ## [0.9.16-beta] - 2026-05-23
 
 > New Builder tool: **Auto cut**. One click detects the brightest /

@@ -304,29 +304,67 @@ class UpdateChecker:
             if on_done: on_done(None, str(e))
             return
         # Spawn the installer detached, then exit so it can replace our
-        # exe. /VERYSILENT runs without a UI; /SUPPRESSMSGBOXES kills
-        # the "are you sure?" prompts. The bridge tray icon will
-        # disappear; the new exe re-launches it on install completion
-        # via the [Run] section the installer already has.
+        # exe. We use /SILENT (not /VERYSILENT) so the user sees an Inno
+        # progress bar — they get visible confirmation the install is
+        # really running, and any Inno error dialog is shown instead of
+        # silently dropped. /SUPPRESSMSGBOXES still kills "are you sure?"
+        # prompts. The bridge tray icon disappears; the installer's
+        # [Run] section re-launches the new exe.
+        #
+        # Spawn strategy (Windows): use ShellExecuteW via ctypes rather
+        # than subprocess.Popen with DETACHED_PROCESS, which had reports
+        # of the spawned child dying together with the parent on some
+        # Windows / SmartScreen configurations. ShellExecuteW goes
+        # through the user shell so SmartScreen gets the right
+        # provenance context and the child is a fully independent
+        # process from the very first instruction.
+        log_path = Path(os.environ.get("TEMP", str(Path.home() / "AppData" / "Local" / "Temp"))) / "signalrgb-update.log"
+        def _log(line: str) -> None:
+            try:
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {line}\n")
+            except Exception:
+                pass
+        _log(f"download complete: {target} ({done:,} bytes)")
+        launched = False
         try:
-            import subprocess
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            subprocess.Popen(
-                [str(target), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
-                close_fds=True,
-                creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            if sys.platform == "win32":
+                import ctypes
+                args = "/SILENT /SUPPRESSMSGBOXES /NORESTART"
+                # nShowCmd=1 (SW_SHOWNORMAL) so the Inno progress
+                # window is visible. ShellExecuteW returns >32 on
+                # success; any value <=32 is a numeric error code.
+                rc = ctypes.windll.shell32.ShellExecuteW(
+                    None, "open", str(target), args, None, 1)
+                _log(f"ShellExecuteW rc={rc}")
+                if rc > 32:
+                    launched = True
+                else:
+                    _log(f"ShellExecuteW failed (rc={rc}); falling back to subprocess")
+            if not launched:
+                import subprocess
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                subprocess.Popen(
+                    [str(target), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+                _log("subprocess.Popen fallback spawned")
+                launched = True
             print(f"[update] installer spawned; exiting bridge to release file locks")
         except Exception as e:
             print(f"[update] installer spawn failed: {e}")
+            _log(f"installer spawn failed: {e}")
             if on_done: on_done(None, str(e))
             return
         if on_done:
             try: on_done(str(target), None)
             except Exception: pass
         # Give the spawned installer a moment to grab its handles
-        # before we kill the bridge process.
-        time.sleep(1.5)
+        # before we kill the bridge process. Bumped from 1.5 s to 3 s
+        # so AV real-time-scan of the just-downloaded exe has time to
+        # complete before the parent process exits.
+        time.sleep(3.0)
+        _log("bridge exiting now")
         # Hard-exit — graceful shutdown would let other threads block
         # the installer's overwrite of SignalRGBBridge.exe.
         os._exit(0)
@@ -426,7 +464,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.9.16-beta"
+APP_VERSION = "0.9.17-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"

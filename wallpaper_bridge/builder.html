@@ -2080,28 +2080,39 @@ async function ensureOnnxRuntime() {
   return _ortLoading;
 }
 
-// Stable URL for U²-Netp (Apache 2.0). Users can override via
-// localStorage["builder.aiModelUrl"] for an offline / mirror setup.
+// Default model is RMBG-1.4 (1024×1024 input). Users can override both
+// the URL and the input size via localStorage so a different model
+// (e.g. U²-Netp @ 320, MODNet @ 512) works without code changes.
+//   localStorage["builder.aiModelUrl"]   — model URL
+//   localStorage["builder.aiInputSize"]  — input H = W (default 1024)
 const DEFAULT_AI_MODEL_URL =
   "https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx";
+const DEFAULT_AI_INPUT_SIZE = 1024;
+
+function getAiModelConfig() {
+  const url = localStorage.getItem("builder.aiModelUrl") || DEFAULT_AI_MODEL_URL;
+  const sz  = parseInt(localStorage.getItem("builder.aiInputSize"), 10);
+  return { url, size: (sz > 0 && sz <= 2048) ? sz : DEFAULT_AI_INPUT_SIZE };
+}
 
 let _aiSession = null;
 async function ensureAiSession() {
   if (_aiSession) return _aiSession;
   const ort = await ensureOnnxRuntime();
-  const url = localStorage.getItem("builder.aiModelUrl") || DEFAULT_AI_MODEL_URL;
+  const { url } = getAiModelConfig();
   _aiSession = await ort.InferenceSession.create(url, {
     executionProviders: ["wasm"],
   });
   return _aiSession;
 }
 
-// Build a 320×320 [N,C,H,W] Float32 tensor from the current canvas,
-// normalised to ImageNet stats (mean 0.5, std 1.0 — fine for U²-Net's
-// saliency-trained checkpoints). Returns { tensor, inputName }.
-async function canvasToModelInput(canvas) {
+// Build a [1,3,SIDE,SIDE] Float32 tensor from the current canvas. SIDE
+// comes from the configured model (1024 for RMBG-1.4). Normalisation is
+// plain /255 — RMBG-1.4 and the usual U²-Net exports both accept raw
+// [0,1] floats; the threshold slider absorbs any small per-channel
+// offset the model wants.
+async function canvasToModelInput(canvas, SIDE) {
   const ort = window.ort;
-  const SIDE = 320;
   const scratch = document.createElement("canvas");
   scratch.width = SIDE; scratch.height = SIDE;
   scratch.getContext("2d").drawImage(canvas, 0, 0, SIDE, SIDE);
@@ -2112,9 +2123,9 @@ async function canvasToModelInput(canvas) {
     for (let x = 0; x < SIDE; x++) {
       const sp = (y * SIDE + x) * 4;
       const dp = y * SIDE + x;
-      data[0 * plane + dp] = (px[sp]     / 255 - 0.5) / 1.0;
-      data[1 * plane + dp] = (px[sp + 1] / 255 - 0.5) / 1.0;
-      data[2 * plane + dp] = (px[sp + 2] / 255 - 0.5) / 1.0;
+      data[0 * plane + dp] = px[sp]     / 255;
+      data[1 * plane + dp] = px[sp + 1] / 255;
+      data[2 * plane + dp] = px[sp + 2] / 255;
     }
   }
   return new ort.Tensor("float32", data, [1, 3, SIDE, SIDE]);
@@ -2174,19 +2185,20 @@ async function runAiCutout() {
       payload = computeOtsuMask(els.canvas);
     } else {
       const session = await ensureAiSession();
-      const tensor = await canvasToModelInput(els.canvas);
+      const { size: SIDE } = getAiModelConfig();
+      const tensor = await canvasToModelInput(els.canvas, SIDE);
       // U²-Net family models use 'input.1' as the input name in most
       // exports; we fall through to the session's first input as a
       // safety net for re-exports that renamed it.
       const inputName = session.inputNames[0] || "input.1";
       const feeds = {}; feeds[inputName] = tensor;
       const out = await session.run(feeds);
-      // First output is the fused saliency map ([1,1,320,320] float32).
+      // First output is the fused saliency map ([1,1,SIDE,SIDE] float32).
       const outName = session.outputNames[0];
-      const raw = out[outName].data;          // Float32Array(320*320)
+      const raw = out[outName].data;          // Float32Array(SIDE*SIDE)
       const mask = new Uint8Array(raw.length);
       // Normalise to 0-255 (the network outputs sigmoid-like values
-      // already in [0,1] for the fused output of u2netp).
+      // already in [0,1] for the fused output).
       let lo = Infinity, hi = -Infinity;
       for (let i = 0; i < raw.length; i++) {
         if (raw[i] < lo) lo = raw[i];
@@ -2199,11 +2211,12 @@ async function runAiCutout() {
         v = Math.max(0, Math.min(1, v + bias));
         mask[i] = Math.round(v * 255);
       }
-      payload = { mask, w: 320, h: 320 };
+      payload = { mask, w: SIDE, h: SIDE };
     }
     pushClick({ kind: "aimask", mask: payload.mask,
                 maskW: payload.w, maskH: payload.h, invert });
     applyMask();
+    updateHistory();
     els.aiStat.textContent = t("ai.done");
     toast(t("ai.done"), "good");
   } catch (e) {
