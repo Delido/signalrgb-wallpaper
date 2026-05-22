@@ -48,7 +48,12 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
-CloseApplications=yes
+; `force` (not `yes`) is critical for the tray's silent
+; auto-update path: `yes` prompts the user to confirm closing the
+; running bridge, and the prompt is suppressed by `/SUPPRESSMSGBOXES`,
+; which deadlocks the installer. `force` closes running instances
+; without prompting so the silent flow can replace SignalRGBBridge.exe.
+CloseApplications=force
 RestartApplications=no
 
 [Languages]

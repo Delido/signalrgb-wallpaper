@@ -2083,12 +2083,20 @@ async function ensureOnnxRuntime() {
 // Default model: U²-Netp (Apache 2.0) — permissive licence, free
 // for personal AND commercial use. Picked over the earlier RMBG-1.4
 // default (BRIA non-commercial licence) so commercial users aren't
-// silently steered into a paid-licence requirement. Users can
-// override both URL and input size via localStorage:
+// silently steered into a paid-licence requirement.
+//
+// URL is the long-standing rembg release asset; it's a single-file
+// .onnx (no external-data references), which onnxruntime-web can
+// load with one fetch. The earlier huggingface.co/Xenova/u2netp
+// host split the weights into a separate file ORT couldn't
+// auto-resolve, hence the "failed to load external data file" error
+// in v0.9.18.
+//
+// Users can override both URL and input size via localStorage:
 //   localStorage["builder.aiModelUrl"]   — model URL
 //   localStorage["builder.aiInputSize"]  — input H = W (default 320)
 const DEFAULT_AI_MODEL_URL =
-  "https://huggingface.co/Xenova/u2netp/resolve/main/onnx/model.onnx";
+  "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx";
 const DEFAULT_AI_INPUT_SIZE = 320;
 
 function getAiModelConfig() {

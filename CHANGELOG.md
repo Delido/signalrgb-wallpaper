@@ -4,6 +4,40 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.19-beta] - 2026-05-23
+
+> Two real-world bugs from v0.9.18: the new Apache 2.0 default AI
+> model URL pointed at a multi-file Hugging Face host that ORT
+> couldn't auto-resolve, and the tray auto-update STILL aborted
+> silently because Inno's `CloseApplications=yes` deadlocks under
+> `/SUPPRESSMSGBOXES`. Both fixed.
+
+### Fixed — Builder Auto-cut
+
+- **AI default URL now points at the long-standing single-file
+  rembg release asset** for U²-Netp (Apache 2.0) instead of
+  `huggingface.co/Xenova/u2netp`. The HF Xenova host splits the
+  model graph (`model.onnx`) from the weights (`model.onnx_data`),
+  and `onnxruntime-web` doesn't auto-resolve the second file —
+  hence the *"failed to load external data file"* error in v0.9.18.
+  The rembg URL is a single self-contained `.onnx` so one fetch
+  is enough. Same Apache 2.0 licence.
+- `localStorage["builder.aiModelUrl"]` override still works for
+  any user wanting a different model.
+
+### Fixed — Tray auto-update
+
+- **`CloseApplications=yes` → `force`** in the Inno script.
+  `yes` shows a confirm dialog asking the user whether to close
+  the running bridge before install. With `/SUPPRESSMSGBOXES` (set
+  by the silent-update path) that dialog is killed before it
+  renders, leaving the installer waiting on user input that will
+  never come and eventually aborting. `force` skips the prompt
+  and closes the bridge unconditionally before overwriting
+  `SignalRGBBridge.exe`. This is the missing piece behind the
+  "starts a window briefly then everything closes" symptom from
+  v0.9.17 + v0.9.18.
+
 ## [0.9.18-beta] - 2026-05-23
 
 > Licence-cleanup release: swaps the AI cut-out default model from
