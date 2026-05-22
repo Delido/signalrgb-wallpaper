@@ -286,13 +286,15 @@ licence-compatibility guidance, see [docs/roadmap.md](docs/roadmap.md).
 
 ### 🛠️ Tier 3 — Power-user / polish (partial)
 
-- **More ambient effects from MIT-licensed sources** — Constellation
-  and Fireflies (v0.9.12), Plasma, Vortex and Bubbles (v0.9.15)
-  shipped as the first two batches; further ports from
-  [ykob](https://github.com/ykob)'s catalogue and similar MIT-
-  licensed pens still on the menu. Per-pen licence check and
-  attribution in [docs/credits.md](docs/credits.md) required for
-  each one ported directly.
+- **More ambient effects from MIT-licensed CodePen sources** —
+  Constellation and Fireflies (v0.9.12), Plasma, Vortex and
+  Bubbles (v0.9.15) shipped as the first two batches. Further
+  effects are an open menu: any MIT-licensed canvas / particle
+  / shader pen from CodePen is fair game, picked on visual fit
+  rather than a single author. Per-pen licence check
+  (CodePen → *Settings → License* on the pen) and attribution
+  in [docs/credits.md](docs/credits.md) required for any pen
+  ported directly.
 - **Winget package** — auto-update is done (tray downloads + runs
   the installer); the missing piece is a Winget manifest submission
   to `microsoft/winget-pkgs` so `winget install

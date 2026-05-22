@@ -372,27 +372,48 @@ optional `def.after(ctx, particles, tint)` post-pass hook for
 effects that draw across the whole particle set (used by
 Constellation's connecting lines).
 
-Further direct ports from individual CodePen pens still pending —
+Further direct ports from individual MIT-licensed CodePen pens
+are an open menu — picked on visual fit (looks great as a
+wallpaper backdrop, plays well with the live RGB glow), not on a
+single author / catalogue. CodePen's default licence is MIT but
+CodePen Pro users can override per-pen, so the licence MUST be
+verified per pen before porting (the pen's *Settings → License*
+field is authoritative).
 
-[ykob](https://github.com/ykob)'s catalog is explicitly MIT
-("If you want to use some code, you can use these freely by
-adding license notation"). Some candidates:
+Candidate effect types — useful as a search lens when browsing
+CodePen, not a fixed shopping list:
 
-- `ykob/pen/aBrjaR` — user-suggested starting point. Verify
-  per-pen license in CodePen Settings before porting.
-- Equivalent particle / flow-field / waveform pens from same author
+- Particle drift / swarm / boids
+- Geometric flow fields, wave fields
+- Audio-reactive visualisers (would combine with our existing
+  `lastAudio` FFT bins)
+- Plasma / fluid / metaball blobs (in addition to the existing
+  Plasma preset)
+- Generative line art, vector noise fields
+- Star-field / nebula / cosmic backdrops
+- Matrix-rain style cascades
+- Lightning / electric arcs
+- Water ripples / pond-surface effects
 
-For each ported pen:
+Per-pen workflow (each port):
 
-1. Confirm per-pen license (CodePen Pro can override the default
-   MIT — `Settings → License` on the pen)
+1. Confirm per-pen licence is MIT (or another permissive licence
+   compatible with our MIT distribution). CodePen Pro accounts can
+   override the default — check *Settings → License* on the pen.
 2. Adapt to our `ambient` IIFE pattern: `#ambient-canvas` element,
-   start/stop based on user toggle, viewport-resize handler,
-   tintFromGlow option
-3. Add an entry to `docs/credits.md` with: author, pen URL,
-   license, optional attribution string for the wallpaper
-   credits / About dialog
-4. Add a per-file MIT notice comment block in the ported code
+   `targetCount` / `spawn` / `step` / `render` / optional `after`
+   hooks matching the `AMBIENT_PRESETS` shape, start/stop based on
+   user toggle, viewport-resize handler, tintFromGlow option.
+3. Add an entry to `docs/credits.md` with: author, pen URL, licence,
+   optional attribution string for the wallpaper credits / About
+   dialog.
+4. Add a per-file MIT notice comment block in the ported code.
+
+If a pen's licence is non-permissive or unverified, the
+alternative is what v0.9.12 and v0.9.15 did: write a fresh
+implementation *inspired by* the visual style, in our own
+`AMBIENT_PRESETS` shape, with no copied code. That's licence-free
+by construction and was the right call for those five effects.
 
 ---
 
