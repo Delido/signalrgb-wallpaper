@@ -163,42 +163,33 @@ These directly reduce the "I installed it and nothing happens / I
 broke something" support surface. Tier 1 = ~10 hours of work total
 for a massive UX bump.
 
-### 🔲 Setup health check in the tray — ~2-3 h
+### ✅ Setup health check in the tray — shipped v0.8.9-beta
 
-Tray entry *"System status…"* opens a small dialog with green/red
-dots for:
+Tray entry *System status…* opens a Tk dialog with five rows:
+SignalRGB plugin file present, SignalRGB.exe running, bridge port
+reachable, wallpaper pages connected, LHM reachable (only if a
+Hardware-sensor widget exists). Each red row offers a contextual
+Fix button: open plugins folder, download SignalRGB, open Help,
+download LHM.
 
-- SignalRGB plugin file present in `Documents\WhirlwindFX\Plugins\`
-- SignalRGB process running
-- Bridge port 17320 reachable (== the bridge itself is alive)
-- At least one wallpaper page connected (Lively or WE actively
-  rendering)
-- LibreHardwareMonitor reachable (only if a Hardware Sensor widget
-  exists)
+### ✅ Backup + restore config — shipped v0.8.9-beta
 
-Each red dot has a *"Fix this…"* button — opens the relevant
-folder / runs the relevant installer / pops the relevant doc page.
+*Export everything…* in the Configurator (new *Backup & Restore*
+card) downloads a `signalrgb-wallpaper-backup-<timestamp>.zip` via
+`GET /backup` — contains `config.json` + the full `library/` and
+`screens/` dirs. *Restore from ZIP…* uploads to `POST /restore`;
+bridge swaps in the config, merges library/screens files on top of
+the live dirs (won't nuke unmatched local files), rebuilds the
+library catalogue, and pushes new settings to every screen.
+`help_images/` not yet included since users don't customise it.
 
-### 🔲 Backup + restore config — ~2 h
+### 🚧 Reset + undo — partially shipped v0.8.9-beta
 
-- *Export all* button in Configurator → writes a ZIP containing
-  `config.json` + `library/` + uploaded `screens/` images +
-  `help_images/` if any
-- *Import from ZIP* button → drops everything back into
-  `%LOCALAPPDATA%\SignalRGBWallpaper\`, restarts the relevant
-  pollers
-- Killer feature for: fresh Windows installs, multi-PC users,
-  "let me try something risky" recovery, sending a config to a
-  friend
-
-### 🔲 Reset + undo — ~1 h
-
-- *Reset this screen to defaults* button per Configurator tab
-- Ctrl+Z in the Configurator → undo last ~10 settings changes,
-  scoped per screen
-- Implementation: ring buffer of last-N settings snapshots; Ctrl+Z
-  pushes the previous snapshot back to the bridge via the existing
-  `setting-update` WS commands
+*Reset this screen to defaults* button shipped in v0.8.9-beta (per
+tab, in the mirror bar). Ctrl+Z undo across the last N settings
+changes is still 🔲 — needs a per-screen ring buffer of snapshots
+plus a Ctrl+Z handler that POSTs the previous snapshot back via
+the existing `/screen/<N>/settings` batch endpoint.
 
 ### 🔲 First-run onboarding tour — ~4 h
 

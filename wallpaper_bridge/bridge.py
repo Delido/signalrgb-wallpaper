@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.8-beta"
+APP_VERSION = "0.8.9-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -736,6 +736,32 @@ TRANSLATIONS = {
     "tray.configurator":        {"en": "Configurator…",           "de": "Konfigurator…"},
     "tray.builder":             {"en": "Build Wallpaper…",        "de": "Wallpaper bauen…"},
     "tray.help":                {"en": "Help…",                   "de": "Hilfe…"},
+    "tray.status":              {"en": "System status…",          "de": "Systemstatus…"},
+    # ── System Status dialog ────────────────────────────────────────
+    "status.title":             {"en": "System status",
+                                 "de": "Systemstatus"},
+    "status.subtitle":          {"en": "Quick check of every signal that has to be green for the wallpaper to actually light up.",
+                                 "de": "Kurzcheck aller Signale, die grün sein müssen, damit das Wallpaper leuchtet."},
+    "status.plugin":            {"en": "SignalRGB plugin file installed",
+                                 "de": "SignalRGB-Plugin-Datei installiert"},
+    "status.signalrgb":         {"en": "SignalRGB.exe running",
+                                 "de": "SignalRGB.exe läuft"},
+    "status.bridge":            {"en": "Bridge reachable on {host}:{port}",
+                                 "de": "Bridge erreichbar auf {host}:{port}"},
+    "status.pages":             {"en": "Wallpaper pages connected: {n}",
+                                 "de": "Verbundene Wallpaper-Seiten: {n}"},
+    "status.lhm":               {"en": "LibreHardwareMonitor reachable ({n} sensors)",
+                                 "de": "LibreHardwareMonitor erreichbar ({n} Sensoren)"},
+    "status.btn.open_plugins":  {"en": "Open plugins folder",
+                                 "de": "Plugin-Ordner öffnen"},
+    "status.btn.get_signalrgb": {"en": "Download SignalRGB",
+                                 "de": "SignalRGB herunterladen"},
+    "status.btn.get_lhm":       {"en": "Download LHM",
+                                 "de": "LHM herunterladen"},
+    "status.btn.help":          {"en": "Open Help",
+                                 "de": "Hilfe öffnen"},
+    "status.btn.refresh":       {"en": "Refresh",
+                                 "de": "Aktualisieren"},
     "tray.lock_all":            {"en": "🔓 Lock widgets (all screens)",
                                  "de": "🔓 Widgets sperren (alle Bildschirme)"},
     "tray.unlock_all":          {"en": "🔒 Unlock widgets (all screens)",
@@ -1093,7 +1119,8 @@ class Broadcaster:
         t = msg.get("type")
         if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
                  "setting-update", "viewport", "bridge-setting-update",
-                 "preset-save", "preset-apply", "preset-clear"):
+                 "preset-save", "preset-apply", "preset-clear",
+                 "screen-reset"):
             try:
                 self.on_widget_command(screen, msg)
             except Exception as e:
@@ -1741,6 +1768,71 @@ class Broadcaster:
                 http_error(writer, 400, "incomplete body")
             except Exception as e:
                 http_error(writer, 500, f"reorder failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # GET /backup — stream a ZIP of every piece of user state
+        # (config.json + library/ + screens/). Browser-driven download.
+        if method == "GET" and target.split("?", 1)[0] == "/backup":
+            try:
+                bridge_runtime = getattr(self, "bridge_runtime", None) or self
+                data = bridge_runtime.build_backup_zip()
+                stamp = time.strftime("%Y%m%d-%H%M%S")
+                filename = f"signalrgb-wallpaper-backup-{stamp}.zip"
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/zip\r\n"
+                    f"Content-Length: {len(data)}\r\n"
+                    f"Content-Disposition: attachment; filename=\"{filename}\"\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + data)
+            except Exception as e:
+                http_error(writer, 500, f"backup failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # POST /restore — body is the raw ZIP. Replaces config.json,
+        # merges library/ + screens/ files on top of the existing dirs,
+        # then pushes fresh settings to every connected wallpaper page.
+        if method == "POST" and target.split("?", 1)[0] == "/restore":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 100 * 1024 * 1024):  # 100 MB cap
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                bridge_runtime = getattr(self, "bridge_runtime", None) or self
+                report = bridge_runtime.restore_backup_zip(body)
+                payload = json.dumps({"ok": True, **report}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except ValueError as e:
+                http_error(writer, 400, f"restore rejected: {e}")
+            except Exception as e:
+                http_error(writer, 500, f"restore failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -2548,6 +2640,196 @@ class BridgeRuntime:
             self._replicate_to_mirrors(screen)
         return snap
 
+    # ── Backup + Restore ─────────────────────────────────────────────────
+    def build_backup_zip(self) -> bytes:
+        """Serialise every piece of user state worth re-installing into a
+        single ZIP. Three roots:
+          • `config.json` at the archive root
+          • `library/*` — wallpapers + thumbs + library.json
+          • `screens/*` — builder-uploaded backgrounds, one per screen
+        Anything else under %LOCALAPPDATA%\\SignalRGBWallpaper is
+        regenerated on demand and isn't worth carrying around."""
+        import io, zipfile
+        buf = io.BytesIO()
+        with self.config_lock:
+            cfg_snapshot = json.dumps(self.config, indent=2).encode("utf-8")
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("config.json", cfg_snapshot)
+            lib = library_dir()
+            if lib.exists():
+                for p in lib.rglob("*"):
+                    if p.is_file():
+                        z.write(p, "library/" + p.relative_to(lib).as_posix())
+            scr = screens_dir()
+            if scr.exists():
+                for p in scr.rglob("*"):
+                    if p.is_file():
+                        z.write(p, "screens/" + p.relative_to(scr).as_posix())
+        return buf.getvalue()
+
+    def restore_backup_zip(self, data: bytes) -> dict:
+        """Replace the live config + library + screens contents from a
+        previously-exported ZIP. Returns a small report dict so the
+        caller can surface counts. Destructive: existing library and
+        screens files NOT in the ZIP are kept (additive merge for files,
+        full replace for config.json) — safer than nuking the folder
+        when the user accidentally restores an old backup."""
+        import io, zipfile
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+        except zipfile.BadZipFile as e:
+            raise ValueError(f"not a zip: {e}")
+        if "config.json" not in zf.namelist():
+            raise ValueError("backup is missing config.json")
+
+        # Validate config.json parses + has the version field we expect.
+        with zf.open("config.json") as f:
+            cfg_text = f.read().decode("utf-8")
+        try:
+            new_cfg = json.loads(cfg_text)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"config.json is not valid JSON: {e}")
+        if not isinstance(new_cfg, dict) or "screens" not in new_cfg:
+            raise ValueError("config.json is missing required keys")
+
+        # Extract library/* and screens/* into their respective dirs.
+        # Path-traversal guard: refuse anything that resolves outside
+        # the target folder.
+        lib_root = library_dir().resolve()
+        scr_root = screens_dir().resolve()
+        copied = {"library": 0, "screens": 0}
+        for name in zf.namelist():
+            if name in ("", "config.json") or name.endswith("/"):
+                continue
+            parts = name.split("/", 1)
+            if len(parts) != 2:
+                continue
+            head, rel = parts
+            if head == "library":
+                target = (lib_root / rel).resolve()
+                if not str(target).startswith(str(lib_root)):
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(name) as src, open(target, "wb") as dst:
+                    dst.write(src.read())
+                copied["library"] += 1
+            elif head == "screens":
+                target = (scr_root / rel).resolve()
+                if not str(target).startswith(str(scr_root)):
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(name) as src, open(target, "wb") as dst:
+                    dst.write(src.read())
+                copied["screens"] += 1
+
+        # Swap the live config in place. Persist + push to all clients.
+        with self.config_lock:
+            self.config.clear()
+            self.config.update(new_cfg)
+            snapshot = json.loads(json.dumps(self.config))
+        try:
+            save_config(snapshot)
+        except Exception as e:
+            print(f"[restore] save_config failed: {e}")
+        # Rebuild library.json from the now-restored disk contents so
+        # any catalogue drift gets fixed.
+        try:
+            _library_rebuild_catalogue(library_dir())
+        except Exception as e:
+            print(f"[restore] library rebuild failed: {e}")
+        # Push every screen's new settings to connected wallpaper pages.
+        for i in range(N_SCREENS):
+            s = snapshot.get("screens", {}).get(str(i))
+            if isinstance(s, dict):
+                self.push_settings(i, s)
+        return copied
+
+    def get_health_status(self) -> dict:
+        """Snapshot of "is the install actually working?" signals for
+        the tray's System-status dialog. Cheap to compute — meant to
+        be called on-demand from the dialog open path."""
+        # SignalRGB plugin file in the user's WhirlwindFX/Plugins dir.
+        try:
+            plugin_path = Path.home() / "Documents" / "WhirlwindFX" / "Plugins" / "SignalRGB_Desktop_Wallpaper.js"
+        except Exception:
+            plugin_path = None
+        plugin_present = bool(plugin_path and plugin_path.is_file())
+
+        # SignalRGB.exe / SignalRgb / SignalRGBLauncher running.
+        signalrgb_running = False
+        try:
+            for p in psutil.process_iter(["name"]):
+                n = (p.info.get("name") or "").lower()
+                if "signalrgb" in n:
+                    signalrgb_running = True
+                    break
+        except Exception:
+            pass
+
+        # Wallpaper pages connected via WS (one per active monitor).
+        pages_connected = 0
+        if self.broadcaster:
+            try:
+                pages_connected = sum(
+                    len(s) for s in self.broadcaster.clients_by_screen.values())
+            except Exception:
+                pass
+
+        # LHM only matters if at least one Hardware Sensor widget exists.
+        lhm_widget_present = False
+        with self.config_lock:
+            for s in self.config.get("screens", {}).values():
+                if not isinstance(s, dict):
+                    continue
+                for w in s.get("widgets", []):
+                    if isinstance(w, dict) and w.get("type") == "hardware-sensor":
+                        lhm_widget_present = True
+                        break
+                if lhm_widget_present:
+                    break
+        lhm_online = False
+        lhm_count = 0
+        if self.hwmon is not None:
+            try:
+                snap = self.hwmon.get_snapshot()
+                if isinstance(snap, dict):
+                    lhm_count = len(snap)
+                    lhm_online = lhm_count > 0
+            except Exception:
+                pass
+
+        return {
+            "plugin_present":    plugin_present,
+            "plugin_path":       str(plugin_path) if plugin_path else "",
+            "plugin_dir":        str(plugin_path.parent) if plugin_path else "",
+            "signalrgb_running": signalrgb_running,
+            "pages_connected":   pages_connected,
+            "lhm_widget_present": lhm_widget_present,
+            "lhm_online":        lhm_online,
+            "lhm_count":         lhm_count,
+        }
+
+    def reset_screen(self, screen: int) -> dict | None:
+        """Reset every mirrorable setting on this screen back to its
+        DEFAULT_SCREEN_SETTINGS value. Per-screen physical attributes
+        (viewport, mirrorOf, presets) are preserved — the user's
+        monitor identity and saved snapshots aren't lost when they
+        ask for a clean slate."""
+        if self._block_if_mirror(screen, "reset-screen"): return None
+        def mutate(s):
+            for k, v in DEFAULT_SCREEN_SETTINGS.items():
+                if k in _NON_MIRRORED_KEYS:
+                    continue
+                # Deep-copy mutable defaults so a later mutation doesn't
+                # bleed into the global DEFAULT_SCREEN_SETTINGS template.
+                s[k] = copy.deepcopy(v)
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
+            print(f"[reset] screen={screen} restored to defaults")
+        return snap
+
     # Keys the wallpaper page / configurator are allowed to set via the
     # generic `setting-update` WS command. Whitelisted so a buggy page
     # can't write arbitrary garbage into config.json — anything not on
@@ -2733,6 +3015,8 @@ class BridgeRuntime:
                 self.apply_preset(screen, int(msg.get("slot", -1)))
             elif t == "preset-clear":
                 self.clear_preset(screen, int(msg.get("slot", -1)))
+            elif t == "screen-reset":
+                self.reset_screen(screen)
         threading.Thread(target=run, daemon=True, name="widget-mutate").start()
 
     def update_viewport(self, screen: int, w, h) -> dict | None:
@@ -2793,6 +3077,10 @@ class BridgeRuntime:
         # so the broadcaster doesn't need to know about hwmon at all if
         # the user is on a build without it.
         self.broadcaster.hwmon_provider = self.hwmon
+        # Expose the runtime so /backup and /restore HTTP handlers can
+        # call back into config + persistence without needing the
+        # methods passed individually through the constructor.
+        self.broadcaster.bridge_runtime = self
         self.sysstats = SysStatsPoller(self.broadcaster, hwmon=self.hwmon)
         self.sysstats.start()
         try:
@@ -3265,6 +3553,109 @@ class AboutDialog:
 
 
 # ============================================================================
+# System Status dialog
+# ============================================================================
+
+class SystemStatusDialog:
+    """Tk dialog that shows green/red rows for each "is the install
+    actually working?" signal and offers a one-click *Fix this…* button
+    per red row. Spawned per tray click on a daemon thread."""
+
+    def __init__(self, bridge: BridgeRuntime):
+        self.bridge = bridge
+
+    def show(self):
+        status = self.bridge.get_health_status()
+        root = tk.Tk()
+        root.title(tr("status.title"))
+        root.geometry("520x360")
+        root.minsize(460, 320)
+
+        ttk.Label(root, text=tr("status.title"),
+                  font=("Segoe UI", 13, "bold")).pack(
+                      anchor="w", padx=18, pady=(16, 0))
+        ttk.Label(root, text=tr("status.subtitle"),
+                  foreground="#666").pack(
+                      anchor="w", padx=18, pady=(0, 12))
+
+        rows = ttk.Frame(root)
+        rows.pack(fill="both", expand=True, padx=18, pady=(0, 8))
+
+        # Build each status row. `(ok, label, fix_label, fix_action)`.
+        # `fix_action` is None when there's nothing useful to do — the
+        # row still renders a red dot but no button.
+        def open_plugin_dir():
+            try:
+                Path(status["plugin_dir"]).mkdir(parents=True, exist_ok=True)
+                os.startfile(status["plugin_dir"])
+            except Exception as e:
+                print(f"[status] open plugin dir failed: {e}")
+
+        def open_signalrgb_dl():
+            webbrowser.open("https://signalrgb.com/")
+
+        def open_lhm_dl():
+            webbrowser.open("https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases")
+
+        def open_help_pages():
+            try: webbrowser.open(f"http://{WS_HOST}:{WS_PORT}/help")
+            except Exception: pass
+
+        entries = [
+            (status["plugin_present"],
+             tr("status.plugin"),
+             tr("status.btn.open_plugins"),
+             open_plugin_dir),
+            (status["signalrgb_running"],
+             tr("status.signalrgb"),
+             tr("status.btn.get_signalrgb"),
+             open_signalrgb_dl),
+            (True,
+             tr("status.bridge", host=WS_HOST, port=WS_PORT),
+             None, None),  # if this dialog renders, the bridge is up
+            (status["pages_connected"] > 0,
+             tr("status.pages", n=status["pages_connected"]),
+             tr("status.btn.help"),
+             open_help_pages),
+        ]
+        # LHM row only appears if a Hardware-sensor widget is in use —
+        # otherwise its status is irrelevant.
+        if status["lhm_widget_present"]:
+            entries.append((
+                status["lhm_online"],
+                tr("status.lhm", n=status["lhm_count"]),
+                tr("status.btn.get_lhm"),
+                open_lhm_dl,
+            ))
+
+        for ok, label, fix_label, fix_action in entries:
+            row = ttk.Frame(rows)
+            row.pack(fill="x", pady=4)
+            dot = tk.Label(row, text="●", font=("Segoe UI", 16),
+                           fg=("#3aa86d" if ok else "#cc4a4a"))
+            dot.pack(side="left", padx=(0, 10))
+            ttk.Label(row, text=label,
+                      wraplength=320, justify="left").pack(
+                          side="left", fill="x", expand=True)
+            if not ok and fix_action is not None and fix_label:
+                ttk.Button(row, text=fix_label,
+                           command=fix_action).pack(side="right")
+
+        # Footer
+        btn_row = ttk.Frame(root)
+        btn_row.pack(fill="x", padx=18, pady=(8, 14), side="bottom")
+        ttk.Button(btn_row, text=tr("status.btn.refresh"),
+                   command=lambda: (root.destroy(),
+                                    SystemStatusDialog(self.bridge).show())
+                  ).pack(side="left")
+        ttk.Button(btn_row, text=tr("about.btn.close"),
+                   command=root.destroy).pack(side="right")
+
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.mainloop()
+
+
+# ============================================================================
 # Tray icon
 # ============================================================================
 
@@ -3331,6 +3722,7 @@ class TrayApp:
             pystray.MenuItem(tr("tray.configurator"), self._open_configurator, default=True),
             pystray.MenuItem(tr("tray.builder"),      self._open_builder),
             pystray.MenuItem(tr("tray.help"),         self._open_help),
+            pystray.MenuItem(tr("tray.status"),       self._open_status),
             pystray.MenuItem(
                 tr("tray.lock_all") if any_unlocked else tr("tray.unlock_all"),
                 self._toggle_widgets_lock_all),
@@ -3417,6 +3809,16 @@ class TrayApp:
             AboutDialog().show()
         except Exception as e:
             print(f"[tray] about dialog crashed: {e}")
+
+    def _open_status(self, icon, item):
+        threading.Thread(target=self._show_status_dialog, daemon=True,
+                         name="status-dialog").start()
+
+    def _show_status_dialog(self):
+        try:
+            SystemStatusDialog(self.bridge).show()
+        except Exception as e:
+            print(f"[tray] status dialog crashed: {e}")
 
     def _open_builder(self, icon, item):
         # Open the bundled HTML wallpaper builder in the user's default

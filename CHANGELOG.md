@@ -4,6 +4,70 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.9-beta] - 2026-05-22
+
+> Tier 1 setup-polish bundle: tray System-status dialog with one-click
+> Fix buttons, full Backup / Restore via ZIP, and Reset-this-screen
+> on each tab. Plus a translation-key audit that fixed the
+> `presets.slot_label` regression.
+
+### Added — Tray
+
+- **System status… dialog.** New tray entry opens a Tk window with
+  one green/red row per "is the install actually working?" signal:
+  SignalRGB plugin file present, SignalRGB.exe running, bridge port
+  reachable, wallpaper pages connected, LibreHardwareMonitor
+  reachable (only when a Hardware-sensor widget exists). Each red
+  row offers a contextual Fix button — *Open plugins folder*,
+  *Download SignalRGB*, *Open Help*, *Download LHM*. Refresh button
+  re-checks without closing.
+
+### Added — Configurator
+
+- **Backup & Restore card** at the bottom of the main column.
+  *Export everything…* downloads a `signalrgb-wallpaper-backup-<ts>.zip`
+  containing `config.json`, the full `library/` folder, and the
+  per-screen `screens/` backgrounds. *Restore from ZIP…* uploads
+  the archive back and the bridge replaces `config.json`, merges
+  library + screens files on top of the live dirs (won't nuke
+  files that aren't in the ZIP), rebuilds the catalogue, and
+  pushes fresh settings to every connected wallpaper page.
+- **Reset this screen…** button on every tab (in the mirror bar).
+  Restores every mirrorable setting to its `DEFAULT_SCREEN_SETTINGS`
+  value while preserving the screen's viewport, preset slots, and
+  mirror state. Confirmation dialog with explicit "what gets wiped"
+  text. Hidden while the screen is in mirror mode.
+
+### Added — Bridge
+
+- **`GET /backup`** — streams a ZIP of `config.json` + `library/*` +
+  `screens/*`. Sets `Content-Disposition: attachment; filename=...`
+  so the browser saves it directly.
+- **`POST /restore`** — accepts a ZIP body (100 MB cap), validates
+  it has a parseable `config.json` with the expected schema, then
+  extracts `library/*` and `screens/*` paths into their respective
+  folders with path-traversal guards. Replaces the live config,
+  rebuilds the library catalogue, and pushes settings to every
+  screen.
+- **`get_health_status`** — process check (`signalrgb` substring in
+  any running process name), plugin file check
+  (`~\Documents\WhirlwindFX\Plugins\SignalRGB_Desktop_Wallpaper.js`),
+  WS-connected-page count, LHM sensor count, hardware-sensor
+  widget detection. Powers the new tray dialog.
+- **`reset_screen`** — restores defaults for one screen,
+  preserves `viewportW/H`, `mirrorOf`, `presets`. Routed via the
+  new `screen-reset` WS command.
+
+### Fixed
+
+- **`presets.slot_label` translation missing** — the static "Slot 1/2/3/4"
+  labels rendered as raw uppercase keys when the `data-i18n` attr
+  ran without a matching translation entry. Added the key plus a
+  generic `data-i18n-<name>` attribute path so any HTML element
+  can carry positional params for its translation template
+  (used by *Slot {n}*; the pattern is now available for any future
+  parameterised label).
+
 ## [0.8.8-beta] - 2026-05-22
 
 > Closes the Workflow-polish slice with Mirror mode, plus a Builder

@@ -243,6 +243,21 @@
     border-left: 3px solid #5b8fd1;
   }
   .mirror-bar .hint { color: var(--text-dim); font-size: 11px; flex: 1; }
+  .mirror-bar .btn-reset {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+  }
+  .mirror-bar .btn-reset:hover {
+    color: #ffbcbc; background: rgba(180,50,50,0.15); border-color: #6a2828;
+  }
+  .mirror-bar .btn-reset.hidden { display: none; }
+  .mirror-bar > .hidden { display: none; }
   main.cards-disabled section.card .body {
     pointer-events: none;
     opacity: 0.45;
@@ -771,12 +786,14 @@
   <div class="overview-thumbs" id="overview-thumbs"></div>
 </div>
 
-<div id="mirror-bar" class="mirror-bar hidden">
-  <span class="label" data-i18n="mirror.label">Mirror</span>
+<div id="mirror-bar" class="mirror-bar">
+  <span class="label" id="mirror-bar-label" data-i18n="mirror.label">Mirror</span>
   <select id="mirror-select"></select>
   <span class="hint" id="mirror-hint" data-i18n="mirror.hint_off">
     Independent — this screen has its own settings.
   </span>
+  <button class="btn-reset" id="reset-screen-btn" type="button"
+          data-i18n="reset_screen.label">Reset this screen…</button>
 </div>
 
 <main>
@@ -1010,6 +1027,33 @@
     </div>
   </section>
 
+  <!-- ── Backup & Restore ───────────────────────────────────────────── -->
+  <section class="card collapsed" id="card-backup">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.backup">Backup &amp; Restore</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="backup.hint">
+        Export every setting plus the wallpaper library and per-screen
+        backgrounds as one ZIP. Restore drops the ZIP back into
+        %LOCALAPPDATA%\SignalRGBWallpaper and reloads — useful for
+        fresh installs, multi-PC setups, or "try something risky"
+        recovery.
+      </div>
+      <div class="btn-row" style="margin-top: 10px;">
+        <a class="btn primary" id="backup-download-btn"
+           href="/backup" download
+           data-i18n="backup.export">Export everything…</a>
+        <label class="btn" for="restore-upload"
+               data-i18n="backup.import">Restore from ZIP…</label>
+        <input id="restore-upload" type="file" accept=".zip,application/zip"
+               style="display:none">
+      </div>
+      <div class="stat" id="backup-stat" style="margin-top: 8px;"></div>
+    </div>
+  </section>
+
 </main>
 
 <div class="modal-backdrop" id="modal">
@@ -1048,6 +1092,17 @@ const TRANSLATIONS = {
   "section.glow":           { en: "Glow",                 de: "Glow" },
   "section.effects":        { en: "Effects",              de: "Effekte" },
   "section.widgets":        { en: "Widgets",              de: "Widgets" },
+  "section.backup":         { en: "Backup & Restore",     de: "Sichern & Wiederherstellen" },
+  "backup.hint":            { en: "Export every setting plus the wallpaper library and per-screen backgrounds as one ZIP. Restore drops the ZIP back into %LOCALAPPDATA%\\SignalRGBWallpaper and reloads — useful for fresh installs, multi-PC setups, or \"try something risky\" recovery.",
+                              de: "Alle Einstellungen plus Wallpaper-Bibliothek und Bildschirm-Hintergründe als ein ZIP exportieren. Wiederherstellen entpackt das ZIP nach %LOCALAPPDATA%\\SignalRGBWallpaper und lädt neu — gut für frische Installationen, mehrere PCs oder „etwas Riskantes ausprobieren“-Recovery." },
+  "backup.export":          { en: "Export everything…",   de: "Alles exportieren…" },
+  "backup.import":          { en: "Restore from ZIP…",    de: "Aus ZIP wiederherstellen…" },
+  "backup.confirm":         { en: "Restore from this ZIP? Your current config.json will be replaced and library/screens files in the ZIP will overwrite matching ones on disk. Files only on disk are kept.",
+                              de: "Aus diesem ZIP wiederherstellen? Deine aktuelle config.json wird ersetzt; Library- und Screen-Dateien im ZIP überschreiben gleichnamige auf der Platte. Nur auf der Platte vorhandene Dateien bleiben erhalten." },
+  "backup.done":            { en: "Restored — config replaced, {library} library file(s) and {screens} screen file(s) copied",
+                              de: "Wiederhergestellt — Config ersetzt, {library} Library-Datei(en) und {screens} Screen-Datei(en) kopiert" },
+  "backup.failed":          { en: "Restore failed: {msg}",
+                              de: "Wiederherstellen fehlgeschlagen: {msg}" },
 
   "bg.path":                { en: "Image path",           de: "Bildpfad" },
   "bg.library":             { en: "Library",              de: "Bibliothek" },
@@ -1099,6 +1154,11 @@ const TRANSLATIONS = {
                               de: "Eigenständig — dieser Bildschirm hat eigene Einstellungen." },
   "mirror.hint_on":         { en: "Mirroring Screen {n} — edits are disabled. Choose Independent to take control.",
                               de: "Spiegelt Bildschirm {n} — Bearbeiten ist deaktiviert. „Eigenständig“ wählen, um die Kontrolle zu übernehmen." },
+  "reset_screen.label":     { en: "Reset this screen…", de: "Diesen Bildschirm zurücksetzen…" },
+  "reset_screen.confirm":   { en: "Reset every setting on Screen {n} to defaults? Presets and the mirror state are kept; widgets, glow, effects, and background are wiped.",
+                              de: "Alle Einstellungen auf Bildschirm {n} auf Standard zurücksetzen? Voreinstellungen und Spiegel-Status bleiben erhalten; Widgets, Glow, Effekte und Hintergrund werden geleert." },
+  "reset_screen.done":      { en: "Screen {n} reset to defaults",
+                              de: "Bildschirm {n} auf Standard zurückgesetzt" },
   "apply_all.label":        { en: "Apply to all",         de: "Auf alle anwenden" },
   "apply_all.confirm":      { en: "Copy {section} settings from Screen {n} to all other screens?",
                               de: "{section}-Einstellungen von Bildschirm {n} auf alle anderen kopieren?" },
@@ -1116,6 +1176,7 @@ const TRANSLATIONS = {
   "presets.widget_one":     { en: "widget",               de: "Widget" },
   "presets.widget_many":    { en: "widgets",              de: "Widgets" },
   "presets.saved_toast":    { en: "Saved preset {n}",     de: "Voreinstellung {n} gespeichert" },
+  "presets.slot_label":     { en: "Slot {n}",             de: "Slot {n}" },
 
   "glow.show":              { en: "Show glow layer",      de: "Glow-Schicht anzeigen" },
   "glow.layout":            { en: "Layout",               de: "Layout" },
@@ -1189,7 +1250,17 @@ function applyI18n() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const key = el.getAttribute("data-i18n");
     const html = el.hasAttribute("data-i18n-html");
-    const txt = t(key);
+    // Any `data-i18n-<name>="value"` attribute gets fed in as a {name}
+    // placeholder for the t() substitution. Lets a single template like
+    // "Slot {n}" reuse the same key for every slot row.
+    const params = {};
+    for (const attr of el.attributes) {
+      if (!attr.name.startsWith("data-i18n-")) continue;
+      const param = attr.name.slice("data-i18n-".length);
+      if (param === "html") continue;
+      params[param] = attr.value;
+    }
+    const txt = t(key, Object.keys(params).length ? params : undefined);
     if (html) el.innerHTML = txt; else el.textContent = txt;
   }
   document.title = t("header.title");
@@ -1419,6 +1490,9 @@ const els = {
   mirrorBar:      $("mirror-bar"),
   mirrorSelect:   $("mirror-select"),
   mirrorHint:     $("mirror-hint"),
+  resetScreenBtn: $("reset-screen-btn"),
+  restoreUpload:  $("restore-upload"),
+  backupStat:     $("backup-stat"),
   toast:          $("toast"),
 };
 
@@ -1651,7 +1725,7 @@ const PRESET_SLOTS = 4;
     row.className = "preset-slot empty";
     row.dataset.slot = String(i);
     row.innerHTML =
-      '<span class="name" data-i18n="presets.slot_label" data-slot-num="' + (i + 1) + '">Slot ' + (i + 1) + '</span>' +
+      '<span class="name" data-i18n="presets.slot_label" data-i18n-n="' + (i + 1) + '">Slot ' + (i + 1) + '</span>' +
       '<span class="summary"></span>' +
       '<div class="actions">' +
         '<button class="btn apply" data-i18n="presets.apply">Apply</button>' +
@@ -2288,19 +2362,22 @@ function renderMirrorBar() {
   const bar  = els.mirrorBar;
   const sel  = els.mirrorSelect;
   if (!bar || !sel) return;
-  // Hide entirely when there's nothing to mirror to.
-  if ((screenCount || 1) < 2) {
-    bar.classList.add("hidden");
-    document.querySelector("main").classList.remove("cards-disabled");
-    return;
-  }
   bar.classList.remove("hidden");
-  rebuildMirrorOptions();
-  const m = settings && Number.isInteger(settings.mirrorOf) ? settings.mirrorOf : null;
+  const multi = (screenCount || 1) >= 2;
+  // Mirror dropdown + its label + the hint only make sense on a
+  // multi-monitor setup. The Reset button stays visible either way.
+  const mirrorLabel = document.getElementById("mirror-bar-label");
+  if (mirrorLabel) mirrorLabel.classList.toggle("hidden", !multi);
+  sel.classList.toggle("hidden", !multi);
+  if (els.mirrorHint) els.mirrorHint.classList.toggle("hidden", !multi);
+  if (multi) rebuildMirrorOptions();
+  const m = (multi && settings && Number.isInteger(settings.mirrorOf))
+    ? settings.mirrorOf : null;
   sel.value = (m == null) ? "" : String(m);
   const active = m != null;
   bar.classList.toggle("active", active);
   document.querySelector("main").classList.toggle("cards-disabled", active);
+  if (els.resetScreenBtn) els.resetScreenBtn.classList.toggle("hidden", active);
   if (els.mirrorHint) {
     if (active) {
       els.mirrorHint.dataset.i18n = "mirror.hint_on";
@@ -2317,6 +2394,55 @@ if (els.mirrorSelect) {
     const v = els.mirrorSelect.value;
     const target = v === "" ? null : parseInt(v, 10);
     setSetting("mirrorOf", target);
+  });
+}
+
+if (els.resetScreenBtn) {
+  els.resetScreenBtn.addEventListener("click", () => {
+    const ok = confirm(t("reset_screen.confirm", { n: activeScreen + 1 }));
+    if (!ok) return;
+    sendCmd({ type: "screen-reset" });
+    toast(t("reset_screen.done", { n: activeScreen + 1 }), "good");
+  });
+}
+
+// ── Backup / Restore ──────────────────────────────────────────────────
+// Export goes via the <a href="/backup" download> link — no JS needed.
+// Restore uploads the ZIP body to POST /restore; bridge swaps in the
+// new config + files and pushes settings to every connected screen.
+if (els.restoreUpload) {
+  els.restoreUpload.addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!confirm(t("backup.confirm"))) return;
+    if (els.backupStat) els.backupStat.textContent = "uploading…";
+    try {
+      const buf = await file.arrayBuffer();
+      const resp = await fetch("/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/zip" },
+        body: buf,
+      });
+      if (!resp.ok) {
+        const msg = await resp.text().catch(() => "HTTP " + resp.status);
+        throw new Error(msg || "HTTP " + resp.status);
+      }
+      const j = await resp.json();
+      const done = t("backup.done", {
+        library: j.library || 0,
+        screens: j.screens || 0,
+      });
+      if (els.backupStat) els.backupStat.textContent = done;
+      toast(done, "good");
+      // Settings just got pushed by the bridge; refresh library so the
+      // restored entries show up immediately.
+      refreshLibrary();
+    } catch (err) {
+      const msg = t("backup.failed", { msg: err.message });
+      if (els.backupStat) els.backupStat.textContent = msg;
+      toast(msg, "bad");
+    }
   });
 }
 
