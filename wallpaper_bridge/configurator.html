@@ -210,6 +210,48 @@
     pointer-events: none;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .overview-thumb.mirror::after {
+    content: "↳";
+    position: absolute; top: 2px; right: 2px;
+    width: 18px; height: 18px;
+    background: rgba(91,143,209,0.92);
+    color: #fff;
+    border-radius: 3px;
+    font-size: 13px; line-height: 18px;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  /* Mirror-mode controls and banner */
+  .mirror-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .mirror-bar .label {
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .mirror-bar select { padding: 4px 8px; font-size: 12px; }
+  .mirror-bar.active {
+    background: rgba(91,143,209,0.15);
+    border-left: 3px solid #5b8fd1;
+  }
+  .mirror-bar .hint { color: var(--text-dim); font-size: 11px; flex: 1; }
+  main.cards-disabled section.card .body {
+    pointer-events: none;
+    opacity: 0.45;
+    user-select: none;
+  }
+  /* Section heads stay clickable so the user can still collapse / expand
+     and read the labels; Apply-to-all is meaningless on a mirror, so
+     hide it. */
+  main.cards-disabled section.card .apply-all { display: none; }
 
   /* ── Common form bits ─────────────────────────────────────────────── */
   .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -729,6 +771,14 @@
   <div class="overview-thumbs" id="overview-thumbs"></div>
 </div>
 
+<div id="mirror-bar" class="mirror-bar hidden">
+  <span class="label" data-i18n="mirror.label">Mirror</span>
+  <select id="mirror-select"></select>
+  <span class="hint" id="mirror-hint" data-i18n="mirror.hint_off">
+    Independent — this screen has its own settings.
+  </span>
+</div>
+
 <main>
 
   <!-- ── Presets ───────────────────────────────────────────────────── -->
@@ -1042,6 +1092,13 @@ const TRANSLATIONS = {
   "screens.label_simple":   { en: "Screen {n}",           de: "Bildschirm {n}" },
   "screens.label_with_res": { en: "Screen {n} — {w}×{h}", de: "Bildschirm {n} — {w}×{h}" },
   "overview.label":         { en: "Overview",             de: "Übersicht" },
+  "mirror.label":           { en: "Mirror",               de: "Spiegeln" },
+  "mirror.option.none":     { en: "Independent",          de: "Eigenständig" },
+  "mirror.option.screen":   { en: "Mirror Screen {n}",    de: "Bildschirm {n} spiegeln" },
+  "mirror.hint_off":        { en: "Independent — this screen has its own settings.",
+                              de: "Eigenständig — dieser Bildschirm hat eigene Einstellungen." },
+  "mirror.hint_on":         { en: "Mirroring Screen {n} — edits are disabled. Choose Independent to take control.",
+                              de: "Spiegelt Bildschirm {n} — Bearbeiten ist deaktiviert. „Eigenständig“ wählen, um die Kontrolle zu übernehmen." },
   "apply_all.label":        { en: "Apply to all",         de: "Auf alle anwenden" },
   "apply_all.confirm":      { en: "Copy {section} settings from Screen {n} to all other screens?",
                               de: "{section}-Einstellungen von Bildschirm {n} auf alle anderen kopieren?" },
@@ -1359,6 +1416,9 @@ const els = {
   modalBody:      $("modal-body"),
   modalCancel:    $("modal-cancel"),
   modalSave:      $("modal-save"),
+  mirrorBar:      $("mirror-bar"),
+  mirrorSelect:   $("mirror-select"),
+  mirrorHint:     $("mirror-hint"),
   toast:          $("toast"),
 };
 
@@ -1497,6 +1557,7 @@ function renderOverviewCard(screens) {
       el.style.backgroundImage = desired;
     }
     el.classList.toggle("active", i === activeScreen);
+    el.classList.toggle("mirror", Number.isInteger(s.mirrorOf));
   }
   // Trim excess thumbs if screenCount shrank.
   grid.querySelectorAll(".overview-thumb").forEach((el) => {
@@ -1557,6 +1618,7 @@ function applyScreenCount(n) {
   if (activeScreen >= n) switchScreen(0);
   // Apply-to-all only makes sense with 2+ screens — re-evaluate.
   if (typeof updateApplyAllVisibility === "function") updateApplyAllVisibility();
+  if (typeof renderMirrorBar === "function") renderMirrorBar();
 }
 
 function switchScreen(n) {
@@ -2195,6 +2257,66 @@ function updateApplyAllVisibility() {
   const visible = (screenCount || 1) > 1;
   document.querySelectorAll(".apply-all").forEach((b) => {
     b.classList.toggle("hidden", !visible);
+  });
+}
+
+// ── Mirror mode ──────────────────────────────────────────────────────────
+// Per-screen `mirrorOf` field; when set, the bridge keeps this screen's
+// settings in lockstep with the chosen source. The configurator's job
+// is just to surface the picker, gate edits with .cards-disabled, and
+// disambiguate the dropdown to the actual screenCount.
+function rebuildMirrorOptions() {
+  const sel = els.mirrorSelect;
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = t("mirror.option.none");
+  sel.appendChild(none);
+  for (let i = 0; i < (screenCount || 1); i++) {
+    if (i === activeScreen) continue;
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = t("mirror.option.screen", { n: i + 1 });
+    sel.appendChild(opt);
+  }
+  sel.value = current;
+}
+
+function renderMirrorBar() {
+  const bar  = els.mirrorBar;
+  const sel  = els.mirrorSelect;
+  if (!bar || !sel) return;
+  // Hide entirely when there's nothing to mirror to.
+  if ((screenCount || 1) < 2) {
+    bar.classList.add("hidden");
+    document.querySelector("main").classList.remove("cards-disabled");
+    return;
+  }
+  bar.classList.remove("hidden");
+  rebuildMirrorOptions();
+  const m = settings && Number.isInteger(settings.mirrorOf) ? settings.mirrorOf : null;
+  sel.value = (m == null) ? "" : String(m);
+  const active = m != null;
+  bar.classList.toggle("active", active);
+  document.querySelector("main").classList.toggle("cards-disabled", active);
+  if (els.mirrorHint) {
+    if (active) {
+      els.mirrorHint.dataset.i18n = "mirror.hint_on";
+      els.mirrorHint.textContent = t("mirror.hint_on", { n: m + 1 });
+    } else {
+      els.mirrorHint.dataset.i18n = "mirror.hint_off";
+      els.mirrorHint.textContent = t("mirror.hint_off");
+    }
+  }
+}
+
+if (els.mirrorSelect) {
+  els.mirrorSelect.addEventListener("change", () => {
+    const v = els.mirrorSelect.value;
+    const target = v === "" ? null : parseInt(v, 10);
+    setSetting("mirrorOf", target);
   });
 }
 
@@ -2995,6 +3117,10 @@ els.modal.addEventListener("click", (e) => {
 // Render — pull settings into the form controls.
 // ─────────────────────────────────────────────────────────────────────────────
 function renderAll() {
+  // Mirror state first — the cards-disabled class on <main> gates
+  // interactive controls everywhere else, so we want it in place before
+  // the per-section render functions touch anything.
+  renderMirrorBar();
   // Presets (rendered first because they live above Background in the UI)
   renderPresets();
   // Background

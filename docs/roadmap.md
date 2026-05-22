@@ -32,11 +32,10 @@ Shipped across the v0.8.3 → v0.8.7 beta cycle:
 - **v0.8.6-beta** — Installer-overwrite hotfix (library.json)
 - **v0.8.7-beta** — Apply-to-all per section, overview card with
   mini-monitor thumbnails
+- **v0.8.8-beta** — Mirror mode, Builder 2×2-grid merge, Tool-options
+  column widened
 
-Remaining (deferred to v0.8.8-beta — needs careful bridge-side
-invariant enforcement):
-
-- Mirror mode per tab
+Workflow-polish slice complete. ✅
 
 ### ✅ Gallery: hover-preview large + RGB-mock glow behind — shipped v0.8.3-beta
 
@@ -118,14 +117,13 @@ the screen's settings (the bridge already tracks this for the
 plugin's Auto-aspect-ratio feature). On screens that haven't
 connected a wallpaper page yet, falls back to just "Screen N".
 
-### 🔲 Configurator: mirror mode per tab — ~3 h
+### ✅ Configurator: mirror mode per tab — shipped v0.8.8-beta
 
-Checkbox in each non-Screen-1 tab: *"Mirror Screen 1"*. When
-enabled, the tab becomes read-only and every settings push for
-Screen 1 also gets pushed to this screen. Persisted as
-`screen.mirrorOf: 0` in `config.json`. Bridge enforces the
-mirror invariant on the server side so external clients (REST
-API in the future) can't bypass it.
+Generalised beyond the original "Mirror Screen 1" — any screen can
+mirror any other (cycle/self detection at activation). Bridge
+enforces the invariant via `_block_if_mirror` on every per-screen
+mutation path (`setting-update`, widgets, presets, background) and
+`_replicate_to_mirrors` fans changes out from source to mirrors.
 
 ### ✅ Configurator: "Apply to all screens" button per section — shipped v0.8.7-beta
 

@@ -38,7 +38,7 @@
 
   main {
     display: grid;
-    grid-template-columns: 54px 232px 1fr 260px;
+    grid-template-columns: 54px 260px 1fr 260px;
     height: calc(100vh - 50px);
   }
 
@@ -736,8 +736,15 @@
     </section>
 
     <section>
-      <h2 data-i18n="section.merge">Merge two images</h2>
-      <div class="hint" style="margin-bottom: 8px;" data-i18n="merge.hint">
+      <h2 data-i18n="section.merge">Merge images</h2>
+      <div class="row" style="margin-bottom: 8px;">
+        <label for="merge-mode" data-i18n="merge.mode">Mode</label>
+        <select id="merge-mode">
+          <option value="2"   data-i18n="merge.mode.2">2 images side-by-side</option>
+          <option value="2x2" data-i18n="merge.mode.2x2">2×2 grid (4 images)</option>
+        </select>
+      </div>
+      <div class="hint" style="margin-bottom: 8px;" id="merge-hint" data-i18n="merge.hint">
         Drop or pick two images, side-by-side into one canvas:
       </div>
       <div class="merge-slot" id="merge-slot-a">
@@ -758,7 +765,25 @@
         </div>
         <div class="stat" id="merge-b-stat" data-i18n="merge.drop_here">— or drop a file here</div>
       </div>
-      <div class="check-row" style="margin-top: 8px;">
+      <div class="merge-slot grid-only" id="merge-slot-c" style="margin-top: 4px; display: none;">
+        <div class="btn-row">
+          <label class="btn" for="merge-input-c" data-i18n="merge.pick_c">Pick C…</label>
+          <input id="merge-input-c" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+          <button class="btn" id="merge-lib-c" type="button"
+                  data-i18n="merge.from_library">From library…</button>
+        </div>
+        <div class="stat" id="merge-c-stat" data-i18n="merge.drop_here">— or drop a file here</div>
+      </div>
+      <div class="merge-slot grid-only" id="merge-slot-d" style="margin-top: 4px; display: none;">
+        <div class="btn-row">
+          <label class="btn" for="merge-input-d" data-i18n="merge.pick_d">Pick D…</label>
+          <input id="merge-input-d" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif">
+          <button class="btn" id="merge-lib-d" type="button"
+                  data-i18n="merge.from_library">From library…</button>
+        </div>
+        <div class="stat" id="merge-d-stat" data-i18n="merge.drop_here">— or drop a file here</div>
+      </div>
+      <div class="check-row pair-only" id="merge-5050-row" style="margin-top: 8px;">
         <input type="checkbox" id="merge-5050">
         <label for="merge-5050" data-i18n="merge.force_5050">Force 50/50</label>
       </div>
@@ -841,14 +866,25 @@ const els = {
   imgStat:      $("img-stat"),
   rotateBtn:    $("rotate-btn"),
 
+  mergeMode:    $("merge-mode"),
+  mergeHint:    $("merge-hint"),
+  merge5050Row: $("merge-5050-row"),
   mergeSlotA:   $("merge-slot-a"),
   mergeSlotB:   $("merge-slot-b"),
+  mergeSlotC:   $("merge-slot-c"),
+  mergeSlotD:   $("merge-slot-d"),
   mergeInputA:  $("merge-input-a"),
   mergeInputB:  $("merge-input-b"),
+  mergeInputC:  $("merge-input-c"),
+  mergeInputD:  $("merge-input-d"),
   mergeLibA:    $("merge-lib-a"),
   mergeLibB:    $("merge-lib-b"),
+  mergeLibC:    $("merge-lib-c"),
+  mergeLibD:    $("merge-lib-d"),
   mergeAStat:   $("merge-a-stat"),
   mergeBStat:   $("merge-b-stat"),
+  mergeCStat:   $("merge-c-stat"),
+  mergeDStat:   $("merge-d-stat"),
   merge5050:    $("merge-5050"),
   mergeGo:      $("merge-go"),
 
@@ -1085,6 +1121,13 @@ const TRANSLATIONS = {
   "btn.open_library": { en: "Open from library…", de: "Aus Bibliothek öffnen…" },
   "btn.save_library": { en: "Save to library",    de: "In Bibliothek speichern" },
   "merge.from_library": { en: "From library…",     de: "Aus Bibliothek…" },
+  "merge.mode":         { en: "Mode",               de: "Modus" },
+  "merge.mode.2":       { en: "2 images side-by-side", de: "2 Bilder nebeneinander" },
+  "merge.mode.2x2":     { en: "2×2 grid (4 images)",   de: "2×2-Raster (4 Bilder)" },
+  "merge.pick_c":       { en: "Pick C…",            de: "C wählen…" },
+  "merge.pick_d":       { en: "Pick D…",            de: "D wählen…" },
+  "merge.hint.2x2":     { en: "Drop or pick four images — top-left, top-right, bottom-left, bottom-right of a 2×2 grid:",
+                          de: "Vier Bilder ablegen oder auswählen — oben links, oben rechts, unten links, unten rechts im 2×2-Raster:" },
   "glow.preview_label": { en: "Show glow preview",
                           de: "Glow-Vorschau anzeigen" },
   "lib.dialog.title": { en: "Library",             de: "Bibliothek" },
@@ -1300,17 +1343,51 @@ function fileToImage(file) {
 
 let mergeSlotA = null;  // { img, name }
 let mergeSlotB = null;
+let mergeSlotC = null;
+let mergeSlotD = null;
 
 function updateMergeStat(slotEl, slot) {
   if (!slot) { slotEl.textContent = "— or drop a file here"; return; }
   slotEl.textContent = `${slot.name} — ${slot.img.naturalWidth}×${slot.img.naturalHeight}`;
 }
 
+function mergeMode() {
+  return (els.mergeMode && els.mergeMode.value) || "2";
+}
+
 function updateMergeUI() {
   updateMergeStat(els.mergeAStat, mergeSlotA);
   updateMergeStat(els.mergeBStat, mergeSlotB);
-  els.mergeGo.disabled = !(mergeSlotA && mergeSlotB);
+  updateMergeStat(els.mergeCStat, mergeSlotC);
+  updateMergeStat(els.mergeDStat, mergeSlotD);
+  if (mergeMode() === "2x2") {
+    els.mergeGo.disabled = !(mergeSlotA && mergeSlotB && mergeSlotC && mergeSlotD);
+  } else {
+    els.mergeGo.disabled = !(mergeSlotA && mergeSlotB);
+  }
 }
+
+// Show/hide slots C+D and the 50/50 row based on the current mode. Hint
+// text swaps between the 2-image / 2×2 versions. Slot state isn't
+// cleared on switch — a user toggling between modes mid-setup keeps
+// whatever they already picked.
+function applyMergeMode() {
+  const m = mergeMode();
+  const gridOnly = m === "2x2";
+  document.querySelectorAll(".merge-slot.grid-only").forEach((el) => {
+    el.style.display = gridOnly ? "" : "none";
+  });
+  document.querySelectorAll(".pair-only").forEach((el) => {
+    el.style.display = gridOnly ? "none" : "";
+  });
+  if (els.mergeHint) {
+    els.mergeHint.dataset.i18n = gridOnly ? "merge.hint.2x2" : "merge.hint";
+    els.mergeHint.textContent = t(els.mergeHint.dataset.i18n);
+  }
+  updateMergeUI();
+}
+if (els.mergeMode) els.mergeMode.addEventListener("change", applyMergeMode);
+applyMergeMode();
 
 function loadSlotFromFile(file, setSlot) {
   if (!file) return;
@@ -1346,6 +1423,8 @@ function bindMergeSlot(slotEl, inputEl, setSlot) {
 }
 bindMergeSlot(els.mergeSlotA, els.mergeInputA, (s) => { mergeSlotA = s; });
 bindMergeSlot(els.mergeSlotB, els.mergeInputB, (s) => { mergeSlotB = s; });
+bindMergeSlot(els.mergeSlotC, els.mergeInputC, (s) => { mergeSlotC = s; });
+bindMergeSlot(els.mergeSlotD, els.mergeInputD, (s) => { mergeSlotD = s; });
 
 function mergeSideBySide(imgA, imgB, force5050) {
   const H = Math.max(imgA.naturalHeight, imgB.naturalHeight);
@@ -1370,10 +1449,43 @@ function mergeSideBySide(imgA, imgB, force5050) {
   return off;
 }
 
+// Compose four images into a 2×2 grid (TL = A, TR = B, BL = C, BR = D).
+// Each cell is forced to (cellW × cellH); aspect ratios that don't match
+// get stretched to fill the quadrant. Symmetric layout matches the
+// 2×2-monitor wall use case the request was about.
+function merge2x2(imgA, imgB, imgC, imgD) {
+  const cellW = Math.max(
+    imgA.naturalWidth, imgB.naturalWidth,
+    imgC.naturalWidth, imgD.naturalWidth);
+  const cellH = Math.max(
+    imgA.naturalHeight, imgB.naturalHeight,
+    imgC.naturalHeight, imgD.naturalHeight);
+  const off = document.createElement("canvas");
+  off.width  = cellW * 2;
+  off.height = cellH * 2;
+  const octx = off.getContext("2d");
+  octx.imageSmoothingQuality = "high";
+  octx.drawImage(imgA, 0,     0,     cellW, cellH); // top-left
+  octx.drawImage(imgB, cellW, 0,     cellW, cellH); // top-right
+  octx.drawImage(imgC, 0,     cellH, cellW, cellH); // bottom-left
+  octx.drawImage(imgD, cellW, cellH, cellW, cellH); // bottom-right
+  return off;
+}
+
 els.mergeGo.addEventListener("click", () => {
+  const stripExt = (n) => n.replace(/\.[^.]+$/, "");
+  if (mergeMode() === "2x2") {
+    if (!(mergeSlotA && mergeSlotB && mergeSlotC && mergeSlotD)) return;
+    const merged = merge2x2(mergeSlotA.img, mergeSlotB.img,
+                            mergeSlotC.img, mergeSlotD.img);
+    const name = `${stripExt(mergeSlotA.name)}+${stripExt(mergeSlotB.name)}` +
+                 `+${stripExt(mergeSlotC.name)}+${stripExt(mergeSlotD.name)}.png`;
+    applySourceImage(name, merged);
+    toast(t("toast.merged", { w: merged.width, h: merged.height }), "good");
+    return;
+  }
   if (!mergeSlotA || !mergeSlotB) return;
   const merged = mergeSideBySide(mergeSlotA.img, mergeSlotB.img, els.merge5050.checked);
-  const stripExt = (n) => n.replace(/\.[^.]+$/, "");
   const name = `${stripExt(mergeSlotA.name)}+${stripExt(mergeSlotB.name)}.png`;
   applySourceImage(name, merged);
   toast(t("toast.merged", { w: merged.width, h: merged.height }), "good");
@@ -2852,6 +2964,12 @@ els.mergeLibA.addEventListener("click", () =>
 els.mergeLibB.addEventListener("click", () =>
   openLibraryDialog((item) =>
     loadLibraryItemIntoMergeSlot(item.file, (s) => { mergeSlotB = s; })));
+els.mergeLibC.addEventListener("click", () =>
+  openLibraryDialog((item) =>
+    loadLibraryItemIntoMergeSlot(item.file, (s) => { mergeSlotC = s; })));
+els.mergeLibD.addEventListener("click", () =>
+  openLibraryDialog((item) =>
+    loadLibraryItemIntoMergeSlot(item.file, (s) => { mergeSlotD = s; })));
 els.libDialogClose.addEventListener("click", closeLibraryDialog);
 els.libDialog.addEventListener("click", (e) => {
   if (e.target === els.libDialog) closeLibraryDialog();

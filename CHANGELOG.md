@@ -4,6 +4,47 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8-beta] - 2026-05-22
+
+> Closes the Workflow-polish slice with Mirror mode, plus a Builder
+> 2×2-grid merge and a tooling fix from beta feedback.
+
+### Added — Configurator
+
+- **Mirror mode** per screen. A new bar above the section cards
+  carries a *Mirror:* dropdown — pick *Independent* (the default) or
+  *Mirror Screen N* to lock this screen's settings in lockstep with
+  another screen's. On activation the bridge copies every mirrorable
+  key from the source onto self; thereafter every mutation of the
+  source replicates to the mirror via `_replicate_to_mirrors`. The
+  mirror's section cards visibly disable (`.cards-disabled`) and
+  reject edits at the bridge level too — a stale tab or future REST
+  client can't drift a mirror away from its source. The overview
+  card marks mirroring tiles with a small chevron badge.
+- **Mirror invariant enforced server-side.** Per-screen mutations
+  (`setting-update`, widget add/remove/update, widget lock,
+  preset-apply, background upload) all run through `_block_if_mirror`
+  before touching state. Chained mirrors (A → B → A, or A → B → C)
+  are rejected at activation time so the propagation graph stays a
+  flat star.
+
+### Added — Builder
+
+- **2×2 grid merge.** *Merge images* section gains a mode dropdown:
+  *2 images side-by-side* (the original) or *2×2 grid (4 images)*.
+  In grid mode four slots (TL / TR / BL / BR) become available, each
+  with the same file picker / drag-drop / *From library…* button as
+  the existing pair. Output forces equal-size quadrants; the cell
+  dimensions match the largest input on each axis so neither half
+  loses resolution.
+
+### Fixed
+
+- **Tool-options column too narrow** for long localised button
+  labels. Widened from 232 px → 260 px so *"Alle Änderungen
+  zurücksetzen"* and friends fit cleanly without bumping into the
+  canvas border.
+
 ## [0.8.7-beta] - 2026-05-22
 
 > Two of the three remaining Multi-monitor-convenience items from the

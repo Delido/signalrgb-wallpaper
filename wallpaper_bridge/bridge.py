@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.7-beta"
+APP_VERSION = "0.8.8-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -399,7 +399,23 @@ DEFAULT_SCREEN_SETTINGS = {
     # current state, Apply writes the snapshot back into the screen's
     # settings, Clear sets the slot to None.
     "presets":         [None, None, None, None],
+    # Mirror mode: when set to another screen index, this screen's settings
+    # are kept in lockstep with that screen's. The bridge:
+    #   - copies all mirrorable keys from the source on activation
+    #   - replicates every per-screen mutation of the source to the mirror
+    #   - rejects direct mutations of the mirror (read-only)
+    # `None` means "not mirroring". Self-mirror and chains (A→B→C) are
+    # rejected at the WS / HTTP entry point.
+    "mirrorOf":        None,
 }
+
+# Keys that get replicated to mirror screens. Per-screen physical
+# attributes (viewport, mirrorOf itself) stay independent, otherwise
+# the mirror would lose its identity. Presets aren't mirrored because
+# they're user-curated per-screen scratch space.
+_NON_MIRRORED_KEYS = frozenset({
+    "viewportW", "viewportH", "mirrorOf", "presets",
+})
 
 # Keys that get rolled up into a preset snapshot. Excludes anything the
 # wallpaper page reports back (viewports), anything transient (locks), and
@@ -1260,6 +1276,7 @@ class Broadcaster:
                 for i in range(count):
                     try:
                         s = self.get_settings(i)
+                        m = s.get("mirrorOf")
                         screens.append({
                             "viewportW": int(s.get("viewportW") or 0),
                             "viewportH": int(s.get("viewportH") or 0),
@@ -1267,9 +1284,13 @@ class Broadcaster:
                             # Overview card can paint mini-thumbnails for
                             # every screen without opening a WS per tab.
                             "bgImage":   str(s.get("bgImage") or ""),
+                            # mirrorOf surfaces in the overview as a small
+                            # indicator on mirroring tiles.
+                            "mirrorOf":  (int(m) if isinstance(m, int) else None),
                         })
                     except Exception:
-                        screens.append({"viewportW": 0, "viewportH": 0, "bgImage": ""})
+                        screens.append({"viewportW": 0, "viewportH": 0,
+                                        "bgImage": "", "mirrorOf": None})
                 payload = json.dumps({
                     "screenCount": count,
                     "screens": screens,
@@ -2293,6 +2314,8 @@ class BridgeRuntime:
         sees a new URL and refetches (avoids stale-cache hits). Old
         screen-N-*.png files are deleted so the screens/ folder doesn't
         bloat over many edits."""
+        if self._block_if_mirror(screen, "background-upload"):
+            return False
         try:
             millis = int(time.time() * 1000)
             target = screens_dir() / f"screen-{screen}-{millis}.png"
@@ -2309,6 +2332,10 @@ class BridgeRuntime:
             except Exception as e:
                 print(f"[bg] save_config failed: {e}")
             print(f"[bg] screen={screen} saved {target.name} ({len(png_bytes)} bytes)")
+            # Replicate the new bgImage path to every mirroring screen.
+            # The PNG file itself is shared (mirrors point at the same
+            # screen-N-*.png), so no per-mirror copy is needed.
+            self._replicate_to_mirrors(screen)
             return True
         except Exception as e:
             print(f"[bg] update failed: {e}")
@@ -2317,6 +2344,43 @@ class BridgeRuntime:
     def push_settings(self, screen: int, settings: dict):
         if self.broadcaster:
             self.broadcaster.push_settings_threadsafe(screen, settings)
+
+    # ── Mirror replication helpers ───────────────────────────────────────
+    # Any time a per-screen mutation runs against a screen that has
+    # mirrors, the same change has to land on each mirror so the
+    # invariant "mirror == source" holds. Single-key changes use the
+    # cheaper key path; widget-array / preset / background changes use
+    # the full snapshot path because the mutation isn't a single
+    # key-value pair.
+
+    def _block_if_mirror(self, screen: int, what: str) -> bool:
+        if self._is_mirror(screen):
+            print(f"[mirror] screen {screen} is a mirror; ignoring {what}")
+            return True
+        return False
+
+    def _replicate_to_mirrors(self, source: int) -> None:
+        """Copy every mirrorable key from `source` into each screen
+        mirroring it, then push the new settings to those mirrors' WS
+        clients. Used after widget-array mutations and background
+        uploads where a single-key replicate isn't enough."""
+        mirrors = self._get_mirrors_of(source)
+        if not mirrors:
+            return
+        with self.config_lock:
+            src = self.config.get("screens", {}).get(str(source))
+            if not isinstance(src, dict):
+                return
+            src_copy = json.loads(json.dumps(src))
+        for m in mirrors:
+            def mutate(s, sc=src_copy):
+                for k, v in sc.items():
+                    if k in _NON_MIRRORED_KEYS:
+                        continue
+                    s[k] = v
+            snap = self._mutate_screen(m, mutate)
+            if snap is not None:
+                self.push_settings(m, snap)
 
     # ── Widget CRUD ──────────────────────────────────────────────────────
     # All four entry points share the same shape: mutate the in-memory
@@ -2346,6 +2410,7 @@ class BridgeRuntime:
         if widget_type not in WIDGET_DEFAULTS:
             print(f"[widgets] unknown type: {widget_type!r}")
             return None
+        if self._block_if_mirror(screen, "widget-add"): return None
         defaults = WIDGET_DEFAULTS[widget_type]
 
         def mutate(s):
@@ -2370,17 +2435,21 @@ class BridgeRuntime:
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
         return snap
 
     def remove_widget(self, screen: int, widget_id: str) -> dict | None:
+        if self._block_if_mirror(screen, "widget-remove"): return None
         def mutate(s):
             s["widgets"] = [w for w in s.get("widgets", []) if w.get("id") != widget_id]
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
         return snap
 
     def update_widget(self, screen: int, widget_id: str, fields: dict) -> dict | None:
+        if self._block_if_mirror(screen, "widget-update"): return None
         # Whitelist mutable fields — never let a wallpaper-page bug bleed
         # arbitrary keys into our config file.
         allowed = {"x", "y", "w", "h", "options"}
@@ -2399,6 +2468,7 @@ class BridgeRuntime:
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
         return snap
 
     # ----- Preset slots -----
@@ -2432,6 +2502,7 @@ class BridgeRuntime:
         if not (0 <= slot < PRESET_SLOTS):
             print(f"[preset] bad slot: {slot}")
             return None
+        if self._block_if_mirror(screen, "preset-apply"): return None
         with self.config_lock:
             screen_cfg = self.config.get("screens", {}).get(str(screen))
             if not screen_cfg:
@@ -2448,6 +2519,7 @@ class BridgeRuntime:
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
             print(f"[preset] applied screen={screen} slot={slot}")
         return snap
 
@@ -2467,11 +2539,13 @@ class BridgeRuntime:
         return snap
 
     def set_widgets_locked(self, screen: int, locked: bool) -> dict | None:
+        if self._block_if_mirror(screen, "widgets-lock"): return None
         def mutate(s):
             s["widgetsLocked"] = bool(locked)
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
         return snap
 
     # Keys the wallpaper page / configurator are allowed to set via the
@@ -2487,15 +2561,106 @@ class BridgeRuntime:
         "pixelfx", "parallax3d",
         "audioGlow", "audioGlowIntensity", "audioGlowTint",
         "widgetsLocked",
+        # Mirror toggle — special-cased in update_screen_setting below
+        # because activation copies the source's state onto self.
+        "mirrorOf",
     }
+
+    def _get_mirrors_of(self, source: int) -> list[int]:
+        """Return every screen index whose `mirrorOf` currently points
+        at `source`. Read-only — used by the propagation paths to know
+        where to fan a settings change out to."""
+        out = []
+        with self.config_lock:
+            screens = self.config.get("screens", {})
+            for k, s in screens.items():
+                try:
+                    idx = int(k)
+                except ValueError:
+                    continue
+                if idx == source:
+                    continue
+                if isinstance(s, dict) and s.get("mirrorOf") == source:
+                    out.append(idx)
+        return out
+
+    def _is_mirror(self, screen: int) -> bool:
+        with self.config_lock:
+            s = self.config.get("screens", {}).get(str(screen))
+            return bool(isinstance(s, dict) and s.get("mirrorOf") is not None)
 
     def update_screen_setting(self, screen: int, key: str, value) -> dict | None:
         if key not in self._SETTABLE_SCREEN_KEYS:
             print(f"[settings] ignoring non-whitelisted key: {key!r}")
             return None
+        # Mirror toggle has its own path: validate target, copy snapshot,
+        # and don't replicate the toggle itself to other screens.
+        if key == "mirrorOf":
+            return self._set_mirror_of(screen, value)
+        # Mutations on a mirror are rejected at the bridge as a safety net
+        # — the Configurator already disables UI controls, but a stale
+        # tab or a future REST client mustn't be able to drift a mirror
+        # away from its source.
+        if self._is_mirror(screen):
+            print(f"[settings] screen {screen} is a mirror; ignoring {key!r}")
+            return None
         def mutate(s):
             s[key] = value
         snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            if key not in _NON_MIRRORED_KEYS:
+                for m in self._get_mirrors_of(screen):
+                    msnap = self._mutate_screen(m, lambda s, k=key, v=value: s.__setitem__(k, v))
+                    if msnap is not None:
+                        self.push_settings(m, msnap)
+        return snap
+
+    def _set_mirror_of(self, screen: int, value) -> dict | None:
+        """Activate / deactivate Mirror mode on `screen`. Validates the
+        target index (no self-mirror, no mirroring an existing mirror),
+        then on activation copies every mirrorable key from the source
+        into self before flipping the flag."""
+        # null / None → deactivate. Just clear the flag; leave the
+        # current snapshot in place so the user can resume editing
+        # whatever the mirror left behind.
+        if value is None or value == "" or value is False:
+            def deactivate(s):
+                s["mirrorOf"] = None
+            snap = self._mutate_screen(screen, deactivate)
+            if snap is not None:
+                self.push_settings(screen, snap)
+            return snap
+        try:
+            tgt = int(value)
+        except (TypeError, ValueError):
+            print(f"[mirror] bad target: {value!r}")
+            return None
+        if not (0 <= tgt < N_SCREENS):
+            print(f"[mirror] target {tgt} out of range")
+            return None
+        if tgt == screen:
+            print(f"[mirror] refusing self-mirror on screen {screen}")
+            return None
+        # Chained mirrors get messy fast (A mirrors B which mirrors C).
+        # Reject the inner step so the user has to break the chain first.
+        if self._is_mirror(tgt):
+            print(f"[mirror] refusing to mirror screen {tgt} (already a mirror)")
+            return None
+        # Snapshot the source's settable state, then overwrite self with
+        # it (minus the per-screen-private keys) and flip the flag.
+        with self.config_lock:
+            src = self.config.get("screens", {}).get(str(tgt))
+            if not isinstance(src, dict):
+                return None
+            src_copy = json.loads(json.dumps(src))
+        def activate(s):
+            for k, v in src_copy.items():
+                if k in _NON_MIRRORED_KEYS:
+                    continue
+                s[k] = v
+            s["mirrorOf"] = tgt
+        snap = self._mutate_screen(screen, activate)
         if snap is not None:
             self.push_settings(screen, snap)
         return snap
