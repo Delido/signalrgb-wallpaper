@@ -584,6 +584,54 @@
   .wall-section { margin-bottom: 16px; }
   .wall-section > h2 { color: #d8e6fc; }
 
+  /* Apply Wall is the climax of the Builder workflow — make it visibly
+     the primary action. Sized 1.1× normal buttons, full width, the
+     secondary row (Span / Clear) sits underneath at default height. */
+  .wall-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .wall-apply-btn { width: 100%; padding: 10px 12px; font-size: 13.5px; font-weight: 500; }
+  .wall-secondary-row { gap: 6px; }
+  .wall-status:empty { display: none; }
+  /* Staged-hint takes priority over the span suggestion — both share
+     the .hint base style, just different copy + tint. */
+  .wall-staged-hint {
+    background: #1a2a1f;
+    border-color: #2a523a;
+    color: #c8e6d3;
+  }
+
+  /* Merge subsection collapses to a single summary line by default so
+     the primary Source → Wall → Output flow isn't crowded by the
+     advanced 2-image / 2×2 grid workflow. */
+  details.merge-details {
+    margin: 14px 0;
+    padding: 0;
+    border-top: 1px dashed var(--border);
+    border-bottom: 1px dashed var(--border);
+  }
+  details.merge-details > summary {
+    cursor: pointer;
+    padding: 9px 2px;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  details.merge-details > summary::-webkit-details-marker { display: none; }
+  details.merge-details > summary::before {
+    content: "▸";
+    display: inline-block;
+    width: 12px;
+    transition: transform 0.15s;
+    color: var(--text-dim);
+  }
+  details.merge-details[open] > summary::before { transform: rotate(90deg); }
+  details.merge-details > summary:hover { color: var(--text); }
+  details.merge-details[open] > summary { color: #d8e6fc; }
+
   /* Per-frame action popup menu — File / Library / Canvas / Clear. */
   .wall-frame-menu {
     position: fixed;
@@ -847,44 +895,7 @@
 
   <!-- ── Files / Output / Apply (right) ─────────────────────────────────── -->
   <div class="panel right padded" id="files-panel">
-    <!-- ── Monitor Wall (primary nav) ─────────────────────────────────── -->
-    <section class="wall-section">
-      <h2 data-i18n="section.wall">Monitor Wall</h2>
-      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint2">
-        One tile per monitor. Click a tile to drop in an image (file /
-        library / current canvas). Hit Apply Wall when ready.
-      </div>
-      <div class="row">
-        <label for="wall-layout" data-i18n="wall.layout">Layout</label>
-        <select id="wall-layout">
-          <option value="horizontal" data-i18n="wall.layout.horizontal">Horizontal row (1×N)</option>
-          <option value="2x2"        data-i18n="wall.layout.2x2">2×2 grid</option>
-          <option value="vertical"   data-i18n="wall.layout.vertical">Vertical column (N×1)</option>
-          <option value="free"       data-i18n="wall.layout.free">Free-form (drag to arrange)</option>
-        </select>
-      </div>
-      <div class="wall-canvas" id="wall-canvas"></div>
-      <div class="hint wall-span-hint" id="wall-span-hint"
-           style="margin-top: 8px; display: none;"
-           data-i18n="wall.span_suggestion">
-        Canvas aspect matches the wall — try Span across monitors.
-      </div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn primary" id="wall-apply" type="button" disabled
-                data-i18n="wall.apply">Apply Wall to screens</button>
-        <button class="btn" id="wall-span" type="button" disabled
-                data-i18n="wall.span_btn"
-                title="Slice the current canvas into one chunk per monitor and stage every frame at once.">
-          ⇔ Span canvas
-        </button>
-        <button class="btn" id="wall-clear" type="button"
-                data-i18n="wall.clear">Clear</button>
-        <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
-                data-i18n="wall.reset_positions">Reset positions</button>
-      </div>
-      <div class="stat" id="wall-stat" style="margin-top: 6px;"></div>
-    </section>
-
+    <!-- ── 1. Source ───────────────────────────────────────────────────── -->
     <section>
       <h2 data-i18n="section.load">Load</h2>
       <div class="btn-row">
@@ -899,9 +910,9 @@
       </div>
     </section>
 
-    <section>
-      <h2 data-i18n="section.merge">Merge images</h2>
-      <div class="row" style="margin-bottom: 8px;">
+    <details class="merge-details">
+      <summary data-i18n="section.merge">Merge images</summary>
+      <div class="row" style="margin-bottom: 8px; margin-top: 8px;">
         <label for="merge-mode" data-i18n="merge.mode">Mode</label>
         <select id="merge-mode">
           <option value="2"   data-i18n="merge.mode.2">2 images side-by-side</option>
@@ -954,8 +965,53 @@
       <div class="btn-row" style="margin-top: 8px;">
         <button class="btn primary" id="merge-go" disabled data-i18n="merge.go">Merge &amp; load →</button>
       </div>
+    </details>
+
+    <!-- ── 2. Monitor Wall ─────────────────────────────────────────────── -->
+    <section class="wall-section">
+      <h2 data-i18n="section.wall">Monitor Wall</h2>
+      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint2">
+        One tile per monitor. Click a tile to drop in an image (file /
+        library / current canvas). Hit Apply Wall when ready.
+      </div>
+      <div class="row">
+        <label for="wall-layout" data-i18n="wall.layout">Layout</label>
+        <select id="wall-layout">
+          <option value="horizontal" data-i18n="wall.layout.horizontal">Horizontal row (1×N)</option>
+          <option value="2x2"        data-i18n="wall.layout.2x2">2×2 grid</option>
+          <option value="vertical"   data-i18n="wall.layout.vertical">Vertical column (N×1)</option>
+          <option value="free"       data-i18n="wall.layout.free">Free-form (drag to arrange)</option>
+        </select>
+      </div>
+      <div class="wall-canvas" id="wall-canvas"></div>
+      <div class="wall-status" id="wall-status">
+        <div class="hint wall-span-hint" id="wall-span-hint"
+             style="display: none;"
+             data-i18n="wall.span_suggestion">
+          Canvas aspect matches the wall — try Span across monitors.
+        </div>
+        <div class="hint wall-staged-hint" id="wall-staged-hint"
+             style="display: none;"></div>
+      </div>
+      <div class="wall-actions">
+        <button class="btn primary wall-apply-btn" id="wall-apply" type="button" disabled
+                data-i18n="wall.apply">Apply Wall to screens</button>
+        <div class="btn-row wall-secondary-row">
+          <button class="btn" id="wall-span" type="button" disabled
+                  data-i18n="wall.span_btn"
+                  title="Slice the current canvas into one chunk per monitor and stage every frame at once.">
+            ⇔ Span canvas
+          </button>
+          <button class="btn" id="wall-clear" type="button" disabled
+                  data-i18n="wall.clear">Clear</button>
+          <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
+                  data-i18n="wall.reset_positions">Reset positions</button>
+        </div>
+      </div>
+      <div class="stat" id="wall-stat" style="margin-top: 6px;"></div>
     </section>
 
+    <!-- ── 3. Output ───────────────────────────────────────────────────── -->
     <section>
       <h2 data-i18n="section.output">Output</h2>
       <div class="row">
@@ -1068,6 +1124,7 @@ const els = {
   wallApply:    $("wall-apply"),
   wallSpan:     $("wall-span"),
   wallSpanHint: $("wall-span-hint"),
+  wallStagedHint: $("wall-staged-hint"),
   wallClear:    $("wall-clear"),
   wallResetPos: $("wall-reset-pos"),
   wallStat:     $("wall-stat"),
@@ -1298,6 +1355,8 @@ const TRANSLATIONS = {
                                de: "„Spannen“ braucht mindestens 2 Bildschirme." },
   "wall.span_done":     { en: "Canvas split across {n} screens — review and Apply Wall.",
                           de: "Canvas auf {n} Bildschirme aufgeteilt — prüfen und „Wand anwenden“." },
+  "wall.staged_ready":  { en: "{n}/{total} screens ready — hit Apply Wall to push.",
+                          de: "{n}/{total} Bildschirme bereit — „Wand anwenden“ überträgt." },
   "wall.applied":       { en: "Applied {ok}/{total} screen(s)", de: "Auf {ok}/{total} Bildschirm(e) angewendet" },
   "wall.failed":        { en: "Apply Wall failed: {msg}", de: "Wand-Übernahme fehlgeschlagen: {msg}" },
   "wall.lib":           { en: "Library", de: "Bibliothek" },
@@ -3669,6 +3728,16 @@ function blobToDataUrl(blob) {
 function updateWallApplyState() {
   const any = wallSlots.some((s) => s);
   if (els.wallApply) els.wallApply.disabled = !any;
+  if (els.wallClear) els.wallClear.disabled = !any;
+  if (els.wallStagedHint) {
+    if (any) {
+      const n = wallSlots.filter((s) => s).length;
+      els.wallStagedHint.textContent = t("wall.staged_ready", { n, total: wallScreenCount });
+      els.wallStagedHint.style.display = "";
+    } else {
+      els.wallStagedHint.style.display = "none";
+    }
+  }
   if (typeof updateWallSpanState === "function") updateWallSpanState();
 }
 
@@ -3748,7 +3817,10 @@ function updateWallSpanState() {
   const multi = wallScreenCount >= 2;
   els.wallSpan.disabled = !(hasCanvas && multi);
   if (!els.wallSpanHint) return;
-  if (!hasCanvas || !multi) {
+  // The "try Span" suggestion is redundant once any slot is staged —
+  // the staged-ready hint takes priority then.
+  const anyStaged = wallSlots.some((s) => s);
+  if (!hasCanvas || !multi || anyStaged) {
     els.wallSpanHint.style.display = "none";
     return;
   }

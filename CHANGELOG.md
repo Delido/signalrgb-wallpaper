@@ -4,6 +4,34 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.14-beta] - 2026-05-23
+
+> Builder right-panel rework — fixes the workflow-order + visual-feedback
+> issues that surfaced once Span Canvas landed in v0.9.13. Source comes
+> first, Wall sits second as the climax of the flow, Output is last; the
+> Merge subsection collapses out of the way until it's actually needed.
+
+### Changed — Builder right panel
+
+- **Reordered**: Source (Load) → Monitor Wall → Output. Earlier
+  layout had Wall on top but the user always has to load / merge
+  *first*, so the eye was jumping bottom-to-top.
+- **Merge subsection is collapsed by default.** Two-image and 2×2
+  merge controls now live behind a `<details><summary>` so the
+  single-image happy path doesn't have to scroll past four file-pick
+  slots. The summary line tells you the section exists; clicking
+  expands it inline.
+- **Wall action hierarchy**: "Wand anwenden" is now a full-width,
+  taller primary button. Span Canvas + Clear sit in a secondary row
+  underneath so the climax of the flow is unambiguous.
+- **Clear button now disables itself** when there's nothing staged
+  (prevents the dead-click that previously left `wall-stat` empty).
+- **Staged-ready hint** ("2/2 Bildschirme bereit — „Wand anwenden"
+  überträgt.") replaces the Span-suggestion banner the moment any
+  slot is filled. Earlier UI kept showing "versuche Canvas spannen"
+  even after the user had just clicked it, which contradicted the
+  apply-success status one line below.
+
 ## [0.9.13-beta] - 2026-05-22
 
 > Closes the Builder merge ↔ Monitor Wall workflow gap (one-click
