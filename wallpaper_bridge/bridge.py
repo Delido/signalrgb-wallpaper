@@ -314,7 +314,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "0.8.5-beta"
+APP_VERSION = "0.8.6-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -3510,6 +3510,19 @@ def main():
     config = load_config()
     init_language(config)
     config_lock = threading.Lock()
+
+    # Rebuild the library catalogue from the directory contents on every
+    # startup. The installer copies its bundled `library.json` over the
+    # user's, which lists only the starter wallpapers — without this
+    # step, user-uploaded PNGs (still on disk) wouldn't appear in the
+    # Configurator strip until the next upload/delete forces a rebuild.
+    # `_library_rebuild_catalogue` preserves pin/order/addedAt for any
+    # entries that survived the overwrite, so this is safe to run
+    # unconditionally.
+    try:
+        _library_rebuild_catalogue(library_dir())
+    except Exception as e:
+        print(f"[library] startup rebuild failed: {e}")
 
     bridge = BridgeRuntime(config, config_lock)
     bridge.start()

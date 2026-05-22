@@ -169,9 +169,21 @@ Source: "install_lively.ps1"; Flags: dontcopy
 ; them via /library/list + /library/<file>. Users can add their own PNGs to
 ; this folder by hand; we don't overwrite anything except our generated set
 ; on upgrade.
-Source: "..\wallpaper_bridge\library\*"; \
+;
+; Split into two entries on purpose:
+;   • PNGs: always copy on install/upgrade (matches the old behaviour and
+;     restores starter wallpapers if the user accidentally deleted them).
+;   • library.json: only on first install (`onlyifdoesntexist`). The bridge
+;     regenerates this file from the directory contents on every startup
+;     and on every upload/delete, so overwriting it loses per-entry
+;     pinned/order state and hides user-uploaded PNGs until the next
+;     upload triggers a rebuild.
+Source: "..\wallpaper_bridge\library\*.png"; \
   DestDir: "{localappdata}\SignalRGBWallpaper\library"; \
   Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\wallpaper_bridge\library\library.json"; \
+  DestDir: "{localappdata}\SignalRGBWallpaper\library"; \
+  Flags: onlyifdoesntexist
 
 [InstallDelete]
 ; Upgrade cleanup: builds before v0.7.2-beta shipped four per-screen WE

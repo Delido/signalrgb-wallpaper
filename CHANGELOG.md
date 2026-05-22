@@ -4,6 +4,34 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6-beta] - 2026-05-22
+
+> Hotfix: installer was overwriting the user's `library.json`, which
+> hid uploaded wallpapers from the Configurator until the user
+> uploaded *another* image (forcing the bridge to rebuild the
+> catalogue from disk).
+
+### Fixed
+
+- **Library tiles missing after an installer-driven upgrade.** The
+  installer's `[Files]` section shipped a bundled `library.json`
+  listing only the four starter wallpapers and overwrote the user's
+  own catalogue on every install. The PNGs were still on disk, but
+  the bridge's `/library/list` endpoint just returned whatever
+  `library.json` said — so user uploads vanished from the strip
+  (re-appearing on the next upload because that path regenerates
+  `library.json` from the directory contents).
+  - **Bridge**: rebuild the library catalogue once at startup. This
+    repairs any state where `library.json` is out of sync with the
+    actual files (installer overwrite, manual file copy, sync
+    conflicts). `_library_rebuild_catalogue` already preserves
+    pinned/order/addedAt for entries that survived.
+  - **Installer**: split the library `[Files]` entry into two —
+    PNGs always copy (so users who deleted a starter get it back),
+    but `library.json` now uses `onlyifdoesntexist` so it's
+    installed on first install only and never overwritten on
+    upgrade.
+
 ## [0.8.5-beta] - 2026-05-22
 
 > Bug-fix-and-polish pass over v0.8.4-beta plus the Builder crop tool.
