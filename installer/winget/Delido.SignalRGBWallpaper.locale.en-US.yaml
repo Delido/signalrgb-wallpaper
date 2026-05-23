@@ -1,9 +1,3 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
-#
-# English locale metadata. Description, tags, URLs. Update
-# PackageVersion per release; everything else only needs a touch when
-# the marketing copy / project URLs change.
-
 PackageIdentifier: Delido.SignalRGBWallpaper
 PackageVersion: 0.9.21-beta
 PackageLocale: en-US
@@ -36,16 +30,16 @@ Description: |-
   - In-browser image editor — pick any wallpaper, click out
     transparent regions, no Photoshop required
   - Starter wallpaper library + per-user uploads
-  - Browser-based Configurator — change background, glow, effects,
-    widgets on-the-fly without restarting anything
-  - Ambient effects — snow, rain, sparks, aurora, plus many more
-  - 11+ desktop widgets — clock, calendar, weather, sticky notes,
-    countdowns, photo frame, quote of the day, CPU / RAM / network
-    meters, audio spectrum, Now-playing
+  - Browser-based Configurator
+  - Twelve ambient effects (snow, rain, sparks, aurora,
+    constellation, fireflies, plasma, vortex, bubbles, matrix,
+    starfield, lightning)
+  - Eleven+ desktop widgets (clock, calendar, weather, sticky
+    notes, countdowns, photo frame, quote, CPU / RAM / network,
+    audio spectrum, Now-playing)
   - Preset slots, per-app profiles, hotkeys, auto-cycle
   - DE / EN UI, auto-detected from Windows locale
-  - Auto-pause when a fullscreen app is active — no GPU drain
-    during games
+  - Auto-pause when a fullscreen app is active
 Moniker: signalrgb-wallpaper
 Tags:
   - rgb

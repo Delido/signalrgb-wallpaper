@@ -1,8 +1,3 @@
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
-#
-# Version manifest — top-level pointer to the installer + locale
-# manifests in this folder. Update `PackageVersion` per release.
-
 PackageIdentifier: Delido.SignalRGBWallpaper
 PackageVersion: 0.9.21-beta
 DefaultLocale: en-US
