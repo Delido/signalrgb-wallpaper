@@ -311,11 +311,15 @@
      scale relative to .widget's font-size, so multiplying that one
      base size hits everything inside. */
   .widget { font-size: calc(1em * var(--w-scale)); }
-  /* clock face is SVG-based — text-align doesn't move it, but the
-     flex centering already kept it middle. text-scale does NOT
-     affect SVG natively; apply via transform: scale to the inner
-     svg so the dial actually resizes with the slider. */
-  .widget-clock svg { transform: scale(var(--w-scale)); transform-origin: center center; }
+  /* Clock widget — text-scale applies to the digital mode's
+     text rendering (rules further down add the calc() multiplier
+     to .digital-time / .digital-date). Analog mode is a fixed-
+     viewBox SVG that fills the widget container; the only sensible
+     way to make an analog clock bigger is to resize the widget
+     itself, so text-scale is a no-op for analog and that's
+     intentional. The earlier transform:scale on the SVG hack
+     looked correct in DevTools but got clipped by .widget's
+     overflow:hidden — drop it. */
   .edit-mode .widget {
     pointer-events: auto;
     background: rgba(0,0,0,0.30);
@@ -367,12 +371,16 @@
   .widget-clock.tinted .face   { stroke: var(--w-tint, #fff);    }
   .widget-clock .digital-time {
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: clamp(22px, 28%, 64px);
+    /* clamp() gives the viewport-relative base size; * --w-scale
+       lets the universal "Text size" option grow / shrink without
+       breaking the responsive sizing. Same pattern the meter
+       widgets use for their stat-value. */
+    font-size: calc(clamp(22px, 28%, 64px) * var(--w-scale, 1));
     font-weight: 600;
     letter-spacing: 0.04em;
   }
   .widget-clock .digital-date {
-    font-size: clamp(11px, 12%, 22px);
+    font-size: calc(clamp(11px, 12%, 22px) * var(--w-scale, 1));
     color: rgba(255,255,255,0.78);
     margin-top: 4px;
   }
@@ -388,7 +396,7 @@
   .widget-calendar table {
     width: 100%; height: 100%;
     border-collapse: collapse;
-    font-size: clamp(9px, 1.5vw, 13px);
+    font-size: calc(clamp(9px, 1.5vw, 13px) * var(--w-scale, 1));
   }
   .widget-calendar th, .widget-calendar td {
     text-align: center; padding: 1px 0;
@@ -412,7 +420,7 @@
     font-size: 12px; color: rgba(255,255,255,0.75);
   }
   .widget-weather .wx-temp {
-    font-size: clamp(28px, 40%, 64px);
+    font-size: calc(clamp(28px, 40%, 64px) * var(--w-scale, 1));
     font-weight: 600; letter-spacing: -0.02em;
   }
   .widget-weather.tinted .wx-temp { color: var(--w-tint, #fff); }
@@ -455,7 +463,7 @@
   }
   .widget-countdown .cd-time {
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: clamp(20px, 26%, 48px);
+    font-size: calc(clamp(20px, 26%, 48px) * var(--w-scale, 1));
     font-weight: 600;
     letter-spacing: 0.03em;
     text-align: center;
@@ -477,7 +485,7 @@
   /* ── Quote widget ── */
   .widget-quote { display: flex; flex-direction: column; justify-content: center; padding: 14px !important; }
   .widget-quote .q-text {
-    font-size: clamp(13px, 14%, 18px);
+    font-size: calc(clamp(13px, 14%, 18px) * var(--w-scale, 1));
     font-style: italic;
     line-height: 1.4;
     margin-bottom: 6px;
@@ -498,18 +506,36 @@
   .widget-ram-meter .stat-head,
   .widget-net-graph .stat-head,
   .widget-hardware-sensor .stat-head {
-    display: flex; justify-content: space-between; align-items: baseline;
+    /* `--w-justify` defaults to flex-start (= textAlign left). When
+       textAlign is "center" or "right" the universal-options pipe
+       overrides it. The pre-v1.1 `space-between` is gone because the
+       second span in stat-head was dead weight (unit moved to the
+       value row), so a single label child is what's actually being
+       laid out. */
+    display: flex; justify-content: var(--w-justify, flex-start); align-items: baseline;
     font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .widget-cpu-meter .stat-value,
   .widget-ram-meter .stat-value,
   .widget-hardware-sensor .stat-value {
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: clamp(22px, 28%, 48px);
+    /* clamp gives a viewport-relative base size; multiplying by
+       --w-scale lets the universal "Text size" option grow / shrink
+       the value text without breaking the responsive sizing. */
+    font-size: calc(clamp(22px, 28%, 48px) * var(--w-scale, 1));
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1;
     margin: 4px 0 6px;
+  }
+  /* CPU/RAM stat-value is a plain text node, so text-align is the
+     right control surface. Hwmon stat-value is a flex row (value +
+     unit spans) — justify-content drives it instead. Both bound to
+     the same --w-align / --w-justify so a single textAlign opt
+     drives every meter consistently. */
+  .widget-cpu-meter .stat-value,
+  .widget-ram-meter .stat-value {
+    text-align: var(--w-align, left);
   }
   /* Hardware-sensor value cell holds two spans (value + unit) so we
      can keep them in one flex row that wraps cleanly on narrow
@@ -519,6 +545,7 @@
   .widget-hardware-sensor .stat-value {
     display: flex; align-items: baseline; gap: 4px;
     flex-wrap: wrap;
+    justify-content: var(--w-justify, flex-start);
   }
   .widget-hardware-sensor .hwmon-unit {
     font-size: 0.55em; opacity: 0.75;
@@ -535,7 +562,7 @@
   .widget-net-graph .stat-pair {
     display: flex; gap: 12px; justify-content: space-between;
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: clamp(11px, 13%, 16px);
+    font-size: calc(clamp(11px, 13%, 16px) * var(--w-scale, 1));
     margin: 4px 0 6px;
   }
   .widget-net-graph .stat-pair > div { display: flex; flex-direction: column; line-height: 1.1; }
@@ -1829,9 +1856,19 @@ function applyWidgetOptions(rec, w) {
   //   tileStyle  — "inherit" | "off" | "glass" | "solid" | "clear"
   //                 (default "inherit" → use the global widgetTileStyle
   //                  set on <body>)
+  //
+  // text-align only works on non-flex content. Meter widgets
+  // (cpu / ram / hwmon) use flex-row layouts for the stat-value
+  // and stat-head so we ALSO emit --w-justify mapped to a
+  // justify-content value — CSS rules below `read` whichever
+  // suits the container.
   const textAlign = (rec.opts.textAlign === "center" || rec.opts.textAlign === "right")
                   ? rec.opts.textAlign : "left";
-  rec.el.style.setProperty("--w-align", textAlign);
+  const justify = textAlign === "center" ? "center"
+                : textAlign === "right"  ? "flex-end"
+                : "flex-start";
+  rec.el.style.setProperty("--w-align",   textAlign);
+  rec.el.style.setProperty("--w-justify", justify);
   const scale = parseFloat(rec.opts.textScale);
   const scaleClamped = (scale > 0 && scale <= 4) ? scale : 1;
   rec.el.style.setProperty("--w-scale", String(scaleClamped));

@@ -4,6 +4,54 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3-beta] - 2026-05-23
+
+> Hotfix on the universal widget options from v1.1.2-beta: text
+> alignment and text size silently did nothing on a handful of
+> widgets because their internal layouts used flex containers
+> (which ignore `text-align`) and hardcoded `clamp()` font-sizes
+> (which bypassed the `--w-scale` variable).
+
+### Fixed — text alignment on meter widgets
+
+Hardware-sensor, CPU-meter, RAM-meter, and Net-graph all use
+`display: flex` internally for the stat-head and stat-value rows.
+CSS `text-align` doesn't affect flex children — they need
+`justify-content`. The Universal Options pipeline now emits a
+second variable `--w-justify` mapped from the textAlign choice
+(left → flex-start / center → center / right → flex-end), and
+the meter widgets' stat-head / stat-value rules read that
+variable. The pre-v1.1 hardcoded `justify-content: space-between`
+on stat-head is gone since the previously-empty second child
+span (where the unit used to live before v1.1.1) was already
+removed.
+
+### Fixed — text size on widgets with clamp() font-size
+
+The earlier `--w-scale` variable only multiplied the .widget
+root's font-size, which clamp()-sized children ignored. Wrapped
+the clamp() expressions in `calc(clamp(...) * var(--w-scale, 1))`
+for:
+
+- `.widget-clock .digital-time` and `.digital-date`
+- `.widget-cpu-meter .stat-value`, `.widget-ram-meter .stat-value`,
+  `.widget-hardware-sensor .stat-value`
+- `.widget-calendar table`
+- `.widget-weather .wx-temp`
+- `.widget-countdown .cd-time`
+- `.widget-quote .q-text`
+- `.widget-net-graph .stat-pair`
+
+### Removed
+
+- The `transform: scale(var(--w-scale))` on `.widget-clock svg`
+  that looked right in DevTools but got clipped by the parent
+  `.widget` element's `overflow: hidden`. Analog clock mode no
+  longer responds to the Text size option — that was always
+  going to be the wrong axis to control on an analog dial.
+  Resize the widget itself to make analog clock bigger; the
+  Text size option still works for digital mode.
+
 ## [1.1.2-beta] - 2026-05-23
 
 > Post-v1.0 plan A landed: per-widget tile-style + universal text
