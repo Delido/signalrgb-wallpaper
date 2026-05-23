@@ -464,7 +464,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.1.3-beta"
+APP_VERSION = "1.1.4-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1043,6 +1043,17 @@ TRANSLATIONS = {
     "tray.quick_add_widget":    {"en": "Quick add widget",        "de": "Widget schnell hinzufügen"},
     "tray.quick_effects":       {"en": "Quick effects",           "de": "Effekte (Schnellzugriff)"},
     "tray.reload_config":       {"en": "Reload config",           "de": "Konfig neu laden"},
+    "tray.reimport_bundles":    {"en": "Re-import wallpaper bundles…",
+                                 "de": "Wallpaper-Bundles neu importieren…"},
+    "tray.reimport_bundles.toast.ok": {
+        "en": "Re-import done. Wallpaper hosts will pick up the new bundle on next apply.",
+        "de": "Re-Import fertig. Wallpaper-Hosts laden das neue Bundle beim nächsten Apply."},
+    "tray.reimport_bundles.toast.partial": {
+        "en": "Re-import partial — see %TEMP%\\signalrgb-reimport.log for details.",
+        "de": "Re-Import teilweise — Details in %TEMP%\\signalrgb-reimport.log."},
+    "tray.reimport_bundles.toast.fail": {
+        "en": "Re-import failed — see %TEMP%\\signalrgb-reimport.log for details.",
+        "de": "Re-Import fehlgeschlagen — Details in %TEMP%\\signalrgb-reimport.log."},
     "tray.reload_wallpapers":   {"en": "Reload wallpaper pages",
                                  "de": "Wallpaper-Seiten neu laden"},
     "tray.preset_hotkeys":      {"en": "Preset hotkeys (Ctrl+Shift+1..4)",
@@ -4895,6 +4906,7 @@ class TrayApp:
                     checked=lambda _i: self._preset_hotkeys_enabled()),
                 pystray.MenuItem(tr("tray.reload_config"),    self._reload_config),
                 pystray.MenuItem(tr("tray.reload_wallpapers"), self._reload_wallpapers),
+                pystray.MenuItem(tr("tray.reimport_bundles"), self._reimport_bundles),
             )),
             pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
             pystray.Menu.SEPARATOR,
@@ -5354,6 +5366,95 @@ class TrayApp:
             self.bridge.broadcaster.push_reload_all_threadsafe()
         except Exception as e:
             print(f"[tray] reload-wallpapers failed: {e}")
+
+    def _reimport_bundles(self, icon, item):
+        """Invoke the installer-side PowerShell helper that re-imports
+        the SignalRGB Glow ZIPs into Lively (via its CLI) and bumps
+        the WE project's `version` field so WE invalidates its cache
+        on next apply.
+
+        This is the user-facing fix for the long-standing pain point
+        that the tray auto-update *only* updates the bridge — Lively
+        and WE both cache the wallpaper-page bundle and don't pick
+        up new JS / HTML until the user manually re-imports. The
+        helper script automates that re-import end-to-end.
+
+        Log lands at %TEMP%\\signalrgb-reimport.log for post-mortem."""
+        import subprocess
+        # The PowerShell script lives next to bridge.py in dev / next
+        # to the exe in PyInstaller builds. Search both candidates.
+        script_candidates = [
+            Path(__file__).resolve().parent.parent / "installer" / "reimport-wallpaper-bundles.ps1",
+            Path(getattr(sys, "_MEIPASS", "")) / "installer" / "reimport-wallpaper-bundles.ps1",
+            Path(getattr(sys, "executable", "")).parent / "reimport-wallpaper-bundles.ps1",
+        ]
+        script = next((p for p in script_candidates if p and p.exists()), None)
+        if not script:
+            print("[tray] reimport-bundles: helper script not found in any expected location")
+            self._toast_unavailable("re-import helper script missing")
+            return
+        log_path = Path(os.environ.get("TEMP", str(Path.home() / "AppData" / "Local" / "Temp"))) / "signalrgb-reimport.log"
+        app_dir = Path(getattr(sys, "executable", "")).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
+        try:
+            # `pwsh` (PowerShell 7) preferred, fall back to `powershell`
+            # (Windows-shipped PS 5.1) so the helper works regardless of
+            # whether the user installed the newer pwsh.
+            ps_exe = "pwsh"
+            try:
+                subprocess.run([ps_exe, "-Version"], check=True, capture_output=True, timeout=5)
+            except Exception:
+                ps_exe = "powershell"
+            args = [
+                ps_exe, "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", str(script),
+                "-AppDir", str(app_dir),
+            ]
+            print(f"[tray] reimport-bundles: invoking {' '.join(args)}")
+            result = subprocess.run(
+                args, capture_output=True, text=True, timeout=60)
+            try:
+                with open(log_path, "w", encoding="utf-8") as fh:
+                    fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] reimport invoked\n")
+                    fh.write(f"  script: {script}\n")
+                    fh.write(f"  app_dir: {app_dir}\n")
+                    fh.write(f"  exit: {result.returncode}\n")
+                    fh.write("─ stdout ─\n")
+                    fh.write(result.stdout or "(empty)\n")
+                    fh.write("─ stderr ─\n")
+                    fh.write(result.stderr or "(empty)\n")
+            except Exception:
+                pass
+            # Toast user via the tray icon's notify API — the WS
+            # broadcast is only useful when wallpaper pages are
+            # connected, and they likely aren't right after an
+            # update.
+            if result.returncode == 0:
+                self._tray_notify(tr("tray.reimport_bundles.toast.ok"), tr("tray.reimport_bundles"))
+            elif result.returncode in (2, 3):
+                self._tray_notify(tr("tray.reimport_bundles.toast.partial"), tr("tray.reimport_bundles"))
+            else:
+                self._tray_notify(tr("tray.reimport_bundles.toast.fail"), tr("tray.reimport_bundles"))
+        except Exception as e:
+            print(f"[tray] reimport-bundles failed: {e}")
+            self._tray_notify(tr("tray.reimport_bundles.toast.fail"), tr("tray.reimport_bundles"))
+
+    def _tray_notify(self, message: str, title: str = "") -> None:
+        """Best-effort tray balloon — falls back to console print
+        if the icon isn't ready yet (some Windows / pystray
+        combinations swallow the call silently before the first
+        WM_TASKBARCREATED message)."""
+        try:
+            if getattr(self, "icon", None):
+                self.icon.notify(message, title or "SignalRGB Wallpaper")
+                return
+        except Exception:
+            pass
+        print(f"[tray] notify (fallback): {title}: {message}")
+
+    def _toast_unavailable(self, reason: str) -> None:
+        self._tray_notify(
+            tr("tray.reimport_bundles.toast.fail") + f"\n({reason})",
+            tr("tray.reimport_bundles"))
 
     def _quit(self, icon, item):
         # Hard-kill the process immediately.

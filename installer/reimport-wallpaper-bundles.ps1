@@ -1,0 +1,155 @@
+# Re-import the SignalRGB Glow wallpaper bundles into Lively (and
+# touch the WE project to nudge Wallpaper Engine into re-loading).
+#
+# Background — the installer drops fresh ZIPs into
+# {app}\Lively wallpapers\ and a fresh project folder into
+# Steam\steamapps\common\wallpaper_engine\projects\myprojects\, but
+# both hosts cache the OLD extracted / loaded copy:
+#   • Lively extracts each ZIP into a random-hash folder once;
+#     re-overwriting the ZIP doesn't propagate.
+#   • Wallpaper Engine reads project.json + index.html at first
+#     apply and caches them in memory.
+# So after every wallpaper-side code update the user had to delete +
+# re-import in Lively, and unsubscribe + re-apply in WE.
+#
+# This script automates step 1 (Lively re-import via its CLI) and
+# step 2 (touching WE's project version so the host invalidates its
+# cache on the next apply). WE doesn't expose a public reload API so
+# the user still has to right-click the wallpaper → re-apply, but
+# the version-bump means WE then picks up the NEW files.
+#
+# Invoked by:
+#   • Installer [Run] section after a successful upgrade
+#   • Tray entry "Re-import wallpaper bundles now…" under Advanced
+#   • Manual maintainer use:
+#       pwsh installer\reimport-wallpaper-bundles.ps1
+#
+# Exit codes:
+#   0 — all detected hosts updated cleanly
+#   1 — neither Lively nor a WE project folder was detected
+#   2 — Lively CLI invocation failed for at least one ZIP
+#   3 — WE project.json patch failed
+
+[CmdletBinding()]
+param(
+    [string]$AppDir = "$env:LOCALAPPDATA\Programs\SignalRGBWallpaperBridge",
+    [switch]$Quiet
+)
+
+$ErrorActionPreference = "Continue"
+
+function Write-Status {
+    param([string]$Message, [string]$Color = "White")
+    if (-not $Quiet) {
+        Write-Host $Message -ForegroundColor $Color
+    }
+}
+
+Write-Status "SignalRGB Wallpaper Bridge — re-import bundles" "Cyan"
+Write-Status "App dir: $AppDir" "DarkGray"
+
+$livelyZipsDir = Join-Path $AppDir "Lively wallpapers"
+$weStageDir    = Join-Path $AppDir "Wallpaper Engine wallpapers"
+
+$anyHostUpdated = $false
+$livelyError    = $false
+$weError        = $false
+
+# ── Lively path ─────────────────────────────────────────────────────────────
+# Two Lively variants ship in the wild: the GitHub installer build
+# (lively.exe in Program Files / portable folder) and the Microsoft
+# Store / MSIX build (sandboxed, no direct exe). The GitHub build
+# exposes a CLI; the Store build doesn't, so for those users we
+# open the wallpapers folder + show a toast prompting drag-import.
+
+$livelyExe = $null
+$livelyCandidates = @(
+    "$env:LOCALAPPDATA\Programs\Lively Wallpaper\Lively.exe",
+    "$env:LOCALAPPDATA\Programs\Lively Wallpaper\livelywpf\Lively.exe",
+    "$env:ProgramFiles\Lively Wallpaper\Lively.exe",
+    "${env:ProgramFiles(x86)}\Lively Wallpaper\Lively.exe"
+)
+foreach ($candidate in $livelyCandidates) {
+    if (Test-Path $candidate) {
+        $livelyExe = $candidate
+        break
+    }
+}
+
+if ($livelyExe -and (Test-Path $livelyZipsDir)) {
+    Write-Status "Lively CLI: $livelyExe" "Green"
+    $zips = Get-ChildItem -Path $livelyZipsDir -Filter "SignalRGB_Glow_Screen*.zip" -ErrorAction SilentlyContinue
+    if ($zips.Count -eq 0) {
+        Write-Status "  No SignalRGB_Glow ZIPs found in $livelyZipsDir — skipping Lively re-import." "Yellow"
+    } else {
+        foreach ($zip in $zips) {
+            try {
+                # Lively's --import flag accepts ZIP paths and de-duplicates
+                # by name. The pre-existing extracted folder isn't auto-
+                # deleted but Lively does swap which hash folder the
+                # library entry points at on re-import.
+                Write-Status "  --import $($zip.Name)" "DarkCyan"
+                & $livelyExe --import $zip.FullName 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Status "    WARN: lively.exe exit=$LASTEXITCODE for $($zip.Name)" "Yellow"
+                    $livelyError = $true
+                }
+                Start-Sleep -Milliseconds 250
+            } catch {
+                Write-Status "    ERROR re-importing $($zip.Name): $_" "Red"
+                $livelyError = $true
+            }
+        }
+        $anyHostUpdated = $true
+    }
+} elseif (Test-Path $livelyZipsDir) {
+    # Lively-not-found path: open the staging folder so the user can
+    # drag the ZIPs onto a running Lively window manually. Better than
+    # silent failure.
+    Write-Status "Lively CLI not found — opening wallpapers folder for manual drag-import." "Yellow"
+    Start-Process explorer.exe $livelyZipsDir
+}
+
+# ── Wallpaper Engine path ───────────────────────────────────────────────────
+# WE has no reload-API. Workaround: bump the version field inside
+# the project's project.json. Next time WE loads the project (either
+# on its own next start or via user re-apply) it detects the
+# version change and re-reads from disk instead of cache.
+#
+# Steam path is the canonical install location; the staging folder
+# under {app}\Wallpaper Engine wallpapers is what the installer
+# copies fresh files into.
+
+$weMyProjects = "${env:ProgramFiles(x86)}\Steam\steamapps\common\wallpaper_engine\projects\myprojects\signalrgb-glow"
+if (Test-Path $weMyProjects) {
+    $weProjectJson = Join-Path $weMyProjects "project.json"
+    if (Test-Path $weProjectJson) {
+        try {
+            $json = Get-Content $weProjectJson -Raw | ConvertFrom-Json
+            $oldVer = if ($json.PSObject.Properties.Match("version").Count) { $json.version } else { 0 }
+            $newVer = [int]$oldVer + 1
+            $json | Add-Member -NotePropertyName "version" -NotePropertyValue $newVer -Force
+            $json | ConvertTo-Json -Depth 10 | Set-Content -Path $weProjectJson -Encoding UTF8
+            Write-Status "WE project.json version bumped: $oldVer → $newVer" "Green"
+            Write-Status "  Open Wallpaper Engine → My Wallpapers → right-click SignalRGB Glow → Set as wallpaper to apply the update." "DarkGray"
+            $anyHostUpdated = $true
+        } catch {
+            Write-Status "ERROR patching WE project.json: $_" "Red"
+            $weError = $true
+        }
+    } else {
+        Write-Status "WE myprojects folder exists but no project.json inside — skipping." "Yellow"
+    }
+} else {
+    Write-Status "Wallpaper Engine not detected (no myprojects\signalrgb-glow folder) — skipping WE path." "DarkGray"
+}
+
+# ── Result ─────────────────────────────────────────────────────────────────
+if (-not $anyHostUpdated) {
+    Write-Status "No wallpaper hosts detected (neither Lively nor WE)." "Red"
+    exit 1
+}
+if ($livelyError) { exit 2 }
+if ($weError)     { exit 3 }
+Write-Status "Done." "Green"
+exit 0

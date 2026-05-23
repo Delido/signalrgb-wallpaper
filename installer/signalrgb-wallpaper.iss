@@ -99,6 +99,9 @@ Name: "openconfigurator"; \
 [Files]
 ; Bridge + tray
 Source: "..\wallpaper_bridge\dist_bridge\SignalRGBBridge.exe"; DestDir: "{app}"; Flags: ignoreversion
+; PS helper for the tray's "Re-import wallpaper bundles" entry — the
+; bridge shells out to this script after locating it next to the exe.
+Source: "reimport-wallpaper-bundles.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 ; SignalRGB plugin (only if user opted in)
 Source: "..\SignalRGB_Desktop_Wallpaper.js";  DestDir: "{userdocs}\WhirlwindFX\Plugins"; \

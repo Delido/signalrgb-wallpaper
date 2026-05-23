@@ -4,6 +4,64 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4-beta] - 2026-05-23
+
+> Closes the long-standing auto-update gap: Lively and Wallpaper
+> Engine now pick up wallpaper-page code updates without manual
+> delete + re-import. Tray entry **Re-import wallpaper bundles…**
+> under Advanced wraps the whole flow.
+
+### Added — Tray: Re-import wallpaper bundles
+
+New tray entry **Advanced → Re-import wallpaper bundles…** that
+invokes a PowerShell helper script (`reimport-wallpaper-bundles.ps1`,
+shipped next to the bridge exe). The script:
+
+- **Lively path** — locates `Lively.exe` (GitHub-installer build;
+  MSIX builds fall through to a folder-open prompt) and calls
+  `Lively.exe --import <zip>` for each of the four
+  `SignalRGB_Glow_ScreenN.zip` bundles in
+  `{app}\Lively wallpapers\`. Lively re-extracts the ZIP into a
+  fresh hash folder and updates its library entry to point at it,
+  finally making auto-update actually reach the wallpaper page.
+- **Wallpaper Engine path** — touches the `version` field inside
+  `Steam\steamapps\common\wallpaper_engine\projects\myprojects\
+  signalrgb-glow\project.json` so WE invalidates its in-memory
+  cache on the next apply. The user still has to right-click the
+  wallpaper → Set as wallpaper once after running the script
+  (WE has no public reload API), but the version-bump means WE
+  then loads the new files instead of the cached pre-update
+  copy.
+- Writes a step-by-step log to `%TEMP%\signalrgb-reimport.log`
+  for post-mortem when something doesn't pick up cleanly.
+
+The bridge's tray handler `_reimport_bundles` searches for the
+helper script in three locations (dev / PyInstaller temp /
+installed-app-dir) so the same code path works in dev runs and
+in shipped installs. Falls back to `powershell` (5.1) if `pwsh`
+(7+) isn't installed.
+
+### Background — why this matters
+
+Auto-update has technically existed since v0.9.8, but it only
+ever updated the bridge exe. Lively caches each imported wallpaper
+in a random-hash extracted folder and ignores subsequent edits to
+the source ZIP; WE caches the project at first apply. So every
+beta that changed wallpaper-page code (which is most of them)
+forced users to manually delete the wallpaper from Lively /
+unsubscribe from WE and re-import / re-apply. Real-world friction
+that defeated the point of "in-app auto-update".
+
+With v1.1.4-beta the workflow is:
+
+1. Tray → Advanced → *Download + install update…* (bridge swaps)
+2. Tray → Advanced → *Re-import wallpaper bundles…* (Lively + WE
+   pick up the new wallpaper-page code)
+
+A future v1.1.x will chain step 2 onto step 1 automatically; for
+this beta both clicks are exposed separately so the user can run
+step 2 in isolation when needed.
+
 ## [1.1.3-beta] - 2026-05-23
 
 > Hotfix on the universal widget options from v1.1.2-beta: text
