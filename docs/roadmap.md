@@ -577,6 +577,103 @@ scale slider is included.
 
 ---
 
+## 🔁 Post-v1.0 — Hot-reload wallpaper bundles after auto-update
+
+The single biggest UX gap in the v1.1 auto-update flow: the bridge
+updates itself cleanly via the tray, but Lively and Wallpaper
+Engine **don't pick up the new wallpaper-page code** even though
+the installer drops fresh bundle files into both hosts' folders.
+Result — every beta that changes anything wallpaper-side requires
+the user to manually delete + re-import bundles in Lively, or
+unsubscribe + re-apply in WE. That's the dominant friction point
+in real-world updates today.
+
+### Why it doesn't auto-pick-up
+
+- **Lively** extracts each imported ZIP **once** into a random-
+  hash folder under `%LOCALAPPDATA%\Lively Wallpaper\…\<hash>\`.
+  Updating the source ZIP doesn't propagate — Lively's library
+  metadata points at the hash folder, not the original ZIP.
+- **Wallpaper Engine** loads the project (`project.json` +
+  `index.html` + assets) into memory **at first apply**.
+  Subsequent edits to those files on disk are ignored until the
+  wallpaper is re-applied or WE restarts.
+- Tray → *Reload wallpaper pages* only does `location.reload()`
+  on the currently-running page — same cached code reloaded,
+  not a fresh fetch from `{app}\Lively wallpapers\`.
+
+### What we'd add
+
+#### Lively path
+
+Lively's CLI exposes an `--import-from-zip <path>` (or similar)
+command that triggers a fresh re-extract. Post-install hook in
+the installer (or a tray action triggered post-update) would:
+
+1. Read Lively's `LibraryView.json` to find existing
+   *SignalRGB Glow – Screen N* entries
+2. Delete each entry's hash folder + JSON record
+3. Call `lively.exe --import-from-zip
+   "{app}\Lively wallpapers\SignalRGB_Glow_ScreenN.zip"` for
+   each screen
+4. Re-assign via Lively's screen-targeting CLI
+   (`--set-screen N`)
+
+If Lively's CLI doesn't support all four steps, fall back to a
+"Re-import wallpapers now" tray button that opens the
+*Lively wallpapers* folder + a one-step instruction overlay.
+
+#### Wallpaper Engine path
+
+WE has no public CLI for project reload. Two options:
+
+1. **Win32 IPC hack** — WE's main window accepts certain custom
+   messages; sending a "reload current wallpaper" message via
+   `SendMessageW` could work. Needs reverse-engineering against
+   WE's current build, brittle across WE updates.
+2. **Subscribe-bump trick** — touch the project's `version` field
+   in `project.json` then call `wallpaperengine32.exe
+   -openwallpaper <project>` which forces a reload. Requires WE
+   to be running and accepting CLI commands.
+
+Realistic v1 implementation: skip the Win32 hack, do the
+subscribe-bump for users with WE already running, and fall back
+to a clear toast saying *"WE wallpaper needs manual re-apply"*
+with a button that opens *My Wallpapers* directly.
+
+### Architecture
+
+- New `installer/post-install-reload.ps1` script the installer's
+  `[Run]` section invokes after copying files
+- Tray entry *Re-import wallpaper bundles now…* under Advanced
+  for users who want to trigger it manually
+- Detection logic on first start after an upgrade: if the
+  bundle's version timestamp inside the wallpaper page is older
+  than the bridge's, toast "Bundles need re-import — click to
+  fix" with a one-click trigger
+
+### Effort estimate
+
+| Block | Time |
+| --- | --- |
+| Lively LibraryView + hash-folder cleanup logic | 1.5 h |
+| Lively CLI re-import invocation + screen targeting | 1.5 h |
+| WE subscribe-bump + fallback toast | 1 h |
+| Tray entry + first-start version-mismatch detection | 1 h |
+| Cross-host testing + edge cases (Lively portable build, MSIX, WE-not-running) | 1.5 h |
+| **Total** | **~6-7 h** |
+
+### Why it's worth doing now (before stable)
+
+This is the single highest-ROI follow-up to the auto-update
+work itself. Right now the tray's "Download + install update"
+button is half a feature — bridge updates work, wallpaper code
+updates don't. Closing that gap is what makes auto-update
+*actually useful* for the wallpaper-page changes we keep
+shipping.
+
+---
+
 ## 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
 
 Not a single user need; broader API + plugin work. Lower priority
