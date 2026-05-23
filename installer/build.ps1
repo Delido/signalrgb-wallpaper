@@ -180,6 +180,13 @@ $singleProject = @{
     }
 } | ConvertTo-Json -Depth 6
 Set-Content -Path (Join-Path $weSingle "project.json") -Value $singleProject -Encoding UTF8
+# Maintainer note: end users don't care, but for the project owner —
+# this project.json has NO `workshopid` / `workshopurl` fields, so
+# whenever the Inno installer copies it over WE's myprojects copy,
+# the existing workshopid linkage is destroyed. WE's next "Share on
+# Workshop" submit then creates a NEW Steam Workshop item instead of
+# updating the existing one. Run `installer\maintainer-restore-workshopid.ps1`
+# after each install to put the workshopid back before opening WE.
 
 # --- 3b. (retired in 0.7.2-beta) ----------------------------------------------
 # We used to stage four per-screen WE bundles here so each monitor got its
