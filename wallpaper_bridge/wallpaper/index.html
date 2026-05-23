@@ -26,8 +26,23 @@
   */
 
   #bars   { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
-  #bg     { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover;
-            z-index: 2; transition: opacity 0.3s; }
+  /* #bg used to be an <img> with object-fit. Swapped to a <div>
+     with background-image because object-fit has no tile / repeat
+     mode — and tile is exactly what users with seamless pattern
+     wallpapers (carbon, hex grids, retro patterns) need. The fit
+     modes drive background-size + background-repeat together:
+       cover  → background-size: cover           repeat: no-repeat
+       contain→ background-size: contain         repeat: no-repeat
+       fill   → background-size: 100% 100%       repeat: no-repeat
+       tile   → background-size: auto            repeat: repeat
+       tile-x → background-size: auto 100%       repeat: repeat-x
+       tile-y → background-size: 100% auto       repeat: repeat-y
+     Defaults below cover the cover-mode case; JS overrides on
+     bgFit change. */
+  #bg     { position: fixed; inset: 0; z-index: 2;
+            background-size: cover; background-repeat: no-repeat;
+            background-position: center center;
+            transition: opacity 0.3s; }
   #dim    { position: fixed; inset: 0; background: #000; opacity: 0;
             z-index: 3; pointer-events: none; }
   #status { position: fixed; top: 10px; left: 10px; z-index: 4;
@@ -183,6 +198,63 @@
     pointer-events: none;     /* per-widget; flipped in edit mode */
     touch-action: none;       /* required by interact.js */
     overflow: hidden;
+    /* Tokens the optional tile shell reads. Picked once here so
+       every variant inherits the same scale. Override per-widget
+       if a specific layout needs different padding. */
+    --widget-tile-radius: 10px;
+    --widget-tile-padding: 12px;
+    --widget-tile-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    --widget-tile-border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* ── Widget tile shell (opt-in, v1.1+) ──
+     The pre-v1.0 baseline shows widgets as transparent overlays —
+     just text + glow with no chrome — which works on busy wallpapers
+     but reads as a disconnected pile on plain backgrounds. The tile
+     shell adds a uniform container around every widget so the whole
+     widget set reads as one design system. Three variants:
+
+       glass — frosted-acrylic, semi-transparent + backdrop-blur,
+               the default when the user opts in. Works against
+               any wallpaper.
+       solid — opaque dark fill, best for users who want the
+               widgets to stand out completely (presentations,
+               heavy-pattern wallpapers).
+       clear — minimal — subtle border + faint fill, mostly
+               transparent. Half-step between off and glass.
+
+     Applied via a class on <body> so a single attribute toggles
+     every widget at once. Default state (no class) preserves the
+     v1.0 transparent-overlay look. */
+  body.widget-tile-glass .widget {
+    background: rgba(15, 22, 36, 0.55);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: var(--widget-tile-border);
+    border-radius: var(--widget-tile-radius);
+    box-shadow: var(--widget-tile-shadow);
+    padding: var(--widget-tile-padding);
+  }
+  body.widget-tile-solid .widget {
+    background: rgba(20, 26, 38, 0.92);
+    border: var(--widget-tile-border);
+    border-radius: var(--widget-tile-radius);
+    box-shadow: var(--widget-tile-shadow);
+    padding: var(--widget-tile-padding);
+  }
+  body.widget-tile-clear .widget {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--widget-tile-radius);
+    padding: var(--widget-tile-padding);
+  }
+  /* Edit-mode still overrides background for the dashed-border
+     feedback — but we keep the radius from the active variant
+     so it doesn't snap to square edges during drags. */
+  body.widget-tile-glass .edit-mode .widget,
+  body.widget-tile-solid .edit-mode .widget,
+  body.widget-tile-clear .edit-mode .widget {
+    border-radius: var(--widget-tile-radius);
   }
   .edit-mode .widget {
     pointer-events: auto;
@@ -557,7 +629,7 @@
 </head>
 <body>
 <div id="bars" class="lay-grid"></div>
-<img id="bg" alt="">
+<div id="bg" role="img" aria-label=""></div>
 <div id="dim"></div>
 <canvas id="ambient-canvas"></canvas>
 <canvas id="audioglow-canvas"></canvas>
@@ -834,22 +906,63 @@ function normalizeImagePath(p) {
   return t;
 }
 
+// Maps the Fit dropdown's string value to a {size, repeat} CSS pair.
+// Keeping this in one table makes adding a future "tile-2x" / "tile-50"
+// scale variant a single-line addition instead of three switch arms.
+const BG_FIT_CSS = {
+  "cover":   { size: "cover",      repeat: "no-repeat" },
+  "contain": { size: "contain",    repeat: "no-repeat" },
+  "fill":    { size: "100% 100%",  repeat: "no-repeat" },
+  "tile":    { size: "auto",       repeat: "repeat"    },
+  "tile-x":  { size: "auto 100%",  repeat: "repeat-x"  },
+  "tile-y":  { size: "100% auto",  repeat: "repeat-y"  },
+};
+
+function applyBgFit(mode) {
+  const css = BG_FIT_CSS[mode] || BG_FIT_CSS.cover;
+  bgEl.style.backgroundSize = css.size;
+  bgEl.style.backgroundRepeat = css.repeat;
+}
+
 function setBackground() {
   const raw = urlOverride && urlOverride.trim() ? urlOverride.trim() : pickedImagePath;
   const src = normalizeImagePath(raw);
   console.log("[wallpaper] setBackground: raw=", JSON.stringify(raw), "src=", JSON.stringify(src));
   flashDebug("raw=" + JSON.stringify(raw) + " | normalised=" + JSON.stringify(src));
   if (!src) {
-    bgEl.removeAttribute("src");
+    bgEl.style.backgroundImage = "";
     bgEl.style.opacity = "0";
     return;
   }
-  bgEl.src = src;
-  bgEl.style.opacity = "1";
+  // <div> backgrounds don't fire load / error events the way <img>
+  // does, so we preload via a throwaway Image and wire its events
+  // to drive the same fade-in / debug-flash UX the old <img>
+  // implementation gave us.
+  const probe = new Image();
+  probe.onload = () => {
+    // CSS url() needs the path single-quoted to survive paths with
+    // spaces or parentheses. encodeURI handles the bytes safely.
+    bgEl.style.backgroundImage = "url('" + src.replace(/'/g, "%27") + "')";
+    bgEl.style.opacity = "1";
+  };
+  probe.onerror = () => {
+    const msg = "image load failed: " + src;
+    console.error("[wallpaper]", msg);
+    if (showStatusEnabled) {
+      statusEl.textContent = msg;
+      statusEl.classList.remove("ok", "hidden");
+      statusEl.classList.add("bad");
+    }
+  };
+  probe.src = src;
 }
 
+// Legacy listener kept around for any external code that still
+// listens — the new path is `probe.onerror` above. We leave the
+// stub so addEventListener doesn't throw on the now-div element
+// (divs accept the listener silently but never fire it).
 bgEl.addEventListener("error", () => {
-  const tried = bgEl.src || "(empty)";
+  const tried = bgEl.style.backgroundImage || "(empty)";
   const msg = "image load failed: " + tried;
   console.error("[wallpaper]", msg);
   // Only surface in the on-screen overlay when the user explicitly enabled
@@ -896,7 +1009,7 @@ function applyProperty(name, val) {
       setBackground();
       break;
     case "bgFit":
-      bgEl.style.objectFit = val || "cover";
+      applyBgFit(val || "cover");
       break;
     case "bgDim":
       dimEl.style.opacity = String((parseInt(val) || 0) / 100);
@@ -940,6 +1053,13 @@ function applyProperty(name, val) {
     case "widgetsLocked":
       setWidgetsLocked(!!val);
       break;
+    case "widgetTileStyle":
+      // Apply the opt-in tile shell. v1.0 baseline is "off" → no class,
+      // widgets render as transparent overlays exactly like before.
+      // glass / solid / clear add the matching body class so a single
+      // CSS rule lights up every .widget at once.
+      applyWidgetTileStyle(typeof val === "string" ? val : "off");
+      break;
     case "ambientEffect":
       ambient.setPreset(typeof val === "string" ? val : "off");
       break;
@@ -976,7 +1096,7 @@ function applyProperty(name, val) {
 }
 
 // Lively adapter: translate index/typed values to the unified format.
-const LIVELY_BG_FIT  = ["cover", "contain", "fill"];
+const LIVELY_BG_FIT  = ["cover", "contain", "fill", "tile", "tile-x", "tile-y"];
 const LIVELY_LAYOUT  = LAYOUT_CLASSES; // same indices as the dropdown items
 
 window.livelyPropertyListener = function (name, val) {
@@ -1473,6 +1593,17 @@ const widgetPicker     = document.getElementById("widget-picker");
 const widgetNodes      = new Map();
 let   widgetsLocked    = true;
 let   currentTintCss   = "#6ab0ff";
+
+// Toggle the body-level tile-shell class for all widgets. "off" strips
+// any prior tile class so we don't end up with two variants set at once.
+const WIDGET_TILE_STYLES = ["off", "glass", "solid", "clear"];
+function applyWidgetTileStyle(style) {
+  const safe = WIDGET_TILE_STYLES.indexOf(style) >= 0 ? style : "off";
+  for (const s of WIDGET_TILE_STYLES) {
+    if (s === "off") continue;
+    document.body.classList.toggle("widget-tile-" + s, s === safe);
+  }
+}
 
 function setWidgetsLocked(locked) {
   widgetsLocked = !!locked;

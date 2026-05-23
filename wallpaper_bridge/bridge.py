@@ -464,7 +464,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -509,6 +509,11 @@ DEFAULT_SCREEN_SETTINGS = {
     # wallpaper attaches drag/resize handles (via interact.js) and pushes
     # position updates back over the WS as widget-update messages.
     "widgetsLocked":   True,
+    # Optional unified "tile" shell wrapping every widget (post-v1.0
+    # design-system refresh). One of "off" | "glass" | "solid" | "clear".
+    # Default "off" preserves the v1.0 transparent-overlay look every
+    # existing user is already running.
+    "widgetTileStyle": "off",
     # Full-canvas ambient effect (Phase 2). One of:
     #   "off" | "snow" | "rain" | "sparks" | "aurora"
     "ambientEffect":   "off",
@@ -592,7 +597,7 @@ PRESET_SNAPSHOT_KEYS = (
     "barLayout", "showBars", "glowStrength",
     "gridBlur", "stripesBlur", "barHeight", "barWidth",
     "showStatus",
-    "widgets",
+    "widgets", "widgetTileStyle",
     "ambientEffect", "ambientTint", "ambientDensity",
     "pixelfx", "parallax3d",
     "audioGlow", "audioGlowIntensity", "audioGlowTint",
@@ -689,7 +694,7 @@ WIDGET_DEFAULTS = {
 WIDGET_TYPES = list(WIDGET_DEFAULTS.keys())
 
 # Choices that must match the wallpaper HTML / CSS class names.
-BG_FIT_CHOICES   = ["cover", "contain", "fill"]
+BG_FIT_CHOICES   = ["cover", "contain", "fill", "tile", "tile-x", "tile-y"]
 LAYOUT_CHOICES   = [
     ("lay-grid",     "Pixel Grid (2D)"),
     ("lay-vstripes", "Vertical Stripes"),
@@ -3862,7 +3867,7 @@ class BridgeRuntime:
         "ambientEffect", "ambientTint", "ambientDensity",
         "pixelfx", "parallax3d",
         "audioGlow", "audioGlowIntensity", "audioGlowTint",
-        "widgetsLocked",
+        "widgetsLocked", "widgetTileStyle",
         # Mirror toggle — special-cased in update_screen_setting below
         # because activation copies the source's state onto self.
         "mirrorOf",

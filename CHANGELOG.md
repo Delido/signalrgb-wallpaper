@@ -4,6 +4,71 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0-beta] - 2026-05-23
+
+> First beta of the post-v1.0 cycle. Two design-system changes
+> from the roadmap landed together: a new **Background Fit tile
+> mode** (so seamless pattern wallpapers finally render correctly)
+> and the **widget tile shell** that lets users wrap every widget
+> in a uniform glass / solid / clear container. Both are opt-in;
+> defaults preserve the v1.0 baseline so existing users see no
+> change unless they explicitly switch to a new mode.
+
+### Added — Background tile / repeat Fit modes
+
+Three new entries in the Background card's *Fit* dropdown:
+
+- **tile** — repeats the image in both X and Y. CSS:
+  `background-repeat: repeat; background-size: auto`. Use for
+  seamless pattern wallpapers (carbon fibre, hex grids, dot
+  patterns, retro tile art) that previously had to be stretched
+  or cropped to fit the screen.
+- **tile X** — repeats horizontally only, image fills the screen
+  height (`background-repeat: repeat-x; background-size: auto 100%`).
+- **tile Y** — repeats vertically only, image fills the screen
+  width (`background-repeat: repeat-y; background-size: 100% auto`).
+
+Implementation: swapped the wallpaper page's `<img id="bg">` for a
+`<div id="bg">` with `background-image` since `object-fit` has no
+tile mode. The fade-on-load UX is preserved via a `new Image()`
+preload that drives the same opacity transition the old `<img>`
+gave us.
+
+### Added — Widget tile shell (opt-in)
+
+New *Tile style* dropdown in the Configurator's Widgets card with
+four options:
+
+- **Off** (default) — transparent overlays, exactly like v1.0.
+  No visual change for existing users.
+- **Glass** — frosted-acrylic shell on every widget. Semi-transparent
+  fill + backdrop blur, subtle border, soft drop shadow. Works
+  against any wallpaper.
+- **Solid** — opaque dark fill. Best for users who want widgets to
+  stand out completely against busy / heavy-pattern wallpapers.
+- **Clear** — minimal — faint fill, subtle border, mostly
+  transparent. Half-step between Off and Glass.
+
+The shell is applied via a single `body.widget-tile-<variant>` CSS
+class, so flipping every widget happens in one DOM op. Per-widget
+tokens (`--widget-tile-radius`, `--widget-tile-padding`,
+`--widget-tile-shadow`, `--widget-tile-border`) sit on `.widget`
+itself so future overrides only need a CSS-variable tweak rather
+than rewriting the variant rules.
+
+### Why this is a beta
+
+Both changes are visually significant. The tile shell in particular
+rewires the visual hierarchy of every widget on screen — that's
+the kind of change that surfaces edge cases (text contrast on
+specific wallpapers, blur performance on older GPUs, padding on
+unusually small widgets) that only show up under real-world use.
+Shipping as `-beta` so the maintainer + opt-in beta users can
+collect feedback before the v1.1.0 stable.
+
+Set tray → Advanced → *Allow beta updates* to pick this up
+automatically; otherwise download the installer below manually.
+
 ## [1.0.0] - 2026-05-23
 
 > 🎉 **First stable release.** Drops the `-beta` suffix that's been

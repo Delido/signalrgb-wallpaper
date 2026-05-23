@@ -946,6 +946,9 @@
           <option value="cover"   data-i18n="bg.fit.cover">cover (crop to fill)</option>
           <option value="contain" data-i18n="bg.fit.contain">contain (letterbox)</option>
           <option value="fill"    data-i18n="bg.fit.fill">fill (stretch)</option>
+          <option value="tile"    data-i18n="bg.fit.tile">tile (repeat X and Y)</option>
+          <option value="tile-x"  data-i18n="bg.fit.tilex">tile X (repeat horizontally)</option>
+          <option value="tile-y"  data-i18n="bg.fit.tiley">tile Y (repeat vertically)</option>
         </select>
       </div>
       <div class="row">
@@ -1118,6 +1121,20 @@
           </div>
         </div>
         <button class="btn toggle" id="lock-toggle">Unlock to edit</button>
+      </div>
+
+      <div class="row" style="margin-top: 10px;">
+        <label for="widget-tile-style" data-i18n="widgets.tile.label">Tile style</label>
+        <select id="widget-tile-style">
+          <option value="off"   data-i18n="widgets.tile.off">Off — transparent overlays (v1.0 default)</option>
+          <option value="glass" data-i18n="widgets.tile.glass">Glass — frosted acrylic</option>
+          <option value="solid" data-i18n="widgets.tile.solid">Solid — opaque dark fill</option>
+          <option value="clear" data-i18n="widgets.tile.clear">Clear — minimal outline</option>
+        </select>
+      </div>
+      <div class="hint" id="widget-tile-hint" data-i18n="widgets.tile.hint" style="margin-top: 6px;">
+        Wraps every widget in a uniform container — same background, border, corner radius, padding, type scale.
+        Off keeps the v1.0 transparent-overlay look every existing user is already running.
       </div>
 
       <div class="layout-preview-wrap">
@@ -1296,6 +1313,9 @@ const TRANSLATIONS = {
   "bg.fit.cover":           { en: "cover (crop to fill)", de: "cover (auf Bildschirm zuschneiden)" },
   "bg.fit.contain":         { en: "contain (letterbox)",  de: "contain (mit Rand)" },
   "bg.fit.fill":            { en: "fill (stretch)",       de: "fill (stretchen)" },
+  "bg.fit.tile":            { en: "tile (repeat X and Y)",      de: "tile (X und Y wiederholen)" },
+  "bg.fit.tilex":           { en: "tile X (repeat horizontally)", de: "tile X (horizontal wiederholen)" },
+  "bg.fit.tiley":           { en: "tile Y (repeat vertically)",   de: "tile Y (vertikal wiederholen)" },
   "bg.dim":                 { en: "Dim",                  de: "Abdunkeln" },
   "bg.debug_overlay":       { en: "Show debug overlay (top-left status line on the wallpaper)",
                               de: "Debug-Overlay anzeigen (Status-Zeile oben links im Wallpaper)" },
@@ -1422,6 +1442,17 @@ const TRANSLATIONS = {
   },
   "widgets.btn.unlock":     { en: "Unlock to edit",       de: "Zum Bearbeiten entsperren" },
   "widgets.btn.lock":       { en: "Lock widgets",         de: "Widgets sperren" },
+  "widgets.tile.label":     { en: "Tile style",           de: "Kachel-Stil" },
+  "widgets.tile.off":       { en: "Off — transparent overlays (v1.0 default)",
+                              de: "Aus — transparente Overlays (v1.0-Standard)" },
+  "widgets.tile.glass":     { en: "Glass — frosted acrylic",
+                              de: "Glas — milchige Acryl-Optik" },
+  "widgets.tile.solid":     { en: "Solid — opaque dark fill",
+                              de: "Solid — deckende dunkle Füllung" },
+  "widgets.tile.clear":     { en: "Clear — minimal outline",
+                              de: "Klar — minimaler Rahmen" },
+  "widgets.tile.hint":      { en: "Wraps every widget in a uniform container — same background, border, corner radius, padding, type scale. Off keeps the v1.0 transparent-overlay look every existing user is already running.",
+                              de: "Wickelt jedes Widget in einen einheitlichen Container — gleicher Hintergrund, Rand, Radius, Padding, Type-Scale. Aus behält den transparenten Overlay-Look aus v1.0." },
   "widgets.preview.head":   { en: "Layout preview · drag widgets to position",
                               de: "Layout-Vorschau · Widgets zum Positionieren ziehen" },
   "widgets.preview.snap":   { en: "Snap to grid",         de: "Am Raster ausrichten" },
@@ -1692,6 +1723,7 @@ const els = {
   presetSlots:        $("preset-slots"),
   libraryStrip:       $("library-strip"),
   lockBar:        $("lock-bar"),
+  widgetTileStyle: $("widget-tile-style"),
   lockLabel:      $("lock-label"),
   lockHint:       $("lock-hint"),
   lockToggle:     $("lock-toggle"),
@@ -3022,6 +3054,10 @@ function _tryFirstRunTour() {
 // ─────────────────────────────────────────────────────────────────────────────
 els.bgImage.addEventListener("change", () => setSetting("bgImage", els.bgImage.value));
 els.bgFit  .addEventListener("change", () => setSetting("bgFit",   els.bgFit.value));
+if (els.widgetTileStyle) {
+  els.widgetTileStyle.addEventListener("change",
+    () => setSetting("widgetTileStyle", els.widgetTileStyle.value));
+}
 els.bgDim  .addEventListener("input",  () => {
   els.bgDimVal.textContent = els.bgDim.value + " %";
 });
@@ -4230,6 +4266,9 @@ function renderAll() {
   // Background
   els.bgImage.value = settings.bgImage || "";
   els.bgFit.value   = settings.bgFit   || "cover";
+  if (els.widgetTileStyle) {
+    els.widgetTileStyle.value = settings.widgetTileStyle || "off";
+  }
   els.bgDim.value   = String(settings.bgDim ?? 0);
   els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";
   els.bgDebug.checked = !!settings.showStatus;
