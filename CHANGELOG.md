@@ -4,6 +4,76 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2-beta] - 2026-05-23
+
+> Post-v1.0 plan A landed: per-widget tile-style + universal text
+> options, Background tile-scale slider, Configurator preview
+> reflects overrides, and ambient effects Batch 4 (waves, ripples,
+> flowfield). Fifteen ambient presets total now.
+
+### Added — Universal widget options
+
+Every widget gains three new options in the Configure modal, in a
+new "Layout (applies to all widgets)" section under the
+widget-specific fields:
+
+- **Text alignment** — left / center / right. Applied via
+  `--w-align` CSS variable, so widgets that read text-align honour
+  it without touching their own per-widget CSS.
+- **Text size** — 50 / 75 / 100 / 125 / 150 / 200 % scale
+  multiplier. Multiplies the base font-size; SVG-based widgets
+  (clock face) use `transform: scale()` so the dial resizes
+  proportionally.
+- **Tile style override** — inherit / off / glass / solid / clear.
+  Overrides the global *Widget tile style* setting from v1.1.0-beta
+  for individual widgets. Picks like "everything Glass, but this
+  CPU meter Solid" now work in one click.
+
+The Configure button is now enabled on every widget (was disabled
+for CPU/RAM/Net meters with empty per-type schemas) since every
+widget at minimum has the universal options.
+
+### Added — Background tile scale slider
+
+When *Fit* is set to a tile mode (tile / tile X / tile Y), a new
+*Tile scale* slider appears in the Background card (10-200 %,
+default 100). At 100 % the pattern renders at the source image's
+natural pixel dimensions; below that it shrinks, above that it
+grows. Wallpaper page captures the loaded image's
+`naturalWidth` / `naturalHeight` into CSS custom properties so the
+scaling is a single CSS recalc rather than a JS rerender.
+
+### Added — Configurator layout preview reflects widget overrides
+
+Each widget's preview box now shows its effective styling at a
+glance:
+
+- The label gains a small suffix-badge for any non-default
+  option (e.g. *· glass*, *· center*, *· 150%*).
+- Widgets with an explicit tile-style override get a warm-amber
+  tint so they stand out from inherited-default siblings.
+- Preview-widget text honours the chosen `textAlign`.
+
+Lets users spot a misconfigured override without opening every
+widget's Configure modal.
+
+### Added — Ambient effects, batch 4
+
+Fifteen presets now. Three new effects, all written from scratch
+in the `AMBIENT_PRESETS` shape:
+
+- **Waves** — multiple sinusoidal horizontal lines flowing across
+  the canvas at slightly different speeds, amplitudes and phases.
+- **Ripples** — concentric expanding rings, water-surface style.
+  Squared-falloff alpha taper so the afterglow fades smoothly.
+- **Flowfield** — particles drifting through a pseudo-noise 2D
+  vector field. Cheap sin/cos noise produces the swirling-stream
+  pattern flow-field pens are known for; particles lerp toward
+  the noise direction so trails curve smoothly.
+
+All three honour the *Tint with glow colour* toggle. Matching
+mini-preview tiles in the Configurator picker.
+
 ## [1.1.1-beta] - 2026-05-23
 
 > Hotfix on the v1.1.0-beta hwmon (LibreHardwareMonitor) widget.

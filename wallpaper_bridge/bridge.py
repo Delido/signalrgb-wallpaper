@@ -464,7 +464,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.1.1-beta"
+APP_VERSION = "1.1.2-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -490,6 +490,11 @@ DEFAULT_SCREEN_SETTINGS = {
     "bgImage":      "",
     "bgImageUrl":   "",
     "bgFit":        "cover",
+    # Pattern scale for the tile / tile-x / tile-y bgFit modes (10-200,
+    # percent). 100 = native source size. Ignored when bgFit is
+    # cover/contain/fill since those modes already define the
+    # background-size implicitly.
+    "bgTileScale":  100,
     "bgDim":        0,
     "barLayout":    "lay-grid",
     "showBars":     True,
@@ -593,7 +598,7 @@ _NON_MIRRORED_KEYS = frozenset({
 # the preset list itself (so a preset can't recursively contain its
 # siblings).
 PRESET_SNAPSHOT_KEYS = (
-    "bgImage", "bgImageUrl", "bgFit", "bgDim",
+    "bgImage", "bgImageUrl", "bgFit", "bgTileScale", "bgDim",
     "barLayout", "showBars", "glowStrength",
     "gridBlur", "stripesBlur", "barHeight", "barWidth",
     "showStatus",
@@ -3860,7 +3865,7 @@ class BridgeRuntime:
     # can't write arbitrary garbage into config.json — anything not on
     # this list is silently dropped (with a console warning).
     _SETTABLE_SCREEN_KEYS = {
-        "bgImage", "bgImageUrl", "bgFit", "bgDim",
+        "bgImage", "bgImageUrl", "bgFit", "bgTileScale", "bgDim",
         "barLayout", "showBars", "glowStrength",
         "gridBlur", "stripesBlur", "barHeight", "barWidth",
         "showStatus",

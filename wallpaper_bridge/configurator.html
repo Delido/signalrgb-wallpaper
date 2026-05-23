@@ -617,6 +617,16 @@
     box-shadow: 0 4px 14px rgba(0,0,0,0.6);
     z-index: 10;
   }
+  /* Per-widget tile-style override visible in the preview as a
+     subtle warmer tint, so the user can spot overrides at a glance
+     without opening each widget's options modal. */
+  .preview-widget.preview-tile-override {
+    border-color: #d4a35e;
+    background: rgba(180, 130, 60, 0.30);
+  }
+  .layout-preview.unlocked .preview-widget.preview-tile-override {
+    background: rgba(212, 163, 94, 0.32);
+  }
   .preview-widget .resize-handle {
     position: absolute; right: 0; bottom: 0;
     width: 14px; height: 14px;
@@ -950,6 +960,11 @@
           <option value="tile-x"  data-i18n="bg.fit.tilex">tile X (repeat horizontally)</option>
           <option value="tile-y"  data-i18n="bg.fit.tiley">tile Y (repeat vertically)</option>
         </select>
+      </div>
+      <div class="row" id="bg-tile-scale-row" style="display: none;">
+        <label for="bg-tile-scale" data-i18n="bg.tile_scale">Tile scale</label>
+        <input type="range" id="bg-tile-scale" min="10" max="200" step="5">
+        <span class="val" id="bg-tile-scale-val">100 %</span>
       </div>
       <div class="row">
         <label for="bg-dim" data-i18n="bg.dim">Dim</label>
@@ -1313,6 +1328,7 @@ const TRANSLATIONS = {
   "bg.fit.cover":           { en: "cover (crop to fill)", de: "cover (auf Bildschirm zuschneiden)" },
   "bg.fit.contain":         { en: "contain (letterbox)",  de: "contain (mit Rand)" },
   "bg.fit.fill":            { en: "fill (stretch)",       de: "fill (stretchen)" },
+  "bg.tile_scale":          { en: "Tile scale",                 de: "Kachel-Größe" },
   "bg.fit.tile":            { en: "tile (repeat X and Y)",      de: "tile (X und Y wiederholen)" },
   "bg.fit.tilex":           { en: "tile X (repeat horizontally)", de: "tile X (horizontal wiederholen)" },
   "bg.fit.tiley":           { en: "tile Y (repeat vertically)",   de: "tile Y (vertikal wiederholen)" },
@@ -1461,6 +1477,8 @@ const TRANSLATIONS = {
                               de: "Noch keine Widgets auf diesem Bildschirm — unten eines auswählen." },
   "widget.btn.configure":   { en: "Configure",            de: "Konfigurieren" },
   "widget.btn.remove":      { en: "Remove",               de: "Entfernen" },
+  "widget.opts.universal":  { en: "Layout (applies to all widgets)",
+                              de: "Layout (gilt für alle Widgets)" },
 
   "modal.btn.save":         { en: "Save",                 de: "Speichern" },
   "modal.btn.cancel":       { en: "Cancel",               de: "Abbrechen" },
@@ -1692,6 +1710,9 @@ const els = {
   bgFile:         $("bg-file"),
   bgUploadStat:   $("bg-upload-stat"),
   bgFit:          $("bg-fit"),
+  bgTileScale:    $("bg-tile-scale"),
+  bgTileScaleRow: $("bg-tile-scale-row"),
+  bgTileScaleVal: $("bg-tile-scale-val"),
   bgDim:          $("bg-dim"),
   bgDimVal:       $("bg-dim-val"),
   bgDebug:        $("bg-debug"),
@@ -3053,7 +3074,22 @@ function _tryFirstRunTour() {
 // Background section
 // ─────────────────────────────────────────────────────────────────────────────
 els.bgImage.addEventListener("change", () => setSetting("bgImage", els.bgImage.value));
-els.bgFit  .addEventListener("change", () => setSetting("bgFit",   els.bgFit.value));
+els.bgFit  .addEventListener("change", () => {
+  setSetting("bgFit", els.bgFit.value);
+  updateBgTileScaleVisibility();
+});
+function updateBgTileScaleVisibility() {
+  if (!els.bgTileScaleRow) return;
+  const isTile = String(els.bgFit.value || "").startsWith("tile");
+  els.bgTileScaleRow.style.display = isTile ? "" : "none";
+}
+if (els.bgTileScale) {
+  els.bgTileScale.addEventListener("input", () => {
+    els.bgTileScaleVal.textContent = els.bgTileScale.value + " %";
+  });
+  els.bgTileScale.addEventListener("change",
+    () => setSetting("bgTileScale", parseInt(els.bgTileScale.value, 10)));
+}
 if (els.widgetTileStyle) {
   els.widgetTileStyle.addEventListener("change",
     () => setSetting("widgetTileStyle", els.widgetTileStyle.value));
@@ -3193,7 +3229,7 @@ els.audioGlowTint.addEventListener("change", () => setSetting("audioGlowTint", e
 // Effects section
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles", "matrix", "starfield", "lightning"];
+const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles", "matrix", "starfield", "lightning", "waves", "ripples", "flowfield"];
 const PIXELFX_MODES   = [
   { value: "off",    label: "Off" },
   { value: "trail",  label: "Trail" },
@@ -3597,6 +3633,84 @@ const TILE_PRESETS = {
       ctx.restore();
     },
   },
+  // ── Waves tile preview ──
+  // Two sine lines scrolling — same character as the wallpaper version,
+  // scaled down to fit the tile.
+  waves: {
+    targetCount: () => 3,
+    spawn: (w, h) => ({
+      yBase: h * (0.25 + Math.random() * 0.5),
+      amp:   3 + Math.random() * 5,
+      freq:  0.05 + Math.random() * 0.06,
+      speed: 1.2 + Math.random() * 1.4,
+      phase: Math.random() * Math.PI * 2,
+      alpha: 0.45 + Math.random() * 0.3,
+    }),
+    step: (p, dt) => { p.phase += p.speed * dt; return true; },
+    render: (ctx, p) => {
+      const w = ctx.canvas.width / (window.devicePixelRatio || 1);
+      ctx.strokeStyle = "rgba(120,180,255," + p.alpha + ")";
+      ctx.lineWidth = 1.2; ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 2) {
+        const y = p.yBase + Math.sin(x * p.freq + p.phase) * p.amp;
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    },
+  },
+  // ── Ripples tile preview ──
+  // Concentric expanding rings. Smaller maxR to fit the tile;
+  // same fade-with-radius envelope as the wallpaper version.
+  ripples: {
+    targetCount: () => 2,
+    spawn: (w, h) => ({
+      x: Math.random() * w, y: Math.random() * h,
+      r: 0, vr: 15 + Math.random() * 12,
+      maxR: 30 + Math.random() * 20,
+    }),
+    step: (p, dt) => { p.r += p.vr * dt; return p.r < p.maxR; },
+    render: (ctx, p) => {
+      const t = 1 - p.r / p.maxR;
+      const a = t * t * 0.7;
+      ctx.strokeStyle = "rgba(180,220,255," + a + ")";
+      ctx.lineWidth = 1; ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.stroke();
+    },
+  },
+  // ── Flowfield tile preview ──
+  // Particles drifting through the same pseudo-noise vector field.
+  flowfield: {
+    targetCount: (w, h) => Math.max(8, Math.round(w * h / 800)),
+    spawn: (w, h) => ({
+      x: Math.random() * w, y: Math.random() * h,
+      vx: 0, vy: 0,
+      r: 0.6 + Math.random() * 0.7,
+      a: 0.5 + Math.random() * 0.3,
+      life: 0, maxLife: 3 + Math.random() * 3,
+    }),
+    step: (p, dt, w, h) => {
+      p.life += dt;
+      const FREQ = 0.04;
+      const T = performance.now() * 0.00012;
+      const angle = Math.sin(p.x * FREQ + T) * Math.PI
+                  + Math.cos(p.y * FREQ - T * 1.3) * Math.PI;
+      const tvx = Math.cos(angle) * 18;
+      const tvy = Math.sin(angle) * 18;
+      p.vx += (tvx - p.vx) * 0.06;
+      p.vy += (tvy - p.vy) * 0.06;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.x < -5 || p.x > w + 5 || p.y < -5 || p.y > h + 5) return false;
+      return p.life < p.maxLife;
+    },
+    render: (ctx, p) => {
+      const fadeIn  = Math.min(1, p.life / 0.4);
+      const fadeOut = Math.min(1, (p.maxLife - p.life) / 0.8);
+      const a = p.a * Math.min(fadeIn, fadeOut);
+      ctx.fillStyle = "rgba(200,220,255," + a + ")";
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    },
+  },
 };
 
 els.ambientTint.addEventListener("change", () => setSetting("ambientTint", els.ambientTint.checked));
@@ -3742,7 +3856,26 @@ function renderLayoutPreview() {
     box.style.width  = (w.w * _previewScale) + "px";
     box.style.height = (w.h * _previewScale) + "px";
     const def = WIDGET_CATALOG[w.type];
-    box.textContent = def ? def.label : w.type;
+    // Label: widget name + a small indicator showing how the widget
+    // is being styled on the actual wallpaper. Helps the user spot
+    // a misconfigured override without flipping over to the wallpaper.
+    const opts = w.options || {};
+    const globalTile = settings.widgetTileStyle || "off";
+    const tileOverride = opts.tileStyle && opts.tileStyle !== "inherit"
+                       ? opts.tileStyle : null;
+    const effectiveTile = tileOverride || globalTile;
+    const tileBadge = (effectiveTile && effectiveTile !== "off")
+                    ? " · " + effectiveTile : "";
+    const alignBadge = (opts.textAlign && opts.textAlign !== "left")
+                     ? " · " + opts.textAlign : "";
+    const scaleBadge = (opts.textScale && opts.textScale !== 1)
+                     ? " · " + Math.round(opts.textScale * 100) + "%" : "";
+    box.textContent = (def ? def.label : w.type) + tileBadge + alignBadge + scaleBadge;
+    // Subtle visual cue for overrides — gives the preview-widget a
+    // slightly different tint when the user has customised it, so it
+    // stands out from inherited-default siblings.
+    if (tileOverride) box.classList.add("preview-tile-override");
+    box.style.textAlign = opts.textAlign || "center";
     const handle = document.createElement("div");
     handle.className = "resize-handle";
     box.appendChild(handle);
@@ -3880,7 +4013,10 @@ function renderWidgetList() {
     const configure = document.createElement("button");
     configure.className = "btn";
     configure.textContent = t("widget.btn.configure");
-    configure.disabled = !def || def.schema.length === 0;
+    // Every widget exposes the universal options (text align / scale /
+     // tile style) so the Configure button is always live, even on
+     // CPU/RAM meters whose own schema is empty.
+    configure.disabled = !def;
     configure.addEventListener("click", () => openOptionsModal(w));
     const remove = document.createElement("button");
     remove.className = "btn danger";
@@ -4056,6 +4192,36 @@ function handleEditWidgetDeepLink() {
   } catch (_) {}
 }
 
+// Universal options every widget honours (text alignment, text-size
+// scale, per-widget tile-style override). Rendered after the
+// widget-specific schema fields, separated by a small heading row so
+// the user can tell type-specific knobs from project-wide ones.
+const UNIVERSAL_WIDGET_FIELDS = [
+  { key: "textAlign", label: "Text alignment", type: "select",
+    options: [
+      { value: "left",   label: "Left" },
+      { value: "center", label: "Centered" },
+      { value: "right",  label: "Right" },
+    ] },
+  { key: "textScale", label: "Text size", type: "select",
+    options: [
+      { value: 0.5,  label: "50 %" },
+      { value: 0.75, label: "75 %" },
+      { value: 1,    label: "100 % (default)" },
+      { value: 1.25, label: "125 %" },
+      { value: 1.5,  label: "150 %" },
+      { value: 2,    label: "200 %" },
+    ] },
+  { key: "tileStyle", label: "Tile style", type: "select",
+    options: [
+      { value: "inherit", label: "Inherit (use global tile style)" },
+      { value: "off",     label: "Off — transparent overlay" },
+      { value: "glass",   label: "Glass — frosted acrylic" },
+      { value: "solid",   label: "Solid — opaque dark fill" },
+      { value: "clear",   label: "Clear — minimal outline" },
+    ] },
+];
+
 function openOptionsModal(widget) {
   const def = WIDGET_CATALOG[widget.type];
   if (!def) return;
@@ -4072,7 +4238,26 @@ function openOptionsModal(widget) {
   if (widget.type === "hardware-sensor") {
     refreshHardwareSensorSchema(def, modalState.options.sensorPath || "");
   }
-  for (const field of def.schema) {
+  // Build a unified list: widget-specific fields followed by the
+  // universal block. Defaults backfill into modalState.options when
+  // a widget's never been edited so the dropdowns show the right
+  // current values instead of empty.
+  if (modalState.options.textAlign == null) modalState.options.textAlign = "left";
+  if (modalState.options.textScale == null) modalState.options.textScale = 1;
+  if (modalState.options.tileStyle == null) modalState.options.tileStyle = "inherit";
+  const allFields = [
+    ...def.schema,
+    { _divider: t("widget.opts.universal") || "Layout (applies to all widgets)" },
+    ...UNIVERSAL_WIDGET_FIELDS,
+  ];
+  for (const field of allFields) {
+    if (field._divider) {
+      const div = document.createElement("div");
+      div.style.cssText = "margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;";
+      div.textContent = field._divider;
+      els.modalBody.appendChild(div);
+      continue;
+    }
     const row = document.createElement("div");
     if (field.type === "boolean") {
       row.className = "check-row";
@@ -4266,6 +4451,12 @@ function renderAll() {
   // Background
   els.bgImage.value = settings.bgImage || "";
   els.bgFit.value   = settings.bgFit   || "cover";
+  if (els.bgTileScale) {
+    const scale = settings.bgTileScale ?? 100;
+    els.bgTileScale.value = String(scale);
+    els.bgTileScaleVal.textContent = scale + " %";
+  }
+  updateBgTileScaleVisibility();
   if (els.widgetTileStyle) {
     els.widgetTileStyle.value = settings.widgetTileStyle || "off";
   }

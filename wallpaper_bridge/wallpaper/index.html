@@ -256,6 +256,66 @@
   body.widget-tile-clear .edit-mode .widget {
     border-radius: var(--widget-tile-radius);
   }
+
+  /* Per-widget tile-style overrides — same property block as the
+     body-level rules but scoped to a single widget so a user can
+     dial "all glass, but this one solid" via the widget's edit
+     dialog. `.tile-off` explicitly cancels the inherited body
+     style (clear background, no border, no shadow). */
+  .widget.tile-glass {
+    background: rgba(15, 22, 36, 0.55);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: var(--widget-tile-border);
+    border-radius: var(--widget-tile-radius);
+    box-shadow: var(--widget-tile-shadow);
+    padding: var(--widget-tile-padding);
+  }
+  .widget.tile-solid {
+    background: rgba(20, 26, 38, 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: var(--widget-tile-border);
+    border-radius: var(--widget-tile-radius);
+    box-shadow: var(--widget-tile-shadow);
+    padding: var(--widget-tile-padding);
+  }
+  .widget.tile-clear {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--widget-tile-radius);
+    box-shadow: none;
+    padding: var(--widget-tile-padding);
+  }
+  .widget.tile-off {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 8px !important;
+  }
+
+  /* Universal text alignment + scale. Default values (left + 1.0)
+     are baked into the var fallbacks so widgets that never had the
+     opts set keep their pre-v1.1 layout. */
+  .widget {
+    --w-align: left;
+    --w-scale: 1;
+    text-align: var(--w-align);
+  }
+  /* Widgets with their own per-content font sizing (cpu/ram/hwmon
+     meter values, now-playing title, etc.) all use `em` units that
+     scale relative to .widget's font-size, so multiplying that one
+     base size hits everything inside. */
+  .widget { font-size: calc(1em * var(--w-scale)); }
+  /* clock face is SVG-based — text-align doesn't move it, but the
+     flex centering already kept it middle. text-scale does NOT
+     affect SVG natively; apply via transform: scale to the inner
+     svg so the dial actually resizes with the slider. */
+  .widget-clock svg { transform: scale(var(--w-scale)); transform-origin: center center; }
   .edit-mode .widget {
     pointer-events: auto;
     background: rgba(0,0,0,0.30);
@@ -926,21 +986,42 @@ function normalizeImagePath(p) {
   return t;
 }
 
-// Maps the Fit dropdown's string value to a {size, repeat} CSS pair.
-// Keeping this in one table makes adding a future "tile-2x" / "tile-50"
-// scale variant a single-line addition instead of three switch arms.
+// Fit-mode → { size, repeat } table. For tile modes the size is a
+// function of (a) the source image's natural dimensions (captured at
+// preload time into --bg-w / --bg-h CSS variables) and (b) the
+// user's per-screen bgTileScale slider in percent. calc() does the
+// multiplication at render time so the slider feels live without
+// re-doing JS layout.
+//   scale 100 → tiles render at the image's natural size
+//   scale 200 → tiles render at 2× the image's natural size
+//   scale  50 → tiles render at half the image's natural size
+// For tile-x and tile-y, the non-repeating axis stays at "100%" so
+// the image still fills that direction; the repeating axis scales.
 const BG_FIT_CSS = {
-  "cover":   { size: "cover",      repeat: "no-repeat" },
-  "contain": { size: "contain",    repeat: "no-repeat" },
-  "fill":    { size: "100% 100%",  repeat: "no-repeat" },
-  "tile":    { size: "auto",       repeat: "repeat"    },
-  "tile-x":  { size: "auto 100%",  repeat: "repeat-x"  },
-  "tile-y":  { size: "100% auto",  repeat: "repeat-y"  },
+  "cover":   { size: () => "cover",                                                 repeat: "no-repeat" },
+  "contain": { size: () => "contain",                                               repeat: "no-repeat" },
+  "fill":    { size: () => "100% 100%",                                             repeat: "no-repeat" },
+  "tile":    { size: (s) => "calc(var(--bg-w, auto) * " + s + " / 100) "
+                          + "calc(var(--bg-h, auto) * " + s + " / 100)",            repeat: "repeat"    },
+  "tile-x":  { size: (s) => "calc(var(--bg-w, auto) * " + s + " / 100) 100%",       repeat: "repeat-x"  },
+  "tile-y":  { size: (s) => "100% calc(var(--bg-h, auto) * " + s + " / 100)",       repeat: "repeat-y"  },
 };
 
+let currentBgFit = "cover";
+let currentBgTileScale = 100;
+
 function applyBgFit(mode) {
-  const css = BG_FIT_CSS[mode] || BG_FIT_CSS.cover;
-  bgEl.style.backgroundSize = css.size;
+  currentBgFit = mode;
+  _refreshBgSize();
+}
+function applyBgTileScale(scale) {
+  const s = Math.max(10, Math.min(200, parseInt(scale, 10) || 100));
+  currentBgTileScale = s;
+  _refreshBgSize();
+}
+function _refreshBgSize() {
+  const css = BG_FIT_CSS[currentBgFit] || BG_FIT_CSS.cover;
+  bgEl.style.backgroundSize = css.size(currentBgTileScale);
   bgEl.style.backgroundRepeat = css.repeat;
 }
 
@@ -963,6 +1044,16 @@ function setBackground() {
     // CSS url() needs the path single-quoted to survive paths with
     // spaces or parentheses. encodeURI handles the bytes safely.
     bgEl.style.backgroundImage = "url('" + src.replace(/'/g, "%27") + "')";
+    // Stash natural pixel dimensions as CSS custom properties so the
+    // tile-mode sizes (calc(var(--bg-w) * scale / 100)) can scale
+    // the pattern relative to the source image's own resolution.
+    // cover / contain / fill ignore these.
+    bgEl.style.setProperty("--bg-w", (probe.naturalWidth || 1) + "px");
+    bgEl.style.setProperty("--bg-h", (probe.naturalHeight || 1) + "px");
+    // Re-apply background-size now that the natural dimensions are
+    // known — important on first load when applyBgFit was called
+    // before the image had loaded.
+    _refreshBgSize();
     bgEl.style.opacity = "1";
   };
   probe.onerror = () => {
@@ -1030,6 +1121,9 @@ function applyProperty(name, val) {
       break;
     case "bgFit":
       applyBgFit(val || "cover");
+      break;
+    case "bgTileScale":
+      applyBgTileScale(val);
       break;
     case "bgDim":
       dimEl.style.opacity = String((parseInt(val) || 0) / 100);
@@ -1724,6 +1818,35 @@ function applyWidgetOptions(rec, w) {
     rec.el.style.setProperty("--w-tint", currentTintCss);
   } else {
     rec.el.style.removeProperty("--w-tint");
+  }
+  // ── Universal widget options (v1.1+) ──
+  // Three knobs every widget honours via CSS custom properties + a
+  // few opt-in class names so individual widget renderers don't
+  // each need to re-implement them.
+  //   textAlign  — "left" | "center" | "right" (default "left")
+  //   textScale  — 0.5 - 2.0, multiplier on widget font-size
+  //                 (default 1.0 = no scaling)
+  //   tileStyle  — "inherit" | "off" | "glass" | "solid" | "clear"
+  //                 (default "inherit" → use the global widgetTileStyle
+  //                  set on <body>)
+  const textAlign = (rec.opts.textAlign === "center" || rec.opts.textAlign === "right")
+                  ? rec.opts.textAlign : "left";
+  rec.el.style.setProperty("--w-align", textAlign);
+  const scale = parseFloat(rec.opts.textScale);
+  const scaleClamped = (scale > 0 && scale <= 4) ? scale : 1;
+  rec.el.style.setProperty("--w-scale", String(scaleClamped));
+  // Per-widget tile-style override. Strip any prior override class,
+  // then apply the new one. "inherit" leaves the body-level class
+  // doing its thing.
+  for (const s of WIDGET_TILE_STYLES) {
+    if (s === "off") continue;
+    rec.el.classList.remove("tile-" + s);
+  }
+  rec.el.classList.remove("tile-off");   // explicit off-override
+  const tileOverride = rec.opts.tileStyle;
+  if (tileOverride && tileOverride !== "inherit"
+      && WIDGET_TILE_STYLES.indexOf(tileOverride) >= 0) {
+    rec.el.classList.add("tile-" + tileOverride);
   }
   if (rec.tick) rec.tick();
 }
@@ -2675,6 +2798,139 @@ const AMBIENT_PRESETS = {
       }
       ctx.stroke();
       ctx.restore();
+    },
+  },
+
+  // ── Waves ──
+  // Multiple sinusoidal horizontal lines flowing across the canvas
+  // at slightly different speeds, amplitudes and phases. Each
+  // "particle" is one line; the renderer samples it as a polyline
+  // across canvas width every frame. Soft alpha so lines blend
+  // into each other where they overlap.
+  waves: {
+    targetCount: (d) => Math.max(3, Math.round(3 + d / 20)),
+    spawn: (w, h) => ({
+      yBase: h * (0.15 + Math.random() * 0.7),
+      amp:   30 + Math.random() * 80,
+      freq:  0.003 + Math.random() * 0.005,    // cycles per px
+      speed: 0.4 + Math.random() * 0.7,        // phase advance / sec
+      phase: Math.random() * Math.PI * 2,
+      thick: 1.5 + Math.random() * 1.5,
+      alpha: 0.25 + Math.random() * 0.35,
+    }),
+    step: (p, dt) => {
+      p.phase += p.speed * dt;
+      return true;     // waves don't despawn
+    },
+    render: (ctx, p, tint) => {
+      const w = ctx.canvas.width / (window.devicePixelRatio || 1);
+      ctx.strokeStyle = tint
+        ? rgbToRgba(tint, p.alpha)
+        : "rgba(120, 180, 255, " + p.alpha + ")";
+      ctx.lineWidth = p.thick;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      // Sample every 4 px — fine enough that the curve reads as
+      // smooth at 1080p / 1440p, coarse enough to keep per-frame
+      // cost negligible. lineJoin handles the segment smoothing.
+      const STEP = 4;
+      for (let x = 0; x <= w; x += STEP) {
+        const y = p.yBase + Math.sin(x * p.freq + p.phase) * p.amp;
+        if (x === 0) ctx.moveTo(x, y);
+        else         ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    },
+  },
+
+  // ── Ripples ──
+  // Concentric expanding rings, like water-surface ripples after a
+  // drop. Each particle is one ripple: a centre point + a radius
+  // that grows over time, with the stroke fading out as the radius
+  // increases. Despawn when alpha hits zero so the field doesn't
+  // fill up with invisible rings.
+  ripples: {
+    targetCount: (d) => Math.max(2, Math.round(d / 25)),
+    spawn: (w, h) => ({
+      x:    Math.random() * w,
+      y:    Math.random() * h,
+      r:    0,
+      vr:   80 + Math.random() * 60,           // radius growth (px / sec)
+      maxR: 200 + Math.random() * 180,
+      thick: 1.2 + Math.random() * 1.0,
+    }),
+    step: (p, dt) => {
+      p.r += p.vr * dt;
+      return p.r < p.maxR;
+    },
+    render: (ctx, p, tint) => {
+      // Stroke alpha fades from 0.55 at birth to 0 at maxR; the
+      // squared falloff makes the ring's afterglow taper rather
+      // than fading linearly.
+      const t = 1 - p.r / p.maxR;
+      const a = t * t * 0.55;
+      ctx.strokeStyle = tint
+        ? rgbToRgba(tint, a)
+        : "rgba(180, 220, 255, " + a + ")";
+      ctx.lineWidth = p.thick;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.stroke();
+    },
+  },
+
+  // ── Flowfield ──
+  // Particles drifting through a smooth 2D Perlin-ish noise vector
+  // field. Each frame the particle's velocity is steered toward
+  // the noise direction at its current position, producing the
+  // organic swirling-stream pattern that flow-field pens are known
+  // for. Cheap pseudo-noise (sin/cos combo) — no dependency.
+  flowfield: {
+    targetCount: (d, w, h) => Math.round((w * h) / 6000 * (d / 60)),
+    spawn: (w, h) => ({
+      x:  Math.random() * w,
+      y:  Math.random() * h,
+      vx: 0, vy: 0,
+      r:  0.8 + Math.random() * 1.0,
+      alpha: 0.35 + Math.random() * 0.3,
+      life: 0,
+      maxLife: 6 + Math.random() * 8,
+    }),
+    step: (p, dt, w, h) => {
+      p.life += dt;
+      // Cheap noise: sample two trig functions at scaled coords to
+      // get an angle. Phase shifts make X and Y components
+      // independent enough for the field to swirl rather than
+      // align. Not true Perlin but visually indistinguishable for
+      // this use case.
+      const FREQ = 0.004;
+      const T = performance.now() * 0.00008;
+      const angle = Math.sin(p.x * FREQ + T) * Math.PI
+                  + Math.cos(p.y * FREQ - T * 1.3) * Math.PI;
+      // Lerp the velocity toward the noise direction so trails
+      // curve smoothly instead of snapping each frame.
+      const targetVx = Math.cos(angle) * 50;
+      const targetVy = Math.sin(angle) * 50;
+      p.vx += (targetVx - p.vx) * 0.04;
+      p.vy += (targetVy - p.vy) * 0.04;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      // Despawn off-screen or end-of-life.
+      if (p.x < -20 || p.x > w + 20 || p.y < -20 || p.y > h + 20) return false;
+      return p.life < p.maxLife;
+    },
+    render: (ctx, p, tint) => {
+      // Subtle birth + death fade so respawning particles don't
+      // pop in and dying ones don't snap out.
+      const fadeIn  = Math.min(1, p.life / 0.6);
+      const fadeOut = Math.min(1, (p.maxLife - p.life) / 1.2);
+      const a = p.alpha * Math.min(fadeIn, fadeOut);
+      ctx.fillStyle = tint
+        ? rgbToRgba(tint, a)
+        : "rgba(200, 220, 255, " + a + ")";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
     },
   },
 };
