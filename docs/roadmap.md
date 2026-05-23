@@ -506,6 +506,77 @@ update + DE/EN strings for the new "Tile style" controls).
 
 ---
 
+## 🧩 Post-v1.0 — Background Fit: add tile / repeat mode
+
+The Background card's *Fit* dropdown currently offers three modes:
+`cover (crop to fill)`, `contain (letterbox)`, `fill (stretch)`.
+Missing the obvious fourth one: **tile** — repeat a small image
+across the canvas as a pattern, the way browser-style backgrounds
+do. Users with seamless / pattern wallpapers (carbon fibre,
+hex grids, dot patterns, abstract textures, retro 90s tile art)
+currently have no way to use those at their native scale.
+
+### What gets added
+
+Three new dropdown entries:
+
+- **tile** — repeat the image in both X and Y. CSS:
+  `background-repeat: repeat; background-size: auto;`
+- **tile X** — repeat horizontally only, image fills the screen
+  height (`background-repeat: repeat-x; background-size: auto 100%;`).
+- **tile Y** — repeat vertically only, image fills the screen
+  width (`background-repeat: repeat-y; background-size: 100% auto;`).
+
+### Architecture
+
+Current implementation uses `<img id="bg">` with `object-fit:
+cover/contain/fill`. `object-fit` has no tile / repeat mode, so the
+tile variants need CSS `background-image` on a `<div>` instead.
+
+Two cleanest options:
+
+1. **Single element, CSS-only:** swap `<img>` for `<div
+   id="bg">` and drive everything via `background-image` +
+   `background-size` + `background-repeat`. Same DOM count, same
+   GPU cost, supports every existing mode plus the new ones.
+   Affects the fade-on-load transition logic since `background-image`
+   doesn't fire `load` events the way `<img>` does — would need
+   to preload via `new Image()` then swap.
+2. **Two-element hybrid:** keep `<img>` for cover/contain/fill,
+   add a hidden `<div>` for tile modes, toggle visibility based
+   on bgFit value. Lower regression risk on the existing modes,
+   but doubles the DOM + makes the fade-on-load transition
+   asymmetric.
+
+Recommended: option 1, with a `new Image()` preload to keep the
+fade-on-load UX from regressing.
+
+### Per-tile scale (optional follow-up)
+
+A second slider — *Tile scale* (10 % – 200 %) — lets the user
+resize the pattern without re-uploading a different-sized source
+image. Drives `background-size: <scale>% auto` for *tile X*,
+`auto <scale>%` for *tile Y*, and `<scale>% <scale>%` for *tile*.
+
+### Where it lives in the code
+
+- `wallpaper_bridge/bridge.py` — `BG_FIT_CHOICES` (line 692ish);
+  add `"tile"`, `"tile-x"`, `"tile-y"`. Defaults stay `"cover"`.
+- `wallpaper_bridge/configurator.html` — three new `<option>` lines
+  in the `bg-fit` `<select>`, three new i18n entries in
+  `TRANSLATIONS` (en + de copy).
+- `wallpaper_bridge/wallpaper/index.html` — `LIVELY_BG_FIT` array
+  bump + the actual `applyBg()` style-application logic.
+- `wallpaper_bridge/wallpaper/index.html` styles — swap
+  `#bg { object-fit: ... }` for `#bg { background-size / background-repeat }`
+  driven by data-attribute.
+
+Effort estimate: **~2-3 h** for the three new modes + i18n + a
+quick sanity test on all three; another **~1 h** if the per-tile
+scale slider is included.
+
+---
+
 ## 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
 
 Not a single user need; broader API + plugin work. Lower priority
