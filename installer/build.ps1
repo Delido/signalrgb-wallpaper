@@ -133,10 +133,14 @@ This wallpaper renders the colours of your currently running SignalRGB effect th
 
 [b]Features driven by the bridge:[/b]
 [list]
-[*] In-browser configurator with drag-and-resize widget layout — clock, calendar, weather, sticky notes, countdown, picture frame, quote, CPU / RAM meters, audio spectrum
-[*] Full-canvas ambient effects: snow, rain, sparks, aurora — optionally tinted from the live glow colour
+[*] In-browser configurator + builder with drag-and-resize widget layout — clock, calendar, weather, sticky notes, countdown, picture frame, quote, CPU / RAM / GPU / hardware sensor meters, audio spectrum, Now-playing (Windows SMTC)
+[*] [b]Twelve ambient effects:[/b] snow, rain, sparks, aurora, constellation, fireflies, plasma, vortex, bubbles, matrix, starfield, lightning — optionally tinted from the live glow colour
+[*] Whole-screen audio-reactive glow layer (pulse / spectrum / waveform)
 [*] Cursor pixelfx (mouse trail, hover glow, click ripple) and 3D parallax on the background
+[*] In-browser Builder with one-click Auto-cut (Otsu + saliency, no AI download), monitor-wall workflow, brush tools, pattern fills
+[*] Preset slots, wallpaper auto-cycle, global preset hotkeys, per-app/game profiles
 [*] DE / EN UI, auto-detected from your Windows locale
+[*] Auto-pause when a fullscreen app is foreground
 [/list]
 
 MIT licensed. Open source: [url=https://github.com/Delido/signalrgb-wallpaper]github.com/Delido/signalrgb-wallpaper[/url]
