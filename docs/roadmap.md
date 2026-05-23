@@ -584,6 +584,86 @@ unless a community / power-user request comes in. Deferred past
 v1.0 — the v0.7 → v1.0 arc was about getting the single-user
 experience rock-solid; integration is the next layer up.
 
+### 🔲 sACN / E1.31 broadcast output — **recommended first Tier 4 item**
+
+The bridge today is already a colour router (SignalRGB plugin →
+UDP → bridge → WebSocket → wallpaper page). Adding a second
+output path that emits the same colour stream as **sACN (streaming
+ACN, ANSI E1.31-2018)** multicast packets would bridge SignalRGB
+into the entire DIY-LED ecosystem — WLED, xLights, FPP, Hyperion,
+OLA-driven fixtures, anything that consumes sACN. Massively
+higher audience-expansion potential than the other Tier 4 items
+because the DIY-LED community dwarfs the SignalRGB user base.
+
+#### What gets added
+
+- A new bridge module that reads the same per-frame colour grid
+  the WebSocket fans get, packs it into 512-channel sACN universes,
+  and emits UDP-multicast packets on `239.255.0.x` (or unicast
+  to a configured IP).
+- Configurator UI for per-output config: destination universe
+  number(s), start-channel offset, priority field (0-200), unicast
+  target IP, source-name string, pixel-mapping mode
+  (linear / snake / boustrophedon).
+- Disabled by default — zero overhead until the user opts in.
+
+#### Architecture
+
+- New optional thread on the bridge side, parallel to the
+  existing HwMon poller / sysstats pusher.
+- Reads the same `latest_frame_by_screen` colour buffer the
+  WebSocket broadcaster already maintains — no protocol changes
+  needed upstream.
+- Pure-Python sACN emit (`sacn` / `python-sacn` library, MIT).
+  UDP-only, no extra deps.
+- Per-screen device config in `config.json` under a new
+  `sacnOutputs` key — list of `{screen, universeStart, channelMap,
+  destIp, priority}` entries.
+- Pixel mapping: SignalRGB devices are 2D grids (128×128 by
+  default), sACN universes are linear 512-channel arrays. Map
+  via pre-set patterns the LED community recognises (linear,
+  snake, boustrophedon — same names xLights uses).
+
+#### Effort estimate
+
+| Block | Time |
+| --- | --- |
+| Core sACN emit + universe mapping | 6-10 h |
+| Configurator UI (universe / channel / priority / dest IP) | 3-4 h |
+| Multi-screen routing + per-device mapping | 4-6 h |
+| Testing against WLED + FPP + xLights | 3-5 h |
+| Docs + sample configs (WLED quick-start) | 2 h |
+| **Total** | **~18-27 h** |
+
+#### Tradeoffs
+
+- **Network complexity** — multicast can be blocked across
+  VLANs; need a clear interface-picker + a "test packet" button
+  in the Configurator for diagnosis. mDNS / SSDP discovery is a
+  potential phase-2.
+- **Pixel-mapping confusion** — different LED setups expect
+  different pixel orderings. Need preset mappings + a visual
+  preview in the Configurator so the user can verify before
+  committing.
+- **Latency budget** — 60 fps × ~96 universes per screen × 638
+  bytes per packet ≈ 6 Mb/s on a 4-screen rig. Comfortably
+  inside any local LAN; need batched emit per frame so we don't
+  miss frame deadlines.
+- **No auth** — sACN protocol has none, relies on network
+  isolation. Document clearly that this is a LAN feature; the
+  bridge should refuse to bind to a routable interface unless
+  the user explicitly opts in.
+
+#### Why this lands ahead of the other Tier 4 items
+
+Most Tier 4 items (HA / MQTT, REST API, Plugin API, Generic HTTP
+widget) extend reach within power-user niches that already know
+about us. sACN extends reach into a **completely separate
+community** (DIY-LED, holiday-lights, ambient-lighting builders)
+that doesn't currently know SignalRGB exists. The work is also
+better-scoped (single protocol, well-documented spec) than the
+REST API formalisation that the other Tier 4 items depend on.
+
 ### 🔲 Home Assistant / MQTT bridge
 
 Bridge publishes wallpaper state (current preset, current
