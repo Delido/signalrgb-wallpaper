@@ -417,10 +417,12 @@ by construction and was the right call for those five effects.
 
 ---
 
-## 🔌 Tier 4 — Ecosystem / integration
+## 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
 
 Not a single user need; broader API + plugin work. Lower priority
-unless a community / power-user request comes in.
+unless a community / power-user request comes in. Deferred past
+v1.0 — the v0.7 → v1.0 arc was about getting the single-user
+experience rock-solid; integration is the next layer up.
 
 ### 🔲 Home Assistant / MQTT bridge
 

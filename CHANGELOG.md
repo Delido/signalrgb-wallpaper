@@ -4,6 +4,85 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-05-23
+
+> 🎉 **First stable release.** Drops the `-beta` suffix that's been
+> trailing the version string for ~18 months and shipped across
+> ~50 beta tags. No new features beyond v0.9.21 — this is a
+> stability + maturity statement, not a feature drop.
+>
+> Everything in the v0.7 → v0.9.21 beta cycle is now considered
+> stable surface. The roadmap's Tier 1 (setup polish), Tier 2
+> (high-visibility features) and Tier 3 (power-user / polish) are
+> all shipped. Tier 4 (ecosystem / integration: HA-MQTT bridge,
+> formal REST API, plugin API, generic HTTP widget) becomes
+> post-1.0 work, prioritised by community demand.
+
+### Highlights of the road to 1.0
+
+The beta cycle delivered, across ~50 tagged releases:
+
+- **Setup polish** — installer with auto-Lively bootstrapper +
+  Wallpaper Engine integration + SignalRGB plugin install + tray
+  system-status diagnostic + Backup/Restore + first-run tour +
+  per-screen Reset + Ctrl+Z undo with 20-entry ring buffer.
+- **In-browser configurator + builder** — multi-screen tabs with
+  resolution labels, library with hover-preview / pin / drag-reorder /
+  right-click menu, monitor-wall workflow, span-canvas-across-monitors,
+  crop tool, pattern-fill brushes, Auto-cut tool (Otsu + saliency,
+  pure JS, no model download), live RGB glow preview, save-to-library.
+- **Twelve ambient effects** — snow, rain, sparks, aurora,
+  constellation, fireflies, plasma, vortex, bubbles, matrix,
+  starfield, lightning. All written from scratch in the project's
+  own `AMBIENT_PRESETS` shape, no per-pen licence verification
+  needed. Optional glow-colour tinting on every preset.
+- **Whole-screen audio-reactive glow layer** — Pulse / Spectrum /
+  Waveform modes driving off the SignalRGB FFT bins.
+- **Eleven+ widgets** with drag-and-resize layout — clock,
+  calendar, weather (Open-Meteo), sticky notes, countdowns, photo
+  frame, quote pool, CPU / RAM / GPU / drive / fan / hardware-sensor
+  meters (LibreHardwareMonitor optional), audio spectrum, Now-playing
+  (Windows SMTC).
+- **Automation** — wallpaper auto-cycle with configurable interval /
+  pool / order, global preset hotkeys (Ctrl+Shift+1..4), per-app /
+  per-game profiles via foreground-window watcher.
+- **Multi-monitor** — up to 4 screens, each independent or mirrored
+  to any other; ultrawide-friendly aspect ratios (Auto / 16:9 /
+  21:9 / 32:9 / 9:16 / Custom).
+- **Auto-update** — tray "Download + install update" via
+  `ShellExecuteW` plus Inno's `CloseApplications=force`;
+  bulletproof after the v0.9.17 + v0.9.19 fix arc.
+- **DE / EN localisation** across Configurator, Builder, About, Help,
+  installer.
+- **Winget submission** — manifest scaffolding in `installer/winget/`
+  with maintainer helper script; first submission opened against
+  `microsoft/winget-pkgs` for v0.9.21. v1.0.0 manifest follows once
+  the v0.9.21 PR merges.
+
+### Compatibility
+
+- Bridge binary, plugin file format, WebSocket protocol, and
+  wallpaper-bundle structure are all considered **stable surface**
+  going forward. v1.x updates preserve compatibility; breaking
+  changes wait for v2.0.
+- Existing v0.9.x installations auto-update to v1.0.0 via the
+  tray (the v0.9.19+ ShellExecuteW path).
+- Lively / Wallpaper Engine bundles need a re-import on the first
+  v1.x install since the cache extracts the zip once and doesn't
+  notice version changes — same gotcha as every beta release with
+  wallpaper-JS changes. Tray → Advanced → *Reload wallpaper pages*
+  helps for in-place HTML reloads but not for new effects.
+
+### Why now
+
+Every meaningful UX surface is shipped, the auto-update path is
+finally bulletproof, the licence story (MIT + permissive deps + no
+non-commercial defaults) is clean, the Workshop submission is live,
+the Winget package is in moderator review, and the maintainer has
+been running it daily on his own machines for the last weeks
+without surfacing anything that screams "still beta". Dropping the
+suffix.
+
 ## [0.9.21-beta] - 2026-05-23
 
 > Closes out the remaining Tier 3 roadmap items: a third batch of

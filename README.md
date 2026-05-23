@@ -29,12 +29,11 @@ Runs on top of [Lively Wallpaper](https://www.rocksdanister.com/lively/)
 Steam). The one-click installer sets everything up — no Python, no
 manual file copies, no terminal.
 
-> Currently in the **v0.9.x stabilisation cycle** — the v0.8.x betas
-> piled workflow polish on top of v0.8.0 (the first stable), and the
-> v0.9.x betas added the bigger features (auto-cycle, hotkeys,
-> per-app profiles, now-playing, Auto-cut Builder tool, multi-monitor
-> wall, etc.). Turn on *Allow betas* in the tray to get them
-> automatically. Full notes: [CHANGELOG](CHANGELOG.md).
+> 🎉 **v1.0.0 is the first stable release.** ~50 beta tags across
+> v0.7 → v0.9.21 are now consolidated into a stable surface: bridge
+> protocol, plugin format, wallpaper-bundle layout, and Configurator
+> API are considered v1.x stable going forward. Full release notes
+> in the [CHANGELOG](CHANGELOG.md).
 
 ## What you get
 
@@ -277,31 +276,18 @@ Open ideas grouped by impact-to-effort ratio. Pull requests welcome.
 For the long-form version with per-item implementation notes +
 licence-compatibility guidance, see [docs/roadmap.md](docs/roadmap.md).
 
-> ✅ **Tiers 1 + 2 are fully shipped** as part of the v0.8.9 → v0.9.10
-> beta cycle (setup health-check, backup/restore, Ctrl+Z undo,
-> first-run tour, auto-cycle, preset hotkeys, per-app profiles,
-> now-playing widget). Tier 3's Builder Auto-cut tool, auto-update,
-> and the first two ambient batches have also shipped (v0.9.12 →
-> v0.9.17). What's left below is the genuinely open work.
+> ✅ **Tiers 1 + 2 + 3 are all shipped** as part of the v0.8 → v1.0
+> arc. Setup health-check, backup/restore, Ctrl+Z undo, first-run
+> tour, wallpaper auto-cycle, preset hotkeys, per-app profiles,
+> Now-playing widget, Builder Auto-cut tool, auto-update,
+> twelve ambient effects, multi-monitor wall workflow, Winget
+> submission — all done.
+>
+> The open work below is **Tier 4 (ecosystem / integration)**.
+> Lower priority because none of it is a single-user need; pull
+> requests very welcome if any of these matter to your setup.
 
-### 🛠️ Tier 3 — Power-user / polish (partial)
-
-- **More ambient effects from MIT-licensed CodePen sources** —
-  Constellation and Fireflies (v0.9.12), Plasma, Vortex and
-  Bubbles (v0.9.15) shipped as the first two batches. Further
-  effects are an open menu: any MIT-licensed canvas / particle
-  / shader pen from CodePen is fair game, picked on visual fit
-  rather than a single author. Per-pen licence check
-  (CodePen → *Settings → License* on the pen) and attribution
-  in [docs/credits.md](docs/credits.md) required for any pen
-  ported directly.
-- **Winget package** — auto-update is done (tray downloads + runs
-  the installer); the missing piece is a Winget manifest submission
-  to `microsoft/winget-pkgs` so `winget install
-  Delido.SignalRGBWallpaper` works. Needs an ongoing per-release
-  manifest update.
-
-### 🔌 Tier 4 — Ecosystem / integration
+### 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
 
 - **Home Assistant / MQTT bridge** — publish wallpaper state +
   sensor values via MQTT so users can write HA automations
