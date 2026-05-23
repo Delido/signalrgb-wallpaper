@@ -4,6 +4,36 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1-beta] - 2026-05-23
+
+> Hotfix on the v1.1.0-beta hwmon (LibreHardwareMonitor) widget.
+> Two reported issues: it used a different (default sans-serif)
+> font than the CPU / RAM meters next to it, and the sensor's unit
+> rendered in the header next to the label instead of after the
+> value — so a "GPU Load %" sensor read as `[GPU %]\n[18.00]`
+> with the % glued to the label, while CPU shows `[CPU]\n[23%]`
+> with the unit attached to the value.
+
+### Fixed
+
+- **Hardware-sensor widget font** — added `.widget-hardware-sensor`
+  to the same CSS rule block that drives the CPU / RAM / Net
+  meters: same monospace value font (Cascadia Mono / Consolas),
+  same uppercase 11 px head label, same `clamp(22px, 28%, 48px)`
+  value sizing, same tinted-mode colour. The four meter widgets
+  now look like they belong to the same UI.
+- **Sensor unit placement** — moved `.hwmon-unit` out of the
+  `.stat-head` (where it sat next to the label) and into the
+  `.stat-value` row alongside the number. Unit is rendered at
+  0.55 em + 0.75 opacity so it reads as a suffix on the value
+  (`18.00 %`) instead of as part of the label (`GPU%`).
+- **Auto-derived label cleanup** — leaf names that already carry
+  a unit suffix (`GPU Total Load %`, `CPU Package °C`, fan RPMs,
+  voltages, drive sizes) get the unit suffix stripped before the
+  string lands in the label cell. The user's explicit `label`
+  override still wins; this only affects the auto-fallback when
+  no override is set.
+
 ## [1.1.0-beta] - 2026-05-23
 
 > First beta of the post-v1.0 cycle. Two design-system changes

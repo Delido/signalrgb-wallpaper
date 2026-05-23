@@ -426,18 +426,24 @@
   .widget-quote.tinted .q-author { color: var(--w-tint, rgba(255,255,255,0.85)); }
   .widget-quote .q-foot { font-size: 10px; opacity: 0.45; text-align: right; margin-top: 4px; }
 
-  /* ── System-stat widgets (CPU / RAM / Net) — sparkline + label ── */
-  .widget-cpu-meter, .widget-ram-meter, .widget-net-graph {
+  /* ── System-stat widgets (CPU / RAM / Net) + Hardware sensor —
+        sparkline + label. Hardware sensor was originally on the
+        generic .widget style; rolled into the same rule block in
+        v1.1 so all four meter widgets visually match. */
+  .widget-cpu-meter, .widget-ram-meter, .widget-net-graph,
+  .widget-hardware-sensor {
     display: flex; flex-direction: column; padding: 10px !important;
   }
   .widget-cpu-meter .stat-head,
   .widget-ram-meter .stat-head,
-  .widget-net-graph .stat-head {
+  .widget-net-graph .stat-head,
+  .widget-hardware-sensor .stat-head {
     display: flex; justify-content: space-between; align-items: baseline;
     font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .widget-cpu-meter .stat-value,
-  .widget-ram-meter .stat-value {
+  .widget-ram-meter .stat-value,
+  .widget-hardware-sensor .stat-value {
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
     font-size: clamp(22px, 28%, 48px);
     font-weight: 600;
@@ -445,11 +451,25 @@
     line-height: 1;
     margin: 4px 0 6px;
   }
+  /* Hardware-sensor value cell holds two spans (value + unit) so we
+     can keep them in one flex row that wraps cleanly on narrow
+     widgets. Unit is slightly smaller + dimmer — matches the way
+     CPU/RAM's inline "%" reads even though those concatenate the
+     string instead of using two spans. */
+  .widget-hardware-sensor .stat-value {
+    display: flex; align-items: baseline; gap: 4px;
+    flex-wrap: wrap;
+  }
+  .widget-hardware-sensor .hwmon-unit {
+    font-size: 0.55em; opacity: 0.75;
+  }
   .widget-cpu-meter.tinted .stat-value,
-  .widget-ram-meter.tinted .stat-value { color: var(--w-tint, #fff); }
+  .widget-ram-meter.tinted .stat-value,
+  .widget-hardware-sensor.tinted .stat-value { color: var(--w-tint, #fff); }
   .widget-cpu-meter canvas,
   .widget-ram-meter canvas,
-  .widget-net-graph canvas {
+  .widget-net-graph canvas,
+  .widget-hardware-sensor canvas {
     width: 100%; flex: 1 1 auto; min-height: 30px; display: block;
   }
   .widget-net-graph .stat-pair {
@@ -3070,8 +3090,16 @@ WIDGET_REGISTRY["hardware-sensor"] = {
   icon: '<svg viewBox="0 0 24 24"><path d="M4 4h6v6H4z"/>' +
         '<path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/>' +
         '<path d="M14 14h6v6h-6z"/></svg>',
-  markup: () => '<div class="stat-head"><span class="hwmon-label">Hardware</span><span class="hwmon-unit"></span></div>' +
-                '<div class="stat-value hwmon-value">—</div><canvas></canvas>',
+  // Markup mirrors cpu-meter / ram-meter: header gets just the label
+  // (matching the all-caps small style); the value row holds both the
+  // number and the unit so the unit reads as a suffix on the value
+  // (`23 %`, `42 °C`) instead of squatting in the header next to the
+  // label like a typo.
+  markup: () => '<div class="stat-head"><span class="hwmon-label">Hardware</span></div>' +
+                '<div class="stat-value">' +
+                  '<span class="hwmon-value">—</span>' +
+                  '<span class="hwmon-unit"></span>' +
+                '</div><canvas></canvas>',
   tick: (rec) => {
     const path = rec.opts.sensorPath || "";
     const entry = (lastSysStats && lastSysStats.hwmon)
@@ -3080,8 +3108,13 @@ WIDGET_REGISTRY["hardware-sensor"] = {
     // Label: explicit override > last segment of path > generic
     // fallback. The path uses " / " as separator (see
     // HwMonPoller._flatten), so .pop() of the split gives the leaf.
-    const leaf = path ? path.split(" / ").pop() : "Hardware";
-    const label = rec.opts.label || leaf;
+    // Strip a trailing unit fragment that some LHM sensor names
+    // carry (e.g. "GPU Total Load %", "CPU Package °C") so we don't
+    // double-render the unit once in the label AND once after the
+    // value. Conservative regex — only the common suffix shapes.
+    let leaf = path ? path.split(" / ").pop() : "Hardware";
+    leaf = leaf.replace(/\s*[\(\[]?\s*(%|°C|°F|RPM|V|W|mV|MHz|GHz|GB|MB|KB)\s*[\)\]]?\s*$/i, "").trim();
+    const label = rec.opts.label || leaf || "Hardware";
     rec.el.querySelector(".hwmon-label").textContent = label;
     if (entry && typeof entry.value === "number") {
       const decimals = (rec.opts.decimals == null) ? 1 : (rec.opts.decimals | 0);
