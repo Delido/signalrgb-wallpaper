@@ -417,6 +417,95 @@ by construction and was the right call for those five effects.
 
 ---
 
+## 🎨 Post-v1.0 — Widget design system refresh
+
+The v0.7 → v1.0 arc added widgets incrementally — each one got built
+when the feature was needed, with its own one-off visual style. The
+result is a set of eleven+ widgets that all *work*, but read as
+disconnected: different paddings, different header treatments,
+different background tints, different type scales, different glass
+/ solid / outlined chromes. On a 4-monitor wall with 8-12 widgets
+visible, that visual inconsistency is the dominant noise.
+
+🚧 **Goal:** unify every widget into a single "tile" design system
+so the wallpaper reads as one coherent UI surface rather than as
+"a collection of independent gadgets glued onto a background".
+
+### What "tile" means here
+
+A reusable container shell every widget renders into. Properties
+the shell owns (not the individual widget):
+
+- **Background** — single source of truth for the tile's fill.
+  Frosted-glass / acrylic look as the default (semi-transparent +
+  blur), with a clear-glass and a solid-fill variant the user can
+  pick per-tile or globally.
+- **Border / corner radius** — uniform across every widget. Single
+  CSS variable so the user can dial it from boxy to fully rounded.
+- **Shadow / depth** — subtle drop shadow to lift the tile off the
+  wallpaper without competing with the SignalRGB glow underneath.
+- **Header bar** — optional, configurable per widget: icon + title
+  on the left, action buttons on the right (settings, refresh,
+  close). Consistent height + type size everywhere.
+- **Padding + spacing tokens** — every widget uses the same scale
+  (e.g. 8 / 12 / 16 / 24 px) so internal layouts line up across
+  tiles when placed side by side.
+- **Type scale** — three sizes top: title (header), primary
+  (body / big numbers), secondary (labels / units). Picked once,
+  applied everywhere.
+- **Tint integration** — accent colour pulls from the live glow
+  colour by default, so widgets visually belong to the wallpaper
+  they sit on. User can override with a fixed accent.
+- **Interaction states** — hover lift, drag-mode outline, snap
+  guides — defined once, applied identically across every widget.
+
+### What the widgets contribute
+
+Each widget is then just the *body content* inside the shell:
+
+- Clock — the time text
+- Weather — temp / condition / forecast strip
+- CPU/RAM meters — bars + percentages
+- Now-playing — title + artist + progress bar
+- Hardware sensor — sensor name + value + unit
+- …
+
+No widget owns its own border, background, padding, or header
+chrome anymore. They all inherit from the shell.
+
+### Implementation notes
+
+- Shell component lives in `wallpaper/index.html` as a single CSS
+  class (`.widget-tile`) plus optional modifier classes
+  (`.widget-tile--glass`, `--solid`, `--clear`, `--no-header`).
+- Each existing widget's CSS gets trimmed down to ONLY the
+  content-layout rules — every container / border / background /
+  padding line gets deleted and moved to the shell.
+- Builder-side widget catalogue (Configurator) gets a single
+  "Tile style" panel that controls the shell variant + accent
+  source globally; per-widget overrides via right-click menu on
+  a tile.
+- Type tokens live in CSS custom properties at the wallpaper-page
+  root so the user can A/B different scales without rebuilding.
+- Drag-and-resize behaviour (interact.js) is already widget-level;
+  the new shell wraps that without changing the drag API.
+
+### Why this is post-v1.0 not pre-v1.0
+
+A design-system refresh of this size touches every widget's CSS
+plus the Configurator's preview canvas plus the Builder's
+drag-overlay. That's the kind of change that bricks at least one
+widget on the first iteration. Better done in a focused v1.1.x
+cycle than as a last-minute v1.0 scramble. The widgets all work
+correctly today — they just don't look like they belong to one
+product yet.
+
+Effort estimate: **~12-16 h** end-to-end (shell design + every
+widget's CSS rewrite + Configurator integration + Builder preview
+update + DE/EN strings for the new "Tile style" controls).
+
+---
+
 ## 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
 
 Not a single user need; broader API + plugin work. Lower priority
