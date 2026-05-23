@@ -3157,7 +3157,7 @@ els.audioGlowTint.addEventListener("change", () => setSetting("audioGlowTint", e
 // Effects section
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles"];
+const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles", "matrix", "starfield", "lightning"];
 const PIXELFX_MODES   = [
   { value: "off",    label: "Off" },
   { value: "trail",  label: "Trail" },
@@ -3451,6 +3451,114 @@ const TILE_PRESETS = {
       ctx.strokeStyle = "rgba(200,225,255," + a + ")";
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.stroke();
+    },
+  },
+  // ── Matrix tile preview ──
+  // Couple of short falling columns of digits so the tile reads as
+  // "digital rain" at a glance. Simplified charset (just digits) so
+  // the tiny preview doesn't get visually cluttered.
+  matrix: {
+    targetCount: (w) => Math.max(2, Math.round(w / 22)),
+    spawn: (w, h) => ({
+      x: ((Math.random() * w / 8) | 0) * 8,
+      y: -10 - Math.random() * 30,
+      speed: 20 + Math.random() * 35,
+      len: 5 + Math.floor(Math.random() * 6),
+      chars: "0123456789",
+    }),
+    step: (p, dt, w, h) => {
+      p.y += p.speed * dt;
+      return p.y - p.len * 8 < h + 5;
+    },
+    render: (ctx, p) => {
+      ctx.font = "7px Consolas, monospace";
+      ctx.textBaseline = "top";
+      for (let i = 0; i < p.len; i++) {
+        const y = p.y - i * 8;
+        if (y < -7) continue;
+        const a = (1 - i / p.len) * 0.9;
+        ctx.fillStyle = i === 0
+          ? "rgba(220,255,220," + a + ")"
+          : "hsla(120, 80%, 55%, " + (a * 0.85) + ")";
+        ctx.fillText(p.chars[(Math.random() * 10) | 0], p.x, y);
+      }
+    },
+  },
+  // ── Starfield tile preview ──
+  // Few stars zooming from centre. Same polar projection as the
+  // wallpaper version, smaller focal length to fit the tile.
+  starfield: {
+    targetCount: (w, h) => Math.max(8, Math.round(w * h / 700)),
+    spawn: (w, h) => ({
+      cx: w / 2, cy: h / 2,
+      nx: (Math.random() - 0.5) * 2 + (Math.random() < 0.5 ? -0.2 : 0.2),
+      ny: (Math.random() - 0.5) * 2 + (Math.random() < 0.5 ? -0.2 : 0.2),
+      z: 1.5 + Math.random() * 3,
+      speed: 0.6 + Math.random() * 0.5,
+      focal: Math.min(w, h) * 0.5,
+    }),
+    step: (p, dt) => {
+      p.z -= p.speed * dt;
+      return p.z > 0.15;
+    },
+    render: (ctx, p) => {
+      const px = p.cx + p.nx / p.z * p.focal;
+      const py = p.cy + p.ny / p.z * p.focal;
+      const r = Math.max(0.4, 1.5 / p.z);
+      const a = Math.min(1, (4 - p.z) / 4);
+      ctx.fillStyle = "rgba(220,235,255," + a + ")";
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI*2); ctx.fill();
+    },
+  },
+  // ── Lightning tile preview ──
+  // One short jagged line that flashes + fades. Single "particle"
+  // logic, scaled down — gives the tile the right "electric arc"
+  // read at small size.
+  lightning: {
+    targetCount: () => 1,
+    spawn: (w, h) => {
+      const sx = w * (0.2 + Math.random() * 0.6);
+      const ex = sx + (Math.random() - 0.5) * w * 0.6;
+      let pts = [{ x: sx, y: 0 }, { x: ex, y: h * 0.85 }];
+      for (let d = 0; d < 3; d++) {
+        const next = [pts[0]];
+        const j = 8 / (d + 1);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          next.push({
+            x: (a.x + b.x) / 2 + (Math.random() - 0.5) * j,
+            y: (a.y + b.y) / 2 + (Math.random() - 0.5) * j,
+          });
+          next.push(b);
+        }
+        pts = next;
+      }
+      return { path: pts, life: 0, flashDur: 0.1, maxLife: 0.7 + Math.random() * 0.4 };
+    },
+    step: (p, dt) => {
+      p.life += dt;
+      return p.life < p.maxLife;
+    },
+    render: (ctx, p) => {
+      let intensity;
+      if (p.life < p.flashDur) intensity = 1;
+      else {
+        const t = (p.life - p.flashDur) / (p.maxLife - p.flashDur);
+        intensity = Math.max(0, 1 - t); intensity *= intensity;
+      }
+      if (intensity <= 0.01) return;
+      ctx.save();
+      ctx.shadowColor = "rgb(180,220,255)";
+      ctx.shadowBlur = 6 * intensity;
+      ctx.strokeStyle = "rgba(255,255,255," + intensity + ")";
+      ctx.lineWidth = 1.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let i = 0; i < p.path.length; i++) {
+        const pt = p.path[i];
+        if (i === 0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y);
+      }
+      ctx.stroke();
+      ctx.restore();
     },
   },
 };

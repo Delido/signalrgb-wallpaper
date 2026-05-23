@@ -4,6 +4,61 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.21-beta] - 2026-05-23
+
+> Closes out the remaining Tier 3 roadmap items: a third batch of
+> ambient effects + initial Winget manifest scaffolding so the
+> upcoming `winget install Delido.SignalRGBWallpaper` flow has
+> something concrete to ship.
+
+### Added — Ambient effects, batch 3
+
+Twelve presets now in the Configurator → Effects picker. Three new
+visually-distinct effects, all written from scratch in the
+`AMBIENT_PRESETS` shape (no copied code, no per-pen licence
+verification needed):
+
+- **Matrix** — falling vertical streams of katakana + digits +
+  symbols, classic green-on-black "digital rain". Each column owns
+  its length / speed / character buffer and periodically swaps a
+  random glyph for the flicker. Tint mode replaces the green palette
+  with the user's glow colour while keeping the head row bright
+  white so the leading edge of each stream still reads against any
+  background.
+- **Starfield** — particles distributed in normalised polar space
+  at varying z-depth; each frame z shrinks (zoom toward viewer),
+  projection puts them at increasing screen radius from the centre
+  with a short streak trail. The trail is the trick that sells the
+  hyperspace illusion. cx / cy baked at spawn so the projection
+  stays stable through the few seconds an average star lives.
+- **Lightning** — brief flashing branched arcs via midpoint
+  displacement (start + end + 4 subdivisions = jagged 17-point
+  polyline; branch jitter shrinks with depth so the macro shape
+  stays close to a straight bolt while micro-segments wobble).
+  Two-phase envelope: hot flash for the first ~70 ms, then
+  squared-fade tail for a real-arc-afterglow look.
+  `ctx.shadowBlur` halo gives the bolt its glow, reset per draw
+  so it doesn't leak into other presets.
+
+Configurator gains matching mini-preview tiles for all three so the
+picker reads at a glance.
+
+### Added — Winget manifest scaffolding
+
+- New `installer/winget/` directory with the three-file v1.6 manifest
+  format for submission to
+  [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs):
+  - `Delido.SignalRGBWallpaper.yaml` — version manifest
+  - `Delido.SignalRGBWallpaper.installer.yaml` — installer URL +
+    SHA256 (per-release update)
+  - `Delido.SignalRGBWallpaper.locale.en-US.yaml` — metadata
+    (description, tags, URLs)
+- `installer/winget/README.md` documents the per-release update
+  workflow + `wingetcreate submit` invocation. Status note: the
+  scaffolding is in-tree as of v0.9.21; the actual first-time PR to
+  `microsoft/winget-pkgs` is still a maintainer-todo since it
+  requires a manual review round with the Winget moderators.
+
 ## [0.9.20-beta] - 2026-05-23
 
 > **Drops the lazy-loaded ONNX default model entirely.** After three

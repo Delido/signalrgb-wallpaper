@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+#
+# Installer manifest. Per-release updates: bump PackageVersion,
+# InstallerUrl, and InstallerSha256. Everything else stays.
+
+PackageIdentifier: Delido.SignalRGBWallpaper
+PackageVersion: 0.9.21-beta
+InstallerType: inno
+Scope: user
+InstallerSwitches:
+  Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART
+  Custom: /CLOSEAPPLICATIONS
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/Delido/signalrgb-wallpaper/releases/download/v0.9.21-beta/SignalRGBWallpaperSetup-0.9.21-beta.exe
+    # Per-release: replace with output of
+    #   Get-FileHash <exe> -Algorithm SHA256
+    InstallerSha256: 7D2B68C6CC07780A24C7D8304D5BFB0A61DF258978A90CA63CFFCBEB6B83D1D7
+ReleaseDate: 2026-05-23
+ManifestType: installer
+ManifestVersion: 1.6.0

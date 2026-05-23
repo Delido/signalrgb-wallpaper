@@ -1957,6 +1957,14 @@ function rgbToRgba(rgb, a) {
   return rgb.replace("rgb(", "rgba(").replace(")", "," + a + ")");
 }
 
+// Katakana half-width + digits + a handful of symbols, matching the
+// classic Matrix-rain character pool. Defined here (above AMBIENT_PRESETS)
+// so the Matrix preset's spawn() finds it at call time.
+const MATRIX_CHARSET =
+  "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン" +
+  "0123456789" +
+  "!@#$%&*?:;+=-";
+
 const AMBIENT_PRESETS = {
   snow: {
     targetCount: (d, w, h) => Math.round((w * h) / 12000 * (d / 60)),
@@ -2330,6 +2338,192 @@ const AMBIENT_PRESETS = {
       ctx.arc(p.x - p.r * 0.35, p.y - p.r * 0.35,
               p.r * 0.35, Math.PI * 0.9, Math.PI * 1.4);
       ctx.stroke();
+    },
+  },
+
+  // ── Matrix ──
+  // Falling columns of katakana + digits, classic green-on-black
+  // "digital rain". Each "particle" is one column with its own
+  // length / speed / character buffer. Tint mode swaps the green
+  // palette for the user's glow colour while keeping the head row
+  // bright white so the leading edge of each stream still pops.
+  matrix: {
+    targetCount: (d, w) => Math.round(w / 16 * (d / 60)),
+    spawn: (w, h) => {
+      const len = 8 + Math.floor(Math.random() * 18);
+      const chars = new Array(len);
+      for (let i = 0; i < len; i++) {
+        chars[i] = MATRIX_CHARSET[(Math.random() * MATRIX_CHARSET.length) | 0];
+      }
+      return {
+        // Snap x to a 16 px grid so columns align visually instead
+        // of looking jittery.
+        x: ((Math.random() * w / 16) | 0) * 16,
+        y: -len * 16 - Math.random() * 200,
+        speed: 100 + Math.random() * 160,
+        chars,
+        swapTimer: 0,
+      };
+    },
+    step: (p, dt, w, h) => {
+      p.y += p.speed * dt;
+      p.swapTimer += dt;
+      // Periodically swap a random char so the streams flicker like
+      // the original effect. ~6 Hz feels right; too fast looks noisy.
+      if (p.swapTimer > 0.16) {
+        p.swapTimer = 0;
+        const idx = (Math.random() * p.chars.length) | 0;
+        p.chars[idx] = MATRIX_CHARSET[(Math.random() * MATRIX_CHARSET.length) | 0];
+      }
+      return p.y - p.chars.length * 16 < h + 20;
+    },
+    render: (ctx, p, tint) => {
+      ctx.font = "13px Consolas, 'Courier New', monospace";
+      ctx.textBaseline = "top";
+      const n = p.chars.length;
+      for (let i = 0; i < n; i++) {
+        const y = p.y - i * 16;
+        if (y < -16) continue;
+        const fade = 1 - i / n;
+        const a = fade * 0.85;
+        if (i === 0) {
+          // Head: always near-white so the stream's leading edge
+          // reads against any background.
+          ctx.fillStyle = "rgba(220,255,220," + a + ")";
+        } else if (tint) {
+          ctx.fillStyle = rgbToRgba(tint, a * 0.7);
+        } else {
+          ctx.fillStyle = "hsla(120, 80%, 55%, " + (a * 0.85) + ")";
+        }
+        ctx.fillText(p.chars[i], p.x, y);
+      }
+    },
+  },
+
+  // ── Starfield ──
+  // Particles distributed in normalised [-1,1] × [-1,1] space at
+  // varying z-depth; each frame z shrinks (zoom toward viewer),
+  // projection puts them at increasing screen radius from the
+  // centre with a streak trail. Despawn when z gets too small
+  // (otherwise they'd grow infinitely large at the centre).
+  //
+  // cx / cy are baked in at spawn so the projection has a fixed
+  // origin even on canvas resize — for the few seconds an average
+  // star lives, that's accurate enough.
+  starfield: {
+    targetCount: (d, w, h) => Math.round((w * h) / 9000 * (d / 60)),
+    spawn: (w, h) => ({
+      cx: w / 2, cy: h / 2,
+      // Bias spawn away from dead-centre so new stars don't pop
+      // into existence visibly close to the projection origin.
+      nx: (Math.random() - 0.5) * 2 + (Math.random() < 0.5 ? -0.15 : 0.15),
+      ny: (Math.random() - 0.5) * 2 + (Math.random() < 0.5 ? -0.15 : 0.15),
+      z: 2 + Math.random() * 5,
+      speed: 0.5 + Math.random() * 0.5,
+      focal: Math.min(w, h) * 0.6,
+    }),
+    step: (p, dt) => {
+      p.z -= p.speed * dt;
+      return p.z > 0.15;
+    },
+    render: (ctx, p, tint) => {
+      const px = p.cx + p.nx / p.z * p.focal;
+      const py = p.cy + p.ny / p.z * p.focal;
+      const r = Math.max(0.4, 2.2 / p.z);
+      const a = Math.min(1, (6 - p.z) / 5);
+      const color = tint ? rgbToRgba(tint, a) : "rgba(220,235,255," + a + ")";
+      // Streak: project at z+frame to get the "previous" position so
+      // the star draws as a short trail rather than a pinpoint, which
+      // is the trick that sells the hyperspace illusion.
+      const prevZ = p.z + p.speed * 0.05;
+      const prevPx = p.cx + p.nx / prevZ * p.focal;
+      const prevPy = p.cy + p.ny / prevZ * p.focal;
+      ctx.strokeStyle = tint ? rgbToRgba(tint, a * 0.5)
+                             : "rgba(220,235,255," + (a * 0.5) + ")";
+      ctx.lineWidth = r * 0.7;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(prevPx, prevPy);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  },
+
+  // ── Lightning ──
+  // Brief flashing branched arcs. Each "particle" is one bolt event:
+  // a jagged polyline generated via midpoint displacement plus a
+  // life-clock that drives the bright-flash-then-fade envelope.
+  // shadowBlur gives the bolt its glow halo; reset after each draw
+  // so the blur doesn't leak into the next preset's render path.
+  lightning: {
+    targetCount: (d) => Math.max(1, Math.round(1 + d / 50)),
+    spawn: (w, h) => {
+      const startX = Math.random() * w;
+      const endX = startX + (Math.random() - 0.5) * w * 0.7;
+      const endY = h * (0.4 + Math.random() * 0.5);
+      // Midpoint-displacement path: start with two endpoints, halve
+      // each segment 4× to get a jagged 17-point polyline. Branch
+      // jitter shrinks with depth so the macro shape stays close to
+      // a straight bolt while micro-segments wobble.
+      let pts = [{ x: startX, y: 0 }, { x: endX, y: endY }];
+      for (let depth = 0; depth < 4; depth++) {
+        const next = [pts[0]];
+        const jitter = 35 / (depth + 1);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          next.push({
+            x: (a.x + b.x) / 2 + (Math.random() - 0.5) * jitter,
+            y: (a.y + b.y) / 2 + (Math.random() - 0.5) * jitter,
+          });
+          next.push(b);
+        }
+        pts = next;
+      }
+      return {
+        path: pts,
+        life: 0,
+        flashDur: 0.06 + Math.random() * 0.08,
+        maxLife: 0.55 + Math.random() * 0.55,
+      };
+    },
+    step: (p, dt) => {
+      p.life += dt;
+      return p.life < p.maxLife;
+    },
+    render: (ctx, p, tint) => {
+      // Two-phase envelope: hot flash for the first flashDur seconds,
+      // then linear fade. Squaring the fade portion makes the tail
+      // drop off faster than a linear ramp — closer to a real arc's
+      // afterglow.
+      let intensity;
+      if (p.life < p.flashDur) {
+        intensity = 1;
+      } else {
+        const t = (p.life - p.flashDur) / (p.maxLife - p.flashDur);
+        intensity = Math.max(0, 1 - t);
+        intensity *= intensity;
+      }
+      if (intensity <= 0.01) return;
+      const halo = tint || "rgb(180,220,255)";
+      ctx.save();
+      ctx.shadowColor = halo;
+      ctx.shadowBlur = 14 * intensity;
+      ctx.strokeStyle = "rgba(255,255,255," + intensity + ")";
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let i = 0; i < p.path.length; i++) {
+        const pt = p.path[i];
+        if (i === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+      }
+      ctx.stroke();
+      ctx.restore();
     },
   },
 };
