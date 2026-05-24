@@ -4,12 +4,98 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-23
+
+> 🎯 **Second stable.** Drops the `-beta` suffix on the v1.1 cycle.
+> Eight betas (v1.1.0-beta → v1.1.7-beta) consolidated into one
+> stable surface — no new code beyond v1.1.7-beta, just a version
+> bump and the formal commitment that everything shipped in this
+> cycle is now considered stable.
+
+### Headline features over v1.0
+
+The v1.1 arc turned the v1.0 foundation into a cohesive product:
+
+- **Tile design system for widgets** — every widget can wrap in a
+  uniform shell (Glass / Solid / Clear / Off), with a global
+  default plus per-widget overrides. Optional header bars (icon +
+  title + actions) so each tile self-identifies.
+- **Universal widget options** — `textAlign` (left / center /
+  right), `textScale` (50 - 200 %), `tileStyle` override and
+  `showHeader` toggle on every widget, surfaced in a new
+  *Layout (applies to all widgets)* section of the Configure
+  modal.
+- **Background Fit tile / repeat modes** — three new entries
+  (tile / tile X / tile Y) plus a Tile-scale slider (10 - 200 %)
+  that scales the pattern relative to the source image's natural
+  pixel dimensions. Finally lets seamless pattern wallpapers
+  (carbon fibre, hex grids, retro tiles) render at native scale.
+- **Three new ambient effects** — Waves, Ripples, Flowfield. Brings
+  the picker to **15 presets total**.
+- **Auto-update finally end-to-end** — one tray click downloads the
+  installer, swaps bridge + plugin + bundle files, restarts the
+  bridge, and re-imports the Lively / WE wallpaper bundles via
+  CLI / project.json patch. No more "tray update doesn't reach
+  Lively" friction.
+- **Configurator layout-preview reflects overrides** — per-widget
+  override badges (small suffix-text like *· glass*, *· center*,
+  *· 150%*) plus warm-amber tint for explicit overrides, so users can
+  spot misconfiguration without opening every Configure modal.
+- **Hardware-sensor widget polish** — matches CPU/RAM in font
+  family, sizing, unit placement, and auto-derived label cleanup.
+
+### Compatibility
+
+- Bridge protocol, plugin file format, WebSocket wire format and
+  wallpaper-bundle structure are unchanged from v1.0. The v1.x
+  stable-surface promise holds; v1.0 → v1.1 is a feature-add
+  release, no breaking changes.
+- Existing v1.0 + v1.1.x installs auto-update to v1.1.0 via the
+  tray. The full auto-update pipeline (download / install /
+  bundle copy / re-import) lands silently in one click thanks to
+  the v1.1.4 → v1.1.7 fix arc.
+
+### Why the long beta cycle
+
+The v1.1 betas spanned a single intense work day, but the bug
+hunt revealed a stack of latent issues with the auto-update flow:
+
+- `subprocess.Popen + DETACHED_PROCESS` was reportedly dying with
+  the parent on some Windows configs (v1.1.7 forerunners → fixed
+  in v0.9.17 with `ShellExecuteW`).
+- `CloseApplications=yes` deadlocked when paired with
+  `/SUPPRESSMSGBOXES` (v0.9.19).
+- Default AI cut-out model URL was non-commercial, then broken,
+  then walked back entirely in favour of pure-JS classical
+  saliency (v0.9.18 → v0.9.20).
+- Silent installs landed with `checkedonce` tasks defaulting OFF,
+  so bridge swapped but plugin + Lively + WE bundles + autostart
+  all stayed at previous-install state (v1.1.6 + v1.1.7).
+- Re-import script auto-launched Lively even on WE-only setups
+  (v1.1.7).
+
+Each beta surfaced + fixed the next layer. The v1.1.0 stable
+release is the consolidated result.
+
+### Workshop + Winget — maintainer todo for after stable
+
+Bridge auto-update flows through GitHub Releases. Workshop
+subscribers and Winget users update via separate channels:
+
+- **Workshop**: run `installer\maintainer-restore-workshopid.ps1`
+  (re-injects the canonical workshopid since the installer wipes
+  it on every run), then WE Editor → Share on Workshop with the
+  v1.1 changelog.
+- **Winget**: `wingetcreate submit installer\winget` once the
+  microsoft/winget-pkgs PR for v0.9.21 has merged (still
+  pending moderator review at v1.1.0 cut).
+
 ## [1.1.7-beta] - 2026-05-23
 
 > Same root-cause class as v1.1.6-beta one layer down: the
 > `autostart` task that gates the [Run] entry which re-launches
 > the bridge after install also runs into the `Flags: checkedonce`
-> + silent-install = OFF default trap. v1.1.6 fixed the file-copy
+> plus silent-install = OFF default trap. v1.1.6 fixed the file-copy
 > tasks but forgot autostart, so the silent update path landed
 > with a fresh bridge.exe on disk but no running process — user
 > had to launch from the Start menu (or reboot) to actually get
@@ -66,17 +152,17 @@ After this release the full auto-update pipeline runs silently
 without any window flash and without launching apps the user
 isn't actively using:
 
-+ User clicks tray *Download + install update*
-+ Tk download dialog (~3 MB), then ShellExecuteW the installer
-+ Bridge writes the `.pending-reimport` marker, then `os._exit(0)`s
-+ Inno (silent) copies bridge.exe + plugin + Lively ZIPs + WE
+- User clicks tray *Download + install update*
+- Tk download dialog (~3 MB), then ShellExecuteW the installer
+- Bridge writes the `.pending-reimport` marker, then `os._exit(0)`s
+- Inno (silent) copies bridge.exe + plugin + Lively ZIPs + WE
   bundle (all four task gates forced ON), runs the `autostart`
   [Run] entry that launches the new bridge
-+ New bridge boots, tray icon reappears, sees the marker, waits
+- New bridge boots, tray icon reappears, sees the marker, waits
   5 s for things to settle, runs the re-import helper hidden
-+ Lively re-imported only if already running; WE project.json
+- Lively re-imported only if already running; WE project.json
   `version` bumped so WE invalidates cache on next apply
-+ Tray balloon confirms re-import done
+- Tray balloon confirms re-import done
 
 Zero manual steps, zero unwanted app launches, zero console
 flashes after the initial *Download + install update* click.

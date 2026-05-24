@@ -29,11 +29,16 @@ Runs on top of [Lively Wallpaper](https://www.rocksdanister.com/lively/)
 Steam). The one-click installer sets everything up — no Python, no
 manual file copies, no terminal.
 
-> 🎉 **v1.0.0 is the first stable release.** ~50 beta tags across
-> v0.7 → v0.9.21 are now consolidated into a stable surface: bridge
-> protocol, plugin format, wallpaper-bundle layout, and Configurator
-> API are considered v1.x stable going forward. Full release notes
-> in the [CHANGELOG](CHANGELOG.md).
+> 🎯 **v1.1.0 is the current stable.** Builds on v1.0's foundation
+> with the widget tile-shell design system (Glass / Solid / Clear
+> variants, optional header bars, universal text-align / text-scale
+> / per-widget overrides), Background tile / repeat Fit modes with
+> a scale slider, three new ambient effects (Waves, Ripples,
+> Flowfield — 15 presets total), and a bulletproof one-click
+> auto-update flow that finally reaches the Lively / Wallpaper
+> Engine bundles too. Bridge protocol + plugin format + bundle
+> layout remain v1.x stable. Full release notes in the
+> [CHANGELOG](CHANGELOG.md).
 
 ## What you get
 
