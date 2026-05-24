@@ -613,13 +613,18 @@
     overflow: hidden;
   }
   .live-preview-frame iframe {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
+    position: absolute; left: 0; top: 0;
+    /* width / height / transform set in JS from the screen's
+       reported viewport (settings.viewportW/H) so the wallpaper
+       page inside the iframe renders at its NATIVE canvas size,
+       then we visually scale-down to fit the preview container.
+       Without that scaling, widgets positioned at absolute pixel
+       coords (e.g. 250×250 on a 2560-wide canvas) would render at
+       the same 250×250 inside an 820-wide iframe — making them
+       look 3× larger than they actually appear on the monitor. */
+    transform-origin: 0 0;
     border: none;
     background: #000;
-    /* Pointer-events ON so widgets in the iframe can be dragged
-       directly (the wallpaper page's own edit-mode handles
-       drag-and-resize via interact.js when widgetsLocked=false). */
   }
 
   /* ── Layout preview canvas (drag-and-resize widgets) ──────────────── */
@@ -4169,13 +4174,54 @@ function _liveIframeSrc() {
 function refreshLivePreview() {
   if (!els.livePreviewIframe) return;
   els.livePreviewIframe.src = _liveIframeSrc();
+  // Iframe contents repaint after the src change finishes loading;
+  // re-sync the scale once that happens so the freshly-loaded
+  // wallpaper page renders at the right downscale ratio. One-shot
+  // listener replaces itself on every refresh so we don't stack.
+  const onLoad = () => {
+    syncLivePreviewScale();
+    els.livePreviewIframe.removeEventListener("load", onLoad);
+  };
+  els.livePreviewIframe.addEventListener("load", onLoad);
 }
 function syncLivePreviewAspect() {
   if (!els.livePreviewFrame) return;
   const w = settings.viewportW || 1920;
   const h = settings.viewportH || 1080;
   els.livePreviewFrame.style.setProperty("--live-preview-ar", w + " / " + h);
+  // Recompute the scale too — viewport dims drive both the aspect
+  // ratio of the container AND the down-scale factor of the iframe
+  // content (so widgets render at the right relative size).
+  syncLivePreviewScale();
 }
+
+// Size the iframe to the screen's NATIVE canvas dimensions, then
+// scale the whole thing down to fit the preview container's width.
+// Has to run after the iframe is in the DOM, after we know the
+// viewport size from settings, and on every container-width change
+// (window resize).
+function syncLivePreviewScale() {
+  const iframe = els.livePreviewIframe;
+  const frame  = els.livePreviewFrame;
+  if (!iframe || !frame) return;
+  const nativeW = settings.viewportW || 1920;
+  const nativeH = settings.viewportH || 1080;
+  // Wait for the next animation frame so the container has its
+  // final width after the aspect-ratio recalc.
+  requestAnimationFrame(() => {
+    const containerW = frame.clientWidth || 1;
+    const scale = containerW / nativeW;
+    iframe.style.width  = nativeW + "px";
+    iframe.style.height = nativeH + "px";
+    iframe.style.transform = "scale(" + scale + ")";
+  });
+}
+
+// Window-resize keeps the scale in sync as the user drags the
+// browser window or expands / collapses the configurator sidebar.
+window.addEventListener("resize", () => {
+  if (typeof syncLivePreviewScale === "function") syncLivePreviewScale();
+});
 function setLivePreviewVisible(on) {
   if (!els.livePreviewWrap) return;
   els.livePreviewWrap.classList.toggle("collapsed", !on);
