@@ -4,6 +4,57 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6-beta] - 2026-05-23
+
+> Root-cause fix for the long-standing "tray update doesn't update
+> Lively/WE" bug. v1.1.4-beta added the re-import path but the
+> auto-chain in v1.1.5 couldn't help because the installer itself
+> wasn't actually copying the new Lively/WE bundles + SignalRGB
+> plugin during silent re-install.
+
+### Fixed — Tray-update now copies host bundles + plugin
+
+`Flags: checkedonce` on the `installplugin`, `installlively`,
+`installlively\autoimport` and `installwallpaperengine` tasks in
+the .iss is supposed to remember the user's first-install choice
+on subsequent silent installs. In practice the recall is fragile —
+silent install with no `/TASKS` or `/MERGETASKS` argument lands
+with most tasks DEFAULTING TO OFF, which silently no-ops the
+file-copy entries in the [Files] section that depend on those
+tasks. `SignalRGBBridge.exe` lives outside any task gate so it
+swapped fine; everything else stayed at the previous-install
+state.
+
+Fix: the bridge's auto-update spawn now always passes
+
+```text
+/MERGETASKS="installplugin,installlively,installlively\autoimport,installwallpaperengine"
+```
+
+so those four tasks are FORCED on during the silent re-install,
+regardless of what's saved in the registry. End result: the
+SignalRGB plugin, the Lively wallpaper ZIPs, and the WE
+`signalrgb-glow` project all get refreshed on every auto-update,
+which is what the user reasonably expects from "Download +
+install update". `installlively\autoinstall` is deliberately
+NOT in the merge list — we don't want to re-download Lively
+itself on every update.
+
+Combined with the v1.1.4 re-import script and the v1.1.5
+auto-chain marker, the full pipeline is now:
+
+1. Tray → *Download + install update* (silent install with
+   forced tasks → bridge + plugin + bundle files all updated)
+2. Bridge restarts, sees the marker
+3. Re-import script runs → Lively re-imports each ZIP via its
+   CLI, WE project.json version-bumped so WE invalidates its
+   cache on next apply
+4. Toast confirms re-import completed
+
+All from one tray click. The previously-broken case the user
+reported ("tray update → WE/Lively show old version even after
+restart") is the root cause this release fixes.
+
 ## [1.1.5-beta] - 2026-05-23
 
 > Two roadmap items land: **one-click update** (auto-chain the

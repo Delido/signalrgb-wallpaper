@@ -348,7 +348,23 @@ class UpdateChecker:
         try:
             if sys.platform == "win32":
                 import ctypes
-                args = "/SILENT /SUPPRESSMSGBOXES /NORESTART"
+                # /MERGETASKS forces the auto-update installer to ALSO run
+                # the host-bundle + plugin file-copy tasks. Without it,
+                # `Flags: checkedonce` on those tasks (see .iss) defaults
+                # them OFF during silent re-install, so bridge.exe got
+                # swapped but the SignalRGB plugin, the Lively ZIPs,
+                # and the WE bundle in {app} all stayed at their
+                # previous-install state — root cause of the long-
+                # standing "tray update doesn't update Lively/WE" bug.
+                # autoinstall is deliberately omitted so we don't
+                # re-download Lively on every update.
+                mergetasks = (
+                    "installplugin,"
+                    "installlively,installlively\\autoimport,"
+                    "installwallpaperengine"
+                )
+                args = ('/SILENT /SUPPRESSMSGBOXES /NORESTART '
+                        f'/MERGETASKS="{mergetasks}"')
                 # nShowCmd=1 (SW_SHOWNORMAL) so the Inno progress
                 # window is visible. ShellExecuteW returns >32 on
                 # success; any value <=32 is a numeric error code.
@@ -364,7 +380,9 @@ class UpdateChecker:
                 DETACHED_PROCESS = 0x00000008
                 CREATE_NEW_PROCESS_GROUP = 0x00000200
                 subprocess.Popen(
-                    [str(target), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                    [str(target),
+                     "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+                     f"/MERGETASKS={mergetasks}"],
                     creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
                 _log("subprocess.Popen fallback spawned")
                 launched = True
@@ -482,7 +500,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.1.5-beta"
+APP_VERSION = "1.1.6-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
