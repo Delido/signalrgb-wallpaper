@@ -489,10 +489,17 @@ begin
     CachedLivelyPathInitialised := True;
     exit;
   end;
-  // 2 + 3. MSIX build — walk Packages\rocksdanister.LivelyWallpaper_*
+  // 2 + 3. MSIX build — walk Packages\*rocksdanister.LivelyWallpaper_*
   // matches and try LocalCache first (the redirection target the
   // sandboxed app actually reads), then LocalState.
-  if FindFirst(AddBackslash(LocalApp) + 'Packages\rocksdanister.LivelyWallpaper_*', FR) then begin
+  //
+  // The LEADING `*` is critical: MS Store prefixes every package
+  // name with a numeric publisher ID, so the real directory is
+  // e.g. `12030rocksdanister.LivelyWallpaper_97hta09mmv6hy` — NOT
+  // `rocksdanister.LivelyWallpaper_…`. Earlier wildcard missed
+  // every Store-installed Lively for that reason and the installer
+  // silently shipped wallpapers into a folder Lively never reads.
+  if FindFirst(AddBackslash(LocalApp) + 'Packages\*rocksdanister.LivelyWallpaper_*', FR) then begin
     try
       repeat
         if (FR.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin

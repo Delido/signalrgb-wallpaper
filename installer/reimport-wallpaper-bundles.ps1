@@ -88,8 +88,13 @@ foreach ($candidate in $livelyCandidates) {
 $livelyMsixLibrary = $null
 $pkgRoot = Join-Path $env:LOCALAPPDATA "Packages"
 if (Test-Path $pkgRoot) {
+    # MS Store prefixes every package name with a numeric publisher
+    # ID, so the real directory is e.g.
+    # `12030rocksdanister.LivelyWallpaper_97hta09mmv6hy`. Leading `*`
+    # in the filter catches that prefix; without it the probe missed
+    # every MSIX Lively install.
     $pkgDir = Get-ChildItem -Path $pkgRoot -Directory `
-                            -Filter "rocksdanister.LivelyWallpaper_*" `
+                            -Filter "*rocksdanister.LivelyWallpaper_*" `
                             -ErrorAction SilentlyContinue |
               Select-Object -First 1
     if ($pkgDir) {
