@@ -430,12 +430,24 @@ end;
 //
 // GitHub-installer build keeps its library under
 //   %LOCALAPPDATA%\Lively Wallpaper\Library\wallpapers
-// The MSIX (Microsoft Store) build hides it inside the sandboxed package
-//   %LOCALAPPDATA%\Packages\rocksdanister.LivelyWallpaper_*\LocalState\Library\wallpapers
-// We probe both, GitHub build first because that's what we recommend.
+// The MSIX (Microsoft Store) build runs inside an AppContainer sandbox.
+// When the MSIX-packaged Lively writes to `%LOCALAPPDATA%\Lively Wallpaper\`
+// in its own code, Windows transparently redirects to
+//   %LOCALAPPDATA%\Packages\rocksdanister.LivelyWallpaper_*\LocalCache\Local\Lively Wallpaper\
+// — NOT to LocalState. Earlier versions of this installer probed
+// LocalState (where some MSIX apps explicitly store data), missed
+// the LocalCache redirection target, and silently shipped wallpapers
+// into a folder Lively was never going to read from.
 //
-// Cached on first call so the per-file [Files] checks don't re-probe the
-// disk hundreds of times during install.
+// Probe order:
+//   1. GitHub-installer build (LocalAppData direct)
+//   2. MSIX LocalCache (redirection target — the one MSIX Lively
+//      actually reads)
+//   3. MSIX LocalState (kept as a fall-back for any Lively build
+//      that did target LocalState explicitly)
+//
+// Cached on first call so the per-file [Files] checks don't re-probe
+// the disk hundreds of times during install.
 // ─────────────────────────────────────────────────────────────────────────────
 
 var
@@ -458,6 +470,7 @@ function GetLivelyLibraryPath(Param: String): String;
 var
   LocalApp: String;
   FR: TFindRec;
+  PackageDir: String;
   CandidateBase: String;
   CandidatePath: String;
 begin
@@ -476,13 +489,26 @@ begin
     CachedLivelyPathInitialised := True;
     exit;
   end;
-  // 2. MSIX build — walk Packages\rocksdanister.LivelyWallpaper_* matches
+  // 2 + 3. MSIX build — walk Packages\rocksdanister.LivelyWallpaper_*
+  // matches and try LocalCache first (the redirection target the
+  // sandboxed app actually reads), then LocalState.
   if FindFirst(AddBackslash(LocalApp) + 'Packages\rocksdanister.LivelyWallpaper_*', FR) then begin
     try
       repeat
         if (FR.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin
           if (FR.Name <> '.') and (FR.Name <> '..') then begin
-            CandidateBase := AddBackslash(LocalApp) + 'Packages\' + FR.Name + '\LocalState';
+            PackageDir := AddBackslash(LocalApp) + 'Packages\' + FR.Name;
+            // 2. LocalCache — Windows redirection target for legacy
+            //    %LOCALAPPDATA%\Lively Wallpaper\ writes
+            CandidateBase := AddBackslash(PackageDir) + 'LocalCache\Local\Lively Wallpaper';
+            CandidatePath := TryLivelyPath(CandidateBase);
+            if CandidatePath <> '' then begin
+              Result := CandidatePath;
+              Break;
+            end;
+            // 3. LocalState — explicit app-data location (some Lively
+            //    builds may target this directly).
+            CandidateBase := AddBackslash(PackageDir) + 'LocalState';
             CandidatePath := TryLivelyPath(CandidateBase);
             if CandidatePath <> '' then begin
               Result := CandidatePath;

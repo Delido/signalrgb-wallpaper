@@ -56,11 +56,16 @@ $livelyError    = $false
 $weError        = $false
 
 # ── Lively path ─────────────────────────────────────────────────────────────
-# Two Lively variants ship in the wild: the GitHub installer build
-# (lively.exe in Program Files / portable folder) and the Microsoft
-# Store / MSIX build (sandboxed, no direct exe). The GitHub build
-# exposes a CLI; the Store build doesn't, so for those users we
-# open the wallpapers folder + show a toast prompting drag-import.
+# Two Lively variants ship in the wild:
+#   • GitHub installer build — `lively.exe` exposes an `--import-from-
+#     zip` CLI we can call directly.
+#   • MSIX (Microsoft Store) build — sandboxed AppContainer, no
+#     externally-invokable CLI. For these users we extract the ZIPs
+#     directly into Lively's library folder (the one MSIX-Lively
+#     reads from, which is the LocalCache redirection target — NOT
+#     LocalState; that's a long-standing trap-door in MSIX virtualization).
+# Both paths land at the same end result: Lively's library shows the
+# four `SignalRGB Glow – Screen N` entries with the fresh JS.
 
 $livelyExe = $null
 $livelyCandidates = @(
@@ -74,6 +79,69 @@ foreach ($candidate in $livelyCandidates) {
         $livelyExe = $candidate
         break
     }
+}
+
+# MSIX detection: probe Packages\rocksdanister.LivelyWallpaper_* for
+# either LocalCache (the legacy-write redirection target) or LocalState
+# (some Lively builds store there directly). LocalCache wins because
+# that's what MSIX Lively actually reads from for its library scan.
+$livelyMsixLibrary = $null
+$pkgRoot = Join-Path $env:LOCALAPPDATA "Packages"
+if (Test-Path $pkgRoot) {
+    $pkgDir = Get-ChildItem -Path $pkgRoot -Directory `
+                            -Filter "rocksdanister.LivelyWallpaper_*" `
+                            -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+    if ($pkgDir) {
+        $msixCandidates = @(
+            (Join-Path $pkgDir.FullName "LocalCache\Local\Lively Wallpaper\Library\wallpapers"),
+            (Join-Path $pkgDir.FullName "LocalState\Library\wallpapers")
+        )
+        foreach ($candidate in $msixCandidates) {
+            if (Test-Path $candidate) {
+                $livelyMsixLibrary = $candidate
+                break
+            }
+        }
+        # Path may not exist yet on a fresh Lively-MSIX install; create
+        # the LocalCache variant since that's where MSIX redirection
+        # will route Lively's own writes.
+        if (-not $livelyMsixLibrary) {
+            $livelyMsixLibrary = $msixCandidates[0]
+            try {
+                New-Item -ItemType Directory -Path $livelyMsixLibrary -Force | Out-Null
+            } catch {
+                Write-Status "  WARN: couldn't create MSIX Lively library path $livelyMsixLibrary - $_" "Yellow"
+                $livelyMsixLibrary = $null
+            }
+        }
+    }
+}
+
+# ── MSIX-Lively path: extract ZIPs straight into the library folder ──
+if ($livelyMsixLibrary -and (Test-Path $livelyZipsDir)) {
+    Write-Status "Lively (MSIX) library: $livelyMsixLibrary" "Green"
+    $zips = Get-ChildItem -Path $livelyZipsDir -Filter "SignalRGB_Glow_Screen*.zip" -ErrorAction SilentlyContinue
+    foreach ($zip in $zips) {
+        try {
+            # Derive screen folder name from the ZIP name. The ZIP root
+            # already contains the per-screen identity (LivelyInfo.json
+            # baked at build time), so we extract into a deterministic
+            # subfolder matching the screen index.
+            $screenNum = if ($zip.Name -match "Screen(\d)") { $Matches[1] } else { "1" }
+            $dest = Join-Path $livelyMsixLibrary ("signalrgb-glow-screen-$screenNum")
+            if (Test-Path $dest) {
+                Remove-Item -Path $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Expand-Archive -Path $zip.FullName -DestinationPath $dest -Force
+            Write-Status "  extracted $($zip.Name) -> $dest" "DarkCyan"
+        } catch {
+            Write-Status "    ERROR extracting $($zip.Name): $_" "Red"
+            $livelyError = $true
+        }
+    }
+    $anyHostUpdated = $true
+    Write-Status "  MSIX Lively: restart Lively (or use its 'Refresh Library' option) to pick up the new bundles." "DarkGray"
 }
 
 if ($livelyExe -and (Test-Path $livelyZipsDir)) {
