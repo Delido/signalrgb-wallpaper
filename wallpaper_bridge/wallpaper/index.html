@@ -842,12 +842,43 @@
 // `wallpaperPropertyListener` path below routes that property to
 // setScreenIndex(), which reconnects the WS to the right screen on the
 // fly. Default 0 covers the first-paint before WE delivers properties.
+// Query-string parser used by both SCREEN_INDEX and PREVIEW_MODE.
+// Wrapped in try/catch so the page still boots in environments where
+// URLSearchParams is missing (very old WebView2 fallbacks, etc.).
+const _URL_PARAMS = (function () {
+  try { return new URLSearchParams(window.location.search); }
+  catch (_) { return new URLSearchParams(""); }
+})();
+
 let SCREEN_INDEX = (function () {
+  // Configurator's live-preview iframe passes ?screen=N directly. In
+  // Lively / WE bundles the screen index comes from a <meta> tag the
+  // installer bakes into the per-screen ZIP. URL param wins if both
+  // present (covers re-using the same wallpaper page from multiple
+  // origins).
+  const qp = parseInt(_URL_PARAMS.get("screen"), 10);
+  if (Number.isFinite(qp) && qp >= 0) return qp;
   const m = document.querySelector('meta[name="signalrgb-screen-index"]');
   const v = m && m.getAttribute("content");
   const n = parseInt(v, 10);
   return Number.isFinite(n) && n >= 0 ? n : 0;
 })();
+
+// ── Preview mode (v1.2-dev) ──
+// When the wallpaper page is loaded as an <iframe> inside the
+// Configurator's live-preview panel, certain features have to be
+// disabled to avoid colliding with the SAME wallpaper page that's
+// running in Lively / WE on the user's actual screens:
+//   • parallax3d — would track the iframe's cursor over the
+//     Configurator UI, not the user's actual desktop cursor
+//   • pixelfx (trail / hover-glow / ripple) — same reason
+//   • audio-glow listener — Lively / WE already feed FFT bins to
+//     the on-desktop instance; the iframe doesn't have a wallpaper-
+//     host providing wallpaperRegisterAudioListener anyway
+// Everything else (background, ambient effects, widgets, glow grid)
+// renders the same in preview as on the actual wallpaper so the
+// user gets a true WYSIWYG editing experience.
+const PREVIEW_MODE = _URL_PARAMS.get("preview") === "1";
 
 function wsUrl() {
   return "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
@@ -1291,13 +1322,21 @@ function applyProperty(name, val) {
       ambient.setDensity(parseInt(val, 10));
       break;
     case "pixelfx":
-      pixelfx.setMode(typeof val === "string" ? val : "off");
+      // Preview-mode iframe must not track cursor — would map the
+      // configurator-area pointer instead of the real desktop one.
+      pixelfx.setMode(PREVIEW_MODE ? "off"
+                                   : (typeof val === "string" ? val : "off"));
       break;
     case "parallax3d":
-      parallax.setStrength(parseInt(val, 10) | 0);
+      // Same reason: parallax binds to cursor position.
+      parallax.setStrength(PREVIEW_MODE ? 0 : (parseInt(val, 10) | 0));
       break;
     case "audioGlow":
-      audioGlow.setMode(typeof val === "string" ? val : "off");
+      // Lively / WE feed FFT bins into the on-desktop instance; the
+      // iframe has no host providing those, and even if it did, two
+      // simultaneous audio-driven layers would visibly desync.
+      audioGlow.setMode(PREVIEW_MODE ? "off"
+                                     : (typeof val === "string" ? val : "off"));
       break;
     case "audioGlowIntensity":
       audioGlow.setIntensity(parseInt(val, 10) | 0);

@@ -2343,6 +2343,56 @@ class Broadcaster:
             except Exception: pass
             return
 
+        # ── /wallpaper (live-preview path, v1.2-dev) ──
+        # Serves wallpaper/index.html + its sibling assets from inside
+        # the bridge so the Configurator can embed the actual wallpaper
+        # page as an iframe (live edit-see-result instead of the
+        # schematic drag-area we had before). Lively / WE keep loading
+        # the wallpaper from their own extracted copies — this route
+        # only exists for in-browser preview.
+        if method == "GET":
+            tgt = target.split("?", 1)[0]
+            if tgt in ("/wallpaper", "/wallpaper/"):
+                tgt = "/wallpaper/index.html"
+            if tgt.startswith("/wallpaper/"):
+                rel = tgt[len("/wallpaper/"):]
+                # Reject any path-traversal attempts. Allow only ASCII
+                # word chars + dot + slash + dash so we don't accidentally
+                # become a file-system browser.
+                if ".." in rel or not all(c.isalnum() or c in "._/-" for c in rel):
+                    http_error(writer, 400, "bad path")
+                else:
+                    try:
+                        asset = _resource_path("wallpaper") / rel
+                        if not asset.is_file():
+                            http_error(writer, 404, "not found")
+                        else:
+                            ctype = mimetypes.guess_type(str(asset))[0] or "application/octet-stream"
+                            data = asset.read_bytes()
+                            # Text-ish payloads get a charset so the
+                            # browser doesn't second-guess; binary
+                            # (images, fonts) just gets the bare type.
+                            is_text = (ctype.startswith("text/")
+                                       or ctype.endswith("/json")
+                                       or ctype.endswith("/javascript")
+                                       or ctype.endswith("/xml"))
+                            ctype_h = f"{ctype}; charset=utf-8" if is_text else ctype
+                            head = (
+                                "HTTP/1.1 200 OK\r\n"
+                                f"Content-Type: {ctype_h}\r\n"
+                                f"Content-Length: {len(data)}\r\n"
+                                "Cache-Control: no-store\r\n"
+                                "Connection: close\r\n\r\n"
+                            )
+                            writer.write(head.encode() + data)
+                    except Exception as e:
+                        http_error(writer, 500, f"server error: {e}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+
         http_error(writer, 404, "not found")
         try: await writer.drain()
         except Exception: pass
@@ -3457,7 +3507,10 @@ class BridgeRuntime:
             print(f"[widgets] save_config failed: {e}")
         return snapshot
 
-    def add_widget(self, screen: int, widget_type: str, x: int | None = None, y: int | None = None) -> dict | None:
+    def add_widget(self, screen: int, widget_type: str,
+                   x: int | None = None, y: int | None = None,
+                   w: int | None = None, h: int | None = None,
+                   options: dict | None = None) -> dict | None:
         if widget_type not in WIDGET_DEFAULTS:
             print(f"[widgets] unknown type: {widget_type!r}")
             return None
@@ -3469,19 +3522,30 @@ class BridgeRuntime:
             # Compose a new id deterministic-ish from current count + ms time
             # so two rapid clicks don't collide.
             new_id = f"w_{int(time.time() * 1000) % 10_000_000}_{len(existing)}"
+            # Merge bundle options over defaults so callers (Look bundles)
+            # can override just the fields they care about; everything else
+            # stays at the type's defaults.
+            merged_opts = dict(defaults["options"])
+            if isinstance(options, dict):
+                merged_opts.update(options)
             entry = {
                 "id":      new_id,
                 "type":    widget_type,
                 "x":       defaults["x"] if x is None else int(x),
                 "y":       defaults["y"] if y is None else int(y),
-                "w":       defaults["w"],
-                "h":       defaults["h"],
-                "options": dict(defaults["options"]),
+                "w":       defaults["w"] if w is None else int(w),
+                "h":       defaults["h"] if h is None else int(h),
+                "options": merged_opts,
             }
             existing.append(entry)
-            # Adding a widget also implicitly puts the page in edit mode —
-            # otherwise the user can't find/move the freshly-added one.
-            s["widgetsLocked"] = False
+            # Adding a widget via the "Add widget" button (no
+            # explicit position) implicitly unlocks the page so the
+            # user can find / move the freshly-added one. Bundle adds
+            # come with explicit x/y/w/h already, so leave the lock
+            # state alone in that path — Quick Looks should land in
+            # a clean read-mode, not edit-mode.
+            if x is None and y is None:
+                s["widgetsLocked"] = False
 
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
@@ -4160,7 +4224,19 @@ class BridgeRuntime:
                 fields = {k: msg[k] for k in ("x", "y", "w", "h", "options") if k in msg}
                 self.update_widget(screen, str(msg.get("id", "")), fields)
             elif t == "widget-add":
-                self.add_widget(screen, str(msg.get("widgetType", "")))
+                # widget-add gained optional x/y/w/h/options fields in
+                # v1.2-dev for the Quick Looks bundle-apply path —
+                # otherwise applying a 5-widget bundle would require
+                # an add-then-update round-trip per widget. Existing
+                # callers (the "Add widget" button) just pass
+                # widgetType; backwards-compatible.
+                self.add_widget(
+                    screen,
+                    str(msg.get("widgetType", "")),
+                    x=msg.get("x"), y=msg.get("y"),
+                    w=msg.get("w"), h=msg.get("h"),
+                    options=msg.get("options"),
+                )
             elif t == "widget-remove":
                 self.remove_widget(screen, str(msg.get("id", "")))
             elif t == "widgets-lock":

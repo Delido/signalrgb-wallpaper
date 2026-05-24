@@ -62,6 +62,7 @@ try {
         --add-data "builder.html;." `
         --add-data "configurator.html;." `
         --add-data "help.html;." `
+        --add-data "wallpaper;wallpaper" `
         --distpath dist_bridge --workpath build_bridge `
         bridge.py
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }

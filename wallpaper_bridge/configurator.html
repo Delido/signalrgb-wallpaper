@@ -422,6 +422,46 @@
     display: flex; flex-direction: column; gap: 6px;
     margin-bottom: 10px;
   }
+
+  /* ── Quick Looks grid (v1.2-dev) ──
+     Card-per-bundle, 2-3 columns at typical widths. The thumbnail-
+     gradient mimics the bundle's dominant tint so the user can
+     pick visually before reading the description. */
+  .looks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .look-card {
+    background: #181c23;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    display: flex; flex-direction: column;
+    user-select: none;
+  }
+  .look-card:hover {
+    border-color: var(--accent);
+    background: #1f2530;
+  }
+  .look-card .look-thumb {
+    height: 60px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--look-tint, #3a6ba8), #0c0e13);
+  }
+  .look-card .look-title {
+    font-weight: 600; font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .look-card .look-desc {
+    font-size: 11px; color: var(--text-dim);
+    line-height: 1.35;
+    flex: 1;
+  }
   .widget-item {
     display: flex; align-items: center; gap: 10px;
     padding: 8px 10px;
@@ -550,6 +590,36 @@
     background: var(--accent-bg);
     border-color: #3a6ba8;
     color: #d8e6fc;
+  }
+
+  /* ── Live preview iframe (v1.2-dev, sits above the schematic
+        preview as a WYSIWYG companion). Aspect-ratio derived from
+        the bridge's /config screen-dimensions on connect; default
+        16:9 for the initial paint before /config lands. */
+  .live-preview-wrap {
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 14px;
+  }
+  .live-preview-wrap.collapsed .live-preview-frame { display: none; }
+  .live-preview-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: var(--live-preview-ar, 16 / 9);
+    background: #000;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .live-preview-frame iframe {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: none;
+    background: #000;
+    /* Pointer-events ON so widgets in the iframe can be dragged
+       directly (the wallpaper page's own edit-mode handles
+       drag-and-resize via interact.js when widgetsLocked=false). */
   }
 
   /* ── Layout preview canvas (drag-and-resize widgets) ──────────────── */
@@ -919,6 +989,27 @@
     </div>
   </section>
 
+  <!-- ── Quick Looks (v1.2-dev) ────────────────────────────────────────
+       Pre-built combinations of background + glow + ambient effect +
+       widget tile-style + widget set. One click replaces the screen's
+       config with the bundle — the new-user shortcut past the
+       "intimidating amount of options" hump. Cards generated client-
+       side from LOOK_BUNDLES (see configurator.html JS section). -->
+  <section class="card" id="card-looks">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.looks">Quick Looks</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="looks.hint" style="margin-bottom: 10px;">
+        Pre-built combinations — background + effects + widgets — for
+        the most common desktop archetypes. Pick one to replace the
+        current screen's configuration with the bundle.
+      </div>
+      <div id="looks-grid" class="looks-grid"></div>
+    </div>
+  </section>
+
   <!-- ── Background ─────────────────────────────────────────────────── -->
   <section class="card" id="card-bg">
     <header class="section-head" data-toggle>
@@ -1150,6 +1241,26 @@
       <div class="hint" id="widget-tile-hint" data-i18n="widgets.tile.hint" style="margin-top: 6px;">
         Wraps every widget in a uniform container — same background, border, corner radius, padding, type scale.
         Off keeps the v1.0 transparent-overlay look every existing user is already running.
+      </div>
+
+      <div class="live-preview-wrap" id="live-preview-wrap">
+        <div class="layout-preview-head">
+          <span data-i18n="widgets.preview.live_head">Live preview · WYSIWYG iframe of the actual wallpaper page</span>
+          <span style="display:flex; align-items:center; gap:10px;">
+            <button class="btn" id="live-preview-refresh" type="button"
+                    data-i18n="widgets.preview.live_refresh">Reload preview</button>
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none;">
+              <input type="checkbox" id="live-preview-toggle" checked>
+              <span data-i18n="widgets.preview.live_toggle">Show live preview</span>
+            </label>
+          </span>
+        </div>
+        <div class="live-preview-frame" id="live-preview-frame">
+          <iframe id="live-preview-iframe"
+                  title="Live wallpaper preview"
+                  loading="lazy"
+                  sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
       </div>
 
       <div class="layout-preview-wrap">
@@ -1472,6 +1583,16 @@ const TRANSLATIONS = {
   "widgets.preview.head":   { en: "Layout preview · drag widgets to position",
                               de: "Layout-Vorschau · Widgets zum Positionieren ziehen" },
   "widgets.preview.snap":   { en: "Snap to grid",         de: "Am Raster ausrichten" },
+  "widgets.preview.live_head":    { en: "Live preview · WYSIWYG iframe of the actual wallpaper page",
+                                    de: "Live-Vorschau · WYSIWYG-iframe der echten Wallpaper-Page" },
+  "widgets.preview.live_refresh": { en: "Reload preview",  de: "Vorschau neu laden" },
+  "widgets.preview.live_toggle":  { en: "Show live preview", de: "Live-Vorschau anzeigen" },
+  "section.looks":          { en: "Quick Looks",                de: "Quick Looks" },
+  "looks.hint":             { en: "Pre-built combinations — background + effects + widgets — for the most common desktop archetypes. Pick one to replace the current screen's configuration with the bundle.",
+                              de: "Vorgebaute Kombinationen — Hintergrund + Effekte + Widgets — für die häufigsten Desktop-Archetypen. Pick einen aus, ersetzt die aktuelle Bildschirm-Konfiguration mit dem Bundle." },
+  "looks.confirm":          { en: "Apply \"{name}\" to {screen}? This replaces background, effects, widget tile-style, and the widget layout. Existing widgets will be removed.",
+                              de: "„{name}\" auf {screen} anwenden? Ersetzt Hintergrund, Effekte, Widget-Stil und das Widget-Layout. Bestehende Widgets werden entfernt." },
+  "looks.applied":          { en: "Applied {name}",             de: "{name} angewendet" },
   "widgets.add_label":      { en: "Add a widget:",        de: "Widget hinzufügen:" },
   "widgets.empty":          { en: "No widgets on this screen yet — pick one below to add.",
                               de: "Noch keine Widgets auf diesem Bildschirm — unten eines auswählen." },
@@ -1530,6 +1651,212 @@ function setLanguage(lang) {
 // page. Adding a new widget = one entry here + matching ones server-side
 // and on the wallpaper page.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quick Looks (v1.2-dev) — pre-built screen configurations
+//
+// Each bundle is { settings: {...}, widgets: [...] }:
+//   • settings    flat key-value pairs that map to setting-update WS msgs
+//   • widgets     the new widget list (existing widgets removed first)
+//   • tint        a representative colour for the card thumbnail (CSS rgb)
+//
+// Applying a bundle is a multi-message WS burst (one per setting key,
+// one widget-remove per existing widget, one widget-add per bundle
+// widget). The bridge processes these in order; the wallpaper page
+// repaints after each setting change. UX-wise this means the user
+// sees the wallpaper morph into the new look over ~1s — intentional;
+// makes the "what's changing" obvious.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LOOK_BUNDLES = [
+  {
+    id: "cyberpunk",
+    name: "Cyberpunk Streamer",
+    desc: "Neon-cyan glow, constellation effect, glass widgets, big now-playing + minimal clock. Built for late-night streaming.",
+    tint: "rgb(20, 220, 220)",
+    settings: {
+      bgImage:         "cyberpunk-skyline.png",
+      bgFit:           "cover",
+      bgDim:           25,
+      glowStrength:    100,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "constellation",
+      ambientTint:     true,
+      ambientDensity:  70,
+      audioGlow:       "spectrum",
+      audioGlowIntensity: 60,
+      audioGlowTint:   true,
+      widgetTileStyle: "glass",
+      parallax3d:      15,
+    },
+    widgets: [
+      { type: "clock",       x:   50, y:   50, w: 200, h: 200,
+        options: { style: "analog", format24h: true, tintFromGlow: true, showHeader: true } },
+      { type: "now-playing", x:   50, y:  280, w: 380, h: 130,
+        options: { tintFromGlow: true, showProgress: true, showHeader: true, tileStyle: "glass" } },
+      { type: "cpu-meter",   x:   50, y:  430, w: 180, h: 100,
+        options: { tintFromGlow: true, showHeader: true } },
+      { type: "ram-meter",   x:  250, y:  430, w: 180, h: 100,
+        options: { tintFromGlow: true, showHeader: true } },
+    ],
+  },
+  {
+    id: "minimal",
+    name: "Minimal Productivity",
+    desc: "Dark background, no effects, just clock + calendar + sticky note. The wallpaper-disappears-and-you-just-see-content look.",
+    tint: "rgb(80, 80, 90)",
+    settings: {
+      bgImage:         "",
+      bgFit:           "cover",
+      bgDim:           60,
+      glowStrength:    30,
+      showBars:        false,
+      ambientEffect:   "off",
+      audioGlow:       "off",
+      widgetTileStyle: "clear",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "clock",        x:   50, y:   50, w: 280, h: 100,
+        options: { style: "digital", format24h: true, showHeader: false, textScale: 1.5 } },
+      { type: "calendar",     x:   50, y:  170, w: 280, h: 220,
+        options: { weekStart: 1, showHeader: true } },
+      { type: "sticky-note",  x:   50, y:  410, w: 280, h: 160,
+        options: { text: "Today:\n• ", color: "yellow", showHeader: false } },
+    ],
+  },
+  {
+    id: "gaming",
+    name: "Gaming",
+    desc: "Big hero wallpaper, vortex effect, only CPU/GPU/RAM meters small in the corner. Stays out of the way of the game.",
+    tint: "rgb(255, 80, 60)",
+    settings: {
+      bgImage:         "",
+      bgFit:           "cover",
+      bgDim:           10,
+      glowStrength:    100,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "vortex",
+      ambientTint:     true,
+      ambientDensity:  50,
+      audioGlow:       "off",
+      widgetTileStyle: "solid",
+      parallax3d:      25,
+    },
+    widgets: [
+      { type: "cpu-meter",   x: 1700, y:   50, w: 200, h: 90,
+        options: { tintFromGlow: true, showHeader: true, textScale: 0.75 } },
+      { type: "ram-meter",   x: 1700, y:  150, w: 200, h: 90,
+        options: { tintFromGlow: true, showHeader: true, textScale: 0.75 } },
+      { type: "hardware-sensor", x: 1700, y:  250, w: 200, h: 90,
+        options: { sensorPath: "", label: "GPU temp", decimals: 0,
+                   tintFromGlow: true, showHeader: true, textScale: 0.75 } },
+    ],
+  },
+  {
+    id: "music",
+    name: "Music Studio",
+    desc: "Dark background, full-screen audio-reactive waveform, big now-playing + audio-spectrum widget. Made for headphones-on producers.",
+    tint: "rgb(140, 100, 255)",
+    settings: {
+      bgImage:         "",
+      bgFit:           "cover",
+      bgDim:           40,
+      glowStrength:    80,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "waves",
+      ambientTint:     true,
+      ambientDensity:  50,
+      audioGlow:       "waveform",
+      audioGlowIntensity: 70,
+      audioGlowTint:   true,
+      widgetTileStyle: "glass",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "now-playing",     x:   50, y:   50, w: 500, h: 150,
+        options: { tintFromGlow: true, showProgress: true, showArtist: true,
+                   showHeader: true, textScale: 1.25 } },
+      { type: "audio-spectrum",  x:   50, y:  220, w: 500, h: 200,
+        options: { tintFromGlow: true, showHeader: false } },
+    ],
+  },
+  {
+    id: "holiday",
+    name: "Holiday Vibes",
+    desc: "Snow + fireflies, warm-tinted dim wallpaper, just a clock. For end-of-year cozy mode.",
+    tint: "rgb(220, 200, 100)",
+    settings: {
+      bgImage:         "",
+      bgFit:           "cover",
+      bgDim:           20,
+      glowStrength:    60,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "snow",
+      ambientTint:     false,
+      ambientDensity:  80,
+      audioGlow:       "off",
+      widgetTileStyle: "glass",
+      parallax3d:      10,
+    },
+    widgets: [
+      { type: "clock",     x:  120, y:  100, w: 320, h: 320,
+        options: { style: "analog", format24h: false, tintFromGlow: false,
+                   showHeader: false, textScale: 1.0 } },
+    ],
+  },
+];
+
+function renderLookBundles() {
+  const grid = document.getElementById("looks-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (const bundle of LOOK_BUNDLES) {
+    const card = document.createElement("div");
+    card.className = "look-card";
+    card.style.setProperty("--look-tint", bundle.tint);
+    card.innerHTML =
+      '<div class="look-thumb"></div>' +
+      '<div class="look-title"></div>' +
+      '<div class="look-desc"></div>';
+    card.querySelector(".look-title").textContent = bundle.name;
+    card.querySelector(".look-desc").textContent  = bundle.desc;
+    card.addEventListener("click", () => applyLookBundle(bundle));
+    grid.appendChild(card);
+  }
+}
+
+function applyLookBundle(bundle) {
+  const screenLabel = "Screen " + (activeScreen + 1);
+  const msg = t("looks.confirm", { name: bundle.name, screen: screenLabel })
+            || `Apply "${bundle.name}" to ${screenLabel}? This replaces background, effects, widget tile-style, and the widget layout. Existing widgets will be removed.`;
+  if (!confirm(msg)) return;
+
+  // 1. Push every setting in the bundle as a setting-update msg.
+  //    Bridge persists each + broadcasts; wallpaper page repaints.
+  for (const [key, value] of Object.entries(bundle.settings || {})) {
+    sendCmd({ type: "setting-update", screen: activeScreen, key, value });
+  }
+
+  // 2. Remove existing widgets, then add the bundle's. Order matters:
+  //    the removes finish before the adds because the WS pipeline is
+  //    serial per-connection.
+  for (const w of (settings.widgets || [])) {
+    sendCmd({ type: "widget-remove", id: w.id });
+  }
+  for (const w of bundle.widgets) {
+    sendCmd({ type: "widget-add",
+              widgetType: w.type,
+              x: w.x, y: w.y, w: w.w, h: w.h,
+              options: w.options || {} });
+  }
+
+  toast(t("looks.applied", { name: bundle.name }) || ("Applied " + bundle.name), "good");
+}
 
 const WIDGET_CATALOG = {
   "clock": {
@@ -1750,6 +2077,11 @@ const els = {
   lockToggle:     $("lock-toggle"),
   layoutPreview:  $("layout-preview"),
   previewStat:    $("preview-stat"),
+  livePreviewWrap:    $("live-preview-wrap"),
+  livePreviewFrame:   $("live-preview-frame"),
+  livePreviewIframe:  $("live-preview-iframe"),
+  livePreviewToggle:  $("live-preview-toggle"),
+  livePreviewRefresh: $("live-preview-refresh"),
   snapToggle:     $("snap-toggle"),
   snapStep:       $("snap-step"),
   widgetList:     $("widget-list"),
@@ -1980,6 +2312,9 @@ function switchScreen(n) {
   });
   if (ws) { try { ws.close(); } catch (_) {} ws = null; }
   connect();
+  // Re-source the live-preview iframe so it points at the newly
+  // active screen's wallpaper page.
+  if (typeof refreshLivePreview === "function") refreshLivePreview();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3802,7 +4137,53 @@ setTimeout(() => {
       }
     });
   }
+  if (els.livePreviewToggle) {
+    // Remember the user's choice across reloads. Default ON (true)
+    // because the live preview is the headline UX win of the v1.2-dev
+    // cycle — first-time users should see it work without having to
+    // discover the toggle.
+    const stored = localStorage.getItem("cfg.livePreview");
+    const startOn = stored === null ? true : stored === "1";
+    els.livePreviewToggle.checked = startOn;
+    setLivePreviewVisible(startOn);
+    els.livePreviewToggle.addEventListener("change",
+      () => setLivePreviewVisible(els.livePreviewToggle.checked));
+  }
+  if (els.livePreviewRefresh) {
+    els.livePreviewRefresh.addEventListener("click", refreshLivePreview);
+  }
 }, 0);
+
+// ── Live preview iframe (v1.2-dev) ──
+// Points at the bridge's /wallpaper route with the same screen index
+// the user is currently viewing in the Configurator. ?preview=1 tells
+// the wallpaper page to disable parallax / pixelfx / audio-glow so the
+// iframe doesn't fight with the on-desktop instance running in
+// Lively / WE. Aspect ratio synced from viewportW/H when the wallpaper
+// has connected, falls back to 16:9 before that.
+function _liveIframeSrc() {
+  // Cache-bust on each (re)load so HTML / JS changes in dev runs
+  // surface immediately when the user hits Reload preview.
+  return "/wallpaper?screen=" + activeScreen + "&preview=1&t=" + Date.now();
+}
+function refreshLivePreview() {
+  if (!els.livePreviewIframe) return;
+  els.livePreviewIframe.src = _liveIframeSrc();
+}
+function syncLivePreviewAspect() {
+  if (!els.livePreviewFrame) return;
+  const w = settings.viewportW || 1920;
+  const h = settings.viewportH || 1080;
+  els.livePreviewFrame.style.setProperty("--live-preview-ar", w + " / " + h);
+}
+function setLivePreviewVisible(on) {
+  if (!els.livePreviewWrap) return;
+  els.livePreviewWrap.classList.toggle("collapsed", !on);
+  // Source the iframe lazily — no point chewing CPU + GPU on a
+  // wallpaper page the user has collapsed away.
+  if (on && !els.livePreviewIframe.src) refreshLivePreview();
+  try { localStorage.setItem("cfg.livePreview", on ? "1" : "0"); } catch (_) {}
+}
 
 function computePreviewCanvasSize() {
   const list = settings.widgets || [];
@@ -3839,6 +4220,7 @@ function renderLayoutPreview() {
   els.layoutPreview.classList.toggle("locked", !unlocked);
   computePreviewCanvasSize();
   applyPreviewSize();
+  syncLivePreviewAspect();
   refreshSnapVisual();
 
   const list = settings.widgets || [];
@@ -4509,6 +4891,7 @@ function escapeHtml(s) {
 buildAmbientTiles();
 buildPixelfxRow();
 buildAddGrid();
+renderLookBundles();   // v1.2-dev: static, paints once at page load
 connect();
 </script>
 
