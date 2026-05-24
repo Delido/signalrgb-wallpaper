@@ -4197,6 +4197,7 @@ function handleEditWidgetDeepLink() {
 // widget-specific schema fields, separated by a small heading row so
 // the user can tell type-specific knobs from project-wide ones.
 const UNIVERSAL_WIDGET_FIELDS = [
+  { key: "showHeader", label: "Show header bar (icon + title + actions)", type: "boolean" },
   { key: "textAlign", label: "Text alignment", type: "select",
     options: [
       { value: "left",   label: "Left" },

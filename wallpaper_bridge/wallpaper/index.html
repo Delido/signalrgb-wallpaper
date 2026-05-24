@@ -327,6 +327,86 @@
     border-radius: 6px;
     cursor: move;
   }
+
+  /* ── v1.1.5+ widget header bar ──
+     Optional strip at the top of every widget. Hidden by default
+     (preserves the pre-v1.1.5 look exactly — no surprise visual
+     change for existing users) and lit up via the universal
+     `showHeader` option or the global default. When visible:
+       • left:  widget-type icon (the SVG already defined on the
+                registry's `icon` field, re-used as the in-screen
+                badge instead of just the Configurator picker)
+       • centre: widget label (e.g. "Clock", "Weather", "CPU")
+       • right: settings + remove action buttons (was floating-
+                overlay in edit mode only; now docked in the header
+                and visible-on-hover in normal mode too).
+     Layout uses CSS grid so the title can ellipsis-truncate on
+     narrow widgets without pushing the actions out of view. */
+  .widget-header { display: none; }
+  .widget.with-header .widget-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 6px;
+    margin: -2px -2px 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.75);
+    user-select: none;
+  }
+  .widget.with-header .widget-header-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px;
+    opacity: 0.8;
+  }
+  .widget.with-header .widget-header-icon svg {
+    width: 100%; height: 100%;
+    fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .widget.with-header .widget-header-title {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .widget.with-header .widget-header-actions {
+    display: flex; gap: 2px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .widget.with-header:hover .widget-header-actions,
+  .edit-mode .widget.with-header .widget-header-actions {
+    opacity: 1;
+  }
+  .widget.with-header .widget-act {
+    width: 18px; height: 18px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+    border: none;
+    color: rgba(255,255,255,0.85);
+    font-size: 12px; line-height: 16px;
+    text-align: center; cursor: pointer; padding: 0;
+    pointer-events: auto;
+  }
+  .widget.with-header .widget-act:hover {
+    background: rgba(255,255,255,0.18);
+  }
+  .widget.with-header .widget-remove:hover {
+    background: rgba(220,70,70,0.85);
+    color: white;
+  }
+  .widget.with-header .widget-body {
+    /* Body fills the remaining vertical space once the header has
+       claimed its row. flex-column on .widget would be cleaner but
+       changes the pre-v1.1.5 layout flow for every widget; growing
+       the body via height: 100% with a margin-top reset is the
+       drop-in-friendly path. */
+    height: calc(100% - 26px);
+  }
+  /* Header tint follows the user's glow colour when "tint" is on,
+     so multi-widget setups read as one coherent UI surface. */
+  .widget.with-header.tinted .widget-header { color: var(--w-tint, rgba(255,255,255,0.85)); }
+  .widget.with-header.tinted .widget-header-icon { color: var(--w-tint, rgba(255,255,255,0.85)); }
   .edit-mode .widget:hover {
     border-color: rgba(106,176,255,0.85);
     background: rgba(15,28,55,0.40);
@@ -1783,10 +1863,25 @@ function createWidget(w) {
   const el = document.createElement("div");
   el.className = "widget widget-" + w.type;
   el.dataset.id = w.id;
-  el.innerHTML = reg.markup() +
-    '<div class="widget-handle"></div>' +
-    (reg.editOptions ? '<div class="widget-settings" title="Configure">⚙</div>' : '') +
-    '<div class="widget-remove" title="Remove widget">×</div>';
+  // ── v1.1.5+ widget shell ──
+  // Optional header bar wraps every widget when the user opts into
+  // a tile style. Holds the widget's icon + display label, plus the
+  // settings/remove action buttons that used to live as floating
+  // overlays on the widget body. Header is visible in non-edit mode
+  // too (was edit-mode-only); actions only fade in on hover so the
+  // read-state stays uncluttered.
+  const widgetTitle = reg.label || w.type;
+  const headerActions =
+    (reg.editOptions ? '<button type="button" class="widget-act widget-settings" title="Configure" tabindex="-1">⚙</button>' : '') +
+    '<button type="button" class="widget-act widget-remove" title="Remove widget" tabindex="-1">×</button>';
+  el.innerHTML =
+    '<div class="widget-header">' +
+      '<span class="widget-header-icon">' + (reg.icon || '') + '</span>' +
+      '<span class="widget-header-title">' + escapeHtml(widgetTitle) + '</span>' +
+      '<span class="widget-header-actions">' + headerActions + '</span>' +
+    '</div>' +
+    '<div class="widget-body">' + reg.markup() + '</div>' +
+    '<div class="widget-handle"></div>';
   el.querySelector(".widget-remove").addEventListener("click", (e) => {
     e.stopPropagation();
     sendWidgetCmd({ type: "widget-remove", id: w.id });
@@ -1885,6 +1980,10 @@ function applyWidgetOptions(rec, w) {
       && WIDGET_TILE_STYLES.indexOf(tileOverride) >= 0) {
     rec.el.classList.add("tile-" + tileOverride);
   }
+  // Header toggle — universal showHeader option (default false so the
+  // pre-v1.1.5 look is preserved). True → reveal the header strip
+  // baked into every widget at create-time.
+  rec.el.classList.toggle("with-header", !!rec.opts.showHeader);
   if (rec.tick) rec.tick();
 }
 

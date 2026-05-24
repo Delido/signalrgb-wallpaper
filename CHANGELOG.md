@@ -4,6 +4,69 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5-beta] - 2026-05-23
+
+> Two roadmap items land: **one-click update** (auto-chain the
+> v1.1.4 re-import onto the download+install path) and the
+> **per-widget header bar** (icon + title + action buttons —
+> the big-polish move that finishes the v1.1 tile-shell design).
+
+### Added — Auto-chain: Download + install → re-import in one tray click
+
+The v1.1.4-beta workflow exposed two separate tray clicks:
+*Download + install update* (bridge swaps), then
+*Re-import wallpaper bundles* (Lively + WE pick up the new
+wallpaper-page code). v1.1.5 chains them automatically:
+
+1. *Download + install update* now writes a tiny marker file
+   (`%LOCALAPPDATA%\SignalRGBWallpaper\.pending-reimport`) right
+   before `os._exit(0)`'ing.
+2. The freshly-installed bridge's `main()` checks for that
+   marker at startup; if it exists, a background thread waits
+   5 s for the tray icon + WS reconnects to settle, then runs
+   the bundle re-import script and deletes the marker.
+
+End result: one tray click does the whole pipeline. The manual
+*Re-import wallpaper bundles* entry stays available for the
+"something didn't pick up cleanly" case.
+
+### Added — Per-widget header bar
+
+Every widget now has an optional header strip at the top with:
+
+- **Left**: the widget-type icon (the same SVG that already
+  identifies the type in the Configurator picker — re-used
+  here as the in-screen badge so each tile self-identifies).
+- **Centre**: the widget's display label (e.g. *Clock*,
+  *Weather*, *CPU*). Ellipsis-truncated when the widget is
+  narrower than the title.
+- **Right**: settings + remove action buttons, fade-in on
+  hover. These used to live as floating overlays on the body
+  in edit-mode only; the header docks them in a predictable
+  spot and makes them reachable without entering edit mode.
+
+Hidden by default (preserves the pre-v1.1.5 look exactly — no
+visual change for existing users). Enable per-widget via a new
+**"Show header bar (icon + title + actions)"** toggle in the
+Configure modal's *Layout (applies to all widgets)* section.
+Stored as `showHeader` on the widget's options blob.
+
+Header tint follows the *Tint with glow colour* toggle so
+multi-widget setups read as one coherent UI surface.
+
+CSS implementation: header is a CSS-grid row (`auto 1fr auto`)
+inside the widget, body gets `height: calc(100% - 26px)` to
+make room. Grid handles title-truncation cleanly even when the
+widget is resized down to the icon's minimum width.
+
+### Removed
+
+- The dev-only Cat-Widget mockup at `temp/cat-preview.html`.
+  Was explored as a roaming-pet experiment; dropped after design
+  review (didn't fit the project's signal-driven aesthetic, and
+  the per-spawn delight wasn't worth the per-widget complexity
+  on a multi-monitor setup).
+
 ## [1.1.4-beta] - 2026-05-23
 
 > Closes the long-standing auto-update gap: Lively and Wallpaper

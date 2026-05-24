@@ -326,6 +326,24 @@ class UpdateChecker:
             except Exception:
                 pass
         _log(f"download complete: {target} ({done:,} bytes)")
+        # ── Auto-chain marker (v1.1.5+) ──
+        # Drop a tiny marker file the newly-installed bridge picks up
+        # on startup → triggers the wallpaper-bundle re-import once,
+        # then deletes the marker. Removes the "two-click update"
+        # friction (download+install, then re-import) so the user
+        # just clicks once in the tray and both bridge + wallpaper
+        # bundles refresh end-to-end.
+        try:
+            cfg_dir = Path(os.environ.get("LOCALAPPDATA",
+                str(Path.home() / "AppData" / "Local"))) / "SignalRGBWallpaper"
+            cfg_dir.mkdir(parents=True, exist_ok=True)
+            marker = cfg_dir / ".pending-reimport"
+            marker.write_text(f"queued-at={time.time()}\n"
+                              f"from-tag={self._available_tag or '?'}\n"
+                              f"installer={target}\n", encoding="utf-8")
+            _log(f"wrote re-import marker: {marker}")
+        except Exception as e:
+            _log(f"could not write re-import marker (non-fatal): {e}")
         launched = False
         try:
             if sys.platform == "win32":
@@ -464,7 +482,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.1.4-beta"
+APP_VERSION = "1.1.5-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -5495,6 +5513,35 @@ def main():
     bridge.start()
 
     tray = TrayApp(bridge, config, config_lock)
+
+    # ── Auto-chain marker check (v1.1.5+) ──
+    # If the tray's "Download + install update" path queued a
+    # post-update re-import, do it now. Wrapping in a 5 s delay
+    # so the tray icon is up + the wallpaper pages have time to
+    # reconnect before we shell out to PowerShell — the user gets
+    # to see "I'm running" before the script's progress dialog
+    # appears.
+    try:
+        cfg_dir = Path(os.environ.get("LOCALAPPDATA",
+            str(Path.home() / "AppData" / "Local"))) / "SignalRGBWallpaper"
+        marker = cfg_dir / ".pending-reimport"
+        if marker.exists():
+            print(f"[startup] re-import marker found at {marker} — scheduling auto-chain")
+            def _run_pending_reimport():
+                time.sleep(5)
+                try:
+                    tray._reimport_bundles(None, None)
+                except Exception as e:
+                    print(f"[startup] auto-chain reimport failed: {e}")
+                try:
+                    marker.unlink()
+                except Exception:
+                    pass
+            threading.Thread(target=_run_pending_reimport,
+                             daemon=True, name="auto-chain-reimport").start()
+    except Exception as e:
+        print(f"[startup] marker check failed (non-fatal): {e}")
+
     tray.run()  # blocks on Win32 message pump
 
 
