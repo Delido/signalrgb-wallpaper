@@ -1018,6 +1018,16 @@ let _lastReportedViewport = "";
 // a window-arrangement change collapses to one send per distinct size.
 function reportViewport() {
   if (!ws || ws.readyState !== 1) return;
+  // Preview-mode iframes must NEVER report their viewport upstream.
+  // The iframe's CSS-pixel size (typically a few hundred px in the
+  // Configurator's preview panel) would otherwise overwrite the
+  // bridge's per-screen viewport state, which is supposed to track
+  // the REAL monitor (e.g. 2560×1440 reported by the Lively/WE
+  // instance). Configurator's syncLivePreviewScale() reads
+  // settings.viewportW/H to compute the iframe's downscale factor,
+  // so polluting that with the iframe's own size makes widgets
+  // appear native-size — i.e. way oversized for the preview frame.
+  if (typeof PREVIEW_MODE !== "undefined" && PREVIEW_MODE) return;
   const w = window.innerWidth | 0;
   const h = window.innerHeight | 0;
   const key = w + "x" + h;

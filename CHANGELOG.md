@@ -4,6 +4,176 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0-beta] - 2026-05-24
+
+> First beta of the post-v1.1 cycle. Four substantial dev tracks
+> consolidated into one beta tag: a live WYSIWYG preview iframe in
+> the Configurator, one-click Look-Bundles, GIF/video background
+> support, and a long-standing MSIX-Lively bug finally tracked
+> down.
+
+### Added — Live preview iframe in the Configurator
+
+The Widgets-card's layout preview used to be a schematic drag
+area: each widget rendered as a coloured rectangle the user
+positioned with their mouse, but the rectangle was a placeholder,
+not what would actually appear on the wallpaper. v1.2-beta adds
+a real iframe of the wallpaper page above the schematic preview
+showing **exactly** how the current settings render — same widgets
+with their real layouts, same ambient effect, same background, all
+live and updating as you change settings.
+
+Architecture:
+
+- New `/wallpaper` and `/wallpaper/*` HTTP routes on the bridge
+  serve `wallpaper/index.html` + sibling assets out of the
+  PyInstaller bundle (`--add-data "wallpaper;wallpaper"` baked
+  into build.ps1). Static-file serving with path-traversal
+  protection.
+- Wallpaper page learns `?preview=1` mode. Parallax3d, pixelfx
+  and audio-glow setters all no-op when PREVIEW_MODE is true so
+  the iframe doesn't fight with the on-desktop instance running
+  in Lively / WE (cursor tracking, audio-listener double-feed).
+  Critically, `reportViewport()` also no-ops in preview mode —
+  otherwise the iframe's CSS-pixel size would overwrite the
+  bridge's per-screen viewport state, which is supposed to track
+  the real monitor's resolution.
+- Iframe sized to the screen's NATIVE canvas (settings.viewportW
+  / viewportH) then visually scaled down via CSS `transform:
+  scale(containerW / nativeW)` with origin 0 0. So widgets at
+  absolute pixel coords render at the same relative size they
+  appear on the actual wallpaper.
+- Container `overflow:hidden` + `aspect-ratio` clip the scaled
+  iframe to the right shape.
+- `syncLivePreviewScale()` runs on initial setup, screen switch,
+  viewport changes, iframe load events, and window resize. Show
+  / hide toggle remembered in localStorage.
+
+### Added — Quick Looks
+
+New Configurator card above Background with five pre-built
+combinations: **Cyberpunk Streamer**, **Minimal Productivity**,
+**Gaming**, **Music Studio**, **Holiday Vibes**. Each defines a
+settings dict (background, glow, ambient effect, audio-glow,
+tile-style, parallax) plus a widget set with positions, options,
+and per-widget tile-style overrides.
+
+Click a card → confirm dialog → applies in one burst: spams the
+matching `setting-update` WS messages, removes existing widgets,
+adds the bundle's widgets at their target positions. WS messages
+are serial-per-connection so the apply order is deterministic
+(setting updates land first, widget removes drain, then widget
+adds populate).
+
+`widget-add` WS schema gained optional `x` / `y` / `w` / `h` /
+`options` fields so a bundle can ship the full widget layout in
+one round-trip per widget (versus add-with-defaults + update-
+position the legacy "Add widget" button still uses). Bundle
+options merge over `WIDGET_DEFAULTS`; existing UI path unchanged.
+
+Add-via-bundle leaves `widgetsLocked` alone (lands in read-mode)
+instead of unlocking like the manual Add button does — bundles
+land in a clean WYSIWYG state ready to be viewed, not edited.
+
+### Added — GIF / video background support
+
+`bgImage` URLs ending in `.mp4` / `.webm` / `.mov` / `.m4v` /
+`.mkv` now route through a new `<video id="bg-video">` element
+instead of the CSS `background-image` path. Animated GIFs already
+animated via the existing image-div route (browsers play them
+natively as CSS bg) and stay there; they're added to the library
+scan for discovery only.
+
+Video element setup:
+
+- `muted` + `playsinline` + `loop` + `autoplay` — required for
+  autoplay in Chromium-based wallpaper hosts.
+- `preload="auto"` + `disablepictureinpicture` so it loads
+  eagerly and doesn't show the PiP overlay on top of the
+  wallpaper.
+- Same z-index + fade transition as `#bg` so the swap between
+  image-mode and video-mode is invisible.
+- `bgFit` drives `object-fit` on the video the same way it
+  drives `background-size` on the div. Tile modes fall back to
+  cover (browsers can't `background-repeat` a `<video>`).
+- Re-setting the same src is suppressed (`dataset.currentSrc`
+  check) so a settings push that doesn't change `bgImage`
+  doesn't restart playback from frame 0.
+
+Library + upload:
+
+- `_library_rebuild_catalogue` scans the new extensions in
+  addition to the image set.
+- `_library_slug` uniqueness check covers them so
+  `spaceship.mp4` doesn't collide with an existing
+  `spaceship.png`.
+- `/library/upload` sniffs MP4 / MOV / WebM / GIF magic-bytes
+  alongside the existing PNG / JPEG / WebP detection. ISO BMFF
+  `ftyp` box discriminates MP4 vs MOV vs M4V.
+- `MAX_BACKGROUND_UPLOAD_BYTES` bumped 50 MB → 200 MB so 1080p
+  / 4K video loops fit comfortably.
+- Configurator file-pickers (library upload + direct bg picker)
+  accept the new video MIME types + extension hints.
+
+### Fixed — MSIX-Lively auto-import (long-standing trap)
+
+User report: clean install with auto-import-into-Lively ticked,
+but the four `SignalRGB Glow – Screen N` tiles never appeared in
+their MS Store Lively library. Two-layer bug:
+
+1. **Wrong path target.** When MSIX-Lively writes to
+   `%LOCALAPPDATA%\Lively Wallpaper\` in its own code, Windows
+   transparently redirects to
+   `%LOCALAPPDATA%\Packages\<pkg>\LocalCache\Local\Lively
+   Wallpaper\` — NOT `LocalState`. The installer was probing
+   only `LocalState` and silently shipped wallpapers into a
+   folder Lively never reads from. Added the LocalCache probe;
+   it wins over LocalState when both exist.
+2. **Wrong wildcard.** Even after the path fix, the probe missed
+   every Store-installed Lively because the MS Store prefixes
+   every package name with a numeric publisher ID — the real
+   directory is e.g. `12030rocksdanister.LivelyWallpaper_<hash>`,
+   not `rocksdanister.LivelyWallpaper_<hash>`. Added a leading
+   `*` to the wildcard so the publisher prefix is matched.
+
+Both fixes land in the .iss installer (Pascal `GetLivelyLibraryPath`)
+and the tray-side re-import PowerShell script. End-result: clean
+install with auto-import ticked now reaches MSIX Lively too. By
+extension, the v1.1.5 auto-chain re-import works on MSIX setups.
+
+Side-effect explanation: users reporting "pause mode doesn't work
+either" on MSIX Lively were observing the upstream symptom of
+this bug — with no wallpaper imported, Lively had nothing to
+pause. Auto-pause itself was never broken; it just had no target.
+
+### Changed — `widget-add` WS message accepts initial positioning
+
+Backwards-compatible extension to support the Look-Bundles
+apply path. Existing "Add widget" button passes only
+`widgetType` like before; bundle apply passes the full
+`{widgetType, x, y, w, h, options}` payload. Bundle widgets
+land at their target position without an add-then-update
+round-trip per widget.
+
+`add_widget` now also leaves `widgetsLocked` alone when the
+caller supplies explicit `x` / `y` (the bundle case). Manual
+adds still unlock the page so the user can find / move the
+freshly-added widget.
+
+### Notes for users on this beta
+
+- Wallpaper-page JS changed significantly. After tray-update or
+  manual install, run **Advanced → Re-import wallpaper bundles**
+  once to refresh Lively / WE bundles (v1.1.7's auto-chain
+  should run this automatically on the v1.1.x → v1.2.0-beta
+  upgrade).
+- Live preview iframe is on by default. Toggle off via the
+  *Show live preview* checkbox at the top of the Widgets card
+  if it's causing GPU pressure on a busy multi-monitor setup.
+- Quick Looks bundles are destructive: clicking one removes
+  every existing widget on the active screen and replaces with
+  the bundle's set. Confirm dialog prompts before the action.
+
 ## [1.1.0] - 2026-05-23
 
 > 🎯 **Second stable.** Drops the `-beta` suffix on the v1.1 cycle.
