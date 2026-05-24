@@ -77,38 +77,49 @@ foreach ($candidate in $livelyCandidates) {
 }
 
 if ($livelyExe -and (Test-Path $livelyZipsDir)) {
-    Write-Status "Lively CLI: $livelyExe" "Green"
-    $zips = Get-ChildItem -Path $livelyZipsDir -Filter "SignalRGB_Glow_Screen*.zip" -ErrorAction SilentlyContinue
-    if ($zips.Count -eq 0) {
-        Write-Status "  No SignalRGB_Glow ZIPs found in $livelyZipsDir — skipping Lively re-import." "Yellow"
+    # Only re-import if Lively is ALREADY running. Users with both
+    # Lively + WE installed who actively use only one shouldn't have
+    # the other auto-launched on every update — that's the bug a real
+    # user just reported (WE-only setup, Lively auto-launched).
+    # Skip silently when Lively isn't up; the new ZIPs are sitting
+    # in $livelyZipsDir for the next manual import whenever the user
+    # actually opens Lively.
+    $livelyRunning = $null -ne (Get-Process -Name "Lively","Livelywpf" -ErrorAction SilentlyContinue | Select-Object -First 1)
+    if (-not $livelyRunning) {
+        Write-Status "Lively not running — skipping CLI re-import (would otherwise force-launch the app). ZIPs are at $livelyZipsDir for the next manual import." "DarkGray"
     } else {
-        foreach ($zip in $zips) {
-            try {
-                # Lively's --import flag accepts ZIP paths and de-duplicates
-                # by name. The pre-existing extracted folder isn't auto-
-                # deleted but Lively does swap which hash folder the
-                # library entry points at on re-import.
-                Write-Status "  --import $($zip.Name)" "DarkCyan"
-                & $livelyExe --import $zip.FullName 2>&1 | Out-Null
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Status "    WARN: lively.exe exit=$LASTEXITCODE for $($zip.Name)" "Yellow"
+        Write-Status "Lively CLI: $livelyExe (process detected — running re-import)" "Green"
+        $zips = Get-ChildItem -Path $livelyZipsDir -Filter "SignalRGB_Glow_Screen*.zip" -ErrorAction SilentlyContinue
+        if ($zips.Count -eq 0) {
+            Write-Status "  No SignalRGB_Glow ZIPs found in $livelyZipsDir — skipping Lively re-import." "Yellow"
+        } else {
+            foreach ($zip in $zips) {
+                try {
+                    # Lively's --import flag accepts ZIP paths and de-duplicates
+                    # by name. The pre-existing extracted folder isn't auto-
+                    # deleted but Lively does swap which hash folder the
+                    # library entry points at on re-import.
+                    Write-Status "  --import $($zip.Name)" "DarkCyan"
+                    & $livelyExe --import $zip.FullName 2>&1 | Out-Null
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Status "    WARN: lively.exe exit=$LASTEXITCODE for $($zip.Name)" "Yellow"
+                        $livelyError = $true
+                    }
+                    Start-Sleep -Milliseconds 250
+                } catch {
+                    Write-Status "    ERROR re-importing $($zip.Name): $_" "Red"
                     $livelyError = $true
                 }
-                Start-Sleep -Milliseconds 250
-            } catch {
-                Write-Status "    ERROR re-importing $($zip.Name): $_" "Red"
-                $livelyError = $true
             }
+            $anyHostUpdated = $true
         }
-        $anyHostUpdated = $true
     }
-} elseif (Test-Path $livelyZipsDir) {
-    # Lively-not-found path: open the staging folder so the user can
-    # drag the ZIPs onto a running Lively window manually. Better than
-    # silent failure.
-    Write-Status "Lively CLI not found — opening wallpapers folder for manual drag-import." "Yellow"
-    Start-Process explorer.exe $livelyZipsDir
 }
+# Note: the old "open the wallpapers folder for manual drag-import"
+# fallback is gone — for end users on the auto-update path, popping
+# Explorer mid-update is just as annoying as auto-launching Lively.
+# Users who want the manual drag-import can run the tray entry
+# explicitly, which still surfaces the folder via the log.
 
 # ── Wallpaper Engine path ───────────────────────────────────────────────────
 # WE has no reload-API. Workaround: bump the version field inside

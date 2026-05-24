@@ -349,19 +349,26 @@ class UpdateChecker:
             if sys.platform == "win32":
                 import ctypes
                 # /MERGETASKS forces the auto-update installer to ALSO run
-                # the host-bundle + plugin file-copy tasks. Without it,
-                # `Flags: checkedonce` on those tasks (see .iss) defaults
-                # them OFF during silent re-install, so bridge.exe got
-                # swapped but the SignalRGB plugin, the Lively ZIPs,
-                # and the WE bundle in {app} all stayed at their
-                # previous-install state — root cause of the long-
-                # standing "tray update doesn't update Lively/WE" bug.
-                # autoinstall is deliberately omitted so we don't
-                # re-download Lively on every update.
+                # the host-bundle + plugin file-copy tasks AND the
+                # autostart [Run] entry that relaunches the bridge.
+                # Without it, `Flags: checkedonce` on those tasks
+                # defaults them OFF during silent re-install:
+                #   • bridge.exe swaps fine (no task gate)
+                #   • plugin, Lively ZIPs, WE bundle stay at the
+                #     previous-install state (file gates: see .iss)
+                #   • the [Run] entry that re-launches the new bridge
+                #     ALSO doesn't fire because it's gated by Tasks:
+                #     autostart → user has a fresh bridge.exe on disk
+                #     but no running process until they click the
+                #     Start-menu shortcut or reboot
+                # autoinstall + openconfigurator deliberately omitted:
+                # the former would re-download Lively every update,
+                # the latter would pop a browser tab every update.
                 mergetasks = (
                     "installplugin,"
                     "installlively,installlively\\autoimport,"
-                    "installwallpaperengine"
+                    "installwallpaperengine,"
+                    "autostart"
                 )
                 args = ('/SILENT /SUPPRESSMSGBOXES /NORESTART '
                         f'/MERGETASKS="{mergetasks}"')
@@ -500,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.1.6-beta"
+APP_VERSION = "1.1.7-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -5435,19 +5442,29 @@ class TrayApp:
             # `pwsh` (PowerShell 7) preferred, fall back to `powershell`
             # (Windows-shipped PS 5.1) so the helper works regardless of
             # whether the user installed the newer pwsh.
+            #
+            # CREATE_NO_WINDOW = 0x08000000 — suppresses the PowerShell
+            # console flash users were seeing post-update. The script's
+            # stdout is captured into the log file anyway; no reason to
+            # show a console for the seconds it runs.
+            CREATE_NO_WINDOW = 0x08000000
             ps_exe = "pwsh"
             try:
-                subprocess.run([ps_exe, "-Version"], check=True, capture_output=True, timeout=5)
+                subprocess.run([ps_exe, "-Version"], check=True,
+                               capture_output=True, timeout=5,
+                               creationflags=CREATE_NO_WINDOW)
             except Exception:
                 ps_exe = "powershell"
             args = [
                 ps_exe, "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-WindowStyle", "Hidden",
                 "-File", str(script),
                 "-AppDir", str(app_dir),
             ]
             print(f"[tray] reimport-bundles: invoking {' '.join(args)}")
             result = subprocess.run(
-                args, capture_output=True, text=True, timeout=60)
+                args, capture_output=True, text=True, timeout=60,
+                creationflags=CREATE_NO_WINDOW)
             try:
                 with open(log_path, "w", encoding="utf-8") as fh:
                     fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] reimport invoked\n")

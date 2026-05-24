@@ -4,6 +4,83 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.7-beta] - 2026-05-23
+
+> Same root-cause class as v1.1.6-beta one layer down: the
+> `autostart` task that gates the [Run] entry which re-launches
+> the bridge after install also runs into the `Flags: checkedonce`
+> + silent-install = OFF default trap. v1.1.6 fixed the file-copy
+> tasks but forgot autostart, so the silent update path landed
+> with a fresh bridge.exe on disk but no running process — user
+> had to launch from the Start menu (or reboot) to actually get
+> the new bridge live.
+
+### Fixed — Bridge auto-restarts after silent update
+
+Added `autostart` to the `/MERGETASKS` list the bridge's update-
+spawn passes to the silent installer. With the task forced ON,
+the [Run] entry's `Tasks: autostart` gate evaluates true, the
+postinstall entry runs even in silent mode, and the fresh
+bridge.exe is launched automatically as the installer exits.
+
+Full `/MERGETASKS` is now:
+
+```text
+installplugin,
+installlively,installlively\autoimport,
+installwallpaperengine,
+autostart
+```
+
+`installlively\autoinstall` and `openconfigurator` deliberately
+stay out — re-downloading Lively every update and popping a
+browser tab every update are both anti-features.
+
+### Fixed — PowerShell window flash during re-import
+
+The auto-chain re-import was visible as a brief PowerShell console
+window flashing into view post-update. Bridge now passes
+`CREATE_NO_WINDOW` to the subprocess.run call AND `-WindowStyle
+Hidden` to PowerShell itself; output still lands in
+`%TEMP%\signalrgb-reimport.log` so nothing's lost.
+
+### Fixed — Re-import no longer force-launches Lively
+
+The re-import helper called `Lively.exe --import <zip>` whenever
+the Lively binary was found on disk, regardless of whether Lively
+was actually running. Users with both Lively + WE installed who
+only actively use WE (the reported case) had Lively auto-launching
+on every update. The script now checks for a running Lively
+process first (`Get-Process Lively, Livelywpf`) and skips the CLI
+invocation entirely if Lively isn't up — the new ZIPs are still
+sitting in `{app}\Lively wallpapers\` for whenever the user
+opens Lively manually.
+
+Removed the Explorer-folder-open fallback for the same reason —
+popping a folder window mid-update is just as annoying as
+auto-launching Lively.
+
+### End-to-end auto-update timeline (post-v1.1.7)
+
+After this release the full auto-update pipeline runs silently
+without any window flash and without launching apps the user
+isn't actively using:
+
++ User clicks tray *Download + install update*
++ Tk download dialog (~3 MB), then ShellExecuteW the installer
++ Bridge writes the `.pending-reimport` marker, then `os._exit(0)`s
++ Inno (silent) copies bridge.exe + plugin + Lively ZIPs + WE
+  bundle (all four task gates forced ON), runs the `autostart`
+  [Run] entry that launches the new bridge
++ New bridge boots, tray icon reappears, sees the marker, waits
+  5 s for things to settle, runs the re-import helper hidden
++ Lively re-imported only if already running; WE project.json
+  `version` bumped so WE invalidates cache on next apply
++ Tray balloon confirms re-import done
+
+Zero manual steps, zero unwanted app launches, zero console
+flashes after the initial *Download + install update* click.
+
 ## [1.1.6-beta] - 2026-05-23
 
 > Root-cause fix for the long-standing "tray update doesn't update
