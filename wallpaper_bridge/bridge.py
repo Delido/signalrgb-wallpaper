@@ -522,7 +522,7 @@ WS_PORT  = 17320
 
 # Max payload size accepted on POST /screen/<N>/background. Generous (50 MB)
 # but bounded — the builder caps output well below this in practice.
-MAX_BACKGROUND_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_BACKGROUND_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB — generous to leave room for video uploads (10-30s 1080p MP4 = 20-80 MB; 4K loops can reach 150 MB)
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MAX_SCREEN_INDEX = 7  # generous upper bound; plugin caps at 3 (4 screens)
@@ -864,7 +864,12 @@ def _library_slug(label: str, lib: Path) -> str:
     s = s[:60]
     base = s
     i = 2
-    while any((lib / (base + ext)).exists() for ext in (".png", ".jpg", ".webp")):
+    # v1.2-dev: extension list extended to cover GIF + video so a
+    # "spaceship.mp4" upload doesn't collide with an earlier
+    # "spaceship.png" of the same slug.
+    while any((lib / (base + ext)).exists() for ext in
+              (".png", ".jpg", ".jpeg", ".webp", ".gif",
+               ".mp4", ".webm", ".mov", ".m4v", ".mkv")):
         base = f"{s}-{i}"
         i += 1
     return base
@@ -893,8 +898,16 @@ def _library_rebuild_catalogue(lib: Path) -> None:
             pass
 
     items = []
+    # GIF + video extensions added in v1.2-dev — wallpaper page now
+    # routes any *.mp4 / *.webm / *.mov / *.m4v / *.mkv through a
+    # <video> element instead of the image-div. GIFs already animated
+    # via the CSS background-image path; they're listed here because
+    # the library catalogue is what populates the Configurator's
+    # picker strip.
     files = sorted([p for p in lib.iterdir()
-                    if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")])
+                    if p.is_file() and p.suffix.lower() in
+                    (".png", ".jpg", ".jpeg", ".webp", ".gif",
+                     ".mp4", ".webm", ".mov", ".m4v", ".mkv")])
     stems = {p.name for p in files}
     for fp in files:
         stem = fp.stem
@@ -2002,19 +2015,35 @@ class Broadcaster:
                 return
             try:
                 body = await reader.readexactly(content_length)
-                # Reject anything that doesn't look like a PNG/JPEG/WebP.
-                if not (body[:8] == b"\x89PNG\r\n\x1a\n" or body[:3] == b"\xff\xd8\xff"
-                        or body[:4] == b"RIFF"):
-                    http_error(writer, 400, "unsupported image format")
+                # Sniff format from the first bytes. PNG / JPEG / WebP
+                # / GIF still + animated for images; MP4 / WebM / MOV
+                # for video (v1.2-dev). Anything else gets a 400 so
+                # we don't silently accept random binaries into the
+                # library and have the wallpaper page choke on them.
+                ext = None
+                if   body[:8] == b"\x89PNG\r\n\x1a\n":     ext = ".png"
+                elif body[:3] == b"\xff\xd8\xff":          ext = ".jpg"
+                elif body[:4] == b"RIFF" and body[8:12] == b"WEBP":  ext = ".webp"
+                elif body[:6] in (b"GIF87a", b"GIF89a"):   ext = ".gif"
+                elif body[:4] == b"\x1aE\xdf\xa3":         ext = ".webm"
+                # MP4 / MOV use ISO BMFF container — `ftyp` box at
+                # offset 4. Subtype byte tells us mp4 vs mov vs m4v
+                # but for filing they all play back fine through the
+                # <video> element so we just discriminate the two
+                # common containers.
+                elif len(body) > 12 and body[4:8] == b"ftyp":
+                    sub = body[8:12]
+                    if   sub == b"qt  ":                   ext = ".mov"
+                    elif sub.startswith(b"M4V"):           ext = ".m4v"
+                    else:                                  ext = ".mp4"
+                if ext is None:
+                    http_error(writer, 400, "unsupported file format (need PNG / JPEG / WebP / GIF / MP4 / WebM / MOV)")
                     try: await writer.drain()
                     except Exception: pass
                     try: writer.close()
                     except Exception: pass
                     return
                 slug = _library_slug(label, library_dir())
-                ext = ".png"
-                if body[:3] == b"\xff\xd8\xff": ext = ".jpg"
-                elif body[:4] == b"RIFF":       ext = ".webp"
                 fp = library_dir() / (slug + ext)
                 fp.write_bytes(body)
                 _library_rebuild_catalogue(library_dir())

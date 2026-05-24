@@ -1029,7 +1029,8 @@
           <div style="display:flex; gap:6px;">
             <label class="btn" for="lib-upload" style="flex:0 0 auto"
                    data-i18n="bg.library.upload">Add image…</label>
-            <input id="lib-upload" type="file" accept="image/png,image/jpeg,image/webp"
+            <input id="lib-upload" type="file"
+                   accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
                    style="display:none">
           </div>
         </div>
@@ -1041,7 +1042,9 @@
       <div class="row">
         <label>&nbsp;</label>
         <label class="btn" style="flex:0 0 auto" for="bg-file" data-i18n="bg.choose">Choose image…</label>
-        <input type="file" id="bg-file" accept="image/*" style="display:none">
+        <input type="file" id="bg-file"
+               accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
+               style="display:none">
         <a class="btn" href="/builder" target="_blank" style="flex:0 0 auto"
            data-i18n="bg.open_builder">Open Builder…</a>
         <span class="val" id="bg-upload-stat" style="flex:1; text-align:left; padding-left:8px;"></span>

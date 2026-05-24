@@ -43,6 +43,15 @@
             background-size: cover; background-repeat: no-repeat;
             background-position: center center;
             transition: opacity 0.3s; }
+  /* Video-background twin of #bg. Same z-index + fade transition so
+     the swap between image-mode and video-mode is invisible. Sized
+     via inset:0 + width/height 100%; object-fit picks up the user's
+     bgFit choice (only cover/contain/fill make sense for video; the
+     tile modes from the v1.1 Background card fall back to cover). */
+  #bg-video { position: fixed; inset: 0; z-index: 2;
+              width: 100%; height: 100%;
+              object-fit: cover; object-position: center center;
+              transition: opacity 0.3s; }
   #dim    { position: fixed; inset: 0; background: #000; opacity: 0;
             z-index: 3; pointer-events: none; }
   #status { position: fixed; top: 10px; left: 10px; z-index: 4;
@@ -817,6 +826,17 @@
 <body>
 <div id="bars" class="lay-grid"></div>
 <div id="bg" role="img" aria-label=""></div>
+<!-- v1.2-dev: animated-background support. Hidden by default; the
+     wallpaper page swaps to the <video> element when bgImage's
+     extension matches a known video container (mp4/webm/mov/m4v).
+     `muted` + `playsinline` are required for autoplay in
+     Chromium-based wallpaper hosts. `loop` keeps the loop seamless
+     regardless of clip length. Audio always off — SignalRGB's
+     own FFT feed drives the audio-glow layer, double-decoding
+     here would just be wasted GPU. -->
+<video id="bg-video" muted playsinline loop autoplay
+       preload="auto" disablepictureinpicture
+       style="display: none;"></video>
 <div id="dim"></div>
 <canvas id="ambient-canvas"></canvas>
 <canvas id="audioglow-canvas"></canvas>
@@ -897,6 +917,11 @@ function setScreenIndex(n) {
 }
 
 const bgEl = document.getElementById("bg");
+const bgVideoEl = document.getElementById("bg-video");
+// Video extensions we'll route through the <video> element. Browsers
+// animate GIFs natively as CSS background-image, so they stay on the
+// #bg path. Anything not in this list lands on the image-div path.
+const VIDEO_BG_EXTS = /\.(mp4|webm|mov|m4v|mkv)(\?.*)?$/i;
 const dimEl = document.getElementById("dim");
 const barsEl = document.getElementById("bars");
 const statusEl = document.getElementById("status");
@@ -1161,6 +1186,17 @@ function _refreshBgSize() {
   const css = BG_FIT_CSS[currentBgFit] || BG_FIT_CSS.cover;
   bgEl.style.backgroundSize = css.size(currentBgTileScale);
   bgEl.style.backgroundRepeat = css.repeat;
+  // Video uses object-fit instead of background-size. The tile
+  // modes don't apply to video (browsers can't repeat-tile a
+  // <video> the way background-repeat can a CSS image), so map
+  // anything tile-shaped to cover.
+  let vFit;
+  switch (currentBgFit) {
+    case "contain": vFit = "contain"; break;
+    case "fill":    vFit = "fill";    break;
+    default:        vFit = "cover";   // cover, tile*, anything unknown
+  }
+  bgVideoEl.style.objectFit = vFit;
 }
 
 function setBackground() {
@@ -1169,10 +1205,33 @@ function setBackground() {
   console.log("[wallpaper] setBackground: raw=", JSON.stringify(raw), "src=", JSON.stringify(src));
   flashDebug("raw=" + JSON.stringify(raw) + " | normalised=" + JSON.stringify(src));
   if (!src) {
-    bgEl.style.backgroundImage = "";
-    bgEl.style.opacity = "0";
+    _clearImageBg();
+    _clearVideoBg();
     return;
   }
+  if (VIDEO_BG_EXTS.test(src)) {
+    _setVideoBg(src);
+  } else {
+    _setImageBg(src);
+  }
+}
+
+function _clearImageBg() {
+  bgEl.style.backgroundImage = "";
+  bgEl.style.opacity = "0";
+}
+function _clearVideoBg() {
+  bgVideoEl.style.opacity = "0";
+  bgVideoEl.style.display = "none";
+  try { bgVideoEl.pause(); } catch (_) {}
+  bgVideoEl.removeAttribute("src");
+  try { bgVideoEl.load(); } catch (_) {}
+}
+
+function _setImageBg(src) {
+  // Hide video first so the image fade isn't stacked on a still-
+  // running clip during the swap.
+  _clearVideoBg();
   // <div> backgrounds don't fire load / error events the way <img>
   // does, so we preload via a throwaway Image and wire its events
   // to drive the same fade-in / debug-flash UX the old <img>
@@ -1204,6 +1263,61 @@ function setBackground() {
     }
   };
   probe.src = src;
+}
+
+function _setVideoBg(src) {
+  // Hide image div first so the video fade-in isn't masked by a
+  // still-painted background-image during the swap.
+  _clearImageBg();
+  bgVideoEl.style.display = "block";
+  // Only re-set src + reload when the source actually changed —
+  // re-assigning the same src restarts playback from frame 0 which
+  // is a visible glitch on every settings push.
+  const want = src;
+  if (bgVideoEl.dataset.currentSrc !== want) {
+    bgVideoEl.dataset.currentSrc = want;
+    bgVideoEl.src = src;
+    try { bgVideoEl.load(); } catch (_) {}
+  }
+  // <video> fires `loadedmetadata` when dimensions are known; use
+  // that to push the native pixel size into the same --bg-w /
+  // --bg-h slots the image path uses (so tile-mode CSS lookups
+  // don't break when someone configures a video as tile bg).
+  const onMeta = () => {
+    bgEl.style.setProperty("--bg-w", (bgVideoEl.videoWidth  || 1) + "px");
+    bgEl.style.setProperty("--bg-h", (bgVideoEl.videoHeight || 1) + "px");
+    _refreshBgSize();
+    bgVideoEl.removeEventListener("loadedmetadata", onMeta);
+  };
+  bgVideoEl.addEventListener("loadedmetadata", onMeta);
+  bgVideoEl.onerror = () => {
+    const msg = "video load failed: " + src;
+    console.error("[wallpaper]", msg);
+    if (showStatusEnabled) {
+      statusEl.textContent = msg;
+      statusEl.classList.remove("ok", "hidden");
+      statusEl.classList.add("bad");
+    }
+  };
+  // Autoplay can be blocked by host policy even with muted=true;
+  // call play() explicitly and swallow the rejection.
+  const startPlay = () => {
+    bgVideoEl.play().catch((e) => {
+      console.warn("[wallpaper] video autoplay blocked:", e && e.message);
+    });
+    bgVideoEl.style.opacity = "1";
+  };
+  // canplay = first frame decodable, safe to fade in. Falls back
+  // to loadedmetadata for hosts that don't fire canplay reliably.
+  if (bgVideoEl.readyState >= 2) {
+    startPlay();
+  } else {
+    const onReady = () => {
+      startPlay();
+      bgVideoEl.removeEventListener("canplay", onReady);
+    };
+    bgVideoEl.addEventListener("canplay", onReady);
+  }
 }
 
 // Legacy listener kept around for any external code that still
