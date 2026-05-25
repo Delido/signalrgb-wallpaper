@@ -4,6 +4,98 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5-beta] - 2026-05-25
+
+> Builder Monitor-Setup. The Builder now starts from "tell me about
+> your monitors" — declare any bridge-reported screen that's actually
+> a span of multiple physical monitors, edit each resulting tile
+> independently, and Apply composites everything back into one image
+> per bridge screen. The classic single-canvas Load/Rotate flow stays
+> available in Advanced mode for the muscle-memory crowd.
+
+### Added — Monitor Setup at the top of the Wall section
+
+New per-bridge-screen mode picker rendered above the wall tiles.
+Each bridge-reported screen (1–4) gets a row showing its actual
+reported resolution + a mode select:
+
+- **1 monitor (use as-is)** — default, one tile covering the
+  whole bridge screen
+- **2 monitors — horizontal span** — splits the bridge screen
+  into a left + right tile (each w/2 × h)
+- **2 monitors — vertical span** — splits into top + bottom
+  (each w × h/2)
+
+Each row also shows a tiny visual preview of the resulting tile
+shape so the user can verify the split before staging images.
+
+The setup persists in `localStorage` under
+`signalrgb.builder.monitor_setup` so the user only declares
+their span layout once.
+
+### Added — Tile-first editing flow
+
+Wall-tile click behavior changed:
+
+- **Empty tile** → opens the file picker directly. The picked
+  file loads into the tile *and* the main Builder canvas
+  in one step (the v1.2.4 in-place edit banner appears
+  immediately).
+- **Filled tile** → drops straight into the in-place edit flow
+  for that slot (was: popup with file / library / canvas /
+  clear / edit choices).
+- **Right-click** on any tile → opens the legacy action popup
+  with all options (file / library / current canvas / edit /
+  clear) for users who need the alternate sources.
+
+Empty-tile hint copy updated to mention the new shortcut + the
+right-click escape hatch.
+
+### Changed — Apply-Wall does per-bridge-screen compositing
+
+`applyWall()` no longer ships one PNG per slot to
+`/screen/N/background`. Instead it:
+
+1. Groups the flat tile list by `bridgeIdx`.
+2. For each bridge screen, builds a composite canvas at the
+   bridge's reported resolution (e.g. 5120×1440).
+3. Stamps each tile's image at its declared (xOffset, yOffset,
+   w, h) inside that composite. Empty sub-tiles stay transparent.
+4. POSTs the composite to `/screen/bridgeIdx/background`.
+
+So a 5120×1440 bridge screen declared as "2 horizontal monitors"
+plus two staged tile images becomes a single 5120×1440 PNG with
+the left half = tile 0 and right half = tile 1. Wallpaper Engine
+and Lively then display it across both physical monitors in
+their existing span mode.
+
+Single-tile bridge screens still go through the composite path —
+the math degenerates to "draw at 0,0 covering full bridge
+resolution" so the apply pipeline doesn't fork.
+
+### Changed — Simple mode hides Load + Rotate
+
+The classic "Load" section (Choose image… / Open from library… /
+Rotate 90°) is now hidden under Simple mode because the new
+tile-first flow makes it redundant. Advanced mode keeps it for
+users who prefer the single-canvas → single-screen workflow.
+
+### Other
+
+- New data model: `bridgeScreens[]` (reported state from
+  `/config`) + `monitorSetup[]` (per-screen mode) + flat
+  `wallScreens[]` (tile descriptors with bridgeW/bridgeH/
+  xOffset/yOffset/w/h/bridgeIdx/subIdx).
+- `loadWallViewports()` reconciles `monitorSetup.length` to
+  `bridgeScreenCount`; new entries default to `"single"`.
+- New i18n keys: `wall.hint4`, `setup.bridge_screen`,
+  `setup.mode.single`, `setup.mode.span_h`, `setup.mode.span_v`.
+- `loadWallSlotFromFile()` now auto-opens the edit flow on the
+  freshly-filled slot so the user lands in the edit banner
+  without a second click.
+
+---
+
 ## [1.2.4-beta] - 2026-05-25
 
 > Builder Monitor Wall becomes a true per-monitor editor. Each tile is

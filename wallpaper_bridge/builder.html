@@ -725,6 +725,54 @@
     width: 18px; display: inline-block; text-align: center;
   }
 
+  /* ── v1.2.5: Monitor-Setup list ──
+     Per bridge-screen row showing the reported resolution + a mode
+     picker (single / 2 H span / 2 V span). Used at the top of the
+     Wall section so the user can declare "the 5120×1440 the bridge
+     sees is actually 2 monitors" before staging tiles. */
+  .monitor-setup-list {
+    display: flex; flex-direction: column;
+    gap: 6px;
+    margin: 4px 0 10px;
+  }
+  .monitor-setup-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .monitor-setup-row .ms-bridge {
+    flex: 0 0 auto;
+    color: var(--text-dim);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    min-width: 50px;
+  }
+  .monitor-setup-row .ms-res {
+    flex: 0 0 auto;
+    color: var(--text);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    min-width: 100px;
+  }
+  .monitor-setup-row select {
+    flex: 1 1 auto;
+    padding: 3px 6px; font-size: 12px;
+  }
+  .monitor-setup-row .ms-preview {
+    flex: 0 0 auto;
+    display: inline-flex; gap: 2px;
+    padding: 2px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+  .monitor-setup-row .ms-preview .ms-tile {
+    background: rgba(106, 176, 255, 0.45);
+    border-radius: 1px;
+  }
+
   /* ── v1.2.4: Editing-Slot banner ──
      Sits above the canvas toolbar while a wall slot is being edited
      in place. Surfaces which slot is open + Save / Cancel CTAs so
@@ -1042,7 +1090,12 @@
       </ol>
     </div>
     <!-- ── 1. Source ───────────────────────────────────────────────────── -->
-    <section>
+    <!-- v1.2.5: Simple-mode hides this section. The new entry-point is
+         clicking a tile in the Monitor Wall section below — that
+         loads + edits the image in one click. Advanced mode keeps the
+         classic Load / Rotate workflow for the file → single-canvas
+         flow the user already had muscle memory for. -->
+    <section class="simple-hide">
       <h2 data-i18n="section.load">Load</h2>
       <div class="btn-row">
         <label class="btn primary" for="file-input" data-i18n="btn.choose_image">Choose image…</label>
@@ -1116,13 +1169,22 @@
     <!-- ── 2. Monitor Wall ─────────────────────────────────────────────── -->
     <section class="wall-section">
       <h2 data-i18n="section.wall">Monitor Wall</h2>
-      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint3">
-        Pick how many monitors + how they're arranged. Each tile is its own
-        slot — click a filled tile and pick "Edit in main canvas" to use
-        Auto-Cut / brushes / colour-pick on just that monitor's image.
+      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint4">
+        Start here. Tell the Builder how the bridge-reported screens map
+        to real monitors (a 5120×1440 screen might actually be a 2-monitor
+        span). Each resulting tile is its own slot — click an empty tile
+        to load an image, click a filled tile to edit it in the main
+        canvas. Apply rebuilds one image per bridge screen, composited
+        from your tiles.
       </div>
-      <div class="row">
-        <label for="wall-screen-count" data-i18n="wall.screen_count">Monitors</label>
+
+      <!-- v1.2.5: Monitor-Setup — per bridge-screen mode picker. The
+           Builder builds wall tiles + the composite Apply step from
+           whatever the user defines here. -->
+      <div id="monitor-setup-list" class="monitor-setup-list"></div>
+
+      <div class="row" style="margin-top: 12px;">
+        <label for="wall-screen-count" data-i18n="wall.screen_count">Bridge screens</label>
         <select id="wall-screen-count">
           <option value="auto" data-i18n="wall.screen_count.auto">Auto (from bridge)</option>
           <option value="1">1</option>
@@ -1132,7 +1194,7 @@
         </select>
       </div>
       <div class="row">
-        <label for="wall-layout" data-i18n="wall.layout">Layout</label>
+        <label for="wall-layout" data-i18n="wall.layout">Tile layout</label>
         <select id="wall-layout">
           <option value="horizontal" data-i18n="wall.layout.horizontal">Horizontal row (1×N)</option>
           <option value="2x2"        data-i18n="wall.layout.2x2">2×2 grid</option>
@@ -1404,15 +1466,17 @@ const TRANSLATIONS = {
   "mode.simple":   { en: "Simple",   de: "Einfach" },
   "mode.advanced": { en: "Advanced", de: "Erweitert" },
   "simple.workflow_hint": {
-    en: "<strong>3 steps:</strong><ol>" +
-        "<li>Load an image (\"Choose image…\")</li>" +
-        "<li>Click the Auto-Cut star button on the left toolbar</li>" +
-        "<li>Hit \"Apply to screen\" — or \"Apply Wall to screens\" for a multi-monitor wall</li>" +
+    en: "<strong>4 steps:</strong><ol>" +
+        "<li>Set up your monitors below — declare any spans (e.g. a 5120×1440 screen that's really 2 monitors)</li>" +
+        "<li>Click an empty tile to pick / drop an image — it opens right here for editing</li>" +
+        "<li>Use Auto-Cut (star icon left) on the parts you want transparent, then Save to slot</li>" +
+        "<li>\"Apply Wall to screens\" composites every tile into one image per bridge screen</li>" +
         "</ol>",
-    de: "<strong>3 Schritte:</strong><ol>" +
-        "<li>Bild laden („Choose image…“)</li>" +
-        "<li>Auto-Cut-Stern in der linken Werkzeugleiste anklicken</li>" +
-        "<li>„Apply to screen“ — oder „Apply Wall to screens“ für eine Multi-Monitor-Wand</li>" +
+    de: "<strong>4 Schritte:</strong><ol>" +
+        "<li>Monitore unten einrichten — Spans deklarieren (z.B. einen 5120×1440-Schirm der eigentlich 2 Monitore sind)</li>" +
+        "<li>Leere Kachel anklicken um ein Bild zu wählen / ablegen — öffnet sich direkt hier zum Bearbeiten</li>" +
+        "<li>Auto-Cut (Sterne-Icon links) auf die Stellen die transparent werden sollen, dann „In Slot speichern“</li>" +
+        "<li>„Apply Wall to screens“ kombiniert alle Kacheln zu einem Bild pro Bridge-Schirm</li>" +
         "</ol>",
   },
 
@@ -1549,10 +1613,21 @@ const TRANSLATIONS = {
   "wall.apply":         { en: "Apply Wall to screens", de: "Wand anwenden" },
   "wall.clear":         { en: "Clear",              de: "Leeren" },
   "wall.staged":        { en: "staged",             de: "vorgemerkt" },
-  "wall.click_to_change": { en: "Click to change",  de: "Klicken zum Ändern" },
-  "wall.drop_here":     { en: "Drop image / click to pick", de: "Bild ablegen / klicken" },
+  "wall.click_to_change": { en: "Click to edit · right-click for menu",
+                            de: "Klicken zum Bearbeiten · Rechtsklick für Menü" },
+  "wall.drop_here":     { en: "Click / drop image (right-click = more)",
+                          de: "Klicken / Bild ablegen (Rechtsklick = mehr)" },
   "wall.hint3":         { en: "Pick how many monitors + how they're arranged. Each tile is its own slot — click a filled tile and pick \"Edit in main canvas\" to use Auto-Cut / brushes / colour-pick on just that monitor's image.",
                           de: "Anzahl Bildschirme + Anordnung wählen. Jede Kachel ist ein eigener Slot — eine gefüllte Kachel anklicken und „Im Haupteditor öffnen“ wählen, um Auto-Cut / Pinsel / Farbpicker nur auf diesem Bild zu nutzen." },
+  "wall.hint4":         { en: "Start here. Tell the Builder how the bridge-reported screens map to real monitors (a 5120×1440 screen might actually be a 2-monitor span). Each resulting tile is its own slot — click an empty tile to load an image, click a filled tile to edit it in the main canvas. Apply rebuilds one image per bridge screen, composited from your tiles.",
+                          de: "Hier starten. Sag dem Builder, wie die vom Bridge gemeldeten Bildschirme zu echten Monitoren passen (ein 5120×1440-Schirm kann in Wahrheit ein 2-Monitor-Span sein). Jede daraus entstehende Kachel ist ein eigener Slot — leere Kachel anklicken um Bild zu laden, gefüllte Kachel anklicken um sie im Haupteditor zu bearbeiten. „Apply“ setzt pro Bridge-Schirm ein Composite-Bild aus deinen Kacheln zusammen." },
+  "setup.bridge_screen": { en: "Bridge {n}", de: "Bridge {n}" },
+  "setup.mode.single":  { en: "1 monitor (use as-is)",
+                          de: "1 Monitor (so verwenden)" },
+  "setup.mode.span_h":  { en: "2 monitors — horizontal span",
+                          de: "2 Monitore — horizontaler Span" },
+  "setup.mode.span_v":  { en: "2 monitors — vertical span",
+                          de: "2 Monitore — vertikaler Span" },
   "wall.screen_count":  { en: "Monitors",            de: "Bildschirme" },
   "wall.screen_count.auto": { en: "Auto (from bridge)", de: "Auto (Bridge-Wert)" },
   "wall.menu.file":     { en: "Choose file…",       de: "Datei wählen…" },
@@ -3884,12 +3959,32 @@ els.saveLibBtn.addEventListener("click", async () => {
 // yet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-let wallScreenCount = 1;
-let wallScreens     = [];           // [{w, h, bgImage}, ...] per screen
-let wallSlots       = [];           // [{img, name, blob, dataUrl, source} | null, ...]
-// v1.2.4: user-set monitor count override. null = use /config's
-// screenCount (the bridge-reported value); 1..4 = pin to that count.
-// Persisted in localStorage so the picker remembers across sessions.
+// v1.2.5: two-layer model.
+//   bridgeScreens[]  — what the bridge actually reports (one entry per
+//                      screenCount), each with reportedW/reportedH/bgImage.
+//   monitorSetup[]   — user's declaration of how each bridge screen
+//                      really splits into physical monitors. Modes:
+//                        "single"   → 1 tile, full bridge resolution.
+//                        "span-h"   → 2 tiles side-by-side, each w/2.
+//                        "span-v"   → 2 tiles stacked, each h/2.
+//                      Persisted in localStorage so the user only
+//                      declares their span layout once.
+//   wallScreens[]    — flat list of tile descriptors built from
+//                      bridgeScreens + monitorSetup. Each tile knows
+//                      which bridge screen + sub-index it covers and
+//                      what its visual W/H + offset within the bridge
+//                      screen are. This is what renderWall iterates.
+//   wallSlots[]      — one entry per wallScreens entry (stays in
+//                      lockstep on every loadWallViewports).
+let bridgeScreens     = [];
+let monitorSetup      = [];
+let wallScreens       = [];   // flat tile descriptors
+let wallSlots         = [];
+let wallScreenCount   = 0;    // = wallScreens.length (kept for legacy refs)
+let bridgeScreenCount = 1;    // = bridgeScreens.length
+
+// v1.2.4: user-set bridge-screen count override. null = use /config's
+// screenCount; 1..4 = pin to that count. Persisted in localStorage.
 const WALL_SCREEN_OVERRIDE_KEY = "signalrgb.builder.wall_screen_count";
 let wallScreenCountOverride = (() => {
   try {
@@ -3899,34 +3994,179 @@ let wallScreenCountOverride = (() => {
   } catch (_) { return null; }
 })();
 
+// v1.2.5: monitorSetup persistence
+const MONITOR_SETUP_KEY = "signalrgb.builder.monitor_setup";
+function loadMonitorSetup() {
+  try {
+    const raw = localStorage.getItem(MONITOR_SETUP_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) { return []; }
+}
+function saveMonitorSetup() {
+  try { localStorage.setItem(MONITOR_SETUP_KEY, JSON.stringify(monitorSetup)); }
+  catch (_) {}
+}
+
+// Build the flat wallScreens (= tile descriptors) from bridgeScreens
+// + monitorSetup. One bridge screen produces one or two tiles
+// depending on its declared mode.
+function rebuildWallScreens() {
+  wallScreens = [];
+  for (let i = 0; i < bridgeScreens.length; i++) {
+    const bs   = bridgeScreens[i];
+    const mode = (monitorSetup[i] && monitorSetup[i].mode) || "single";
+    if (mode === "span-h") {
+      const halfW = Math.floor(bs.reportedW / 2);
+      const restW = bs.reportedW - halfW;
+      wallScreens.push({
+        bridgeIdx: i, subIdx: 0,
+        w: halfW, h: bs.reportedH,
+        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
+        xOffset: 0, yOffset: 0,
+        bgImage: bs.bgImage,
+      });
+      wallScreens.push({
+        bridgeIdx: i, subIdx: 1,
+        w: restW, h: bs.reportedH,
+        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
+        xOffset: halfW, yOffset: 0,
+        bgImage: bs.bgImage,
+      });
+    } else if (mode === "span-v") {
+      const halfH = Math.floor(bs.reportedH / 2);
+      const restH = bs.reportedH - halfH;
+      wallScreens.push({
+        bridgeIdx: i, subIdx: 0,
+        w: bs.reportedW, h: halfH,
+        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
+        xOffset: 0, yOffset: 0,
+        bgImage: bs.bgImage,
+      });
+      wallScreens.push({
+        bridgeIdx: i, subIdx: 1,
+        w: bs.reportedW, h: restH,
+        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
+        xOffset: 0, yOffset: halfH,
+        bgImage: bs.bgImage,
+      });
+    } else {
+      // single
+      wallScreens.push({
+        bridgeIdx: i, subIdx: 0,
+        w: bs.reportedW, h: bs.reportedH,
+        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
+        xOffset: 0, yOffset: 0,
+        bgImage: bs.bgImage,
+      });
+    }
+  }
+  wallScreenCount = wallScreens.length;
+  // Slots array is keyed by wallScreens index — keep aligned.
+  while (wallSlots.length < wallScreenCount) wallSlots.push(null);
+  wallSlots.length = wallScreenCount;
+}
+
 async function loadWallViewports() {
   try {
     const r = await fetch("/config", { cache: "no-store" });
     if (!r.ok) return;
     const cfg = await r.json();
-    const bridgeCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
-    // Override wins when set; falls back to /config's value when the
-    // user picks "Auto (from bridge)".
-    wallScreenCount = wallScreenCountOverride
+    const detectedCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
+    bridgeScreenCount = wallScreenCountOverride
       ? Math.max(1, Math.min(4, wallScreenCountOverride))
-      : bridgeCount;
-    wallScreens = [];
+      : detectedCount;
+    bridgeScreens = [];
     const arr = Array.isArray(cfg.screens) ? cfg.screens : [];
-    for (let i = 0; i < wallScreenCount; i++) {
+    for (let i = 0; i < bridgeScreenCount; i++) {
       const s = arr[i] || {};
       const w = parseInt(s.viewportW, 10) || 0;
       const h = parseInt(s.viewportH, 10) || 0;
-      wallScreens.push({
-        w: w > 0 ? w : 1920,
-        h: h > 0 ? h : 1080,
-        bgImage: String(s.bgImage || ""),
+      bridgeScreens.push({
+        reportedW: w > 0 ? w : 1920,
+        reportedH: h > 0 ? h : 1080,
+        bgImage:   String(s.bgImage || ""),
       });
     }
-    // Resize slot array to match new screen count.
-    while (wallSlots.length < wallScreenCount) wallSlots.push(null);
-    wallSlots.length = wallScreenCount;
+    // Reconcile monitorSetup length with bridgeScreens. Existing entries
+    // beyond the new count are dropped; missing entries default to "single".
+    monitorSetup = loadMonitorSetup();
+    while (monitorSetup.length < bridgeScreenCount) monitorSetup.push({ mode: "single" });
+    monitorSetup.length = bridgeScreenCount;
+    saveMonitorSetup();
+
+    rebuildWallScreens();
   } catch (_) { /* keep current state */ }
+  renderMonitorSetup();
   renderWall();
+}
+
+// Render the per-bridge-screen mode-picker row list. Tile preview
+// next to each picker visually confirms what mode will produce.
+function renderMonitorSetup() {
+  const host = document.getElementById("monitor-setup-list");
+  if (!host) return;
+  host.innerHTML = "";
+  for (let i = 0; i < bridgeScreens.length; i++) {
+    const bs   = bridgeScreens[i];
+    const mode = (monitorSetup[i] && monitorSetup[i].mode) || "single";
+    const row = document.createElement("div");
+    row.className = "monitor-setup-row";
+
+    const bridgeLbl = document.createElement("span");
+    bridgeLbl.className = "ms-bridge";
+    bridgeLbl.textContent = t("setup.bridge_screen", { n: i + 1 });
+    row.appendChild(bridgeLbl);
+
+    const resLbl = document.createElement("span");
+    resLbl.className = "ms-res";
+    resLbl.textContent = bs.reportedW + " × " + bs.reportedH;
+    row.appendChild(resLbl);
+
+    const sel = document.createElement("select");
+    for (const opt of [
+      { v: "single", k: "setup.mode.single"  },
+      { v: "span-h", k: "setup.mode.span_h"  },
+      { v: "span-v", k: "setup.mode.span_v"  },
+    ]) {
+      const o = document.createElement("option");
+      o.value = opt.v; o.textContent = t(opt.k);
+      sel.appendChild(o);
+    }
+    sel.value = mode;
+    sel.addEventListener("change", () => {
+      monitorSetup[i] = { mode: sel.value };
+      saveMonitorSetup();
+      rebuildWallScreens();
+      renderMonitorSetup();
+      renderWall();
+      updateWallApplyState();
+    });
+    row.appendChild(sel);
+
+    // Tile preview — 1 box for single, 2 split for span. Keeps a
+    // fixed 36×18 footprint so the row height doesn't jump on mode change.
+    const preview = document.createElement("div");
+    preview.className = "ms-preview";
+    if (mode === "span-h") {
+      preview.innerHTML =
+        '<div class="ms-tile" style="width: 16px; height: 18px;"></div>' +
+        '<div class="ms-tile" style="width: 16px; height: 18px;"></div>';
+    } else if (mode === "span-v") {
+      const col = document.createElement("div");
+      col.style.display = "flex"; col.style.flexDirection = "column"; col.style.gap = "2px";
+      col.innerHTML =
+        '<div class="ms-tile" style="width: 34px; height: 8px;"></div>' +
+        '<div class="ms-tile" style="width: 34px; height: 8px;"></div>';
+      preview.appendChild(col);
+    } else {
+      preview.innerHTML = '<div class="ms-tile" style="width: 34px; height: 18px;"></div>';
+    }
+    row.appendChild(preview);
+
+    host.appendChild(row);
+  }
 }
 
 // Wire the v1.2.4 monitor-count picker. Defers until the DOM has the
@@ -4029,10 +4269,23 @@ function renderWall() {
       : t("wall.drop_here");
     frame.appendChild(hint);
 
-    // Click → action popup (file / library / current canvas / clear).
+    // v1.2.5 click behavior:
+    //   empty tile  → open file picker directly
+    //   filled tile → drop straight into the in-place edit flow
+    //   right-click (anywhere) → the legacy popup with all options
+    //                            (library / canvas / clear / etc.)
     frame.addEventListener("click", (e) => {
       // Suppress the click if a drag just ended (set by attachFreeDrag).
       if (frame.__suppressClick) return;
+      e.stopPropagation();
+      if (slot && slot.img) {
+        editWallSlot(i);
+      } else {
+        triggerWallFilePick(i);
+      }
+    });
+    frame.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
       e.stopPropagation();
       showWallFrameMenu(i, frame);
     });
@@ -4444,6 +4697,12 @@ async function loadWallSlotFromFile(idx, file) {
       img, name: file.name, blob: file, dataUrl,
     };
     renderWall();
+    // v1.2.5: drop the user straight into the edit flow for the
+    // tile they just filled — that's the whole point of the new
+    // click-tile-to-edit UX. Skipped if the file came from a drop
+    // event on an already-filled slot (caller can opt out by
+    // passing skipAutoEdit, but that path isn't used yet).
+    editWallSlot(idx);
   } catch (_) {
     toast(t("toast.decode_failed", { name: file.name }), "bad");
   }
@@ -4488,30 +4747,54 @@ function updateWallApplyState() {
   if (typeof updateWallSpanState === "function") updateWallSpanState();
 }
 
-// Apply each loaded slot to its matching screen. Slots without an
-// image are skipped (lets the user push only the screens they care
-// about). Each slot's blob is first re-encoded to PNG via canvas so
-// the upload size + format match the existing /screen background
-// pipeline.
+// v1.2.5 — composite-aware apply.
+// Walk wallScreens (the flat tile list), group tiles by their
+// bridgeIdx, and for each bridge screen build a composite PNG sized
+// to the bridge's reported resolution. Each tile's image lands at
+// (xOffset, yOffset) within that composite. Sub-tile areas without a
+// staged slot stay transparent (the wallpaper page already handles
+// transparent areas via its existing alpha pipeline).
+//
+// Single-tile bridge screens still go through the same composite
+// path — the math degenerates to "draw at 0,0 covering full bridge
+// resolution" so the code path doesn't fork.
 async function applyWall() {
   if (!wallSlots.some((s) => s)) return;
   els.wallApply.disabled = true;
   if (els.wallStat) els.wallStat.textContent = "uploading…";
+
+  // Group flat-tile indices by their owning bridge screen.
+  const byBridge = new Map();
+  for (let i = 0; i < wallScreens.length; i++) {
+    const t = wallScreens[i];
+    if (!t) continue;
+    if (!byBridge.has(t.bridgeIdx)) byBridge.set(t.bridgeIdx, []);
+    byBridge.get(t.bridgeIdx).push(i);
+  }
+
   let ok = 0, fail = null, total = 0;
-  for (let i = 0; i < wallSlots.length; i++) {
-    const slot = wallSlots[i];
-    if (!slot) continue;
+  for (const [bridgeIdx, tileIndices] of byBridge.entries()) {
+    // Skip bridge screens whose every tile is empty — nothing to push.
+    if (!tileIndices.some((i) => wallSlots[i])) continue;
     total++;
     try {
-      // Re-encode through canvas to ensure PNG bytes — JPEGs would
-      // otherwise be rejected by the wallpaper page's PNG sniff in
-      // some code paths.
-      const c = document.createElement("canvas");
-      c.width = slot.img.naturalWidth || slot.img.width;
-      c.height = slot.img.naturalHeight || slot.img.height;
-      c.getContext("2d").drawImage(slot.img, 0, 0);
-      const pngBlob = await new Promise((res) => c.toBlob(res, "image/png"));
-      const r = await fetch("/screen/" + i + "/background", {
+      const first = wallScreens[tileIndices[0]];
+      const composite = document.createElement("canvas");
+      composite.width  = first.bridgeW;
+      composite.height = first.bridgeH;
+      const cctx = composite.getContext("2d");
+      // Stretch each tile to its declared cell (xOffset/yOffset/w/h).
+      // We don't preserve source aspect ratio here — the user picked
+      // an image expecting it to cover its monitor, same contract as
+      // the per-screen Apply path.
+      for (const i of tileIndices) {
+        const slot = wallSlots[i];
+        const tile = wallScreens[i];
+        if (!slot || !slot.img) continue;
+        cctx.drawImage(slot.img, tile.xOffset, tile.yOffset, tile.w, tile.h);
+      }
+      const pngBlob = await new Promise((res) => composite.toBlob(res, "image/png"));
+      const r = await fetch("/screen/" + bridgeIdx + "/background", {
         method: "POST",
         headers: { "Content-Type": "image/png" },
         body: pngBlob,
@@ -4534,9 +4817,6 @@ async function applyWall() {
       wallSlots[i] = null;
     }
   }
-  // Re-fetch /config so each frame paints the just-applied background
-  // (the bridge generated a new timestamped path; the proxy needs
-  // the fresh path to bypass any CEF cache).
   await loadWallViewports();
   updateWallApplyState();
 }
