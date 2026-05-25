@@ -4,6 +4,58 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4-beta] - 2026-05-25
+
+> Builder Monitor Wall becomes a true per-monitor editor. Each tile is
+> now a fully-editable slot — open it in the main canvas, use any tool
+> (Auto-Cut, brushes, colour-pick, polygon, etc.) on just that
+> monitor's image, then save back. Plus a "Monitors" override picker
+> for users testing multi-monitor layouts they don't physically have
+> connected.
+
+### Added — Per-slot in-place editing on Wall tiles
+
+New "Edit in main canvas" action in the wall-frame popup menu
+(next to Choose file… / From library… / Use current canvas /
+Clear). Opens the slot's image in the Builder's main canvas with
+all existing tools available. A persistent banner above the
+canvas surfaces "Editing Wall slot N" + Save / Cancel CTAs so
+the user can't lose edits by accident. Save writes the edited
+bytes back to the slot via the existing
+`loadWallSlotFromCurrentCanvas` pipeline; Cancel drops the
+in-progress edit.
+
+Resolves the long-standing gap that wall tiles could only
+receive a finished image — Auto-Cut + brushes were only
+reachable for the "single full canvas" workflow.
+
+### Added — Monitor count override picker
+
+Top of the Monitor Wall section: new "Monitors" select with
+options "Auto (from bridge)" + 1 / 2 / 3 / 4. Lets users design
+wall layouts for setups they don't physically have connected
+(testing a 4-monitor wall on a 2-monitor desk, etc.). Override
+persists in `localStorage` (`signalrgb.builder.wall_screen_count`)
+so it survives reloads.
+
+When the user picks an explicit count, `loadWallViewports()`
+uses that instead of the bridge's `screenCount`; "Auto" clears
+the override.
+
+### Other
+
+- New i18n keys: `wall.hint3`, `wall.screen_count`,
+  `wall.screen_count.auto`, `wall.menu.edit`, `wall.editing`,
+  `wall.editing_banner`, `wall.editing_save`, `wall.editing_cancel`,
+  `wall.edit_saved`, `wall.edit_save_failed`, `wall.edit_empty`.
+- The wall-frame menu disables the Edit row on empty slots
+  (rather than opening the file picker silently).
+- Editing-slot banner injects itself above the canvas-toolbar
+  only when in use, so users who never touch the Wall edit
+  flow see zero new chrome.
+
+---
+
 ## [1.2.3-beta] - 2026-05-25
 
 > Builder onboarding overhaul + two fresh Quick-Looks bundles. The

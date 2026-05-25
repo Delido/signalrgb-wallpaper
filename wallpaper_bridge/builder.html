@@ -724,6 +724,26 @@
   .wall-frame-menu button .icon {
     width: 18px; display: inline-block; text-align: center;
   }
+
+  /* ── v1.2.4: Editing-Slot banner ──
+     Sits above the canvas toolbar while a wall slot is being edited
+     in place. Surfaces which slot is open + Save / Cancel CTAs so
+     the user can't lose their edits by accident. */
+  .editing-slot-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px;
+    background: linear-gradient(90deg,
+      rgba(91, 143, 209, 0.20),
+      rgba(91, 143, 209, 0.10));
+    border-bottom: 1px solid #3a6ba8;
+    font-size: 12.5px;
+  }
+  .editing-slot-banner .banner-label {
+    flex: 1 1 auto;
+    color: #cfe1ff;
+    font-weight: 500;
+  }
+  .editing-slot-banner .btn { padding: 5px 12px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -1096,9 +1116,20 @@
     <!-- ── 2. Monitor Wall ─────────────────────────────────────────────── -->
     <section class="wall-section">
       <h2 data-i18n="section.wall">Monitor Wall</h2>
-      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint2">
-        One tile per monitor. Click a tile to drop in an image (file /
-        library / current canvas). Hit Apply Wall when ready.
+      <div class="hint" style="margin-bottom: 8px;" data-i18n="wall.hint3">
+        Pick how many monitors + how they're arranged. Each tile is its own
+        slot — click a filled tile and pick "Edit in main canvas" to use
+        Auto-Cut / brushes / colour-pick on just that monitor's image.
+      </div>
+      <div class="row">
+        <label for="wall-screen-count" data-i18n="wall.screen_count">Monitors</label>
+        <select id="wall-screen-count">
+          <option value="auto" data-i18n="wall.screen_count.auto">Auto (from bridge)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
       </div>
       <div class="row">
         <label for="wall-layout" data-i18n="wall.layout">Layout</label>
@@ -1520,10 +1551,27 @@ const TRANSLATIONS = {
   "wall.staged":        { en: "staged",             de: "vorgemerkt" },
   "wall.click_to_change": { en: "Click to change",  de: "Klicken zum Ändern" },
   "wall.drop_here":     { en: "Drop image / click to pick", de: "Bild ablegen / klicken" },
+  "wall.hint3":         { en: "Pick how many monitors + how they're arranged. Each tile is its own slot — click a filled tile and pick \"Edit in main canvas\" to use Auto-Cut / brushes / colour-pick on just that monitor's image.",
+                          de: "Anzahl Bildschirme + Anordnung wählen. Jede Kachel ist ein eigener Slot — eine gefüllte Kachel anklicken und „Im Haupteditor öffnen“ wählen, um Auto-Cut / Pinsel / Farbpicker nur auf diesem Bild zu nutzen." },
+  "wall.screen_count":  { en: "Monitors",            de: "Bildschirme" },
+  "wall.screen_count.auto": { en: "Auto (from bridge)", de: "Auto (Bridge-Wert)" },
   "wall.menu.file":     { en: "Choose file…",       de: "Datei wählen…" },
   "wall.menu.library":  { en: "From library…",      de: "Aus Bibliothek…" },
   "wall.menu.canvas":   { en: "Use current canvas", de: "Aktuelle Leinwand nutzen" },
+  "wall.menu.edit":     { en: "Edit in main canvas", de: "Im Haupteditor öffnen" },
   "wall.menu.clear":    { en: "Clear",              de: "Leeren" },
+  // v1.2.4 — per-slot in-place edit flow
+  "wall.editing":        { en: "Editing slot {n} — use any tool, then click Save back to slot {n}.",
+                           de: "Slot {n} wird bearbeitet — beliebiges Werkzeug nutzen, dann „Zu Slot {n} speichern“ klicken." },
+  "wall.editing_banner": { en: "Editing Wall slot {n}",
+                           de: "Wand-Slot {n} wird bearbeitet" },
+  "wall.editing_save":   { en: "Save to slot",      de: "In Slot speichern" },
+  "wall.editing_cancel": { en: "Cancel",            de: "Abbrechen" },
+  "wall.edit_saved":     { en: "Saved to slot {n}.", de: "In Slot {n} gespeichert." },
+  "wall.edit_save_failed": { en: "Save failed: {msg}",
+                             de: "Speichern fehlgeschlagen: {msg}" },
+  "wall.edit_empty":     { en: "Slot is empty — pick an image first, then click Edit again.",
+                           de: "Slot ist leer — zuerst ein Bild wählen, dann erneut „Bearbeiten“ klicken." },
   "wall.span_btn":      { en: "⇔ Span canvas",
                           de: "⇔ Canvas spannen" },
   "wall.span_suggestion": { en: "Canvas aspect matches the wall — try Span across monitors.",
@@ -3839,13 +3887,29 @@ els.saveLibBtn.addEventListener("click", async () => {
 let wallScreenCount = 1;
 let wallScreens     = [];           // [{w, h, bgImage}, ...] per screen
 let wallSlots       = [];           // [{img, name, blob, dataUrl, source} | null, ...]
+// v1.2.4: user-set monitor count override. null = use /config's
+// screenCount (the bridge-reported value); 1..4 = pin to that count.
+// Persisted in localStorage so the picker remembers across sessions.
+const WALL_SCREEN_OVERRIDE_KEY = "signalrgb.builder.wall_screen_count";
+let wallScreenCountOverride = (() => {
+  try {
+    const v = localStorage.getItem(WALL_SCREEN_OVERRIDE_KEY);
+    const n = parseInt(v, 10);
+    return (n >= 1 && n <= 4) ? n : null;
+  } catch (_) { return null; }
+})();
 
 async function loadWallViewports() {
   try {
     const r = await fetch("/config", { cache: "no-store" });
     if (!r.ok) return;
     const cfg = await r.json();
-    wallScreenCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
+    const bridgeCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
+    // Override wins when set; falls back to /config's value when the
+    // user picks "Auto (from bridge)".
+    wallScreenCount = wallScreenCountOverride
+      ? Math.max(1, Math.min(4, wallScreenCountOverride))
+      : bridgeCount;
     wallScreens = [];
     const arr = Array.isArray(cfg.screens) ? cfg.screens : [];
     for (let i = 0; i < wallScreenCount; i++) {
@@ -3864,6 +3928,28 @@ async function loadWallViewports() {
   } catch (_) { /* keep current state */ }
   renderWall();
 }
+
+// Wire the v1.2.4 monitor-count picker. Defers until the DOM has the
+// element (script tag runs after the picker is in the DOM thanks to
+// the file's bottom-of-body script position).
+(function bindWallScreenCountPicker() {
+  const sel = document.getElementById("wall-screen-count");
+  if (!sel) return;
+  // Reflect saved state onto the picker on first render.
+  sel.value = wallScreenCountOverride ? String(wallScreenCountOverride) : "auto";
+  sel.addEventListener("change", () => {
+    const v = sel.value;
+    if (v === "auto") {
+      wallScreenCountOverride = null;
+      try { localStorage.removeItem(WALL_SCREEN_OVERRIDE_KEY); } catch (_) {}
+    } else {
+      wallScreenCountOverride = Math.max(1, Math.min(4, parseInt(v, 10) || 1));
+      try { localStorage.setItem(WALL_SCREEN_OVERRIDE_KEY, String(wallScreenCountOverride)); }
+      catch (_) {}
+    }
+    loadWallViewports();
+  });
+})();
 
 // Mirror the wallpaper page's path normaliser: http(s)/data URLs pass
 // through; file:// + absolute paths route through the /image proxy.
@@ -4005,6 +4091,15 @@ function _buildWallMenu() {
     '<button type="button" data-action="canvas">' +
       '<span class="icon">🖼️</span>' +
       '<span data-i18n="wall.menu.canvas"></span></button>' +
+    // v1.2.4: per-tile in-place editing. "Edit" loads the slot's
+    // current image into the main Builder canvas + arms the
+    // "Save → Slot N" CTA. All existing tools (color, auto-cut,
+    // brushes, polygon, etc.) work on that image. Saving writes
+    // the edited bytes back to the slot via the existing
+    // loadWallSlotFromCurrentCanvas pipeline.
+    '<button type="button" data-action="edit">' +
+      '<span class="icon">✎</span>' +
+      '<span data-i18n="wall.menu.edit"></span></button>' +
     '<button type="button" data-action="clear">' +
       '<span class="icon">✕</span>' +
       '<span data-i18n="wall.menu.clear"></span></button>';
@@ -4020,10 +4115,92 @@ function _buildWallMenu() {
     if      (action === "file")    triggerWallFilePick(idx);
     else if (action === "library") openLibraryDialog((it) => loadWallSlotFromLibrary(idx, it.file));
     else if (action === "canvas")  loadWallSlotFromCurrentCanvas(idx);
+    else if (action === "edit")    editWallSlot(idx);
     else if (action === "clear")   clearWallSlot(idx);
   });
   _wallMenuEl = el;
   return el;
+}
+
+// v1.2.4 — per-slot edit state. When non-null, the main canvas is a
+// working copy of the slot's image; saveEditingSlot() pushes the
+// edited bytes back into the slot. Cancel resets via abandonEditingSlot().
+let _editingWallSlot = null;
+
+async function editWallSlot(idx) {
+  const slot = wallSlots[idx];
+  if (!slot || !slot.img) {
+    // Empty slot — bounce to the file picker so the user can
+    // start a fresh edit by loading an image into the slot first.
+    toast(t("wall.edit_empty"), "bad");
+    triggerWallFilePick(idx);
+    return;
+  }
+  try {
+    _editingWallSlot = idx;
+    applySourceImage(
+      (slot.name || ("slot-" + (idx + 1))) + " (Slot " + (idx + 1) + ")",
+      slot.img
+    );
+    _renderEditingSlotBanner();
+    toast(t("wall.editing", { n: idx + 1 }), "good");
+  } catch (e) {
+    _editingWallSlot = null;
+    _renderEditingSlotBanner();
+    toast(t("toast.decode_failed", { name: slot.name || "slot" }), "bad");
+  }
+}
+
+async function saveEditingSlot() {
+  if (_editingWallSlot == null) return;
+  const idx = _editingWallSlot;
+  try {
+    await loadWallSlotFromCurrentCanvas(idx);
+    _editingWallSlot = null;
+    _renderEditingSlotBanner();
+    toast(t("wall.edit_saved", { n: idx + 1 }), "good");
+  } catch (e) {
+    toast(t("wall.edit_save_failed", { msg: e.message || String(e) }), "bad");
+  }
+}
+
+function abandonEditingSlot() {
+  if (_editingWallSlot == null) return;
+  _editingWallSlot = null;
+  _renderEditingSlotBanner();
+}
+
+// Banner above the canvas explaining the active edit + offering
+// Save / Cancel. Created lazily so the page-load JS doesn't waste
+// DOM on users who never use the Wall Edit flow.
+function _renderEditingSlotBanner() {
+  let banner = document.getElementById("editing-slot-banner");
+  if (_editingWallSlot == null) {
+    if (banner) banner.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "editing-slot-banner";
+    banner.className = "editing-slot-banner";
+    banner.innerHTML =
+      '<span class="banner-label"></span>' +
+      '<button class="btn primary" type="button" data-act="save"></button>' +
+      '<button class="btn"         type="button" data-act="cancel"></button>';
+    // Insert above the canvas-toolbar so it doesn't fight zoom controls.
+    const canvasArea = document.querySelector(".canvas-area");
+    if (canvasArea) canvasArea.insertBefore(banner, canvasArea.firstChild);
+    banner.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      if (btn.dataset.act === "save")   saveEditingSlot();
+      if (btn.dataset.act === "cancel") abandonEditingSlot();
+    });
+  }
+  banner.querySelector(".banner-label").textContent =
+    t("wall.editing_banner", { n: _editingWallSlot + 1 });
+  banner.querySelector('[data-act="save"]').textContent   = t("wall.editing_save");
+  banner.querySelector('[data-act="cancel"]').textContent = t("wall.editing_cancel");
 }
 
 function showWallFrameMenu(idx, frame) {
@@ -4033,7 +4210,12 @@ function showWallFrameMenu(idx, frame) {
   el.querySelector('[data-action="file"]    span:last-child').textContent = t("wall.menu.file");
   el.querySelector('[data-action="library"] span:last-child').textContent = t("wall.menu.library");
   el.querySelector('[data-action="canvas"]  span:last-child').textContent = t("wall.menu.canvas");
+  el.querySelector('[data-action="edit"]    span:last-child').textContent = t("wall.menu.edit");
   el.querySelector('[data-action="clear"]   span:last-child').textContent = t("wall.menu.clear");
+  // Edit is only meaningful when the slot has an image to operate on;
+  // disable it otherwise so the user isn't tempted into the "slot is
+  // empty" toast path.
+  el.querySelector('[data-action="edit"]').disabled  = !wallSlots[_wallMenuIdx];
   // Disable Canvas when no image is loaded in the Builder, Clear when
   // nothing is staged.
   el.querySelector('[data-action="canvas"]').disabled = !originalData;
