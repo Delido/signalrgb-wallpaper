@@ -4,6 +4,69 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3-beta] - 2026-05-25
+
+> Builder onboarding overhaul + two fresh Quick-Looks bundles. The
+> Builder's tool surface used to drop new users into a panel of nine
+> tools with no signpost; v1.2.3 hides everything but Choose-image +
+> Auto-Cut behind a Simple/Advanced toggle (Simple = default) and
+> nudges the AI button on first image load. The Monitor Wall section
+> with its built-in SPAN support stays visible in both modes so
+> multi-monitor wall workflows are one click away.
+
+### Added — Builder Simple / Advanced mode toggle
+
+New pill in the Builder header. Simple mode (the default for first-
+time users) hides:
+
+- The bounded / region / polygon / ellipse / crop tool buttons
+- The restore / erase / pattern brush tools
+- The full Merge-images details fold
+- The History section (undo / redo / reset-edits)
+
+What stays visible: Click-pixel (the default colour picker), Auto-
+Cut (the AI star tool), Load section, Monitor Wall section, Output
+section, canvas + toolbar. Mode choice persists in `localStorage`
+so returning users land in whichever mode they last picked.
+
+A 3-step workflow hint above the Load section spells out the
+Simple-mode happy path ("Load → Auto-Cut → Apply") so the user
+doesn't have to discover Auto-Cut by hovering every tool icon.
+
+### Added — Auto-Cut nudge on first image load
+
+When an image lands on the canvas for the first time in Simple
+mode, the AI tool button gets a 5-second pulse (3 × accent-bg
+glow rings) to point the user at it. Suppressed after the first
+firing via a `localStorage` flag, so returning users don't get
+poked every load. Doesn't auto-run Otsu — running an automatic
+mask on a non-glow source image would just dump alpha into the
+wrong half of the picture; the pulse just makes the next click
+discoverable.
+
+### Added — Two new Quick Looks bundles
+
+- **News Desk** — Aurora ambient + glass tile shell + digital
+  clock + weather + a 540 × 420 RSS widget pre-pointed at Hacker
+  News. Built for the "always-on second monitor as a dashboard"
+  use case the v1.2.1 RSS widget unlocked.
+- **Focus Mode** — Black background, no effects, just a big HMS
+  countdown ("Focus block ends") and a sticky note with a Top-3
+  template. For deep-work blocks where the wallpaper has to
+  disappear.
+
+### Other
+
+- Mode toggle reads/writes `signalrgb.builder.mode` in
+  `localStorage`; auto-cut nudge tracker uses
+  `signalrgb.builder.autocut_pulse_shown`.
+- Builder header gains a `.spacer` + `.mode-pick` row; main grid
+  layout unchanged.
+- `applySourceImage` is wrapped (not edited in-place) so the
+  v1.2.3 nudge hook stays isolated from the existing load pipeline.
+
+---
+
 ## [1.2.2-beta] - 2026-05-25
 
 > Configurator UX overhaul. Tray's "Advanced" submenu shrinks down to

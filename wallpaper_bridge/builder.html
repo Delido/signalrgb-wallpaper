@@ -35,6 +35,59 @@
   }
   header h1 { margin: 0; font-size: 17px; font-weight: 600; }
   header .sub { color: var(--text-dim); font-size: 12px; }
+  header .spacer { flex: 1; }
+  /* ── Simple / Advanced mode toggle (v1.2.3) ── */
+  .mode-pick {
+    display: inline-flex; align-items: center; gap: 0;
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .mode-pick .mode-btn {
+    padding: 4px 12px;
+    background: transparent; color: var(--text-dim);
+    border: none; cursor: pointer;
+    font: inherit;
+  }
+  .mode-pick .mode-btn:hover { background: var(--panel-2); color: var(--text); }
+  .mode-pick .mode-btn.active {
+    background: var(--accent-bg); color: #d8e6fc;
+  }
+  /* Simple-mode element visibility. Hide the brush tools, merge
+     workflow, history panel, and the canvas brush options that
+     don't apply to a "load → auto-cut → apply" flow. The Wall
+     section stays prominent because that's where SPAN lives. */
+  body.simple-mode .tool-btn[data-tool="bounded"],
+  body.simple-mode .tool-btn[data-tool="region"],
+  body.simple-mode .tool-btn[data-tool="polygon"],
+  body.simple-mode .tool-btn[data-tool="ellipse"],
+  body.simple-mode .tool-btn[data-tool="crop"],
+  body.simple-mode .tool-btn[data-tool="restore"],
+  body.simple-mode .tool-btn[data-tool="erase"],
+  body.simple-mode .tool-btn[data-tool="pattern"],
+  body.simple-mode .tool-btn-divider,
+  body.simple-mode details.merge-details,
+  body.simple-mode .simple-hide {
+    display: none !important;
+  }
+  /* Surface the "Workflow" hint that walks first-time users through
+     the three Simple-mode steps. Hidden in Advanced mode (the
+     existing tool-options panel covers that audience). */
+  .simple-workflow-hint {
+    display: none;
+    margin: 10px 0 14px;
+    padding: 10px 12px;
+    background: rgba(106, 176, 255, 0.08);
+    border: 1px solid #2c476e;
+    border-radius: 6px;
+    color: #cfdcef;
+    font-size: 12px; line-height: 1.5;
+  }
+  body.simple-mode .simple-workflow-hint { display: block; }
+  .simple-workflow-hint ol {
+    margin: 6px 0 0 0; padding-left: 22px;
+  }
+  .simple-workflow-hint li { margin: 2px 0; }
 
   main {
     display: grid;
@@ -75,6 +128,17 @@
     color: #d8e6fc;
   }
   .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  /* One-shot attention pulse used by the v1.2.3 Simple-mode "Try
+     Auto-Cut" nudge — three soft accent-bg pulses then settles back
+     to its idle look. Pulse animation only fires while the class is
+     present (added on first image load, removed after ~5s). */
+  .tool-btn.pulse-once {
+    animation: builder-tool-pulse 1.6s ease-out 3;
+  }
+  @keyframes builder-tool-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(106, 176, 255, 0.0); }
+    50%      { box-shadow: 0 0 0 6px rgba(106, 176, 255, 0.35); }
+  }
   .tool-btn svg {
     width: 22px; height: 22px;
     stroke: currentColor; fill: none;
@@ -667,6 +731,17 @@
 <header>
   <h1 data-i18n="header.title">SignalRGB Wallpaper Builder</h1>
   <span class="sub" data-i18n="header.sub">Click bright areas to make them transparent, then apply to a screen.</span>
+  <span class="spacer"></span>
+  <!-- v1.2.3: Simple / Advanced mode toggle. Default = Simple, which
+       hides the brush tools, merge workflow, and history panel so
+       new users see a clean "load → auto-cut → apply" path. The
+       state is remembered in localStorage. -->
+  <div class="mode-pick" role="tablist">
+    <button class="mode-btn" id="mode-simple" type="button" role="tab"
+            data-i18n="mode.simple">Simple</button>
+    <button class="mode-btn" id="mode-advanced" type="button" role="tab"
+            data-i18n="mode.advanced">Advanced</button>
+  </div>
 </header>
 
 <main>
@@ -882,7 +957,7 @@
       </div>
     </section>
 
-    <section>
+    <section class="simple-hide">
       <h2 data-i18n="section.history">History</h2>
       <div class="history" id="history"></div>
       <div class="btn-row" style="margin-top: 8px;">
@@ -935,6 +1010,17 @@
 
   <!-- ── Files / Output / Apply (right) ─────────────────────────────────── -->
   <div class="panel right padded" id="files-panel">
+    <!-- Simple-mode 3-step workflow hint (visible only when body has
+         .simple-mode class). Walks new users through the happy path so
+         the Builder isn't a wall of unexplained tools on first open. -->
+    <div class="simple-workflow-hint" data-i18n-html="simple.workflow_hint">
+      <strong>3 Schritte:</strong>
+      <ol>
+        <li>Bild laden („Choose image…“)</li>
+        <li>Auto-Cut klicken (Auto-Cut Sterne-Tool links)</li>
+        <li>„Apply to screen“ / „Apply Wall to screens“</li>
+      </ol>
+    </div>
     <!-- ── 1. Source ───────────────────────────────────────────────────── -->
     <section>
       <h2 data-i18n="section.load">Load</h2>
@@ -1281,6 +1367,23 @@ const TRANSLATIONS = {
   "header.title": { en: "SignalRGB Wallpaper Builder", de: "SignalRGB Wallpaper Builder" },
   "header.sub":   { en: "Click bright areas to make them transparent, then apply to a screen.",
                     de: "Helle Bereiche anklicken, um sie transparent zu machen, dann auf einen Bildschirm anwenden." },
+
+  // Mode toggle (v1.2.3) — Simple is the new default; Advanced
+  // surfaces the brush tools + merge workflow + history panel.
+  "mode.simple":   { en: "Simple",   de: "Einfach" },
+  "mode.advanced": { en: "Advanced", de: "Erweitert" },
+  "simple.workflow_hint": {
+    en: "<strong>3 steps:</strong><ol>" +
+        "<li>Load an image (\"Choose image…\")</li>" +
+        "<li>Click the Auto-Cut star button on the left toolbar</li>" +
+        "<li>Hit \"Apply to screen\" — or \"Apply Wall to screens\" for a multi-monitor wall</li>" +
+        "</ol>",
+    de: "<strong>3 Schritte:</strong><ol>" +
+        "<li>Bild laden („Choose image…“)</li>" +
+        "<li>Auto-Cut-Stern in der linken Werkzeugleiste anklicken</li>" +
+        "<li>„Apply to screen“ — oder „Apply Wall to screens“ für eine Multi-Monitor-Wand</li>" +
+        "</ol>",
+  },
 
   // Tool labels (h2 in tool-options panel) — keyed off currentTool.
   "tool.color.name":    { en: "Click pixel",     de: "Pixel anklicken" },
@@ -3514,6 +3617,74 @@ function escapeHtml(s) {
 selectTool(currentTool);
 syncBrushCursorSize();
 updateMergeUI();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.2.3 — Simple / Advanced mode toggle.
+// Simple is the default for first-time users. It hides the brush tools,
+// merge workflow, and history panel, leaving a clean "Choose image →
+// Auto-cut → Apply" path. State persists in localStorage so returning
+// users land in whichever mode they last picked.
+// ─────────────────────────────────────────────────────────────────────────────
+const BUILDER_MODE_KEY = "signalrgb.builder.mode";
+
+function applyBuilderMode(mode) {
+  const safe = (mode === "advanced") ? "advanced" : "simple";
+  document.body.classList.toggle("simple-mode", safe === "simple");
+  document.getElementById("mode-simple")?.classList.toggle("active",   safe === "simple");
+  document.getElementById("mode-advanced")?.classList.toggle("active", safe === "advanced");
+  try { localStorage.setItem(BUILDER_MODE_KEY, safe); } catch (_) {}
+  // If the user switched to Simple while a hidden tool was active,
+  // fall back to the colour-pick tool (the simple-mode default).
+  if (safe === "simple") {
+    const HIDDEN_TOOLS = new Set([
+      "bounded","region","polygon","ellipse","crop",
+      "restore","erase","pattern",
+    ]);
+    if (HIDDEN_TOOLS.has(currentTool)) selectTool("color");
+  }
+}
+
+(function initBuilderMode() {
+  let saved = "simple";
+  try { saved = localStorage.getItem(BUILDER_MODE_KEY) || "simple"; }
+  catch (_) {}
+  applyBuilderMode(saved);
+  document.getElementById("mode-simple")?.addEventListener("click",   () => applyBuilderMode("simple"));
+  document.getElementById("mode-advanced")?.addEventListener("click", () => applyBuilderMode("advanced"));
+})();
+
+// v1.2.3 — gentle "Try Auto-Cut" nudge after the first image load
+// in Simple mode. We don't auto-run Otsu (it'd mangle non-glow source
+// images) but the AI tool button gets a one-shot pulse to draw the
+// user's eye there. Suppressed in Advanced mode + after the first
+// successful auto-cut run.
+const AUTOCUT_PULSE_KEY = "signalrgb.builder.autocut_pulse_shown";
+let _autocutPulseFired = false;
+function suggestAutoCutOnce() {
+  if (_autocutPulseFired) return;
+  if (!document.body.classList.contains("simple-mode")) return;
+  try { if (localStorage.getItem(AUTOCUT_PULSE_KEY) === "1") { _autocutPulseFired = true; return; } }
+  catch (_) {}
+  const aiBtn = document.querySelector('.tool-btn[data-tool="ai"]');
+  if (!aiBtn) return;
+  _autocutPulseFired = true;
+  aiBtn.classList.add("pulse-once");
+  setTimeout(() => aiBtn.classList.remove("pulse-once"), 5200);
+  try { localStorage.setItem(AUTOCUT_PULSE_KEY, "1"); } catch (_) {}
+}
+
+// Hook into applySourceImage's tail so the nudge fires whenever a
+// fresh image lands on the canvas. Patched here instead of inside the
+// function body so the v1.2.3 hook stays isolated from the existing
+// load pipeline.
+(function wrapApplySourceImage() {
+  const original = applySourceImage;
+  applySourceImage = function patchedApplySourceImage(...args) {
+    const r = original.apply(this, args);
+    try { suggestAutoCutOnce(); } catch (_) {}
+    return r;
+  };
+})();
 
 // Fetch a library file and feed it into the same pipeline `loadFile()`
 // uses for the file picker. Source name is the library filename so saves

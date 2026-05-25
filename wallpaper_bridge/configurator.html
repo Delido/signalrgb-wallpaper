@@ -2081,6 +2081,71 @@ const LOOK_BUNDLES = [
                    showHeader: false, textScale: 1.0 } },
     ],
   },
+  // ── v1.2.3 bundles ──────────────────────────────────────────────────────
+  // Home-office and news-junkie pre-builts that take advantage of the new
+  // RSS widget (added in v1.2.1) — gives the bundle gallery a reason for
+  // someone with an RSS-reading habit to glance at it.
+  {
+    id: "news",
+    name: "News Desk",
+    desc: "Aurora ambient + RSS feed + clock + weather, glass tile shell. Drop-in dashboard for the always-on second monitor.",
+    tint: "rgb(110, 200, 255)",
+    settings: {
+      bgImage:         "",
+      bgFit:           "cover",
+      bgDim:           45,
+      glowStrength:    50,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "aurora",
+      ambientTint:     true,
+      ambientDensity:  40,
+      audioGlow:       "off",
+      widgetTileStyle: "glass",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "clock",       x:   50, y:   50, w: 260, h:  90,
+        options: { style: "digital", format24h: true, tintFromGlow: true,
+                   showHeader: false, textScale: 1.2 } },
+      { type: "weather",     x:  330, y:   50, w: 260, h:  90,
+        options: { units: "metric", tintFromGlow: true, showHeader: true } },
+      { type: "rss",         x:   50, y:  160, w: 540, h: 420,
+        options: { feedUrl: "https://hnrss.org/frontpage",
+                   feedTitle: "Hacker News",
+                   itemCount: 12, refreshMin: 30, showDate: true,
+                   tintFromGlow: true, showHeader: true } },
+    ],
+  },
+  {
+    id: "focus",
+    name: "Focus Mode",
+    desc: "Pure black background, no effects, single big countdown + sticky note. For deep-work blocks where the wallpaper has to disappear.",
+    tint: "rgb(180, 180, 180)",
+    settings: {
+      bgImage:         "",
+      bgFit:           "cover",
+      bgDim:           90,
+      glowStrength:    15,
+      barLayout:       "lay-off",
+      showBars:        false,
+      ambientEffect:   "off",
+      audioGlow:       "off",
+      widgetTileStyle: "off",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "countdown",   x:   80, y:  100, w: 420, h: 220,
+        options: { label: "Focus block ends",
+                   units: "hms",
+                   tintFromGlow: false,
+                   showHeader: false, textScale: 1.5 } },
+      { type: "sticky-note", x:   80, y:  360, w: 420, h: 220,
+        options: { text: "Top 3 today:\n• \n• \n• ",
+                   color: "yellow",
+                   showHeader: false } },
+    ],
+  },
 ];
 
 function renderLookBundles() {
