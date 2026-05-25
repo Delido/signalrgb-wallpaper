@@ -91,7 +91,10 @@
 
   main {
     display: grid;
-    grid-template-columns: 54px 260px 1fr 260px;
+    /* v1.2.6: right panel widened 260 → 340 to fit the Monitor-Setup
+       rows + the wall tile preview without horizontal-scrolling at
+       common ultrawide tile aspect ratios. */
+    grid-template-columns: 54px 260px 1fr 340px;
     height: calc(100vh - 50px);
   }
 
@@ -772,6 +775,12 @@
     background: rgba(106, 176, 255, 0.45);
     border-radius: 1px;
   }
+  .monitor-setup-row .ms-orient-btn {
+    padding: 2px 6px;
+    font-size: 14px;
+    line-height: 1;
+    min-width: 26px;
+  }
 
   /* ── v1.2.4: Editing-Slot banner ──
      Sits above the canvas toolbar while a wall slot is being edited
@@ -1216,7 +1225,11 @@
         <button class="btn primary wall-apply-btn" id="wall-apply" type="button" disabled
                 data-i18n="wall.apply">Apply Wall to screens</button>
         <div class="btn-row wall-secondary-row">
-          <button class="btn" id="wall-span" type="button" disabled
+          <!-- v1.2.6: "Span canvas" hidden in Simple mode — it slices
+               the single-canvas image into wall slots, which conflicts
+               with the v1.2.5 per-tile direct-edit flow. Still visible
+               in Advanced for the legacy Load → big-image → split workflow. -->
+          <button class="btn simple-hide" id="wall-span" type="button" disabled
                   data-i18n="wall.span_btn"
                   title="Slice the current canvas into one chunk per monitor and stage every frame at once.">
             ⇔ Span canvas
@@ -1628,6 +1641,17 @@ const TRANSLATIONS = {
                           de: "2 Monitore — horizontaler Span" },
   "setup.mode.span_v":  { en: "2 monitors — vertical span",
                           de: "2 Monitore — vertikaler Span" },
+  "wall.applied_summary_line": {
+    en: "Bridge {n} ({w}×{h}) ← {tiles}/{total} tile(s)",
+    de: "Bridge {n} ({w}×{h}) ← {tiles}/{total} Kachel(n)",
+  },
+  "wall.tile_applied": { en: "applied", de: "angewendet" },
+  "setup.orient.landscape_short": { en: "▭", de: "▭" },
+  "setup.orient.portrait_short":  { en: "▯", de: "▯" },
+  "setup.orient.title": {
+    en: "Sub-tile {n} orientation — click to toggle landscape / portrait",
+    de: "Unter-Kachel {n} Ausrichtung — klick wechselt Quer-/Hochformat",
+  },
   "wall.screen_count":  { en: "Monitors",            de: "Bildschirme" },
   "wall.screen_count.auto": { en: "Auto (from bridge)", de: "Auto (Bridge-Wert)" },
   "wall.menu.file":     { en: "Choose file…",       de: "Datei wählen…" },
@@ -4012,54 +4036,56 @@ function saveMonitorSetup() {
 // Build the flat wallScreens (= tile descriptors) from bridgeScreens
 // + monitorSetup. One bridge screen produces one or two tiles
 // depending on its declared mode.
+//
+// v1.2.6: per-tile orientation. When a tile is declared "portrait"
+// the user's edit canvas is swapped (long-axis becomes vertical) and
+// the composite step rotates the image 90° CW so it lands correctly
+// inside its landscape-shaped bridge slot. The physical monitor is
+// assumed to be rotated by Windows already — same image content,
+// rendered in the right orientation by the OS.
+function _tileOrientation(setup, subIdx) {
+  if (!setup || !Array.isArray(setup.orientations)) return "landscape";
+  return setup.orientations[subIdx] === "portrait" ? "portrait" : "landscape";
+}
+
 function rebuildWallScreens() {
   wallScreens = [];
   for (let i = 0; i < bridgeScreens.length; i++) {
-    const bs   = bridgeScreens[i];
-    const mode = (monitorSetup[i] && monitorSetup[i].mode) || "single";
+    const bs    = bridgeScreens[i];
+    const setup = monitorSetup[i] || { mode: "single" };
+    const mode  = setup.mode || "single";
+
+    const make = (subIdx, slotW, slotH, xOff, yOff) => {
+      const orient = _tileOrientation(setup, subIdx);
+      // Visual + edit dimensions: swap on portrait so the user works
+      // on a portrait canvas; bridge slot dimensions (slotW/slotH) +
+      // offset stay as-is — they describe where the rotated image
+      // lands inside the bridge-resolution composite.
+      const eW = (orient === "portrait") ? slotH : slotW;
+      const eH = (orient === "portrait") ? slotW : slotH;
+      wallScreens.push({
+        bridgeIdx: i, subIdx,
+        w: eW, h: eH,                     // user-facing edit canvas
+        slotW: slotW, slotH: slotH,       // bridge composite slot
+        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
+        xOffset: xOff, yOffset: yOff,
+        orientation: orient,
+        bgImage: bs.bgImage,
+      });
+    };
+
     if (mode === "span-h") {
       const halfW = Math.floor(bs.reportedW / 2);
       const restW = bs.reportedW - halfW;
-      wallScreens.push({
-        bridgeIdx: i, subIdx: 0,
-        w: halfW, h: bs.reportedH,
-        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
-        xOffset: 0, yOffset: 0,
-        bgImage: bs.bgImage,
-      });
-      wallScreens.push({
-        bridgeIdx: i, subIdx: 1,
-        w: restW, h: bs.reportedH,
-        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
-        xOffset: halfW, yOffset: 0,
-        bgImage: bs.bgImage,
-      });
+      make(0, halfW, bs.reportedH, 0,     0);
+      make(1, restW, bs.reportedH, halfW, 0);
     } else if (mode === "span-v") {
       const halfH = Math.floor(bs.reportedH / 2);
       const restH = bs.reportedH - halfH;
-      wallScreens.push({
-        bridgeIdx: i, subIdx: 0,
-        w: bs.reportedW, h: halfH,
-        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
-        xOffset: 0, yOffset: 0,
-        bgImage: bs.bgImage,
-      });
-      wallScreens.push({
-        bridgeIdx: i, subIdx: 1,
-        w: bs.reportedW, h: restH,
-        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
-        xOffset: 0, yOffset: halfH,
-        bgImage: bs.bgImage,
-      });
+      make(0, bs.reportedW, halfH, 0, 0);
+      make(1, bs.reportedW, restH, 0, halfH);
     } else {
-      // single
-      wallScreens.push({
-        bridgeIdx: i, subIdx: 0,
-        w: bs.reportedW, h: bs.reportedH,
-        bridgeW: bs.reportedW, bridgeH: bs.reportedH,
-        xOffset: 0, yOffset: 0,
-        bgImage: bs.bgImage,
-      });
+      make(0, bs.reportedW, bs.reportedH, 0, 0);
     }
   }
   wallScreenCount = wallScreens.length;
@@ -4136,7 +4162,15 @@ function renderMonitorSetup() {
     }
     sel.value = mode;
     sel.addEventListener("change", () => {
-      monitorSetup[i] = { mode: sel.value };
+      // Preserve existing orientations if the user just toggles modes
+      // (single ↔ span-h ↔ span-v); resize the array to match the new
+      // tile count.
+      const prev = monitorSetup[i] || {};
+      const orient = Array.isArray(prev.orientations) ? prev.orientations.slice() : [];
+      const newCount = (sel.value === "single") ? 1 : 2;
+      while (orient.length < newCount) orient.push("landscape");
+      orient.length = newCount;
+      monitorSetup[i] = { mode: sel.value, orientations: orient };
       saveMonitorSetup();
       rebuildWallScreens();
       renderMonitorSetup();
@@ -4144,6 +4178,41 @@ function renderMonitorSetup() {
       updateWallApplyState();
     });
     row.appendChild(sel);
+
+    // v1.2.6: per-sub-tile orientation toggles. Only meaningful when
+    // a setup has > 1 tile, so the single-mode row hides them. Each
+    // button cycles landscape ↔ portrait for that sub-tile; portrait
+    // tiles get a 90° CW rotation at composite time.
+    const tileCount = (mode === "single") ? 1 : 2;
+    if (tileCount > 1) {
+      const orientBox = document.createElement("div");
+      orientBox.className = "ms-orient";
+      orientBox.style.display = "flex";
+      orientBox.style.gap = "3px";
+      for (let sub = 0; sub < tileCount; sub++) {
+        const orient = _tileOrientation(monitorSetup[i], sub);
+        const ob = document.createElement("button");
+        ob.type = "button";
+        ob.className = "btn ms-orient-btn";
+        ob.title = t("setup.orient.title", { n: sub + 1 });
+        ob.textContent = (orient === "portrait")
+          ? t("setup.orient.portrait_short")
+          : t("setup.orient.landscape_short");
+        ob.addEventListener("click", () => {
+          const cur = monitorSetup[i] || { mode };
+          const orientations = Array.isArray(cur.orientations) ? cur.orientations.slice() : [];
+          while (orientations.length < tileCount) orientations.push("landscape");
+          orientations[sub] = (orientations[sub] === "portrait") ? "landscape" : "portrait";
+          monitorSetup[i] = { mode: cur.mode || mode, orientations };
+          saveMonitorSetup();
+          rebuildWallScreens();
+          renderMonitorSetup();
+          renderWall();
+        });
+        orientBox.appendChild(ob);
+      }
+      row.appendChild(orientBox);
+    }
 
     // Tile preview — 1 box for single, 2 split for span. Keeps a
     // fixed 36×18 footprint so the row height doesn't jump on mode change.
@@ -4204,19 +4273,20 @@ function currentBgUrl(bgPath) {
 }
 
 function frameSizeFor(viewport, layout) {
-  // Wall is now the primary nav, so frames are bigger than the
-  // earlier per-section thumbnails. Sizes tuned so the most common
-  // multi-monitor counts (2-3) fit a single horizontal row without
-  // scrolling at the default 260 px panel width.
+  // v1.2.6: bumped sizes for the 340 px right panel + the v1.2.5
+  // flat-tile model (a 2-monitor span produces 2 tiles, so a
+  // horizontal layout might have 2-8 tiles to fit). Horizontal
+  // layout still falls back to overflow-x:auto on really wide
+  // setups via the .wall-canvas style.
   let base;
   if (layout === "horizontal") {
-    base = 130;
+    base = 150;
   } else if (layout === "2x2") {
-    base = 150;
+    base = 145;
   } else if (layout === "vertical") {
-    base = 220;
+    base = 260;
   } else {   // free
-    base = 150;
+    base = 160;
   }
   const ar = (viewport.w || 1920) / (viewport.h || 1080);
   return { w: Math.round(base), h: Math.round(base / ar) };
@@ -4258,8 +4328,10 @@ function renderWall() {
 
     const label = document.createElement("span");
     label.className = "label";
-    label.textContent = `${i + 1} · ${scr.w}×${scr.h}` +
-      (slot ? " · " + t("wall.staged") : "");
+    let suffix = "";
+    if (slot && slot.applied) suffix = " · ✓ " + t("wall.tile_applied");
+    else if (slot)            suffix = " · " + t("wall.staged");
+    label.textContent = `${i + 1} · ${scr.w}×${scr.h}` + suffix;
     frame.appendChild(label);
 
     const hint = document.createElement("div");
@@ -4783,15 +4855,33 @@ async function applyWall() {
       composite.width  = first.bridgeW;
       composite.height = first.bridgeH;
       const cctx = composite.getContext("2d");
-      // Stretch each tile to its declared cell (xOffset/yOffset/w/h).
-      // We don't preserve source aspect ratio here — the user picked
-      // an image expecting it to cover its monitor, same contract as
-      // the per-screen Apply path.
+      // Stretch each tile to its declared bridge slot (slotW × slotH
+      // at xOffset/yOffset). We don't preserve source aspect ratio —
+      // the user picked an image expecting it to cover its monitor.
+      //
+      // v1.2.6: portrait tiles are rotated 90° CW when stamped so the
+      // user's portrait-shaped edit lands correctly in its
+      // landscape-shaped bridge slot (Windows rotates the physical
+      // monitor; we hand WE/Lively a landscape PNG whose pixels read
+      // upright when the OS rotates them back).
       for (const i of tileIndices) {
         const slot = wallSlots[i];
         const tile = wallScreens[i];
         if (!slot || !slot.img) continue;
-        cctx.drawImage(slot.img, tile.xOffset, tile.yOffset, tile.w, tile.h);
+        const sw = tile.slotW || tile.w;
+        const sh = tile.slotH || tile.h;
+        if (tile.orientation === "portrait") {
+          cctx.save();
+          // Place origin at the slot's top-right corner, rotate 90° CW.
+          // Then drawImage at (0,0,sh,sw) lays the portrait-source
+          // image into a landscape-shaped slot.
+          cctx.translate(tile.xOffset + sw, tile.yOffset);
+          cctx.rotate(Math.PI / 2);
+          cctx.drawImage(slot.img, 0, 0, sh, sw);
+          cctx.restore();
+        } else {
+          cctx.drawImage(slot.img, tile.xOffset, tile.yOffset, sw, sh);
+        }
       }
       const pngBlob = await new Promise((res) => composite.toBlob(res, "image/png"));
       const r = await fetch("/screen/" + bridgeIdx + "/background", {
@@ -4805,18 +4895,43 @@ async function applyWall() {
       if (!fail) fail = e;
     }
   }
+  // v1.2.6: build a richer toast so the user sees *what* went where
+  // ("Bridge 1 (5120×1440) ← 2 tiles") instead of the old generic
+  // "Applied to 1/1 screens" which read like nothing happened.
+  let appliedSummary = "";
+  if (!fail) {
+    const parts = [];
+    for (const [bridgeIdx, tileIndices] of byBridge.entries()) {
+      if (!tileIndices.some((i) => wallSlots[i])) continue;
+      const first    = wallScreens[tileIndices[0]];
+      const filledN  = tileIndices.filter((i) => wallSlots[i]).length;
+      parts.push(t("wall.applied_summary_line", {
+        n: bridgeIdx + 1, w: first.bridgeW, h: first.bridgeH,
+        tiles: filledN, total: tileIndices.length,
+      }));
+    }
+    appliedSummary = parts.join("\n");
+  }
   const msg = fail
     ? t("wall.failed", { msg: fail.message })
-    : t("wall.applied", { ok, total });
+    : appliedSummary || t("wall.applied", { ok, total });
   if (els.wallStat) els.wallStat.textContent = msg;
   toast(msg, fail ? "bad" : "good");
-  // Drop applied slots so the frames revert to showing the new
-  // current bgImage instead of staying "staged".
+  // v1.2.6: do NOT wipe wallSlots after apply. Pre-v1.2.5 the wipe was
+  // fine because each slot was a one-shot upload to a single screen;
+  // with the v1.2.5 per-tile edit flow, wiping makes the user think
+  // their staged images are gone (clicking a tile then opens the file
+  // picker because the slot looks empty). Instead mark them applied
+  // so the frame can render a discreet "✓" badge — slot bytes stay
+  // editable for further refinement.
   for (let i = 0; i < wallSlots.length; i++) {
     if (wallSlots[i] && wallSlots[i].source !== "error") {
-      wallSlots[i] = null;
+      wallSlots[i].applied = true;
     }
   }
+  // Re-fetch /config so each frame paints the just-applied background
+  // (the bridge generated a new timestamped path; the proxy needs the
+  // fresh path to bypass any CEF cache).
   await loadWallViewports();
   updateWallApplyState();
 }

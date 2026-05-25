@@ -4,6 +4,89 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.6-beta] - 2026-05-25
+
+> v1.2.5 fixes. The new tile-first flow exposed three regressions in
+> the apply pipeline + a cramped right panel that didn't fit the
+> Monitor-Setup rows. Plus the "Canvas spannen" button is now hidden
+> in Simple mode — it conflicts with the per-tile editing flow and
+> only confuses new users.
+
+### Fixed — Slots wiped after Apply made tiles look fillable when they were empty
+
+Pre-v1.2.5 `applyWall()` cleared every slot after a successful
+upload because each slot was a one-shot delivery to a single
+screen. The v1.2.5 per-tile edit flow inherited the same wipe by
+accident, which meant: user loads image into a tile, edits it,
+hits Apply, sees the "✓ applied 1/1" toast, then clicks the tile
+to make further edits — and gets a file picker because the slot
+was just emptied. Looked like the loaded image had vanished.
+
+`applyWall()` now keeps the slot's image bytes after a successful
+push and just marks `slot.applied = true`. Tile labels gain a
+"✓ angewendet" badge so the user can still tell which tiles
+have already been delivered, and clicking a tile drops them
+straight into the in-place edit flow as expected.
+
+### Fixed — Apply feedback was uninformative
+
+The old "Auf 1/1 Bildschirm(e) angewendet" toast didn't say
+*what* was applied or to *which* monitor. v1.2.6 builds a richer
+per-bridge-screen summary:
+
+> Bridge 1 (5120×1440) ← 2/2 tile(s)
+
+One line per bridge screen written. Shows the composite
+resolution so the user can verify the span math, and the tile
+fill ratio so it's obvious if an empty sub-tile was uploaded as
+transparent.
+
+### Changed — "Span canvas" button hidden in Simple mode
+
+The button slices the single Builder canvas into wall slots,
+which is the inverse of the v1.2.5 per-tile-edit flow (each tile
+already gets its own image directly). Keeping it visible in
+Simple mode was a contradiction — and a tempting wrong-click for
+new users. Still available in Advanced mode for the legacy
+single-canvas → split workflow.
+
+### Changed — Right panel widened to 340 px
+
+The Monitor-Setup rows + the wall tile preview overflowed the
+old 260 px column at 2-monitor span layouts (the "2 Monito…" cut
+off in the screenshot). Wider right panel + bumped tile preview
+sizes (horizontal 130 → 150 px base, vertical 220 → 260 px, free
+150 → 160 px, 2×2 unchanged) so the standard ultrawide-span
+case now fits without horizontal scrolling.
+
+### Added — Per-sub-tile orientation (portrait / landscape)
+
+Each sub-tile in a span setup gains a ▭/▯ toggle that flips
+its orientation. A portrait sub-tile gives the user a portrait-
+shaped edit canvas (long axis vertical) and the composite step
+rotates the image 90° CW when stamping it into the (landscape-
+shaped) bridge slot — so a span across a landscape + portrait
+monitor pair where Windows rotates the physical screen now
+renders the right pixels in the right orientation.
+
+Orientations persist alongside the mode under
+`signalrgb.builder.monitor_setup.orientations[]` and are
+preserved when toggling modes (single ↔ span-h ↔ span-v).
+
+### Other
+
+- New i18n keys: `wall.applied_summary_line`, `wall.tile_applied`,
+  `setup.orient.landscape_short`, `setup.orient.portrait_short`,
+  `setup.orient.title`.
+- Tile label suffix becomes "✓ angewendet" after apply (was
+  "staged" while loaded but not yet pushed).
+- Wall-tile descriptor now carries `slotW` / `slotH` (bridge
+  composite slot dimensions, independent of `w` / `h` which
+  are the user's edit-canvas dims; the two diverge in portrait
+  mode).
+
+---
+
 ## [1.2.5-beta] - 2026-05-25
 
 > Builder Monitor-Setup. The Builder now starts from "tell me about
