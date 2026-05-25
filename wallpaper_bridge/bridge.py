@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.1-beta"
+APP_VERSION = "1.2.2-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1479,13 +1479,18 @@ class Broadcaster:
     cross-thread calls (e.g. tray->push_settings) use call_soon_threadsafe.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused, on_widget_command):
+    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused, on_widget_command, get_bridge_state=None):
         self.loop = loop
         self.get_settings = get_settings        # callable(screen:int)->dict
         self.get_screen_count = get_screen_count  # callable()->int (1..N_SCREENS)
         self.update_background = update_background  # callable(screen:int, png_bytes:bytes)->bool
         self.get_paused = get_paused            # callable()->bool (fullscreen-induced pause)
         self.on_widget_command = on_widget_command  # callable(screen:int, msg:dict)->None
+        # v1.2.1: callable()->dict of bridge-scoped (non-per-screen)
+        # booleans the Configurator's System section reads (fullscreenPause,
+        # updateCheckEnabled, allowBetas, presetHotkeysEnabled). Optional
+        # so older callers don't break; defaults to an empty dict.
+        self.get_bridge_state = get_bridge_state or (lambda: {})
         # The hwmon provider is wired in after construction (BridgeRuntime
         # builds the broadcaster before it builds the HwMonPoller). Stays
         # None until then; the /hwmon/sensors endpoint just reports
@@ -1501,6 +1506,7 @@ class Broadcaster:
         t = msg.get("type")
         if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
                  "setting-update", "viewport", "bridge-setting-update",
+                 "system-action",
                  "preset-save", "preset-apply", "preset-clear",
                  "screen-reset",
                  "profile-add", "profile-update", "profile-remove"):
@@ -1533,6 +1539,7 @@ class Broadcaster:
                 "data": settings, "language": _CURRENT_LANG,
                 "screenCount": int(self.get_screen_count()),
                 "profiles": self._get_profiles_for_push(),
+                "bridge": self.get_bridge_state(),
             })))
         except Exception as e:
             print(f"[ws] initial settings push failed: {e}")
@@ -1638,7 +1645,8 @@ class Broadcaster:
         msg = json.dumps({"type": "settings", "screen": screen,
                           "data": settings, "language": _CURRENT_LANG,
                           "screenCount": int(self.get_screen_count()),
-                          "profiles": self._get_profiles_for_push()})
+                          "profiles": self._get_profiles_for_push(),
+                          "bridge": self.get_bridge_state()})
         frame = encode_text_frame(msg)
         dead = []
         for w in clients:
@@ -3428,6 +3436,12 @@ class BridgeRuntime:
             on_state_change=self._on_fullscreen_state,
             is_enabled=self._is_fullscreen_pause_enabled,
         )
+        # v1.2.1: tray-app reference, set by main() after both the
+        # bridge runtime and the tray app exist. Used by the
+        # Configurator's `system-action` WS commands to invoke the
+        # same handlers the tray's Advanced submenu used to call.
+        # None-safe — every callsite null-checks before dispatching.
+        self.tray = None
 
     def _get_settings(self, screen: int) -> dict:
         with self.config_lock:
@@ -3443,6 +3457,18 @@ class BridgeRuntime:
     def _is_fullscreen_pause_enabled(self) -> bool:
         with self.config_lock:
             return bool(self.config.get("fullscreenPause", True))
+
+    def _get_bridge_state(self) -> dict:
+        """Snapshot of bridge-scoped (non-per-screen) toggles the
+        Configurator's System section binds to. Cheap — just a few
+        dict lookups under the config lock."""
+        with self.config_lock:
+            return {
+                "fullscreenPause":      bool(self.config.get("fullscreenPause", True)),
+                "updateCheckEnabled":   bool(self.config.get("updateCheckEnabled", True)),
+                "allowBetas":           bool(self.config.get("allowBetas", False)),
+                "presetHotkeysEnabled": bool(self.config.get("presetHotkeysEnabled", False)),
+            }
 
     def _on_fullscreen_state(self, paused: bool):
         # Called from the watcher thread when fullscreen-active flips.
@@ -4197,7 +4223,13 @@ class BridgeRuntime:
     # Whitelist of global (bridge-scoped) keys the Configurator may set via
     # the `bridge-setting-update` WS command. Per-screen keys go through
     # `update_screen_setting` above; this is the global counterpart.
-    _SETTABLE_BRIDGE_KEYS = {"screenCount", "presetHotkeysEnabled"}
+    _SETTABLE_BRIDGE_KEYS = {
+        "screenCount", "presetHotkeysEnabled",
+        # v1.2.1: tray-Advanced toggles migrated into the Configurator
+        # System section. Same persisted keys the tray was already
+        # writing — no new defaults / migration needed.
+        "fullscreenPause", "updateCheckEnabled", "allowBetas",
+    }
 
     def update_bridge_setting(self, key: str, value):
         """Mutate a top-level (non-per-screen) config field. Currently
@@ -4254,6 +4286,27 @@ class BridgeRuntime:
                 self.hotkey_listener.stop()
                 self.hotkey_listener = HotkeyListener(self)
             print(f"[settings] presetHotkeysEnabled -> {enabled}")
+        elif key in ("fullscreenPause", "updateCheckEnabled", "allowBetas"):
+            # Plain boolean settings the bridge consumes elsewhere
+            # (fullscreen-watcher reads fullscreenPause every poll;
+            # UpdateChecker reads updateCheckEnabled + allowBetas
+            # before each scheduled check). No side-effects beyond
+            # persisting + re-broadcasting — the consumer threads
+            # pick up the change on their next iteration.
+            enabled = bool(value)
+            with self.config_lock:
+                if bool(self.config.get(key, False)) == enabled:
+                    return
+                self.config[key] = enabled
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            # No screen-settings push needed — these are bridge-global.
+            # The tray menu's checkbox state is re-read lazily on next
+            # menu render so it stays in sync too.
+            print(f"[settings] {key} -> {enabled}")
 
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
@@ -4288,6 +4341,33 @@ class BridgeRuntime:
             elif t == "bridge-setting-update":
                 self.update_bridge_setting(str(msg.get("key", "")),
                                            msg.get("value"))
+            elif t == "system-action":
+                # v1.2.1: Configurator System-section trigger for
+                # the maintenance commands the tray's Advanced
+                # submenu used to own. Whitelisted action → tray
+                # method, so the same code paths run regardless of
+                # entry point. tray is set by main() after both
+                # bridge + tray exist; bail silently if not yet
+                # ready (shouldn't happen in practice).
+                action = str(msg.get("action", ""))
+                if self.tray is None:
+                    print(f"[system-action] tray not wired up — dropping {action!r}")
+                else:
+                    handler = {
+                        "reload-config":     self.tray._reload_config,
+                        "reload-wallpapers": self.tray._reload_wallpapers,
+                        "reimport-bundles":  self.tray._reimport_bundles,
+                        "check-updates-now": self.tray._check_updates_now,
+                        "open-releases":     self.tray._open_update_page,
+                    }.get(action)
+                    if handler is None:
+                        print(f"[system-action] unknown action: {action!r}")
+                    else:
+                        try:
+                            handler(None, None)
+                            print(f"[system-action] dispatched {action}")
+                        except Exception as e:
+                            print(f"[system-action] {action} failed: {e}")
             elif t == "viewport":
                 self.update_viewport(screen, msg.get("w"), msg.get("h"))
             elif t == "preset-save":
@@ -4362,6 +4442,7 @@ class BridgeRuntime:
             self._update_background,
             self._is_paused,
             self._on_widget_command,
+            self._get_bridge_state,
         )
         # System-stats poller pushes 1 Hz snapshots over the WS once the
         # broadcaster is up. No-op if psutil wasn't bundled into this build.
@@ -5057,16 +5138,16 @@ class TrayApp:
                 tr("tray.lock_all") if any_unlocked else tr("tray.unlock_all"),
                 self._toggle_widgets_lock_all),
             pystray.Menu.SEPARATOR,
+            # v1.2.1: most of the old "Advanced" submenu moved into the
+            # Configurator's new System section. What stays here are the
+            # screen-scoped quick-mutation menus (Add widget / Quick
+            # effects per screen) — those are deliberately per-screen and
+            # don't fit the Configurator's "you're editing one screen at a
+            # time" model. Toggles + maintenance buttons live in the
+            # Configurator now to keep one source of truth.
             pystray.MenuItem(tr("tray.advanced"), pystray.Menu(
                 pystray.MenuItem(tr("tray.quick_add_widget"), pystray.Menu(self._widget_menu_items)),
                 pystray.MenuItem(tr("tray.quick_effects"),    pystray.Menu(self._effects_menu_items)),
-                pystray.MenuItem(
-                    tr("tray.preset_hotkeys"),
-                    self._toggle_preset_hotkeys,
-                    checked=lambda _i: self._preset_hotkeys_enabled()),
-                pystray.MenuItem(tr("tray.reload_config"),    self._reload_config),
-                pystray.MenuItem(tr("tray.reload_wallpapers"), self._reload_wallpapers),
-                pystray.MenuItem(tr("tray.reimport_bundles"), self._reimport_bundles),
             )),
             pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
             pystray.Menu.SEPARATOR,
@@ -5665,6 +5746,12 @@ def main():
     bridge.start()
 
     tray = TrayApp(bridge, config, config_lock)
+    # v1.2.1: hand the tray reference back to the bridge so the
+    # Configurator's System-section `system-action` WS commands
+    # can invoke the same maintenance handlers the tray's Advanced
+    # submenu used to call (reload-config / reload-wallpapers /
+    # reimport-bundles / check-updates-now / open-releases).
+    bridge.tray = tray
 
     # ── Auto-chain marker check (v1.1.5+) ──
     # If the tray's "Download + install update" path queued a

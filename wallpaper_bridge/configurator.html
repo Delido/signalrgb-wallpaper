@@ -112,6 +112,79 @@
     padding: 22px;
   }
 
+  /* ── Section nav (v1.2.1+) ──
+     Fixed left rail with one icon button per visible <section.card>.
+     Clicking jumps to + expands that section. Hover expands the
+     button into icon+label, so the rail stays narrow at rest. The
+     rail anchors to the viewport edge (overlays the page bg, not
+     <main>'s centred content), which means it doesn't reflow main
+     and disappears cleanly on narrow viewports.
+     IntersectionObserver in JS keeps the active button highlighted
+     as the user scrolls. */
+  #section-nav {
+    position: fixed; top: 110px; left: 8px;
+    z-index: 20;
+    display: flex; flex-direction: column;
+    gap: 4px;
+    padding: 8px 6px;
+    background: rgba(20, 23, 28, 0.78);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: background 0.2s;
+  }
+  #section-nav .nav-btn {
+    display: flex; align-items: center; gap: 8px;
+    width: 36px;
+    height: 36px;
+    padding: 0 8px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: width 0.2s ease, color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  #section-nav:hover {
+    background: rgba(26, 30, 38, 0.92);
+  }
+  #section-nav:hover .nav-btn {
+    width: 168px;
+  }
+  #section-nav .nav-btn svg {
+    flex: 0 0 auto;
+    width: 20px; height: 20px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #section-nav .nav-btn .nav-label {
+    flex: 1 1 auto;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  #section-nav:hover .nav-btn .nav-label { opacity: 1; }
+  #section-nav .nav-btn:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  #section-nav .nav-btn.active {
+    color: #d8e6fc;
+    background: var(--accent-bg);
+    border-color: #3a6ba8;
+  }
+  /* Narrow viewports — page main is 920px wide, header padding 22px,
+     so a viewport under ~1080px starts to overlap. Hide the rail
+     entirely below that threshold; users on small screens fall back
+     to scrolling. */
+  @media (max-width: 1080px) {
+    #section-nav { display: none; }
+  }
+
   section.card {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -222,42 +295,114 @@
     pointer-events: none;
   }
 
-  /* Mirror-mode controls and banner */
-  .mirror-bar {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 14px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
+  /* Mirror-mode controls (v1.2.1 redesign).
+     The old full-width "mirror-bar" was visually heavy and split the
+     mirror-picker from the Reset button it was always seen alongside.
+     New layout: a compact mirror badge inside each screen tab + a
+     dedicated "Screen settings" popover trigger anchored to the tab
+     row. Both the picker and the Reset button live inside the popover
+     so a single click brings up all per-screen controls at once. */
+  .tab .tab-mirror-badge {
+    display: inline-flex; align-items: center;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 10.5px;
+    color: #d8e6fc;
+    background: rgba(91, 143, 209, 0.22);
+    border: 1px solid #3a6ba8;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+    pointer-events: none;
   }
-  .mirror-bar .label {
+  .tab .tab-mirror-badge.hidden { display: none; }
+  .screen-popover-trigger {
+    /* Lives in the tab row, immediately right of the last visible
+       tab. Inherits the screencount picker's footprint so it doesn't
+       reflow when the user shows/hides extra screens. */
+    margin-left: 4px;
+    margin-bottom: 6px;
+    width: 28px; height: 28px;
+    background: transparent;
     color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
-    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
   }
-  .mirror-bar select { padding: 4px 8px; font-size: 12px; }
-  .mirror-bar.active {
+  .screen-popover-trigger:hover {
+    color: var(--text); background: rgba(255,255,255,0.04);
+    border-color: #3a6ba8;
+  }
+  .screen-popover-trigger.active {
+    color: #d8e6fc; background: var(--accent-bg); border-color: #3a6ba8;
+  }
+  .screen-popover-trigger svg {
+    width: 16px; height: 16px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #screen-popover {
+    position: absolute;
+    z-index: 30;
+    min-width: 280px;
+    padding: 12px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    display: none;
+  }
+  #screen-popover.show { display: block; }
+  #screen-popover .pop-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+  }
+  #screen-popover .pop-row .lbl {
+    flex: 0 0 auto;
+    font-size: 11px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    min-width: 80px;
+  }
+  #screen-popover .pop-row select {
+    flex: 1 1 auto;
+    padding: 4px 8px; font-size: 12px;
+  }
+  #screen-popover .pop-hint {
+    font-size: 11px; color: var(--text-dim);
+    line-height: 1.45;
+    margin: 4px 0 8px;
+  }
+  #screen-popover .pop-hint.mirror-active {
+    color: #d8e6fc;
     background: rgba(91,143,209,0.15);
     border-left: 3px solid #5b8fd1;
+    padding: 6px 8px;
+    border-radius: 4px;
   }
-  .mirror-bar .hint { color: var(--text-dim); font-size: 11px; flex: 1; }
-  .mirror-bar .btn-reset {
+  #screen-popover .pop-divider {
+    height: 1px; background: var(--border);
+    margin: 6px 0;
+  }
+  #screen-popover .btn-reset {
+    width: 100%;
     background: transparent;
     color: var(--text-dim);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 11px;
+    padding: 6px 10px;
+    font-size: 12px;
     cursor: pointer;
     transition: color 0.12s, background 0.12s, border-color 0.12s;
   }
-  .mirror-bar .btn-reset:hover {
+  #screen-popover .btn-reset:hover {
     color: #ffbcbc; background: rgba(180,50,50,0.15); border-color: #6a2828;
   }
-  .mirror-bar .btn-reset.hidden { display: none; }
-  .mirror-bar > .hidden { display: none; }
+  /* Legacy mirror-bar element kept hidden — easier to revert than
+     ripping out every JS reference at once. CSS rule below collapses
+     it; matching JS keeps writing to it as a no-op view to avoid a
+     larger refactor for v1.2.1. */
+  .mirror-bar { display: none !important; }
 
   /* First-run onboarding tour — overlay + spotlight ring + tooltip.
      Activates once on first Configurator open; the spotlight points
@@ -976,6 +1121,28 @@
           data-i18n="reset_screen.label">Reset this screen…</button>
 </div>
 
+<!-- v1.2.1: per-screen settings popover. Replaces the full-width
+     mirror bar. Anchored under the "Screen settings" trigger that
+     buildScreenSettingsTrigger() appends to the tab row. -->
+<div id="screen-popover" role="dialog" aria-label="Screen settings">
+  <div class="pop-row pop-mirror-row">
+    <span class="lbl" data-i18n="mirror.label">Mirror</span>
+    <select id="screen-popover-mirror"></select>
+  </div>
+  <div class="pop-hint" id="screen-popover-hint" data-i18n="mirror.hint_off">
+    Independent — this screen has its own settings.
+  </div>
+  <div class="pop-divider"></div>
+  <button class="btn-reset" id="screen-popover-reset" type="button"
+          data-i18n="reset_screen.label">Reset this screen…</button>
+</div>
+
+<!-- v1.2.1: left-rail section nav. Populated client-side from the
+     visible <section.card> elements in <main>. Click jumps to +
+     expands the target section; the rail highlights the section
+     currently on-screen via IntersectionObserver. -->
+<aside id="section-nav" aria-label="Section navigation"></aside>
+
 <main>
 
   <!-- ── Presets ───────────────────────────────────────────────────── -->
@@ -1300,6 +1467,78 @@
     </div>
   </section>
 
+  <!-- ── System (v1.2.1+) ────────────────────────────────────────────────
+       Bridge-level toggles + maintenance actions migrated out of the
+       tray menu's "Advanced" submenu. Same handlers — they now POST
+       to bridge endpoints over WS instead of being invoked via
+       pystray callbacks. -->
+  <section class="card collapsed" id="card-system">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.system">System</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="system.hint">
+        Bridge-level toggles + maintenance actions that used to live
+        in the tray menu's Advanced submenu.
+      </div>
+
+      <div class="check-row" style="margin-top: 10px;">
+        <input type="checkbox" id="sys-preset-hotkeys">
+        <label for="sys-preset-hotkeys" data-i18n="system.preset_hotkeys">
+          Global preset hotkeys
+        </label>
+      </div>
+      <div class="hint sub" data-i18n="system.preset_hotkeys_hint"
+           style="margin: -4px 0 8px 22px; font-size: 11px;">
+        Ctrl+Shift+1…0 applies preset slot 1…10 on the focused screen
+        (or screen 1 when nothing is focused).
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="sys-fullscreen-pause">
+        <label for="sys-fullscreen-pause" data-i18n="system.fullscreen_pause">
+          Pause on fullscreen apps
+        </label>
+      </div>
+      <div class="hint sub" data-i18n="system.fullscreen_pause_hint"
+           style="margin: -4px 0 8px 22px; font-size: 11px;">
+        Automatically pause glow + animations when a fullscreen
+        game/video is in the foreground.
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="sys-update-check">
+        <label for="sys-update-check" data-i18n="system.update_check">
+          Check for updates on startup
+        </label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="sys-update-betas">
+        <label for="sys-update-betas" data-i18n="system.update_betas">
+          Include beta releases
+        </label>
+      </div>
+      <div class="btn-row" style="margin-top: 6px;">
+        <button class="btn" id="sys-update-check-now" type="button"
+                data-i18n="system.check_now">Check now</button>
+        <button class="btn" id="sys-open-releases" type="button"
+                data-i18n="system.open_release">Open releases page</button>
+      </div>
+
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+
+      <div class="btn-row" style="flex-wrap: wrap; gap: 6px;">
+        <button class="btn" id="sys-reload-config" type="button"
+                data-i18n="system.reload_config">Reload config from disk</button>
+        <button class="btn" id="sys-reload-wallpapers" type="button"
+                data-i18n="system.reload_wallpapers">Reload wallpaper pages</button>
+        <button class="btn" id="sys-reimport-bundles" type="button"
+                data-i18n="system.reimport_bundles">Re-import wallpaper bundles…</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Per-app profiles ────────────────────────────────────────────── -->
   <section class="card collapsed" id="card-profiles">
     <header class="section-head" data-toggle>
@@ -1386,6 +1625,31 @@ const TRANSLATIONS = {
   "section.glow":           { en: "Glow",                 de: "Glow" },
   "section.effects":        { en: "Effects",              de: "Effekte" },
   "section.widgets":        { en: "Widgets",              de: "Widgets" },
+  "section.system":         { en: "System",               de: "System" },
+  "system.hint":            { en: "Bridge-level toggles + maintenance actions that used to live in the tray menu's Advanced submenu.",
+                              de: "Bridge-Optionen + Wartungs-Aktionen, die früher im Tray-Menü unter „Erweitert“ lagen." },
+  "system.preset_hotkeys":  { en: "Global preset hotkeys",
+                              de: "Globale Preset-Hotkeys" },
+  "system.preset_hotkeys_hint": { en: "Ctrl+Shift+1…0 applies preset slot 1…10 on the focused screen (or screen 1 when nothing is focused).",
+                              de: "Strg+Umschalt+1…0 wendet Preset-Slot 1…10 auf den fokussierten Bildschirm an (oder Bildschirm 1, wenn nichts fokussiert ist)." },
+  "system.reload_config":   { en: "Reload config from disk",
+                              de: "Config von Festplatte neu laden" },
+  "system.reload_wallpapers": { en: "Reload wallpaper pages",
+                              de: "Wallpaper-Seiten neu laden" },
+  "system.reimport_bundles": { en: "Re-import wallpaper bundles…",
+                              de: "Wallpaper-Bundles neu importieren…" },
+  "system.fullscreen_pause": { en: "Pause on fullscreen apps",
+                              de: "Bei Vollbild-Apps pausieren" },
+  "system.fullscreen_pause_hint": { en: "Automatically pause glow + animations when a fullscreen game/video is in the foreground.",
+                              de: "Glow + Animationen automatisch pausieren, wenn ein Vollbild-Spiel/-Video im Vordergrund ist." },
+  "system.update_check":    { en: "Check for updates on startup",
+                              de: "Beim Start nach Updates suchen" },
+  "system.update_betas":    { en: "Include beta releases",
+                              de: "Beta-Releases einschließen" },
+  "system.check_now":       { en: "Check now",            de: "Jetzt prüfen" },
+  "system.open_release":    { en: "Open releases page",   de: "Releases-Seite öffnen" },
+  "screen_popover.trigger_title": { en: "Screen settings (mirror, reset)",
+                              de: "Bildschirm-Einstellungen (Spiegeln, Zurücksetzen)" },
   "section.profiles":       { en: "Per-app profiles",     de: "Pro-App-Profile" },
   "profiles.hint":          { en: "When a matching .exe is focused, swap the chosen screen's preset slot automatically. Reverts to the previous state when the foreground changes away. One rule active at a time — order in the list = priority on conflict.",
                               de: "Wenn eine passende .exe im Vordergrund ist, wird der gewählte Preset-Slot automatisch angewendet. Beim Wechsel weg von der App wird der vorherige Zustand wiederhergestellt. Es ist immer nur eine Regel aktiv — die Reihenfolge in der Liste ist die Priorität bei Konflikten." },
@@ -2195,10 +2459,17 @@ async function refreshTabLabels() {
     if (!r.ok) return;
     const cfg = await r.json();
     const screens = Array.isArray(cfg.screens) ? cfg.screens : [];
+    // Cache the snapshot so renderTabMirrorBadges can read the
+    // per-screen mirrorOf for tabs that aren't the active one
+    // (in-memory `settings` only holds the active screen's view).
+    _lastConfigSnapshot = { screens };
     document.querySelectorAll(".tab").forEach((tab) => {
       const i = parseInt(tab.dataset.screen, 10);
       if (!isFinite(i)) return;
       const s = screens[i];
+      // tab.textContent assignments below blow away any badges
+      // attached; we re-add the badge in renderTabMirrorBadges()
+      // below so badges survive the poll cycle.
       if (s && s.viewportW > 0 && s.viewportH > 0) {
         tab.textContent = t("screens.label_with_res",
                             { n: i + 1, w: s.viewportW, h: s.viewportH });
@@ -2207,6 +2478,7 @@ async function refreshTabLabels() {
       }
     });
     renderOverviewCard(screens);
+    if (typeof renderTabMirrorBadges === "function") renderTabMirrorBadges();
   } catch (_) { /* leave existing labels */ }
 }
 refreshTabLabels();
@@ -2282,6 +2554,33 @@ function renderOverviewCard(screens) {
     if (!isFinite(i) || i >= n) el.remove();
   });
 }
+
+// v1.2.1: Per-screen settings trigger button. Sits between the tab
+// row and the screen-count picker. Clicking opens #screen-popover
+// anchored under the trigger; popover contains the mirror picker
+// and the Reset-this-screen button. Replaces the full-width
+// mirror-bar that the older betas put under the tab row.
+(function buildScreenSettingsTrigger() {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "screen-popover-trigger";
+  btn.id = "screen-popover-trigger";
+  btn.title = t("screen_popover.trigger_title");
+  btn.innerHTML =
+    '<svg viewBox="0 0 24 24">' +
+      '<circle cx="12" cy="12" r="3"/>' +
+      '<path d="M12 4v2"/><path d="M12 18v2"/>' +
+      '<path d="M4 12h2"/><path d="M18 12h2"/>' +
+      '<path d="M6 6l1.5 1.5"/><path d="M16.5 16.5L18 18"/>' +
+      '<path d="M6 18l1.5-1.5"/><path d="M16.5 7.5L18 6"/>' +
+    '</svg>';
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleScreenPopover();
+  });
+  els.tabs.appendChild(btn);
+  els.screenPopoverTrigger = btn;
+})();
 
 // Right-aligned screen-count picker. Replaces the legacy Tk dialog's
 // "Number of screens" knob — sends `bridge-setting-update screenCount`
@@ -2932,6 +3231,86 @@ document.querySelectorAll("section.card > header.section-head[data-toggle]").for
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Section nav (v1.2.1) — left rail with one icon button per <section.card>.
+// Each entry knows the card ID, an icon path, and the i18n key for its label.
+// Click expands the section + smooth-scrolls to it. IntersectionObserver
+// keeps the currently-visible section highlighted on the rail.
+// ─────────────────────────────────────────────────────────────────────────────
+const SECTION_NAV_ENTRIES = [
+  { id: "card-presets",  i18n: "section.presets",
+    icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>' },
+  { id: "card-looks",    i18n: "section.looks",
+    icon: '<path d="M12 3l2.5 5 5.5 0.8-4 3.9 1 5.5L12 15.8 6.5 18.2l1-5.5-4-3.9 5.5-0.8z"/>' },
+  { id: "card-bg",       i18n: "section.bg",
+    icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4-4 3 3 4-5 3 4"/>' },
+  { id: "card-glow",     i18n: "section.glow",
+    icon: '<circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21"/><line x1="3" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21" y2="12"/><line x1="6" y1="6" x2="7.5" y2="7.5"/><line x1="16.5" y1="16.5" x2="18" y2="18"/><line x1="6" y1="18" x2="7.5" y2="16.5"/><line x1="16.5" y1="7.5" x2="18" y2="6"/>' },
+  { id: "card-effects",  i18n: "section.effects",
+    icon: '<path d="M5 12l3-3 3 3 3-6 3 6 2-2"/><circle cx="18" cy="6" r="1.4"/>' },
+  { id: "card-widgets",  i18n: "section.widgets",
+    icon: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>' },
+  { id: "card-system",   i18n: "section.system",
+    icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.4 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.6 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>' },
+  { id: "card-profiles", i18n: "section.profiles",
+    icon: '<rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="1.2"/><circle cx="7" cy="17" r="1.2"/>' },
+  { id: "card-backup",   i18n: "section.backup",
+    icon: '<path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/>' },
+];
+
+function buildSectionNav() {
+  const nav = document.getElementById("section-nav");
+  if (!nav) return;
+  nav.innerHTML = "";
+  for (const entry of SECTION_NAV_ENTRIES) {
+    const card = document.getElementById(entry.id);
+    if (!card) continue;   // section not present — skip
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-btn";
+    btn.dataset.target = entry.id;
+    btn.innerHTML =
+      '<svg viewBox="0 0 24 24">' + entry.icon + '</svg>' +
+      '<span class="nav-label">' + escapeHtml(t(entry.i18n)) + '</span>';
+    btn.title = t(entry.i18n);
+    btn.addEventListener("click", () => {
+      card.classList.remove("collapsed");
+      // Sticky tabs above main are ~95px tall — offset the scroll so
+      // the section's header lands just below them.
+      const y = card.getBoundingClientRect().top + window.scrollY - 100;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    });
+    nav.appendChild(btn);
+  }
+  // Highlight whichever section is mid-viewport. We observe the body
+  // of each card (not the head) so a barely-visible header doesn't
+  // mark the section "active" while the user is reading the next one.
+  const observer = new IntersectionObserver((entries) => {
+    // Pick the entry with the highest intersection ratio that's
+    // actually intersecting. Multiple sections can fire at once on a
+    // fast scroll, so we just refresh classes from the full set.
+    let best = null;
+    for (const ent of entries) {
+      if (!ent.isIntersecting) continue;
+      if (!best || ent.intersectionRatio > best.intersectionRatio) best = ent;
+    }
+    if (!best) return;
+    const cardId = best.target.closest("section.card")?.id;
+    if (!cardId) return;
+    nav.querySelectorAll(".nav-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.target === cardId);
+    });
+  }, { rootMargin: "-30% 0px -50% 0px", threshold: [0, 0.25, 0.5, 1] });
+  for (const entry of SECTION_NAV_ENTRIES) {
+    const card = document.getElementById(entry.id);
+    if (card) observer.observe(card);
+  }
+}
+// Defer one tick so i18n strings + section cards are definitely
+// in the DOM by the time we build the nav. translateUI() runs at
+// page load to populate t() — buildSectionNav reads that table.
+setTimeout(buildSectionNav, 0);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Apply to all screens — per-section button in each card header. Each
 // card declares which settings keys belong to it; the button copies the
 // active screen's values for those keys to every other screen via
@@ -2982,48 +3361,68 @@ function updateApplyAllVisibility() {
 
 // ── Mirror mode ──────────────────────────────────────────────────────────
 // Per-screen `mirrorOf` field; when set, the bridge keeps this screen's
-// settings in lockstep with the chosen source. The configurator's job
-// is just to surface the picker, gate edits with .cards-disabled, and
-// disambiguate the dropdown to the actual screenCount.
+// settings in lockstep with the chosen source. v1.2.1 moves the picker
+// from the full-width mirror-bar into a popover anchored to a new
+// "Screen settings" gear in the tab row. The legacy #mirror-bar is
+// hidden via CSS but the old elements still drive their writers as a
+// no-op shim to avoid ripping out every reference at once.
+const popoverMirrorSel  = document.getElementById("screen-popover-mirror");
+const popoverHintEl     = document.getElementById("screen-popover-hint");
+const popoverResetBtn   = document.getElementById("screen-popover-reset");
+const popoverEl         = document.getElementById("screen-popover");
+
 function rebuildMirrorOptions() {
-  const sel = els.mirrorSelect;
-  if (!sel) return;
-  const current = sel.value;
-  sel.innerHTML = "";
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = t("mirror.option.none");
-  sel.appendChild(none);
-  for (let i = 0; i < (screenCount || 1); i++) {
-    if (i === activeScreen) continue;
-    const opt = document.createElement("option");
-    opt.value = String(i);
-    opt.textContent = t("mirror.option.screen", { n: i + 1 });
-    sel.appendChild(opt);
+  // Build options for both the legacy select (hidden but still wired
+  // in case external code reads it) and the popover select. Same
+  // logic — skip the active screen in the list so the user can't try
+  // to mirror a screen onto itself.
+  for (const sel of [els.mirrorSelect, popoverMirrorSel]) {
+    if (!sel) continue;
+    const current = sel.value;
+    sel.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = t("mirror.option.none");
+    sel.appendChild(none);
+    for (let i = 0; i < (screenCount || 1); i++) {
+      if (i === activeScreen) continue;
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = t("mirror.option.screen", { n: i + 1 });
+      sel.appendChild(opt);
+    }
+    sel.value = current;
   }
-  sel.value = current;
 }
 
 function renderMirrorBar() {
-  const bar  = els.mirrorBar;
-  const sel  = els.mirrorSelect;
-  if (!bar || !sel) return;
-  bar.classList.remove("hidden");
+  // Even though the bar is hidden via CSS we still drive the legacy
+  // input shapes so any code reading els.mirrorSelect.value gets the
+  // same value the popover shows.
   const multi = (screenCount || 1) >= 2;
-  // Mirror dropdown + its label + the hint only make sense on a
-  // multi-monitor setup. The Reset button stays visible either way.
-  const mirrorLabel = document.getElementById("mirror-bar-label");
-  if (mirrorLabel) mirrorLabel.classList.toggle("hidden", !multi);
-  sel.classList.toggle("hidden", !multi);
-  if (els.mirrorHint) els.mirrorHint.classList.toggle("hidden", !multi);
   if (multi) rebuildMirrorOptions();
   const m = (multi && settings && Number.isInteger(settings.mirrorOf))
     ? settings.mirrorOf : null;
-  sel.value = (m == null) ? "" : String(m);
+  if (els.mirrorSelect) els.mirrorSelect.value = (m == null) ? "" : String(m);
+  if (popoverMirrorSel)  popoverMirrorSel.value = (m == null) ? "" : String(m);
   const active = m != null;
-  bar.classList.toggle("active", active);
+  if (els.mirrorBar) els.mirrorBar.classList.toggle("active", active);
   document.querySelector("main").classList.toggle("cards-disabled", active);
   if (els.resetScreenBtn) els.resetScreenBtn.classList.toggle("hidden", active);
+  if (popoverResetBtn) popoverResetBtn.classList.toggle("hidden", active);
+  // Popover hint mirrors the legacy bar's hint.
+  if (popoverHintEl) {
+    if (active) {
+      popoverHintEl.dataset.i18n = "mirror.hint_on";
+      popoverHintEl.textContent = t("mirror.hint_on", { n: m + 1 });
+      popoverHintEl.classList.add("mirror-active");
+    } else {
+      popoverHintEl.dataset.i18n = "mirror.hint_off";
+      popoverHintEl.textContent = t("mirror.hint_off");
+      popoverHintEl.classList.remove("mirror-active");
+    }
+  }
+  // Legacy hint kept in sync too.
   if (els.mirrorHint) {
     if (active) {
       els.mirrorHint.dataset.i18n = "mirror.hint_on";
@@ -3033,7 +3432,104 @@ function renderMirrorBar() {
       els.mirrorHint.textContent = t("mirror.hint_off");
     }
   }
+  // Per-tab mirror badges + trigger active state.
+  renderTabMirrorBadges();
 }
+
+// Tab-row mirror badges + active state on the gear trigger. Reads
+// the per-screen mirrorOf from /config (already polled every 5 s by
+// refreshTabLabels) and lights up the badge on each mirroring tab.
+function renderTabMirrorBadges() {
+  const tabs = document.querySelectorAll(".tab");
+  // mirrorOf for the *active* tab comes from in-memory settings; for
+  // the rest we need the most-recent /config snapshot. Cache the
+  // last fetched snapshot on the module level so we don't double-poll.
+  tabs.forEach((tab) => {
+    const i = parseInt(tab.dataset.screen, 10);
+    if (!isFinite(i)) return;
+    let badge = tab.querySelector(".tab-mirror-badge");
+    let m = null;
+    if (i === activeScreen && settings && Number.isInteger(settings.mirrorOf)) {
+      m = settings.mirrorOf;
+    } else if (_lastConfigSnapshot && Array.isArray(_lastConfigSnapshot.screens)) {
+      const s = _lastConfigSnapshot.screens[i];
+      if (s && Number.isInteger(s.mirrorOf)) m = s.mirrorOf;
+    }
+    if (m == null) {
+      if (badge) badge.classList.add("hidden");
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "tab-mirror-badge";
+      tab.appendChild(badge);
+    }
+    badge.classList.remove("hidden");
+    badge.textContent = "↳ " + (m + 1);
+  });
+  // Light up the gear trigger if the current screen is mirroring.
+  if (els.screenPopoverTrigger) {
+    const isMirroring = settings && Number.isInteger(settings.mirrorOf);
+    els.screenPopoverTrigger.classList.toggle("active", !!isMirroring);
+  }
+}
+
+let _lastConfigSnapshot = null;
+
+// v1.2.1: System section state + wiring.
+// bridgeState mirrors the bridge-scoped toggles the bridge publishes
+// on every settings push. Local renderSystemSection() pushes those
+// values into the System card's checkboxes; each checkbox's change
+// listener sends a bridge-setting-update back. The maintenance
+// buttons send a system-action with the named action.
+let bridgeState = {};
+
+function renderSystemSection() {
+  const map = {
+    "sys-preset-hotkeys":  "presetHotkeysEnabled",
+    "sys-fullscreen-pause": "fullscreenPause",
+    "sys-update-check":    "updateCheckEnabled",
+    "sys-update-betas":    "allowBetas",
+  };
+  for (const [elId, key] of Object.entries(map)) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    el.checked = !!bridgeState[key];
+  }
+}
+
+(function wireSystemSection() {
+  const toggleMap = {
+    "sys-preset-hotkeys":   "presetHotkeysEnabled",
+    "sys-fullscreen-pause": "fullscreenPause",
+    "sys-update-check":     "updateCheckEnabled",
+    "sys-update-betas":     "allowBetas",
+  };
+  for (const [elId, key] of Object.entries(toggleMap)) {
+    const el = document.getElementById(elId);
+    if (!el) continue;
+    el.addEventListener("change", () => {
+      bridgeState[key] = el.checked;
+      sendCmd({ type: "bridge-setting-update", key, value: el.checked });
+    });
+  }
+  const actionMap = {
+    "sys-update-check-now": "check-updates-now",
+    "sys-open-releases":    "open-releases",
+    "sys-reload-config":    "reload-config",
+    "sys-reload-wallpapers": "reload-wallpapers",
+    "sys-reimport-bundles": "reimport-bundles",
+  };
+  for (const [btnId, action] of Object.entries(actionMap)) {
+    const btn = document.getElementById(btnId);
+    if (!btn) continue;
+    btn.addEventListener("click", () => {
+      sendCmd({ type: "system-action", action });
+      toast(t(action === "reimport-bundles"
+        ? "system.reimport_bundles" : ("system." + action.replace(/-/g, "_"))), "good");
+    });
+  }
+})();
 
 if (els.mirrorSelect) {
   els.mirrorSelect.addEventListener("change", () => {
@@ -3042,6 +3538,53 @@ if (els.mirrorSelect) {
     setSetting("mirrorOf", target);
   });
 }
+
+if (popoverMirrorSel) {
+  popoverMirrorSel.addEventListener("change", () => {
+    const v = popoverMirrorSel.value;
+    const target = v === "" ? null : parseInt(v, 10);
+    setSetting("mirrorOf", target);
+  });
+}
+
+if (popoverResetBtn) {
+  popoverResetBtn.addEventListener("click", () => {
+    if (els.resetScreenBtn) els.resetScreenBtn.click();
+    hideScreenPopover();
+  });
+}
+
+function toggleScreenPopover() {
+  if (popoverEl.classList.contains("show")) hideScreenPopover();
+  else showScreenPopover();
+}
+function showScreenPopover() {
+  if (!popoverEl || !els.screenPopoverTrigger) return;
+  // Anchor under the trigger, right-aligned to its right edge so the
+  // popover stays within the viewport even on narrow screens.
+  const r = els.screenPopoverTrigger.getBoundingClientRect();
+  const popW = 320;   // matches min-width + a bit of buffer
+  let left = r.right + window.scrollX - popW;
+  if (left < 8) left = 8;
+  popoverEl.style.left = left + "px";
+  popoverEl.style.top  = (r.bottom + window.scrollY + 6) + "px";
+  popoverEl.classList.add("show");
+  // Re-render before showing so the dropdown matches current state.
+  renderMirrorBar();
+}
+function hideScreenPopover() {
+  if (popoverEl) popoverEl.classList.remove("show");
+}
+
+document.addEventListener("click", (e) => {
+  if (!popoverEl || !popoverEl.classList.contains("show")) return;
+  if (popoverEl.contains(e.target)) return;
+  if (els.screenPopoverTrigger && els.screenPopoverTrigger.contains(e.target)) return;
+  hideScreenPopover();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") hideScreenPopover();
+});
 
 if (els.resetScreenBtn) {
   els.resetScreenBtn.addEventListener("click", () => {
@@ -3168,6 +3711,13 @@ function connect() {
         if (msg.language) setLanguage(msg.language);
         if (typeof msg.screenCount === "number") applyScreenCount(msg.screenCount);
         if (Array.isArray(msg.profiles)) profilesList = msg.profiles;
+        // v1.2.1: bridge-scoped toggles for the System section. Echoed
+        // back on every settings push so the toggle UI stays in sync
+        // with the persisted config across tabs.
+        if (msg.bridge && typeof msg.bridge === "object") {
+          bridgeState = msg.bridge;
+          renderSystemSection();
+        }
         renderAll();
         // Deep-link from a wallpaper-page gear icon: open the matching
         // widget's options modal once its settings are in. Handled here

@@ -4,6 +4,87 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2-beta] - 2026-05-25
+
+> Configurator UX overhaul. Tray's "Advanced" submenu shrinks down to
+> the per-screen quick mutations; everything else (bridge toggles +
+> maintenance buttons) moves into a new System section in the
+> Configurator. Mirror-mode UI redesigned around a per-screen popover
+> instead of the full-width bar. New left rail with one icon per
+> section card for fast navigation.
+
+### Added — Left section-nav rail
+
+Fixed left rail with one icon button per `<section.card>` in the
+Configurator. Rests at 36 × 36 px showing just icons; expands to
+168 px on hover to reveal labels. Click jumps to + auto-expands
+the target section. An IntersectionObserver highlights whichever
+section currently dominates the viewport.
+
+Hidden via media query under 1080 px viewport width so it never
+overlaps the centred main column on narrower setups.
+
+### Added — Configurator "System" section
+
+New collapsible card between Widgets and Per-app profiles. Hosts
+the bridge-scoped toggles and maintenance actions that used to live
+in the tray's Advanced submenu:
+
+- Global preset hotkeys
+- Pause on fullscreen apps
+- Check for updates on startup
+- Include beta releases
+- Check now / Open releases page
+- Reload config from disk
+- Reload wallpaper pages
+- Re-import wallpaper bundles
+
+### Changed — Mirror-mode UI
+
+The full-width `#mirror-bar` between the tab row and main content
+was visually heavy and pre-empted vertical space on every screen
+even when nobody was mirroring. v1.2.2 replaces it with:
+
+- A small `↳ N` badge inside each tab that's mirroring screen N.
+  Renders on the tab itself + on the Overview card mini-thumbs.
+- A "Screen settings" gear icon docked at the tab row's right
+  edge. Click opens a 320 px popover with the mirror picker, an
+  active-mirror hint banner, and the "Reset this screen…" button.
+  Auto-closes on outside click or Esc.
+
+### Changed — Tray Advanced submenu
+
+Shrunk to just the two per-screen quick-mutation menus (Add
+widget, Quick effects). The five toggles + buttons that used to
+live alongside them are now under the Configurator's System
+section, addressed via:
+
+- `bridge-setting-update` WS commands for the four bridge-scoped
+  booleans (`fullscreenPause`, `updateCheckEnabled`, `allowBetas`,
+  `presetHotkeysEnabled`).
+- New `system-action` WS command for the maintenance buttons.
+  Whitelisted action names (`reload-config`, `reload-wallpapers`,
+  `reimport-bundles`, `check-updates-now`, `open-releases`)
+  dispatch to the same handlers the tray was calling.
+
+`Broadcaster` now publishes a `bridge` object alongside the
+per-screen settings push so the Configurator's System toggles
+hydrate from the bridge config on connect / reconnect / cross-tab
+edits.
+
+### Other
+
+- New i18n keys: `section.system`, `system.*`,
+  `screen_popover.trigger_title`.
+- `BridgeRuntime` gets a `tray` reference, set by `main()` after
+  both objects exist, so the WS `system-action` dispatcher can
+  invoke the existing tray methods without ripping them out.
+- The legacy `#mirror-bar` element is kept hidden via CSS and
+  still driven by `renderMirrorBar()` as a no-op shim — avoids
+  ripping out every external reference for this release.
+
+---
+
 ## [1.2.1-beta] - 2026-05-25
 
 > Bug-fix + small-feature beta on top of 1.2.0-beta. Focus: fix the
