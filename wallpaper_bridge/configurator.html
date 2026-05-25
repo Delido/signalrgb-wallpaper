@@ -2025,6 +2025,35 @@ const WIDGET_CATALOG = {
     ],
     describe: (o) => (o.showProgress === false ? "title + artist" : "title + artist + progress"),
   },
+  "rss": {
+    label: "RSS",
+    icon: '<svg viewBox="0 0 24 24">' +
+          '<path d="M4 11a9 9 0 0 1 9 9"/>' +
+          '<path d="M4 4a16 16 0 0 1 16 16"/>' +
+          '<circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    schema: [
+      { key: "feedUrl",      label: "Feed URL",
+        type: "text",
+        placeholder: "https://example.com/feed.xml" },
+      { key: "feedTitle",    label: "Title override (optional)",
+        type: "text" },
+      { key: "itemCount",    label: "Items shown",
+        type: "select",
+        options: [{value:3,label:"3"},{value:5,label:"5"},{value:8,label:"8"},
+                  {value:12,label:"12"},{value:20,label:"20"}] },
+      { key: "refreshMin",   label: "Refresh interval (min)",
+        type: "select",
+        options: [{value:5,label:"5"},{value:15,label:"15"},{value:30,label:"30"},
+                  {value:60,label:"60"},{value:180,label:"180"}] },
+      { key: "showDate",     label: "Show item date",        type: "boolean" },
+      { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
+    ],
+    describe: (o) => {
+      const u = (o.feedUrl || "").trim();
+      if (!u) return "(no feed configured)";
+      try { return new URL(u).hostname; } catch (_) { return u.slice(0, 40); }
+    },
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3518,15 +3547,47 @@ els.bgFile.addEventListener("change", async (e) => {
   if (!f) return;
   els.bgUploadStat.textContent = "uploading…";
   try {
-    const blob = await fileToPngBlob(f);
+    const isVideo = /^video\//.test(f.type || "") ||
+                    /\.(mp4|webm|mov|m4v|mkv)$/i.test(f.name);
+    let blob, contentType;
+    if (isVideo) {
+      blob = await f.arrayBuffer().then(b => new Blob([b], { type: f.type || "video/mp4" }));
+      contentType = f.type || "video/mp4";
+    } else {
+      blob = await fileToPngBlob(f);
+      contentType = "image/png";
+    }
     const res = await fetch("/screen/" + activeScreen + "/background", {
       method: "POST",
-      headers: { "Content-Type": "image/png" },
+      headers: { "Content-Type": contentType },
       body: blob,
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     els.bgUploadStat.textContent = "applied · " + (blob.size / 1024).toFixed(0) + " KB";
     toast("Background applied to screen " + (activeScreen + 1), "good");
+    // v1.2.1: auto-add the picked background to the Library too, so the
+    // user doesn't have to upload it twice if they later want to swap
+    // back to it. Library upload gets the *raw* bytes (preserves video
+    // format + JPEG quality), not the PNG-recompressed background blob.
+    try {
+      const label = f.name.replace(/\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v|mkv)$/i, "");
+      const rawBuf = await f.arrayBuffer();
+      const libResp = await fetch(
+        "/library/upload?name=" + encodeURIComponent(label),
+        {
+          method: "POST",
+          headers: { "Content-Type": f.type || "application/octet-stream" },
+          body: rawBuf,
+        }
+      );
+      if (libResp.ok) {
+        await refreshLibrary();
+      }
+    } catch (libErr) {
+      // Library auto-add is best-effort; if it fails the user still
+      // has the background applied to the screen.
+      console.warn("[library auto-add]", libErr);
+    }
   } catch (err) {
     console.error(err);
     els.bgUploadStat.textContent = "upload failed";

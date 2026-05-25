@@ -228,6 +228,21 @@ if (Test-Path $weMyProjects) {
     Write-Status "Wallpaper Engine not detected (no myprojects\signalrgb-glow folder) — skipping WE path." "DarkGray"
 }
 
+# ── MSIX-Lively loopback exemption ─────────────────────────────────────────
+# Re-running the exemption is idempotent — the script no-ops if MSIX-Lively
+# isn't installed or the exemption is already in place — so call it
+# unconditionally from the re-import path. This catches the case where the
+# user installed MSIX-Lively *after* the bridge was already installed.
+$loopbackScript = Join-Path $AppDir "msix-lively-loopback-exempt.ps1"
+if (Test-Path $loopbackScript) {
+    Write-Status "Running MSIX-Lively loopback-exemption helper…" "Cyan"
+    try {
+        & $loopbackScript -Quiet
+    } catch {
+        Write-Status "  WARN: loopback exempt helper failed: $_" "Yellow"
+    }
+}
+
 # ── Result ─────────────────────────────────────────────────────────────────
 if (-not $anyHostUpdated) {
     Write-Status "No wallpaper hosts detected (neither Lively nor WE)." "Red"

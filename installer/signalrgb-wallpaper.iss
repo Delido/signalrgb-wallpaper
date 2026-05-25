@@ -102,6 +102,12 @@ Source: "..\wallpaper_bridge\dist_bridge\SignalRGBBridge.exe"; DestDir: "{app}";
 ; PS helper for the tray's "Re-import wallpaper bundles" entry — the
 ; bridge shells out to this script after locating it next to the exe.
 Source: "reimport-wallpaper-bundles.ps1"; DestDir: "{app}"; Flags: ignoreversion
+; PS helper that grants MSIX-Lively a loopback exemption via
+; CheckNetIsolation. Without this the sandboxed WebView2 in
+; MS-Store Lively can't reach ws://127.0.0.1:17320 and the wallpaper
+; never renders glow / never receives pause-on-fullscreen messages.
+; Idempotent + quiet on non-MSIX-Lively systems.
+Source: "msix-lively-loopback-exempt.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 ; SignalRGB plugin (only if user opted in)
 Source: "..\SignalRGB_Desktop_Wallpaper.js";  DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
@@ -254,6 +260,17 @@ Filename: "{app}\Wallpaper Engine wallpapers"; Verb: open; \
   Description: "Open the Wallpaper Engine bundle folder (drag 'signalrgb-glow' into Wallpaper Engine manually)"; \
   Flags: postinstall skipifsilent shellexec nowait; \
   Tasks: installwallpaperengine; Check: WallpaperEngineNotDetected
+; ── MSIX-Lively loopback exemption. Runs unconditionally (the script
+;    is a no-op on non-MSIX-Lively systems) BEFORE the bridge starts,
+;    so when the bridge launches the new permission is already live
+;    and Lively's first WS handshake succeeds. `runhidden` keeps the
+;    PowerShell window invisible; `waituntilterminated` ensures the
+;    exemption is in place before the bridge fires up immediately
+;    after.
+Filename: "powershell.exe"; \
+  Parameters: "-ExecutionPolicy Bypass -NoProfile -File ""{app}\msix-lively-loopback-exempt.ps1"" -Quiet"; \
+  Flags: runhidden waituntilterminated; \
+  StatusMsg: "Granting MSIX-Lively loopback access (if installed)…"
 ; ── Start the bridge right away (only if user kept autostart). Dropping
 ;    `skipifsilent` means in silent mode (used by the tray's
 ;    "Download + install update" flow) the bridge auto-restarts after

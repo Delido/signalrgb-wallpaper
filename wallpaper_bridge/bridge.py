@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.0-beta"
+APP_VERSION = "1.2.1-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -737,6 +737,18 @@ WIDGET_DEFAULTS = {
         "x": 1100, "y": 580, "w": 320, "h": 96,
         "options": {"showProgress": True, "showArtist": True,
                     "tintFromGlow": False},
+    },
+    # RSS / Atom feed reader. Fetches a user-configured feedUrl every
+    # refreshMin minutes inside the wallpaper page (we don't proxy
+    # through the bridge — the feed source's CORS / cache headers
+    # apply directly). Defaults: empty URL = shows "Click ⚙ to set a
+    # feed URL" placeholder; 15-min refresh; 8 visible items.
+    "rss": {
+        "label":   "RSS feed",
+        "x": 1100, "y": 60, "w": 360, "h": 280,
+        "options": {"feedUrl": "", "feedTitle": "",
+                    "itemCount": 8, "refreshMin": 15,
+                    "showDate": True, "tintFromGlow": False},
     },
 }
 WIDGET_TYPES = list(WIDGET_DEFAULTS.keys())

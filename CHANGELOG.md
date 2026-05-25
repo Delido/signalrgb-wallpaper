@@ -4,6 +4,116 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1-beta] - 2026-05-25
+
+> Bug-fix + small-feature beta on top of 1.2.0-beta. Focus: fix the
+> widget header layout regression, finally make pause-on-fullscreen
+> work for users on MSIX Lively, add an RSS widget and a fancy
+> bridge-offline standby card, and let "Choose image" auto-add to
+> the Library.
+
+### Fixed — Widget header layout broke per-type body layouts
+
+v1.1.5 introduced the optional `.widget-header` strip at the top of
+every widget. The shell wraps content in a new `.widget-body` div,
+but per-widget CSS rules (`.widget-clock { display: flex; … }`,
+`.widget-quote { display: flex; … }`, etc.) still targeted the
+`.widget-X` root. With header on, the header bar became a flex
+child of the same flex container that was centring the clock face —
+the analog clock got squeezed beside the "CLOCK" header label
+instead of sitting under it. Same root cause behind the
+"Cyberpunk-Streamer bundle has 2 clocks" report: one widget +
+header label looked like two stacked widgets because of the
+collapsed layout.
+
+Moved every per-type layout rule (display:flex / flex-direction /
+gap / justify-content) from `.widget-X { … }` to
+`.widget-X .widget-body { … }`. Padding and visual chrome stay on
+the root so tile-shell variants (glass/solid/clear) keep their
+chrome around the entire widget. Affects: clock, calendar, weather,
+countdown, quote, now-playing, cpu-meter, ram-meter, net-graph,
+hardware-sensor.
+
+### Fixed — Pause-on-fullscreen never fired on MSIX Lively
+
+Lively from the Microsoft Store runs its WebView2 inside an
+AppContainer sandbox. The default AppContainer firewall rule
+blocks outbound loopback (127.0.0.1) traffic, so the wallpaper
+page's `ws://127.0.0.1:17320/` connection silently failed and the
+bridge's `paused` WS messages never reached the wallpaper. Users
+saw glow + widgets keep rendering on fullscreen games even with
+"pause on fullscreen" toggled on — and most also reported widgets
+never appearing at all. Same package, GitHub-installer build: no
+problem (no sandbox).
+
+Installer now ships a `msix-lively-loopback-exempt.ps1` helper that
+auto-detects the MSIX-Lively package family name (via
+`Get-AppxPackage` first, then a `Packages\*rocksdanister.LivelyWallpaper_*`
+folder probe as fallback) and runs
+`CheckNetIsolation.exe LoopbackExempt -a -n=<PFN>` to grant the
+exemption. Runs in the `[Run]` section after a successful install
+(`waituntilterminated` so the bridge starts with the new
+permission already in place), and is also re-invoked from
+`reimport-wallpaper-bundles.ps1` for users who install MSIX
+Lively *after* the bridge was set up. Idempotent + a no-op on
+non-MSIX-Lively systems.
+
+### Added — RSS / Atom feed widget
+
+New widget type `rss` reading any RSS 2.0 or Atom feed URL.
+DOMParser-based XML parsing, no third-party deps. Renders the
+latest N titles as a scrollable list with optional per-item
+relative dates ("3h ago", "2d ago", "13/05/2026"). Channel title
+fills the widget header bar; can be overridden via the `feedTitle`
+option. Refresh interval configurable from 5 min to 3 h (default
+15 min). Fetch errors surface inline in the widget footer.
+
+Same CORS caveat as Weather + Quote: Wallpaper Engine's CEF
+blocks outgoing cross-origin `fetch()` by default for some users;
+toggle "Allow internet access" per-wallpaper if a feed never
+loads.
+
+### Added — Bridge-offline standby card
+
+When the bridge isn't reachable, the wallpaper used to just sit
+quietly showing the static background with no glow and no
+widgets. v1.2.1 adds a centred standby card (frosted-glass shell,
+animated pulse + scan-line, "SignalRGB Wallpaper Bridge offline"
+text + instructions) that fades in after 5 s without a live WS
+and fades out the instant the bridge is reachable again. 5 s
+delay was picked so a quick bridge restart never flashes the
+card; preview-mode iframe suppresses it (the Configurator has its
+own connection status). Pure CSS animation — zero per-frame
+work, no impact on the wallpaper's rendering loop.
+
+### Added — "Choose image" auto-adds the picked image to the Library
+
+Picking an image (or video) via the Configurator's "Choose image…"
+button used to set it as the screen background but NOT add it to
+the Library, so the user had to manually re-upload via "Add image…"
+if they wanted to swap back to it later. The change handler now
+fires both calls: the existing `/screen/N/background` POST (PNG
+canvas-converted for images, raw bytes for videos) plus a
+`/library/upload?name=<basename>` POST with the raw bytes
+(preserves video container + JPEG quality — no canvas
+recompression for the library copy). Library refresh fires
+automatically so the new tile appears in the strip.
+
+### Other
+
+- Bridge: new `rss` entry in `WIDGET_DEFAULTS` (label "RSS feed",
+  360×280, defaults to empty feedUrl + 15-min refresh + 8 items).
+- Configurator: new `rss` schema in the widget options registry
+  (feedUrl text, optional feedTitle override, itemCount and
+  refreshMin selects, showDate + tintFromGlow booleans).
+- `bg-file` accepts videos (mp4 / webm / mov / m4v / mkv) — was
+  image-only before, would error if you tried to pick a video.
+- Wallpaper: `_formatRssDate()` helper shared with the RSS
+  widget; rss-specific CSS block (`.widget-rss` shell + list +
+  per-item styling + error-foot variant).
+
+---
+
 ## [1.2.0-beta] - 2026-05-24
 
 > First beta of the post-v1.1 cycle. Four substantial dev tracks

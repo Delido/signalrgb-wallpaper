@@ -75,6 +75,90 @@
                   pointer-events: none; user-select: none; }
   #paused-badge.on { display: block; }
 
+  /* ── Bridge-offline standby card ── (v1.2.1)
+     Visible only after the WS has been disconnected for >5s, so a
+     bridge restart that completes in <5s never flashes this. Sits
+     above the wallpaper but below widgets so it's the clear focal
+     point on a "no signal" screen. Light scan-line + pulse animation
+     so the user can tell the wallpaper is alive but the bridge is
+     not. Hidden in preview mode (the Configurator already shows its
+     own connection status). */
+  #standby-card {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0; transition: opacity 0.4s ease;
+    padding: 28px 36px;
+    background: rgba(10, 14, 22, 0.78);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
+    text-align: center;
+    min-width: 340px; max-width: 80vw;
+    overflow: hidden;
+  }
+  #standby-card.on { opacity: 1; }
+  #standby-card::before {
+    /* Slow scan-line — same trick the "no signal" CRT look uses to
+       say "this is dead but the surface is fine". 8s sweep keeps it
+       just visible enough to register movement without being busy. */
+    content: "";
+    position: absolute; left: 0; right: 0; top: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(106, 176, 255, 0.55) 50%,
+      transparent 100%);
+    animation: standby-scan 4s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes standby-scan {
+    0%   { transform: translateY(0);    opacity: 0; }
+    10%  {                              opacity: 1; }
+    90%  {                              opacity: 1; }
+    100% { transform: translateY(180px); opacity: 0; }
+  }
+  #standby-card .standby-icon {
+    width: 56px; height: 56px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: rgba(106, 176, 255, 0.12);
+    border: 1px solid rgba(106, 176, 255, 0.45);
+    display: flex; align-items: center; justify-content: center;
+    animation: standby-pulse 2.4s ease-in-out infinite;
+  }
+  #standby-card .standby-icon svg {
+    width: 28px; height: 28px;
+    stroke: rgba(106, 176, 255, 0.85); fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  @keyframes standby-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(106, 176, 255, 0.40); }
+    50%      { box-shadow: 0 0 0 14px rgba(106, 176, 255, 0); }
+  }
+  #standby-card .standby-title {
+    font-size: 17px; font-weight: 600;
+    letter-spacing: 0.02em; margin-bottom: 6px;
+  }
+  #standby-card .standby-sub {
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.65);
+    line-height: 1.5;
+  }
+  #standby-card .standby-sub code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11.5px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
   /* ── Layout: Pixel Grid (2D — default) ─────────────────────────────────── */
   #bars.lay-grid {
     display: grid;
@@ -404,12 +488,17 @@
     background: rgba(220,70,70,0.85);
     color: white;
   }
+  /* v1.2.1: every widget's content now lives inside .widget-body
+     (was unwrapped before v1.1.5). Per-type layout rules (clock
+     centering, meter flex-column, etc.) moved from the .widget-X
+     root onto .widget-X .widget-body so the layout works regardless
+     of whether the optional header bar is rendered above it. */
+  .widget .widget-body {
+    width: 100%; height: 100%;
+    position: relative;
+  }
   .widget.with-header .widget-body {
-    /* Body fills the remaining vertical space once the header has
-       claimed its row. flex-column on .widget would be cleaner but
-       changes the pre-v1.1.5 layout flow for every widget; growing
-       the body via height: 100% with a margin-top reset is the
-       drop-in-friendly path. */
+    /* Header claims a row at the top; body shrinks to fill below. */
     height: calc(100% - 26px);
   }
   /* Header tint follows the user's glow colour when "tint" is on,
@@ -447,7 +536,9 @@
   .widget .widget-remove:hover { background: rgba(220, 70, 70, 0.95); }
 
   /* ── Clock widget ── */
-  .widget-clock { display: flex; align-items: center; justify-content: center; }
+  .widget-clock .widget-body {
+    display: flex; align-items: center; justify-content: center;
+  }
   .widget-clock svg { width: 100%; height: 100%; max-width: 100%; max-height: 100%; }
   .widget-clock .hand-h, .widget-clock .hand-m, .widget-clock .hand-s,
   .widget-clock .face,   .widget-clock .tick   { stroke: #fff; fill: none; stroke-linecap: round; }
@@ -476,7 +567,7 @@
   .widget-clock.tinted .digital-time { color: var(--w-tint, #fff); }
 
   /* ── Calendar widget ── */
-  .widget-calendar { display: flex; flex-direction: column; }
+  .widget-calendar .widget-body { display: flex; flex-direction: column; }
   .widget-calendar .cal-head {
     text-align: center; font-weight: 600; font-size: 13px;
     margin-bottom: 4px; letter-spacing: 0.05em;
@@ -503,7 +594,7 @@
   }
 
   /* ── Weather widget ── */
-  .widget-weather { display: flex; flex-direction: column; }
+  .widget-weather .widget-body { display: flex; flex-direction: column; }
   .widget-weather .wx-head {
     display: flex; justify-content: space-between; align-items: baseline;
     font-size: 12px; color: rgba(255,255,255,0.75);
@@ -543,7 +634,7 @@
   }
 
   /* ── Countdown widget ── */
-  .widget-countdown {
+  .widget-countdown .widget-body {
     display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px;
   }
   .widget-countdown .cd-label {
@@ -572,7 +663,51 @@
   }
 
   /* ── Quote widget ── */
-  .widget-quote { display: flex; flex-direction: column; justify-content: center; padding: 14px !important; }
+  .widget-quote { padding: 14px !important; }
+  .widget-quote .widget-body { display: flex; flex-direction: column; justify-content: center; }
+
+  /* ── RSS widget ── */
+  .widget-rss { padding: 10px 12px !important; }
+  .widget-rss .widget-body {
+    display: flex; flex-direction: column;
+    gap: 4px;
+  }
+  .widget-rss .rss-head {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.8; padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .widget-rss.tinted .rss-head { color: var(--w-tint, rgba(255,255,255,0.85)); }
+  .widget-rss .rss-list {
+    list-style: none; margin: 0; padding: 0;
+    overflow-y: auto;
+    flex: 1 1 auto; min-height: 0;
+    font-size: calc(clamp(11px, 12%, 14px) * var(--w-scale, 1));
+    line-height: 1.35;
+  }
+  .widget-rss .rss-item {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .widget-rss .rss-item:last-child { border-bottom: none; }
+  .widget-rss .rss-title {
+    display: block;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
+  .widget-rss .rss-date {
+    display: block;
+    font-size: 10px; opacity: 0.5;
+    margin-top: 2px;
+  }
+  .widget-rss .rss-foot {
+    font-size: 10px; opacity: 0.5;
+    text-align: right;
+  }
+  .widget-rss .rss-foot.err { color: #f88; opacity: 0.85; }
   .widget-quote .q-text {
     font-size: calc(clamp(13px, 14%, 18px) * var(--w-scale, 1));
     font-style: italic;
@@ -589,7 +724,13 @@
         v1.1 so all four meter widgets visually match. */
   .widget-cpu-meter, .widget-ram-meter, .widget-net-graph,
   .widget-hardware-sensor {
-    display: flex; flex-direction: column; padding: 10px !important;
+    padding: 10px !important;
+  }
+  .widget-cpu-meter .widget-body,
+  .widget-ram-meter .widget-body,
+  .widget-net-graph .widget-body,
+  .widget-hardware-sensor .widget-body {
+    display: flex; flex-direction: column;
   }
   .widget-cpu-meter .stat-head,
   .widget-ram-meter .stat-head,
@@ -669,9 +810,11 @@
 
   /* ── Now-playing widget — title + artist + progress bar ── */
   .widget-now-playing {
+    padding: 10px 14px !important;
+  }
+  .widget-now-playing .widget-body {
     display: flex; flex-direction: column;
     justify-content: center;
-    padding: 10px 14px !important;
     gap: 4px;
   }
   .widget-now-playing.np-empty .np-title { opacity: 0.4; }
@@ -849,6 +992,25 @@
 </div>
 <div id="status" class="bad hidden">starting…</div>
 <div id="paused-badge">⏸ PAUSED</div>
+<!-- v1.2.1: "bridge offline" standby overlay. Hidden until the WS has
+     been disconnected for >5s; fades back out as soon as the bridge is
+     reachable. The card is purely informational — pointer-events:none
+     so it never eats wallpaper-host input. -->
+<div id="standby-card" aria-hidden="true">
+  <div class="standby-icon">
+    <svg viewBox="0 0 24 24">
+      <path d="M2 12 a 10 10 0 0 1 20 0" />
+      <path d="M5 12 a 7 7 0 0 1 14 0" />
+      <path d="M8 12 a 4 4 0 0 1 8 0" />
+      <circle cx="12" cy="18" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  </div>
+  <div class="standby-title">SignalRGB Wallpaper Bridge offline</div>
+  <div class="standby-sub">
+    The wallpaper is running, but the bridge isn't reachable.<br>
+    Start <code>SignalRGBBridge.exe</code> — the glow + widgets will resume automatically.
+  </div>
+</div>
 <script src="interact.min.js"></script>
 <script>
 "use strict";
@@ -1041,11 +1203,44 @@ function reportViewport() {
 }
 window.addEventListener("resize", reportViewport);
 
+// ── Bridge-offline standby overlay ──
+// Visible only after >5s without a live WS to the bridge, so a quick
+// bridge restart never flashes the card. Cleared on the first ws.onopen.
+// Suppressed in PREVIEW_MODE because the Configurator already shows its
+// own "bridge connection" status and doesn't need a second offline UI.
+const STANDBY_DELAY_MS = 5000;
+const standbyCardEl = document.getElementById("standby-card");
+let _standbyTimer = null;
+function showStandbyCard(show) {
+  if (PREVIEW_MODE) return;
+  if (!standbyCardEl) return;
+  standbyCardEl.classList.toggle("on", !!show);
+}
+function armStandbyCard() {
+  if (PREVIEW_MODE) return;
+  if (_standbyTimer) return;   // already armed
+  _standbyTimer = setTimeout(() => {
+    _standbyTimer = null;
+    showStandbyCard(true);
+  }, STANDBY_DELAY_MS);
+}
+function disarmStandbyCard() {
+  if (_standbyTimer) {
+    clearTimeout(_standbyTimer);
+    _standbyTimer = null;
+  }
+  showStandbyCard(false);
+}
+
 function connect() {
   const url = wsUrl();
   statusEl.textContent = "connecting " + url + "…";
   statusEl.classList.remove("ok");
   statusEl.classList.add("bad");
+  // First connect() call (page-load) also arms the timer; if the
+  // bridge isn't up by the time the page loads, the standby card
+  // appears after STANDBY_DELAY_MS.
+  armStandbyCard();
   try { ws = new WebSocket(url); }
   catch (e) {
     statusEl.textContent = "ws error: " + e.message;
@@ -1057,6 +1252,7 @@ function connect() {
     statusEl.textContent = "connected " + url;
     statusEl.classList.remove("bad");
     statusEl.classList.add("ok");
+    disarmStandbyCard();
     reportViewport();
   };
   ws.onerror = () => {};
@@ -1064,6 +1260,7 @@ function connect() {
     statusEl.textContent = "disconnected — retrying…";
     statusEl.classList.remove("ok");
     statusEl.classList.add("bad");
+    armStandbyCard();
     setTimeout(connect, RECONNECT_MS);
   };
   ws.onmessage = (ev) => {
@@ -1969,6 +2166,36 @@ const WIDGET_REGISTRY = {
     },
     editOptions: null,
   },
+
+  // ── RSS / Atom feed reader ─────────────────────────────────────────────
+  // Polls a user-configured feed URL every `refreshMin` minutes (default
+  // 15), parses the XML with DOMParser, and renders the latest N items
+  // as a scrollable list. Supports both RSS 2.0 (<item>) and Atom
+  // (<entry>) flavours via the same selector chain. CEF / WebView2 may
+  // block cross-origin fetch() — same caveat the Weather + Quote
+  // widgets already document. Surface fetch failures inline so the user
+  // can tell a feed is broken vs. just slow.
+  rss: {
+    label: "RSS",
+    icon: '<svg viewBox="0 0 24 24">' +
+          '<path d="M4 11a9 9 0 0 1 9 9"/>' +
+          '<path d="M4 4a16 16 0 0 1 16 16"/>' +
+          '<circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    markup: () => '<div class="rss-head"></div>' +
+                  '<ul class="rss-list"></ul>' +
+                  '<div class="rss-foot">loading…</div>',
+    tick: (rec) => {
+      const now = Date.now();
+      if (rec.cache) renderRssCache(rec);
+      const refreshMin = Math.max(1, parseInt((rec.opts && rec.opts.refreshMin) || 15, 10));
+      const REFRESH    = refreshMin * 60 * 1000;
+      if (!rec.lastFetch || now - rec.lastFetch > REFRESH) {
+        rec.lastFetch = now;
+        fetchRss(rec);
+      }
+    },
+    editOptions: openWidgetInConfigurator,
+  },
 };
 
 // ── Cross-widget state ─────────────────────────────────────────────────────
@@ -2368,6 +2595,122 @@ function renderQuoteCache(rec) {
   if (!c) return;
   rec.el.querySelector(".q-text").textContent   = "“" + (c.content || "—") + "”";
   rec.el.querySelector(".q-author").textContent = "— " + (c.author || "anonymous");
+}
+
+// ── RSS fetch / parse / render ──
+// Parses RSS 2.0 + Atom in the same pass: both expose <title> at the
+// item root, just under <item> vs <entry>. Links and dates differ, so
+// each parser arm extracts what's there and skips what isn't. Items
+// without a title are dropped — they're almost always a sidecar
+// <image>/<channel> element a feed mis-orders into the item list.
+async function fetchRss(rec) {
+  const url = (rec.opts && rec.opts.feedUrl || "").trim();
+  const foot = rec.el.querySelector(".rss-foot");
+  if (!url) {
+    foot.textContent = "Click ⚙ to set a feed URL";
+    return;
+  }
+  foot.textContent = "fetching…";
+  try {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const xml = await resp.text();
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.querySelector("parsererror")) {
+      throw new Error("not valid XML");
+    }
+    const isAtom = !!doc.querySelector("feed > entry");
+    const items  = [];
+    if (isAtom) {
+      for (const entry of doc.querySelectorAll("feed > entry")) {
+        const title = (entry.querySelector(":scope > title")?.textContent || "").trim();
+        if (!title) continue;
+        const linkEl = entry.querySelector(':scope > link[rel="alternate"]')
+                    || entry.querySelector(":scope > link");
+        const link   = linkEl ? (linkEl.getAttribute("href") || linkEl.textContent || "").trim() : "";
+        const dateStr = (entry.querySelector(":scope > updated")?.textContent
+                      || entry.querySelector(":scope > published")?.textContent || "").trim();
+        items.push({ title, link, date: dateStr ? new Date(dateStr).getTime() : 0 });
+      }
+    } else {
+      for (const item of doc.querySelectorAll("channel > item, rss > channel > item")) {
+        const title = (item.querySelector(":scope > title")?.textContent || "").trim();
+        if (!title) continue;
+        const link  = (item.querySelector(":scope > link")?.textContent || "").trim();
+        const dateStr = (item.querySelector(":scope > pubDate")?.textContent || "").trim();
+        items.push({ title, link, date: dateStr ? new Date(dateStr).getTime() : 0 });
+      }
+    }
+    // Channel title — RSS feeds publish it as <channel><title>; Atom
+    // feeds as <feed><title>. Used as the widget's caption when the
+    // user hasn't overridden it via opts.feedTitle.
+    const channelTitle = (isAtom
+      ? doc.querySelector("feed > title")?.textContent
+      : doc.querySelector("channel > title")?.textContent) || "";
+    rec.cache = {
+      title: channelTitle.trim(),
+      items,
+      ts: Date.now(),
+      err: null,
+    };
+    renderRssCache(rec);
+  } catch (e) {
+    console.warn("[rss] fetch failed:", e);
+    rec.cache = rec.cache || { items: [] };
+    rec.cache.err = e.message || String(e);
+    renderRssCache(rec);
+  }
+}
+
+function renderRssCache(rec) {
+  const c = rec.cache;
+  if (!c) return;
+  const head = rec.el.querySelector(".rss-head");
+  const list = rec.el.querySelector(".rss-list");
+  const foot = rec.el.querySelector(".rss-foot");
+  const overrideTitle = (rec.opts && rec.opts.feedTitle || "").trim();
+  head.textContent = overrideTitle || c.title || "RSS";
+  const maxItems = Math.max(1, Math.min(50,
+    parseInt((rec.opts && rec.opts.itemCount) || 8, 10)));
+  const showDate = rec.opts && rec.opts.showDate !== false;
+  list.innerHTML = "";
+  const items = (c.items || []).slice(0, maxItems);
+  for (const it of items) {
+    const li = document.createElement("li");
+    li.className = "rss-item";
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "rss-title";
+    titleSpan.textContent = it.title;
+    li.appendChild(titleSpan);
+    if (showDate && it.date) {
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "rss-date";
+      dateSpan.textContent = _formatRssDate(it.date);
+      li.appendChild(dateSpan);
+    }
+    list.appendChild(li);
+  }
+  if (c.err) {
+    foot.textContent = "error: " + c.err;
+    foot.classList.add("err");
+  } else if (!items.length) {
+    foot.textContent = "no items";
+    foot.classList.remove("err");
+  } else {
+    foot.textContent = "updated " + _formatRssDate(c.ts);
+    foot.classList.remove("err");
+  }
+}
+
+function _formatRssDate(ts) {
+  if (!ts) return "";
+  const d  = new Date(ts);
+  const dt = (Date.now() - ts) / 1000;
+  if (dt < 60)      return "just now";
+  if (dt < 3600)    return Math.floor(dt / 60) + "m ago";
+  if (dt < 86400)   return Math.floor(dt / 3600) + "h ago";
+  if (dt < 604800)  return Math.floor(dt / 86400) + "d ago";
+  return d.toLocaleDateString();
 }
 
 function escapeHtml(s) {
