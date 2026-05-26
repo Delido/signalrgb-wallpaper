@@ -5058,9 +5058,16 @@ function updateWallSpanState() {
 }
 
 loadWallViewports();
-// Re-poll viewports periodically so changing screen count or
-// resolution surfaces in the Wall section without reloading.
-setInterval(loadWallViewports, 10000);
+// v1.2.9: tighter poll cadence + tab-focus refresh so a Configurator-side
+// monitorSetup change shows up here without a manual reload. The Builder
+// is HTTP-only (no persistent WS) so this is the lightweight equivalent
+// of subscribing — 3 s steady-state poll, instant refresh whenever the
+// browser tab becomes visible again (covers the common "edit setup in
+// Configurator → switch back to Builder tab" flow).
+setInterval(loadWallViewports, 3000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadWallViewports();
+});
 </script>
 </body>
 </html>

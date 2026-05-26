@@ -395,27 +395,108 @@
     cursor: pointer;
     transition: color 0.12s, background 0.12s, border-color 0.12s;
   }
-  #screen-popover .ms-orient-pop {
-    display: inline-flex; gap: 4px;
+  /* v1.2.9: Visual layout picker — mini-mocks of the resulting tile
+     layout. Each button shows literal rectangles arranged the way the
+     screen will split, so the user picks by recognising the shape, not
+     by parsing "H span" jargon. */
+  #screen-popover .pop-row-block {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
-  #screen-popover .ms-orient-pop button {
-    padding: 3px 8px;
-    background: var(--panel-2);
-    color: var(--text);
+  #screen-popover .layout-picker {
+    display: flex; gap: 6px;
+    width: 100%;
+  }
+  #screen-popover .layout-btn {
+    flex: 1 1 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    gap: 6px;
+    padding: 8px 6px;
+    background: var(--panel);
+    color: var(--text-dim);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    font: inherit; font-size: 14px;
-    line-height: 1;
-    min-width: 30px;
+    font: inherit;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
   }
-  #screen-popover .ms-orient-pop button:hover {
+  #screen-popover .layout-btn:hover {
     border-color: #3a6ba8;
+    color: var(--text);
   }
-  #screen-popover .ms-orient-pop button.portrait {
+  #screen-popover .layout-btn.active {
+    border-color: #6ab0ff;
     background: var(--accent-bg);
     color: #d8e6fc;
-    border-color: #3a6ba8;
+  }
+  #screen-popover .layout-mock {
+    display: flex; gap: 3px;
+    width: 56px; height: 32px;
+    align-items: stretch; justify-content: center;
+  }
+  #screen-popover .layout-mock.vertical {
+    flex-direction: column;
+    width: 44px; height: 36px;
+  }
+  #screen-popover .layout-mon {
+    flex: 1 1 0;
+    background: rgba(106, 176, 255, 0.55);
+    border-radius: 2px;
+  }
+  #screen-popover .layout-mon.portrait {
+    /* Portrait monitor shape: taller than wide. Achieved by flex
+       basis since the parent mock has a fixed height; we don't need
+       to grow the height, just narrow the width. */
+    max-width: 18px;
+    align-self: center;
+    height: 100%;
+  }
+  #screen-popover .layout-btn.active .layout-mon {
+    background: rgba(106, 176, 255, 0.85);
+  }
+  #screen-popover .layout-label {
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+  }
+  /* Per-monitor rotation row — only visible when a split layout is
+     active. Each button is a labelled monitor pictogram, click to
+     toggle between landscape and portrait. */
+  #screen-popover .rotate-row {
+    display: flex; gap: 6px;
+    width: 100%;
+  }
+  #screen-popover .rotate-btn {
+    flex: 1 1 0;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 4px;
+    padding: 6px 4px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+  }
+  #screen-popover .rotate-btn:hover { border-color: #3a6ba8; }
+  #screen-popover .rotate-btn .rot-mock {
+    display: block;
+    background: rgba(106, 176, 255, 0.55);
+    border-radius: 2px;
+    transition: width 0.15s, height 0.15s;
+  }
+  #screen-popover .rotate-btn.landscape .rot-mock {
+    width: 28px; height: 16px;
+  }
+  #screen-popover .rotate-btn.portrait .rot-mock {
+    width: 16px; height: 24px;
+  }
+  #screen-popover .rotate-btn .rot-label {
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
   }
   #screen-popover .btn-reset:hover {
     color: #ffbcbc; background: rgba(180,50,50,0.15); border-color: #6a2828;
@@ -1155,23 +1236,40 @@
     Independent — this screen has its own settings.
   </div>
   <div class="pop-divider"></div>
-  <!-- v1.2.8: Monitor-Setup picker. Declares whether this screen's
-       reported viewport is a single physical monitor or a span of
-       two (horizontal / vertical). The Builder reads this back via
-       the WS settings push so its Wall tiles + composite-Apply use
-       the right per-tile dimensions. Per-sub-tile orientation chips
-       appear when a span mode is picked. -->
-  <div class="pop-row">
+  <!-- v1.2.9: Visual layout picker. Each card is a literal mini-mock
+       of the resulting tile layout — one rectangle for single, two
+       side-by-side for horizontal span, two stacked for vertical
+       span. Per-monitor rotation buttons appear below when a split
+       layout is active; each shows a portrait/landscape pictogram
+       so the user sees the physical shape, not just an icon chip. -->
+  <div class="pop-row pop-row-block">
     <span class="lbl" data-i18n="setup.label">Layout</span>
-    <select id="screen-popover-setup-mode">
-      <option value="single" data-i18n="setup.mode.single">1 monitor</option>
-      <option value="span-h" data-i18n="setup.mode.span_h">2 — H span</option>
-      <option value="span-v" data-i18n="setup.mode.span_v">2 — V span</option>
-    </select>
+    <div class="layout-picker" id="screen-popover-layout-picker">
+      <button type="button" class="layout-btn" data-layout="single">
+        <div class="layout-mock">
+          <div class="layout-mon landscape"></div>
+        </div>
+        <span class="layout-label" data-i18n="setup.layout.single">1 monitor</span>
+      </button>
+      <button type="button" class="layout-btn" data-layout="span-h">
+        <div class="layout-mock">
+          <div class="layout-mon landscape"></div>
+          <div class="layout-mon landscape"></div>
+        </div>
+        <span class="layout-label" data-i18n="setup.layout.side_by_side">2 side by side</span>
+      </button>
+      <button type="button" class="layout-btn" data-layout="span-v">
+        <div class="layout-mock vertical">
+          <div class="layout-mon landscape"></div>
+          <div class="layout-mon landscape"></div>
+        </div>
+        <span class="layout-label" data-i18n="setup.layout.stacked">2 stacked</span>
+      </button>
+    </div>
   </div>
-  <div class="pop-row" id="screen-popover-orient-row" style="display: none;">
+  <div class="pop-row pop-row-block" id="screen-popover-rotate-row" style="display: none;">
     <span class="lbl" data-i18n="setup.orient.label">Orientation</span>
-    <div class="ms-orient-pop" id="screen-popover-orient"></div>
+    <div class="rotate-row" id="screen-popover-rotate"></div>
   </div>
   <div class="pop-hint" data-i18n="setup.popover_hint">
     Used by the Builder's Monitor Wall — declare a span if the
@@ -1700,6 +1798,13 @@ const TRANSLATIONS = {
   "setup.mode.span_h":      { en: "2 — H span",            de: "2 — H-Span" },
   "setup.mode.span_v":      { en: "2 — V span",            de: "2 — V-Span" },
   "setup.orient.label":     { en: "Orientation",           de: "Ausrichtung" },
+  "setup.orient.landscape": { en: "landscape",             de: "Querformat" },
+  "setup.orient.portrait":  { en: "portrait",              de: "Hochformat" },
+  "setup.layout.single":      { en: "1 monitor",          de: "1 Monitor" },
+  "setup.layout.side_by_side":{ en: "2 side by side",     de: "2 nebeneinander" },
+  "setup.layout.stacked":     { en: "2 stacked",          de: "2 übereinander" },
+  "setup.rotate.btn":         { en: "Monitor {n} · {shape}",
+                                de: "Monitor {n} · {shape}" },
   "setup.orient.landscape_short": { en: "▭", de: "▭" },
   "setup.orient.portrait_short":  { en: "▯", de: "▯" },
   "setup.orient.title": {
@@ -3699,59 +3804,78 @@ function showScreenPopover() {
   renderMonitorSetupPopover();
 }
 
-// v1.2.8: Monitor-Setup popover renderer. Pulls from settings.monitorSetup
-// (per-screen, written by the bridge in its WS settings push) and renders
-// the mode select + per-sub-tile orientation chips. Edits write back via
-// setSetting("monitorSetup", ...) — the bridge persists, sanitises, and
-// echoes the change to every connected client (Configurator + Builder).
+// v1.2.9: Visual Monitor-Setup popover. Layout buttons show literal
+// mini-mocks of the resulting tile layout (one rect for single, two
+// side-by-side for span-h, two stacked for span-v). Per-monitor
+// rotation buttons appear below for split layouts, each showing a
+// landscape- or portrait-shaped pictogram of the monitor. Reads the
+// current setup from settings.monitorSetup (per-screen, bridge-owned)
+// and writes via setSetting("monitorSetup", ...) — bridge persists,
+// sanitises, and echoes to every connected client.
 function renderMonitorSetupPopover() {
-  const modeSel  = document.getElementById("screen-popover-setup-mode");
-  const orientRow = document.getElementById("screen-popover-orient-row");
-  const orientBox = document.getElementById("screen-popover-orient");
-  if (!modeSel || !orientRow || !orientBox) return;
+  const picker    = document.getElementById("screen-popover-layout-picker");
+  const rotateRow = document.getElementById("screen-popover-rotate-row");
+  const rotateBox = document.getElementById("screen-popover-rotate");
+  if (!picker || !rotateRow || !rotateBox) return;
   const setup = (settings && settings.monitorSetup) || { mode: "single", orientations: ["landscape"] };
-  modeSel.value = setup.mode || "single";
-  // Orientation chips only meaningful when there's > 1 sub-tile.
-  if (modeSel.value === "single") {
-    orientRow.style.display = "none";
+  const mode  = setup.mode || "single";
+  // Highlight the active layout button + update its mini-mock to
+  // reflect any per-tile portrait flag (so the visual matches the
+  // saved orientations even before the user opens the rotate row).
+  picker.querySelectorAll(".layout-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.layout === mode);
+  });
+  // Per-monitor rotation row only meaningful when there's > 1 tile.
+  if (mode === "single") {
+    rotateRow.style.display = "none";
     return;
   }
-  orientRow.style.display = "";
+  rotateRow.style.display = "";
   const orientations = Array.isArray(setup.orientations)
     ? setup.orientations.slice() : [];
   while (orientations.length < 2) orientations.push("landscape");
-  orientBox.innerHTML = "";
+  rotateBox.innerHTML = "";
   for (let sub = 0; sub < 2; sub++) {
+    const isPortrait = orientations[sub] === "portrait";
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = (orientations[sub] === "portrait") ? "portrait" : "";
+    btn.className = "rotate-btn " + (isPortrait ? "portrait" : "landscape");
     btn.title = t("setup.orient.title", { n: sub + 1 });
-    btn.textContent = (orientations[sub] === "portrait")
-      ? t("setup.orient.portrait_short")
-      : t("setup.orient.landscape_short");
+    const mock = document.createElement("span");
+    mock.className = "rot-mock";
+    btn.appendChild(mock);
+    const lbl = document.createElement("span");
+    lbl.className = "rot-label";
+    lbl.textContent = t("setup.rotate.btn", {
+      n: sub + 1,
+      shape: isPortrait ? t("setup.orient.portrait") : t("setup.orient.landscape"),
+    });
+    btn.appendChild(lbl);
     btn.addEventListener("click", () => {
       const cur = (settings && settings.monitorSetup) || {};
       const ors = Array.isArray(cur.orientations) ? cur.orientations.slice() : [];
       while (ors.length < 2) ors.push("landscape");
       ors[sub] = (ors[sub] === "portrait") ? "landscape" : "portrait";
-      setSetting("monitorSetup", { mode: cur.mode || modeSel.value, orientations: ors });
+      setSetting("monitorSetup", { mode: cur.mode || mode, orientations: ors });
       // Optimistic re-render — the WS echo will refresh again on arrival.
       renderMonitorSetupPopover();
     });
-    orientBox.appendChild(btn);
+    rotateBox.appendChild(btn);
   }
 }
 
-// Mode select listener — fires once on first popover open.
-(function bindMonitorSetupModeSelect() {
-  const modeSel = document.getElementById("screen-popover-setup-mode");
-  if (!modeSel) return;
-  modeSel.addEventListener("change", () => {
-    const newMode = modeSel.value;
-    // Preserve existing orientations across mode toggles; reset on
-    // single mode (the bridge sanitiser would coerce it to landscape
-    // anyway, but doing it here means the optimistic re-render shows
-    // the right state immediately).
+// Visual-picker bindings — fire once at module load. Each button writes
+// its data-layout value back as monitorSetup.mode, preserving the
+// existing orientations[] across mode toggles where possible (single
+// mode always resets to ["landscape"]).
+(function bindMonitorSetupPicker() {
+  const picker = document.getElementById("screen-popover-layout-picker");
+  if (!picker) return;
+  picker.addEventListener("click", (e) => {
+    const btn = e.target.closest(".layout-btn");
+    if (!btn) return;
+    const newMode = btn.dataset.layout;
+    if (!newMode) return;
     let ors;
     if (newMode === "single") {
       ors = ["landscape"];

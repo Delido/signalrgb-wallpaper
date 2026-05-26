@@ -4,6 +4,61 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.9-beta] - 2026-05-26
+
+> Two complaints from the v1.2.8 test pass — the Builder didn't pick
+> up Configurator-side Monitor-Setup changes for up to 10 seconds, and
+> the span configuration UI felt opaque (a dropdown labelled "2 — H
+> span" + cryptic ▭/▯ chips). v1.2.9 fixes both: Builder polls 3× more
+> often + refreshes on tab focus, and the Monitor-Setup popover
+> becomes a visual layout picker with labelled monitor-shape buttons.
+
+### Fixed — Builder didn't reflect Configurator changes promptly
+
+The Builder is HTTP-only (no persistent WS), so it picks up
+`monitorSetup` updates via the `/config` poll. The poll interval
+was 10 s, which meant "edit setup in Configurator → switch back
+to Builder tab" left the user staring at a stale layout long
+enough to assume the change hadn't applied.
+
+- Poll interval dropped 10 s → 3 s.
+- New `visibilitychange` listener forces an immediate
+  `loadWallViewports()` on tab focus. Covers the common
+  "Configurator → Builder" tab switch with zero perceptible lag
+  even without waiting for the next poll tick.
+
+### Changed — Monitor-Setup popover is now a visual layout picker
+
+The mode dropdown (`1 monitor` / `2 — H span` / `2 — V span`)
+plus the chip toggles (`▭` / `▯`) read like API parameters, not
+UI. v1.2.9 replaces both with:
+
+- **Three layout cards**: each shows a literal mini-mock of the
+  resulting tile layout — one rectangle for single, two
+  side-by-side for span-h, two stacked for span-v. Click a card
+  to pick. The active card highlights with the accent colour.
+- **Per-monitor rotation buttons** (visible only when a split
+  layout is active): each is a labelled monitor pictogram that
+  transitions between landscape (28 × 16 px rect) and portrait
+  (16 × 24 px rect) on click. The user sees the physical shape
+  they're declaring, not a chip.
+
+Copy is friendlier too: "2 side by side" / "2 stacked" instead
+of "2 — H span" / "2 — V span", and the rotation buttons read
+"Monitor 1 · landscape" / "Monitor 2 · portrait" instead of
+just `▭` / `▯`.
+
+### Other
+
+- New i18n keys: `setup.orient.landscape`, `setup.orient.portrait`,
+  `setup.layout.single`, `setup.layout.side_by_side`,
+  `setup.layout.stacked`, `setup.rotate.btn`.
+- Popover row layout: new `.pop-row-block` modifier stacks the
+  label above the picker grid so the layout cards have room to
+  breathe at 320 px popover width.
+
+---
+
 ## [1.2.8-beta] - 2026-05-26
 
 > Monitor-Setup moves to the bridge config — single source of truth
