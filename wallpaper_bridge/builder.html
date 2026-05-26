@@ -753,6 +753,64 @@
   details.merge-details > summary:hover { color: var(--text); }
   details.merge-details[open] > summary { color: #d8e6fc; }
 
+  /* v1.2.2: first-run tour. Same overlay + spotlight + tooltip
+     pattern as the Configurator tour; styles are duplicated here
+     so the Builder remains a self-contained page (no shared CSS
+     file). */
+  .tour-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 9700;
+    display: none;
+  }
+  .tour-overlay.show { display: block; }
+  .tour-spotlight {
+    position: fixed;
+    border: 2px solid #5b8fd1;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.65);
+    pointer-events: none;
+    transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s;
+    z-index: 9701;
+  }
+  .tour-tooltip {
+    position: fixed;
+    background: var(--panel-2);
+    border: 1px solid #5b8fd1;
+    border-radius: 8px;
+    padding: 14px 16px;
+    width: 340px;
+    z-index: 9702;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+  }
+  .tour-tooltip .tour-title {
+    font-size: 14px; font-weight: 600; margin-bottom: 6px;
+    color: #d8e6fc;
+  }
+  .tour-tooltip .tour-body {
+    font-size: 12.5px; line-height: 1.45; color: var(--text);
+  }
+  .tour-tooltip .tour-actions {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px;
+  }
+  .tour-tooltip .tour-progress {
+    flex: 1 1 auto; text-align: center;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .tour-tooltip .tour-btn {
+    padding: 5px 12px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .tour-tooltip .tour-btn.primary {
+    background: var(--accent-bg); color: #d8e6fc; border-color: #3a6ba8;
+  }
+  .tour-tooltip .tour-btn:hover { filter: brightness(1.15); }
+
   /* Per-frame action popup menu — File / Library / Canvas / Clear. */
   .wall-frame-menu {
     position: fixed;
@@ -1862,6 +1920,39 @@ const TRANSLATIONS = {
 
   // Toast templates — formatted at runtime via {placeholders}.
   "toast.decode_failed":  { en: "Failed to decode {name}",          de: "{name} konnte nicht dekodiert werden" },
+  // v1.2.2: Builder first-run tour. Sibling to the Configurator
+  // tour but tailored to the load → cut → apply workflow.
+  "tour.skip":            { en: "Skip",                de: "Überspringen" },
+  "tour.next":            { en: "Next",                de: "Weiter" },
+  "tour.done":            { en: "Got it",              de: "Verstanden" },
+  "tour.progress":        { en: "{n} / {total}",       de: "{n} / {total}" },
+  "tour.welcome.title":   { en: "Wallpaper Builder",   de: "Wallpaper Builder" },
+  "tour.welcome.body":    { en: "Quick tour of the Builder. Hit Skip any time to dismiss.",
+                            de: "Kurze Tour durch den Builder. Mit Überspringen jederzeit beenden." },
+  "tour.mode.title":      { en: "Simple / Advanced",   de: "Einfach / Erweitert" },
+  "tour.mode.body":       { en: "Simple mode (the default) hides the brush + merge + history sections. Switch to Advanced if you need the full toolset.",
+                            de: "Einfach (Default) versteckt Pinsel / Merge / History. „Erweitert“ wenn du das volle Toolset brauchst." },
+  "tour.setup.title":     { en: "Monitor Setup",       de: "Monitor-Setup" },
+  "tour.setup.body":      { en: "Read-only summary of how the bridge sees your monitors. Span layouts (ultrawide-as-two-monitors) are declared in the Configurator's screen-settings popover; this card shows the resulting per-tile breakdown.",
+                            de: "Read-only-Übersicht wie die Bridge deine Monitore sieht. Span-Layouts (Ultrawide-als-2-Monitore) werden im Configurator-Popover deklariert; diese Karte zeigt das Ergebnis pro Kachel." },
+  "tour.wall.title":      { en: "Monitor Wall",        de: "Monitor-Wand" },
+  "tour.wall.body":       { en: "Each tile is one slot. Click a tile to open the action menu — pick file, library, current canvas, or load this screen's current background. Loading drops you into the edit flow.",
+                            de: "Jede Kachel ist ein Slot. Klick öffnet das Aktionsmenü — Datei, Bibliothek, aktuelle Leinwand, oder aktuelles Hintergrundbild laden. Lädt direkt in den Editier-Flow." },
+  "tour.canvas.title":    { en: "Edit canvas",         de: "Edit-Leinwand" },
+  "tour.canvas.body":     { en: "When a tile is open for editing, this canvas shows the slot's image at the target monitor's resolution. Under-sized images get contain-fitted; the rest is transparent (= black on the wallpaper).",
+                            de: "Wenn eine Kachel offen ist, zeigt diese Leinwand das Slot-Bild in der Ziel-Monitor-Auflösung. Kleinere Bilder werden contain-fitted; der Rest bleibt transparent (= schwarz im Wallpaper)." },
+  "tour.tools.title":     { en: "Tools",               de: "Werkzeuge" },
+  "tour.tools.body":      { en: "Click-pixel removes similar colours. Auto-Cut (star icon, Ctrl+Shift+A) detects bright / salient regions automatically. Advanced mode unlocks brushes, polygon, and crop.",
+                            de: "Pixel-Klick entfernt ähnliche Farben. Auto-Cut (Stern-Icon, Strg+Umschalt+A) erkennt helle / salient Bereiche automatisch. Erweitert: Pinsel, Polygon, Crop." },
+  "tour.save.title":      { en: "Save back to slot",   de: "In Slot speichern" },
+  "tour.save.body":       { en: "When you're done editing, the banner above the canvas has a Save button. Writes the edited image back to its wall tile — slot then shows the new preview.",
+                            de: "Beim Editieren: Banner über der Leinwand hat einen Speichern-Button. Schreibt das Bild zurück in die Kachel — Slot zeigt die neue Vorschau." },
+  "tour.apply.title":     { en: "Apply Wall",          de: "Wand anwenden" },
+  "tour.apply.body":      { en: "Composites every staged tile into one PNG per bridge screen (size = bridge resolution), with portrait tiles rotated and the rest cover-fitted. Posts to the bridge — wallpaper page repaints.",
+                            de: "Baut pro Bridge-Schirm ein Composite-PNG (Größe = Bridge-Auflösung) — Portrait-Kacheln rotiert, Rest cover-fitted. Wird zur Bridge gepostet — Wallpaper-Seite repaintet." },
+  "tour.done.title":      { en: "Ready to go",         de: "Fertig" },
+  "tour.done.body":       { en: "Ctrl+Z / Ctrl+Y for undo/redo. Right-click a tile for the full action menu. Have fun!",
+                            de: "Strg+Z / Strg+Y für Undo/Redo. Rechtsklick auf eine Kachel = volles Aktionsmenü. Viel Spaß!" },
   "toast.merged":         { en: "Merged {w}×{h} loaded.",           de: "{w}×{h} zusammengeführt geladen." },
   "toast.bounded_no_area":{ en: "Drag a rectangle first to set the area, then click a colour inside it.",
                             de: "Erst ein Rechteck ziehen, um den Bereich festzulegen, dann eine Farbe darin anklicken." },
@@ -4920,12 +5011,49 @@ async function loadWallSlotFromCurrentBackground(idx) {
     }
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const blob    = await resp.blob();
-    const img     = await fileToImage(blob);
-    const dataUrl = await blobToDataUrl(blob);
+    const fullImg = await fileToImage(blob);
     const name = (String(owner.bgImage).split(/[\\/]/).pop() || "current");
+
+    // v1.2.2: when the bridge screen is declared as a span (span-h /
+    // span-v / custom), the current bg image covers the FULL bridge
+    // resolution. Loading it as-is into a single sub-tile would
+    // duplicate the same image into both halves, which is what the
+    // user reported — clicking "Load current bg" on the left tile of
+    // a span produced the same full panorama in left + right edits.
+    // Crop the image to just the sub-tile's bridge-space rectangle
+    // (cover-fitting the source bg onto bridgeW×bridgeH first, the
+    // same fit the wallpaper page applies at render time).
+    let img = fullImg, slotImg = fullImg, slotBlob = blob;
+    const isSubTile = tile.bridgeW !== tile.w || tile.bridgeH !== tile.h
+                   || tile.xOffset !== 0 || tile.yOffset !== 0;
+    if (isSubTile) {
+      // Cover-fit the source image onto the bridge rectangle: the bg
+      // image's native dims rarely match the bridge resolution exactly,
+      // so we replicate the wallpaper page's default "cover" fit (one
+      // axis fills, other centre-crops) before slicing out our region.
+      const bw = tile.bridgeW, bh = tile.bridgeH;
+      const iw = fullImg.naturalWidth  || fullImg.width;
+      const ih = fullImg.naturalHeight || fullImg.height;
+      const scale = Math.max(bw / iw, bh / ih);
+      const dw = iw * scale, dh = ih * scale;
+      const dx = (bw - dw) / 2, dy = (bh - dh) / 2;
+      // Render the bridge-sized canvas, then slice the sub-tile out.
+      const slotCanvas = document.createElement("canvas");
+      slotCanvas.width  = tile.slotW || tile.w;
+      slotCanvas.height = tile.slotH || tile.h;
+      const sctx = slotCanvas.getContext("2d");
+      // Draw the source positioned such that (xOffset, yOffset) of
+      // the bridge canvas maps to (0, 0) of the slot canvas.
+      sctx.drawImage(fullImg, dx - tile.xOffset, dy - tile.yOffset, dw, dh);
+      slotImg  = slotCanvas;
+      slotBlob = await new Promise((res) => slotCanvas.toBlob(res, "image/png"));
+    }
+    const dataUrl = await blobToDataUrl(slotBlob);
     wallSlots[idx] = {
-      img, name, blob, dataUrl, source: "currentbg",
-      origImg: img, origBlob: blob,
+      img: slotImg, name, blob: slotBlob, dataUrl, source: "currentbg",
+      // origImg keeps the just-cropped sub-region so re-edits start
+      // from THIS tile's slice, not the whole bridge bg.
+      origImg: slotImg, origBlob: slotBlob,
     };
     renderWall();
     // Drop the user straight into the edit flow, matching the
@@ -5310,6 +5438,134 @@ setInterval(loadWallViewports, 3000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) loadWallViewports();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.2.2 — Builder first-run tour
+//
+// Same overlay + spotlight + tooltip mechanics as the Configurator tour.
+// Steps walk the user through the Builder's monitor-wall-first flow:
+// mode toggle → monitor setup summary → wall tiles → edit canvas →
+// tools → save → apply.
+//
+// Triggered once per browser via `signalrgb.builder.tour_seen` flag.
+// User can replay by clearing localStorage or via Help.
+// ─────────────────────────────────────────────────────────────────────────────
+const BUILDER_TOUR_KEY = "signalrgb.builder.tour_seen";
+let _bTourStep = 0;
+const BUILDER_TOUR_STEPS = [
+  { selector: null,                   i18n: "welcome" },
+  { selector: ".mode-pick",           i18n: "mode" },
+  { selector: "#monitor-setup-list",  i18n: "setup",   optional: true },
+  { selector: "#wall-canvas",         i18n: "wall" },
+  { selector: ".canvas-area",         i18n: "canvas" },
+  { selector: "#toolbox",             i18n: "tools" },
+  { selector: "#files-panel",         i18n: "apply" },
+  { selector: null,                   i18n: "done" },
+];
+
+function _bBuildTourDom() {
+  if (document.getElementById("b-tour-overlay")) return;
+  const overlay = document.createElement("div");
+  overlay.id = "b-tour-overlay";
+  overlay.className = "tour-overlay show";
+  document.body.appendChild(overlay);
+  const spot = document.createElement("div");
+  spot.id = "b-tour-spotlight";
+  spot.className = "tour-spotlight";
+  spot.style.display = "none";
+  document.body.appendChild(spot);
+  const tip = document.createElement("div");
+  tip.id = "b-tour-tooltip";
+  tip.className = "tour-tooltip";
+  tip.innerHTML =
+    '<div class="tour-title"></div>' +
+    '<div class="tour-body"></div>' +
+    '<div class="tour-actions">' +
+    '<button class="tour-btn" id="b-tour-skip"></button>' +
+    '<span class="tour-progress"></span>' +
+    '<button class="tour-btn primary" id="b-tour-next"></button>' +
+    '</div>';
+  document.body.appendChild(tip);
+  tip.querySelector("#b-tour-skip").onclick = () => _bDismissTour();
+  tip.querySelector("#b-tour-next").onclick = () => _bAdvanceTour();
+  overlay.addEventListener("click", () => _bDismissTour());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.getElementById("b-tour-overlay")) {
+      _bDismissTour();
+    }
+  });
+}
+
+function _bRenderTourStep() {
+  const step = BUILDER_TOUR_STEPS[_bTourStep];
+  if (!step) { _bDismissTour(); return; }
+  const spot = document.getElementById("b-tour-spotlight");
+  const tip  = document.getElementById("b-tour-tooltip");
+  if (!spot || !tip) return;
+  tip.querySelector(".tour-title").textContent = t("tour." + step.i18n + ".title");
+  tip.querySelector(".tour-body").textContent  = t("tour." + step.i18n + ".body");
+  tip.querySelector(".tour-progress").textContent = t("tour.progress",
+    { n: _bTourStep + 1, total: BUILDER_TOUR_STEPS.length });
+  tip.querySelector("#b-tour-skip").textContent = t("tour.skip");
+  tip.querySelector("#b-tour-next").textContent =
+    (_bTourStep === BUILDER_TOUR_STEPS.length - 1) ? t("tour.done") : t("tour.next");
+
+  if (!step.selector) {
+    spot.style.display = "none";
+    tip.style.left = "50%";
+    tip.style.top  = "50%";
+    tip.style.right = ""; tip.style.bottom = "";
+    tip.style.transform = "translate(-50%, -50%)";
+    return;
+  }
+  const el = document.querySelector(step.selector);
+  if (!el || el.getBoundingClientRect().height === 0) {
+    if (step.optional) { _bAdvanceTour(); return; }
+  }
+  if (el) {
+    const r = el.getBoundingClientRect();
+    spot.style.display = "block";
+    spot.style.left   = (r.left   - 6) + "px";
+    spot.style.top    = (r.top    - 6) + "px";
+    spot.style.width  = (r.width  + 12) + "px";
+    spot.style.height = (r.height + 12) + "px";
+    // Position tooltip beside the spotlight, picking the side with
+    // the most room so the tip doesn't escape the viewport.
+    const tipW = 360, tipH = 180;
+    let left = r.right + 12;
+    if (left + tipW > window.innerWidth - 12) left = Math.max(12, r.left - tipW - 12);
+    let top = Math.max(12, Math.min(window.innerHeight - tipH - 12, r.top));
+    tip.style.left = left + "px";
+    tip.style.top  = top + "px";
+    tip.style.right = ""; tip.style.bottom = "";
+    tip.style.transform = "";
+  }
+}
+function _bAdvanceTour() {
+  _bTourStep++;
+  if (_bTourStep >= BUILDER_TOUR_STEPS.length) { _bDismissTour(); return; }
+  _bRenderTourStep();
+}
+function _bDismissTour() {
+  document.getElementById("b-tour-overlay")?.remove();
+  document.getElementById("b-tour-spotlight")?.remove();
+  document.getElementById("b-tour-tooltip")?.remove();
+  try { localStorage.setItem(BUILDER_TOUR_KEY, "1"); } catch (_) {}
+}
+function startBuilderTour() {
+  _bTourStep = 0;
+  _bBuildTourDom();
+  _bRenderTourStep();
+}
+window.startBuilderTour = startBuilderTour;   // for manual re-run
+
+// Fire on first visit. Skipped if the user already dismissed it.
+(function _bMaybeFireTour() {
+  try {
+    if (localStorage.getItem(BUILDER_TOUR_KEY) === "1") return;
+  } catch (_) {}
+  setTimeout(startBuilderTour, 500);
+})();
 </script>
 </body>
 </html>

@@ -29,37 +29,61 @@ Runs on top of [Lively Wallpaper](https://www.rocksdanister.com/lively/)
 Steam). The one-click installer sets everything up — no Python, no
 manual file copies, no terminal.
 
-> 🎯 **v1.1.0 is the current stable.** Builds on v1.0's foundation
-> with the widget tile-shell design system (Glass / Solid / Clear
-> variants, optional header bars, universal text-align / text-scale
-> / per-widget overrides), Background tile / repeat Fit modes with
-> a scale slider, three new ambient effects (Waves, Ripples,
-> Flowfield — 15 presets total), and a bulletproof one-click
-> auto-update flow that finally reaches the Lively / Wallpaper
-> Engine bundles too. Bridge protocol + plugin format + bundle
-> layout remain v1.x stable. Full release notes in the
-> [CHANGELOG](CHANGELOG.md).
+> 🎯 **v1.2.x is the current stable.** Big UX overhaul on top of
+> v1.1's tile-shell foundation:
+>
+> - **Monitor-Setup workflow** in the Builder — declare ultrawide-as-
+>   2-monitors or landscape+portrait span layouts, edit each sub-tile
+>   independently, "Apply Wall" composites one PNG per bridge screen
+>   with portrait tiles rotated automatically.
+> - **Quick Looks gallery** — 10 pre-built bundles (Streamer, Focus,
+>   Pomodoro, Minimal Productivity, Gaming, …) that swap effects +
+>   widget layout in one click without touching the background.
+> - **Live preview iframe** in the Configurator — see widgets,
+>   ambient effect, and glow on a scaled-down WYSIWYG canvas.
+> - **Per-tab settings popover** with visual layout picker for
+>   monitor declarations + Mirror mode + Reset.
+> - **System section** absorbs the tray's old Advanced submenu
+>   (preset hotkeys, fullscreen pause, update channel, reload pages,
+>   re-import bundles, diagnostics export).
+> - **RSS widget**, **video backgrounds** (mp4 / webm / mov),
+>   **bridge-offline standby card**, **WebSocket reconnect backoff**,
+>   **MSIX-Lively loopback fix**.
+>
+> Full release notes in the [CHANGELOG](CHANGELOG.md).
 
 ## What you get
 
 - 🌈 **Live RGB glow** behind a transparent background, 60 fps
-- 🖥️ **Up to 4 monitors**, each fully independent or spanned
+- 🖥️ **Up to 4 bridge screens**, each independent, mirroring, or
+  declared as a multi-monitor span (ultrawides, landscape+portrait
+  pairs)
 - 🖌️ **In-browser image editor** — pick any wallpaper, click out
-  transparent regions, no Photoshop required
+  transparent regions, Auto-Cut for one-click bright-region detection,
+  reference-image colour picker, full keyboard nav
 - 🎨 **Starter wallpaper library** — Cyberpunk Skyline, Neon Grid,
-  Anime Window, Geometric Panels (more via *Add image…*)
+  Anime Window, Geometric Panels, … (more via *Add image…*)
+- 🎬 **Video backgrounds** — MP4 / WebM / MOV / M4V routed through
+  a `<video>` element so animated wallpapers work out of the box
 - ⚙️ **Browser-based Configurator** — change background, glow,
-  effects, widgets on-the-fly without restarting anything
+  effects, widgets on-the-fly without restarting anything; live
+  WYSIWYG preview iframe
+- 🎯 **Quick Looks** — 10 pre-built bundles (Streamer, Focus,
+  Pomodoro, Minimal Productivity, Gaming, …) — one-click swap of
+  effects + widgets without touching your background
 - ✨ **Ambient effects** behind the wallpaper — snow, rain, sparks,
-  aurora, plus a whole-screen audio-reactive glow layer
-- 🧩 **11 desktop widgets** — clock, calendar, weather, sticky notes,
+  aurora, vortex, plus a whole-screen audio-reactive glow layer
+- 🧩 **12 desktop widgets** — clock, calendar, weather, sticky notes,
   countdowns, photo frame, quote of the day, CPU / RAM / network
-  meters, audio spectrum
+  meters, hardware sensor, audio spectrum, now-playing, **RSS feed**
 - 💾 **Preset slots** — save a complete "background + glow + widgets"
-  combo per screen, switch with one click
+  combo per screen, switch with one click. Quick Looks auto-snapshot
+  to slot 1 before they apply, so you can always revert.
 - 🌐 **DE / EN UI**, auto-detected from your Windows locale
 - 🎮 **Auto-pause** when a fullscreen app is active — no GPU drain
   during games
+- 🩺 **Diagnostics export** — one-click ZIP with config, library,
+  and summary metadata for bug reports
 
 ## See it in action
 
