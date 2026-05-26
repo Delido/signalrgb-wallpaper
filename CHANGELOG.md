@@ -4,6 +4,31 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.15-beta] - 2026-05-26
+
+> v1.2.14 hotfix — Diagnose-Paket landete im falschen Ordner für
+> OneDrive-Setups + war silent ohne sichtbares Feedback.
+
+### Fixed — Diagnose-Paket Export auf OneDrive-Setups
+
+`Path.home() / "Desktop"` schreibt auf OneDrive-synced Accounts in
+einen Schatten-Ordner den der User nie öffnet — der echte Desktop
+liegt unter `~/OneDrive/Desktop` (oder dem registry-konfigurierten
+Pfad). Neuer `_resolve_desktop_path()` Helper liest erst die
+Windows Shell-Folders Registry, fällt dann auf `OneDrive/Desktop`,
+dann auf `~/Desktop`, dann auf Home zurück. Funktioniert auf
+Standard- + OneDrive- + Unternehmens-Redirect-Setups.
+
+### Added — Diagnose-Export öffnet Explorer mit Datei pre-selected
+
+Nach dem Schreiben wird `explorer.exe /select,<path>` aufgerufen
+damit die ZIP-Datei im Explorer hervorgehoben angezeigt wird. Tray-
+Balloon konnte man leicht übersehen; ein offenes Explorer-Fenster
+mit selektierter Datei ist eindeutig. Tray-Notification zeigt jetzt
+auch den vollen Pfad statt nur den Dateinamen.
+
+---
+
 ## [1.2.14-beta] - 2026-05-26
 
 > Second audit pass — 9 items from the v1.2.13 review list land in

@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.14-beta"
+APP_VERSION = "1.2.15-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -5399,6 +5399,34 @@ class TrayApp:
         except Exception as e:
             print(f"[tray] failed to open browser: {e}")
 
+    def _resolve_desktop_path(self) -> Path:
+        """Find the user's real Desktop folder. On OneDrive-synced
+        accounts the in-explorer "Desktop" is actually at
+        `%USERPROFILE%\\OneDrive\\Desktop`, not `%USERPROFILE%\\Desktop`,
+        so a naive `Path.home() / "Desktop"` writes into the wrong
+        place (or a shadow folder the user never opens). Check the
+        Windows known-folder registry value first; fall back to the
+        OneDrive candidate, then to the legacy home/Desktop, then to
+        home itself."""
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders") as k:
+                val, _ = winreg.QueryValueEx(k, "Desktop")
+                p = Path(os.path.expandvars(val))
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+        for candidate in (
+            Path.home() / "OneDrive" / "Desktop",
+            Path.home() / "Desktop",
+            Path.home(),
+        ):
+            if candidate.exists():
+                return candidate
+        return Path.home()
+
     def _export_diagnostics(self, icon, item):
         """v1.2.14: bundle the bridge config + last-known errors +
         screen / library / install paths into a single ZIP on the
@@ -5406,12 +5434,15 @@ class TrayApp:
         of 'paste your config' / 'paste the log' / etc. Secrets-redacted:
         the only field we knowingly carry that could leak anything is
         bgImage absolute paths — those stay because they're useful for
-        diagnosing path issues."""
-        import zipfile, traceback
+        diagnosing path issues.
+
+        v1.2.15: harden the Desktop resolution for OneDrive-synced
+        setups + open Explorer with the ZIP pre-selected so the user
+        immediately sees where it landed (the tray balloon alone was
+        easy to miss)."""
+        import zipfile, subprocess, traceback
         try:
-            desktop = Path.home() / "Desktop"
-            if not desktop.exists():
-                desktop = Path.home()
+            desktop = self._resolve_desktop_path()
             stamp = time.strftime("%Y%m%d-%H%M%S")
             out = desktop / f"signalrgb-wallpaper-diagnostics-{stamp}.zip"
             with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -5451,7 +5482,15 @@ class TrayApp:
                 except Exception as e:
                     zf.writestr("reimport.log.error", str(e))
             print(f"[diagnostics] exported {out}")
-            self._tray_notify(tr("diagnostics.done", path=out.name),
+            # Pop Explorer with the file pre-selected so the user can't
+            # miss where the bundle landed.
+            try:
+                CREATE_NO_WINDOW = 0x08000000
+                subprocess.Popen(["explorer.exe", "/select,", str(out)],
+                                 creationflags=CREATE_NO_WINDOW)
+            except Exception as e:
+                print(f"[diagnostics] explorer popup failed: {e}")
+            self._tray_notify(tr("diagnostics.done", path=str(out)),
                               tr("tray.export_diagnostics"))
         except Exception as e:
             tb = traceback.format_exc()
