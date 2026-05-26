@@ -2448,40 +2448,37 @@ function applyLookBundle(bundle) {
             || `Apply "${bundle.name}" to ${screenLabel}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.`;
   if (!confirm(msg)) return;
 
-  // v1.2.14: snapshot the screen's current state into preset slot 1
-  // before applying so the user can 1-click revert via the Presets
-  // section. Slot 1 is chosen because it's the most-prominent slot
-  // in the UI; if the user already had something there it gets
-  // overwritten — same trade-off as any other autosave.
-  sendCmd({ type: "preset-save", screen: activeScreen, slot: 0 });
-  toast(t("looks.autosnapshot"), "good");
-
-  // 1. Push every setting in the bundle as a setting-update msg.
-  //    Bridge persists each + broadcasts; wallpaper page repaints.
-  // v1.2.12: bgImage / bgFit / bgDim are deliberately NOT pushed —
-  // the user's current background should survive a Quick Look apply
-  // so picking a Look doesn't overwrite a wallpaper they just
-  // imported. Effects, glow, tile style, widget layout are what
-  // makes a "look" a look.
+  // v1.2.16: single atomic Quick Look apply. The bridge wraps the
+  // current-state snapshot + non-widget settings + widget replace
+  // inside ONE _mutate_screen call under the config lock so they
+  // can't race each other. Pre-v1.2.16 each sub-op was its own WS
+  // message, the bridge spawned a worker thread per message, and
+  // the threads then raced for the lock in non-deterministic order:
+  // sometimes the snapshot fired AFTER setting-updates had already
+  // mutated state (capturing the post-bundle config as the
+  // "revert" point), sometimes widget-remove × N completed AFTER
+  // widget-add × M (leaving pre-bundle widgets alive alongside
+  // bundle ones).
+  //
+  // v1.2.12 bg-skip: bgImage / bgImageUrl / bgFit / bgDim /
+  // bgTileScale are filtered out so the user's current wallpaper
+  // survives a Look apply.
   const SKIP_BG_KEYS = new Set(["bgImage", "bgImageUrl", "bgFit", "bgDim", "bgTileScale"]);
+  const sentSettings = {};
   for (const [key, value] of Object.entries(bundle.settings || {})) {
     if (SKIP_BG_KEYS.has(key)) continue;
-    sendCmd({ type: "setting-update", screen: activeScreen, key, value });
+    sentSettings[key] = value;
   }
-
-  // 2. Remove existing widgets, then add the bundle's. Order matters:
-  //    the removes finish before the adds because the WS pipeline is
-  //    serial per-connection.
-  for (const w of (settings.widgets || [])) {
-    sendCmd({ type: "widget-remove", id: w.id });
-  }
-  for (const w of bundle.widgets) {
-    sendCmd({ type: "widget-add",
-              widgetType: w.type,
-              x: w.x, y: w.y, w: w.w, h: w.h,
-              options: w.options || {} });
-  }
-
+  sendCmd({
+    type: "quick-look-apply",
+    snapshotSlot: 0,
+    settings: sentSettings,
+    widgets: bundle.widgets.map((w) => ({
+      type: w.type, x: w.x, y: w.y, w: w.w, h: w.h,
+      options: w.options || {},
+    })),
+  });
+  toast(t("looks.autosnapshot"), "good");
   toast(t("looks.applied", { name: bundle.name }) || ("Applied " + bundle.name), "good");
 }
 

@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.15-beta"
+APP_VERSION = "1.2.16-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1549,7 +1549,8 @@ class Broadcaster:
         mutations live here; future client→server messages slot in next to
         them. Runs on the asyncio loop thread."""
         t = msg.get("type")
-        if t in ("widget-update", "widget-add", "widget-remove", "widgets-lock",
+        if t in ("widget-update", "widget-add", "widget-remove",
+                 "widgets-set", "widgets-lock",
                  "setting-update", "viewport", "bridge-setting-update",
                  "system-action",
                  "preset-save", "preset-apply", "preset-clear",
@@ -3730,6 +3731,124 @@ class BridgeRuntime:
             self._replicate_to_mirrors(screen)
         return snap
 
+    def quick_look_apply(self, screen: int,
+                         snapshot_slot=None, settings=None, widgets=None) -> dict | None:
+        """v1.2.16: atomic Quick Look apply. All three sub-ops
+        (snapshot current state → preset slot, replace widget array,
+        merge non-bg settings) happen inside one _mutate_screen call
+        so they share a single config_lock acquisition. Pre-v1.2.16
+        each was its own WS message → its own worker thread → its own
+        lock acquire, and the bridge's free-threaded dispatch meant
+        the snapshot could land AFTER the bundle's setting-updates
+        had already mutated the live state, capturing post-bundle
+        mixed state instead of pre-bundle."""
+        if self._block_if_mirror(screen, "quick-look-apply"): return None
+        if not isinstance(settings, dict): settings = {}
+        if not isinstance(widgets, list):  widgets  = []
+        # Strict slot range — fall back to no-snapshot if the caller
+        # passed something silly.
+        try:
+            slot = int(snapshot_slot) if snapshot_slot is not None else -1
+        except (TypeError, ValueError):
+            slot = -1
+        def mutate(s):
+            # 1. Snapshot CURRENT state to the slot if requested.
+            if 0 <= slot < PRESET_SLOTS:
+                snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
+                            for k in PRESET_SNAPSHOT_KEYS}
+                presets = list(s.get("presets") or [None] * PRESET_SLOTS)
+                while len(presets) < PRESET_SLOTS:
+                    presets.append(None)
+                presets[slot] = snapshot
+                s["presets"] = presets
+            # 2. Apply non-widget settings. Bridge-side whitelist
+            # mirrors what setting-update would accept; unknown keys
+            # are ignored. monitorSetup goes through the dedicated
+            # sanitiser to keep its invariants.
+            for key, value in settings.items():
+                if key not in BridgeRuntime._SETTABLE_SCREEN_KEYS:
+                    continue
+                if key in ("widgets", "mirrorOf", "cycle"):
+                    # widgets is handled below; mirror toggle + cycle
+                    # need their own dispatch paths — not safe to
+                    # cram into a Quick Look.
+                    continue
+                if key == "monitorSetup":
+                    value = BridgeRuntime._sanitise_monitor_setup(value)
+                s[key] = value
+            # 3. Replace widgets atomically.
+            counter = int(s.get("_widgetIdSeq", 0))
+            built = []
+            for raw in widgets:
+                if not isinstance(raw, dict): continue
+                wt = str(raw.get("type") or "")
+                if wt not in WIDGET_DEFAULTS:
+                    continue
+                defaults = WIDGET_DEFAULTS[wt]
+                counter += 1
+                merged_opts = dict(defaults["options"])
+                if isinstance(raw.get("options"), dict):
+                    merged_opts.update(raw["options"])
+                built.append({
+                    "id":      f"w_s{screen}_{counter}",
+                    "type":    wt,
+                    "x":       defaults["x"] if raw.get("x") is None else int(raw["x"]),
+                    "y":       defaults["y"] if raw.get("y") is None else int(raw["y"]),
+                    "w":       defaults["w"] if raw.get("w") is None else int(raw["w"]),
+                    "h":       defaults["h"] if raw.get("h") is None else int(raw["h"]),
+                    "options": merged_opts,
+                })
+            s["widgets"] = built
+            s["_widgetIdSeq"] = counter
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
+        return snap
+
+    def replace_widgets(self, screen: int, incoming) -> dict | None:
+        """v1.2.16: atomically replace the screen's widgets array with
+        the bundle-provided list. Each incoming entry must carry a
+        `type`; the bridge assigns IDs (so client-side ID collisions
+        can't happen) and merges options with the type's defaults the
+        same way `add_widget` does. Geometry (x/y/w/h) falls back to
+        the type's defaults when missing. Used by Quick Looks apply
+        and any future "import preset" flow."""
+        if self._block_if_mirror(screen, "widgets-set"): return None
+        if not isinstance(incoming, list):
+            print("[widgets-set] payload must be a list")
+            return None
+        def mutate(s):
+            built = []
+            counter = int(s.get("_widgetIdSeq", 0))
+            for raw in incoming:
+                if not isinstance(raw, dict): continue
+                wt = str(raw.get("type") or "")
+                if wt not in WIDGET_DEFAULTS:
+                    print(f"[widgets-set] skip unknown type: {wt!r}")
+                    continue
+                defaults = WIDGET_DEFAULTS[wt]
+                counter += 1
+                merged_opts = dict(defaults["options"])
+                if isinstance(raw.get("options"), dict):
+                    merged_opts.update(raw["options"])
+                built.append({
+                    "id":      f"w_s{screen}_{counter}",
+                    "type":    wt,
+                    "x":       defaults["x"] if raw.get("x") is None else int(raw["x"]),
+                    "y":       defaults["y"] if raw.get("y") is None else int(raw["y"]),
+                    "w":       defaults["w"] if raw.get("w") is None else int(raw["w"]),
+                    "h":       defaults["h"] if raw.get("h") is None else int(raw["h"]),
+                    "options": merged_opts,
+                })
+            s["widgets"] = built
+            s["_widgetIdSeq"] = counter
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
+        return snap
+
     def update_widget(self, screen: int, widget_id: str, fields: dict) -> dict | None:
         if self._block_if_mirror(screen, "widget-update"): return None
         # Whitelist mutable fields — never let a wallpaper-page bug bleed
@@ -4471,6 +4590,31 @@ class BridgeRuntime:
                 )
             elif t == "widget-remove":
                 self.remove_widget(screen, str(msg.get("id", "")))
+            elif t == "widgets-set":
+                # v1.2.16: atomic widget-array replace for Quick Looks.
+                # Pre-v1.2.16 applyLookBundle did widget-remove × N
+                # followed by widget-add × M as separate WS messages;
+                # _on_widget_command spawns a worker thread per message
+                # so the operations raced and bundle widgets ended up
+                # interleaved with the old set. widgets-set wipes +
+                # appends inside one mutate(s) call under the config
+                # lock — no race.
+                self.replace_widgets(screen, msg.get("widgets") or [])
+            elif t == "quick-look-apply":
+                # v1.2.16: all-in-one atomic Quick Look apply. Snapshot
+                # the current state to a preset slot, replace widgets,
+                # and set the bundle's non-widget settings — all under
+                # one config_lock acquire so the auto-snapshot
+                # captures the pre-bundle state regardless of which
+                # threads race in. Earlier versions queued these as
+                # three separate WS messages whose worker threads
+                # raced.
+                self.quick_look_apply(
+                    screen,
+                    snapshot_slot=msg.get("snapshotSlot"),
+                    settings=msg.get("settings") or {},
+                    widgets=msg.get("widgets") or [],
+                )
             elif t == "widgets-lock":
                 self.set_widgets_locked(screen, bool(msg.get("locked", True)))
             elif t == "setting-update":

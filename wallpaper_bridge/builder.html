@@ -1789,6 +1789,8 @@ const TRANSLATIONS = {
                              de: "Auf diesem Screen ist kein aktuelles Hintergrundbild gesetzt." },
   "wall.currentbg.failed": { en: "Loading current background failed: {msg}",
                              de: "Laden des aktuellen Hintergrunds fehlgeschlagen: {msg}" },
+  "wall.currentbg.stale":  { en: "Background file no longer exists on disk — cleared the stale reference. Pick a new image to set a background.",
+                             de: "Hintergrund-Datei existiert nicht mehr auf der Festplatte — die veraltete Referenz wurde gelöscht. Neues Bild wählen um einen Hintergrund zu setzen." },
   "wall.menu.edit":     { en: "Edit in main canvas", de: "Im Haupteditor öffnen" },
   "wall.menu.clear":    { en: "Clear",              de: "Leeren" },
   // v1.2.4 — per-slot in-place edit flow
@@ -4900,6 +4902,22 @@ async function loadWallSlotFromCurrentBackground(idx) {
   try {
     const url  = currentBgUrl(owner.bgImage);
     const resp = await fetch(url, { cache: "no-store" });
+    if (resp.status === 404) {
+      // v1.2.16: the bridge dropped the file on disk (or the screens
+      // dir was manually cleared) but config still points at it. Tell
+      // the user explicitly + queue a setting-update via /screen/N
+      // to null the dead path so subsequent operations don't keep
+      // hitting 404s.
+      toast(t("wall.currentbg.stale"), "bad");
+      try {
+        await fetch("/screen/" + tile.bridgeIdx + "/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bgImage: "" }),
+        });
+      } catch (_) {}
+      return;
+    }
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const blob    = await resp.blob();
     const img     = await fileToImage(blob);

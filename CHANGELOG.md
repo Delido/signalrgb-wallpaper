@@ -4,6 +4,59 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.16-beta] - 2026-05-26
+
+> Quick Looks ließen pre-Bundle Widgets manchmal mit-leben + die
+> Auto-Snapshot griff den falschen State. Plus ein 404-Fix für den
+> "Load current background" Pfad auf Screens deren bgImage auf eine
+> gelöschte Datei zeigt.
+
+### Fixed — Quick Looks left widgets from the previous bundle alive
+
+Pre-v1.2.16 `applyLookBundle` sent each operation (snapshot,
+per-setting update × N, widget-remove × M, widget-add × K) as its
+own WS message. The bridge's `_on_widget_command` spawns a worker
+thread per message — so all those mutations raced for the
+`config_lock` in non-deterministic order. Two symptoms users hit:
+
+- Pre-Look widgets sometimes survived the apply (the bundle's
+  widget-add fired before the previous widget-remove had finished).
+- The auto-snapshot to preset slot 1 sometimes captured POST-Look
+  state instead of PRE-Look (the snapshot thread won the lock
+  AFTER some setting-update threads had already mutated).
+
+v1.2.16 introduces a single `quick-look-apply` bridge command that
+wraps snapshot → non-widget settings → widget array replace in ONE
+`_mutate_screen` call under one lock acquire. No race.
+
+Also adds a sibling `widgets-set` command for any future code path
+that needs an atomic widget-array replace (preset apply, future
+import-bundle, etc.).
+
+### Fixed — "Load current background" 404 left bgImage stuck
+
+If a screen's `bgImage` referenced a file that no longer existed
+on disk (manual cleanup, OneDrive sync glitch, etc.), the Builder's
+"Load current background" tile-menu action hit a 404 on the
+`/image` proxy and surfaced "Loading current background failed:
+HTTP 404" — useful for diagnosis but not a fix. v1.2.16 detects the
+404 specifically, surfaces a clear "Background file no longer
+exists on disk — cleared the stale reference" toast, and POSTs
+`bgImage: ""` to the screen settings so the config self-heals.
+
+### Other
+
+- Bridge: `replace_widgets()` helper for the standalone
+  `widgets-set` command + the inline replacement inside
+  `quick_look_apply`. Each entry's id is server-assigned via the
+  per-screen `_widgetIdSeq` counter so client-side ID collisions
+  can't happen.
+- `quick_look_apply` skips `widgets` / `mirrorOf` / `cycle` from its
+  settings dict — `widgets` is handled by the same call's atomic
+  replace, the other two need their own special-case dispatch paths.
+
+---
+
 ## [1.2.15-beta] - 2026-05-26
 
 > v1.2.14 hotfix — Diagnose-Paket landete im falschen Ordner für
