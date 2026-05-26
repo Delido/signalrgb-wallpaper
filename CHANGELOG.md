@@ -4,6 +4,42 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.12-beta] - 2026-05-26
+
+> Quick Looks no longer overwrite the user's background, dead bg keys
+> dropped from every bundle, and the Gaming bundle's meters moved off
+> the off-screen x=1700 anchor.
+
+### Changed — Quick Looks keep the current background
+
+`applyLookBundle` now filters out `bgImage` / `bgImageUrl` / `bgFit` /
+`bgDim` / `bgTileScale` from the bundle's settings push. A bundle is
+a *look* — effects, glow, tile style, widget layout — not a
+wallpaper-swapper. Users who imported a custom background no longer
+lose it by trying a different Look. The matching keys were dropped
+from every bundle definition too so they don't show up as dead
+clutter in source.
+
+### Fixed — Gaming bundle meters were off-screen on sub-1920 setups
+
+CPU / RAM / hardware-sensor widgets used `x: 1700` which assumes a
+1920-wide monitor. On a 1280×720 screen the row would render
+entirely outside the visible area; on a portrait monitor it was
+hopelessly off-canvas. Moved to `x: 50` (top-left corner of the
+useable area) — users on wider screens can drag the row right via
+the unlock-and-edit flow; the bundle's job is to land somewhere
+visible on every screen.
+
+### Other
+
+- Cyberpunk Streamer bundle dropped its `bgImage:
+  "cyberpunk-skyline.png"` reference — there's no such file shipped
+  with the bridge, so the entry was always dead.
+- Bundle descriptions updated to drop "dark background" framing
+  since the bundles no longer touch the background.
+
+---
+
 ## [1.2.11-beta] - 2026-05-26
 
 > Tiny follow-up: Undo / Redo buttons surface in Simple mode again.

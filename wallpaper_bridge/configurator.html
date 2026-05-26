@@ -2146,10 +2146,10 @@ const LOOK_BUNDLES = [
     name: "Cyberpunk Streamer",
     desc: "Neon-cyan glow, constellation effect, glass widgets, big now-playing + minimal clock. Built for late-night streaming.",
     tint: "rgb(20, 220, 220)",
+    // v1.2.12: bg-related keys removed from all bundles. applyLookBundle
+    // skips them so the user's current wallpaper stays put; carrying
+    // dead keys here is just clutter.
     settings: {
-      bgImage:         "cyberpunk-skyline.png",
-      bgFit:           "cover",
-      bgDim:           25,
       glowStrength:    100,
       barLayout:       "lay-grid",
       showBars:        true,
@@ -2176,12 +2176,9 @@ const LOOK_BUNDLES = [
   {
     id: "minimal",
     name: "Minimal Productivity",
-    desc: "Dark background, no effects, just clock + calendar + sticky note. The wallpaper-disappears-and-you-just-see-content look.",
+    desc: "No effects, just clock + calendar + sticky note. The wallpaper-disappears-and-you-just-see-content look.",
     tint: "rgb(80, 80, 90)",
     settings: {
-      bgImage:         "",
-      bgFit:           "cover",
-      bgDim:           60,
       glowStrength:    30,
       showBars:        false,
       ambientEffect:   "off",
@@ -2201,12 +2198,9 @@ const LOOK_BUNDLES = [
   {
     id: "gaming",
     name: "Gaming",
-    desc: "Big hero wallpaper, vortex effect, only CPU/GPU/RAM meters small in the corner. Stays out of the way of the game.",
+    desc: "Vortex effect, only CPU/GPU/RAM meters in the corner. Stays out of the way of the game.",
     tint: "rgb(255, 80, 60)",
     settings: {
-      bgImage:         "",
-      bgFit:           "cover",
-      bgDim:           10,
       glowStrength:    100,
       barLayout:       "lay-grid",
       showBars:        true,
@@ -2217,12 +2211,16 @@ const LOOK_BUNDLES = [
       widgetTileStyle: "solid",
       parallax3d:      25,
     },
+    // v1.2.12: meters moved from x=1700 (1920px-assumption, off-screen
+    // on portrait or sub-FHD setups) to the top-left corner. Users on
+    // wider screens can drag them right via the unlock-and-edit flow;
+    // the bundle's job is to land somewhere visible on every screen.
     widgets: [
-      { type: "cpu-meter",   x: 1700, y:   50, w: 200, h: 90,
+      { type: "cpu-meter",        x:  50, y:  50, w: 200, h: 90,
         options: { tintFromGlow: true, showHeader: true, textScale: 0.75 } },
-      { type: "ram-meter",   x: 1700, y:  150, w: 200, h: 90,
+      { type: "ram-meter",        x:  50, y: 150, w: 200, h: 90,
         options: { tintFromGlow: true, showHeader: true, textScale: 0.75 } },
-      { type: "hardware-sensor", x: 1700, y:  250, w: 200, h: 90,
+      { type: "hardware-sensor",  x:  50, y: 250, w: 200, h: 90,
         options: { sensorPath: "", label: "GPU temp", decimals: 0,
                    tintFromGlow: true, showHeader: true, textScale: 0.75 } },
     ],
@@ -2230,12 +2228,9 @@ const LOOK_BUNDLES = [
   {
     id: "music",
     name: "Music Studio",
-    desc: "Dark background, full-screen audio-reactive waveform, big now-playing + audio-spectrum widget. Made for headphones-on producers.",
+    desc: "Full-screen audio-reactive waveform, big now-playing + audio-spectrum widget. Made for headphones-on producers.",
     tint: "rgb(140, 100, 255)",
     settings: {
-      bgImage:         "",
-      bgFit:           "cover",
-      bgDim:           40,
       glowStrength:    80,
       barLayout:       "lay-grid",
       showBars:        true,
@@ -2259,12 +2254,9 @@ const LOOK_BUNDLES = [
   {
     id: "holiday",
     name: "Holiday Vibes",
-    desc: "Snow + fireflies, warm-tinted dim wallpaper, just a clock. For end-of-year cozy mode.",
+    desc: "Snow + fireflies + just a clock. For end-of-year cozy mode.",
     tint: "rgb(220, 200, 100)",
     settings: {
-      bgImage:         "",
-      bgFit:           "cover",
-      bgDim:           20,
       glowStrength:    60,
       barLayout:       "lay-grid",
       showBars:        true,
@@ -2291,9 +2283,6 @@ const LOOK_BUNDLES = [
     desc: "Aurora ambient + RSS feed + clock + weather, glass tile shell. Drop-in dashboard for the always-on second monitor.",
     tint: "rgb(110, 200, 255)",
     settings: {
-      bgImage:         "",
-      bgFit:           "cover",
-      bgDim:           45,
       glowStrength:    50,
       barLayout:       "lay-grid",
       showBars:        true,
@@ -2320,12 +2309,9 @@ const LOOK_BUNDLES = [
   {
     id: "focus",
     name: "Focus Mode",
-    desc: "Pure black background, no effects, single big countdown + sticky note. For deep-work blocks where the wallpaper has to disappear.",
+    desc: "No effects, single big countdown + sticky note. For deep-work blocks where the wallpaper has to disappear.",
     tint: "rgb(180, 180, 180)",
     settings: {
-      bgImage:         "",
-      bgFit:           "cover",
-      bgDim:           90,
       glowStrength:    15,
       barLayout:       "lay-off",
       showBars:        false,
@@ -2370,12 +2356,19 @@ function renderLookBundles() {
 function applyLookBundle(bundle) {
   const screenLabel = "Screen " + (activeScreen + 1);
   const msg = t("looks.confirm", { name: bundle.name, screen: screenLabel })
-            || `Apply "${bundle.name}" to ${screenLabel}? This replaces background, effects, widget tile-style, and the widget layout. Existing widgets will be removed.`;
+            || `Apply "${bundle.name}" to ${screenLabel}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.`;
   if (!confirm(msg)) return;
 
   // 1. Push every setting in the bundle as a setting-update msg.
   //    Bridge persists each + broadcasts; wallpaper page repaints.
+  // v1.2.12: bgImage / bgFit / bgDim are deliberately NOT pushed —
+  // the user's current background should survive a Quick Look apply
+  // so picking a Look doesn't overwrite a wallpaper they just
+  // imported. Effects, glow, tile style, widget layout are what
+  // makes a "look" a look.
+  const SKIP_BG_KEYS = new Set(["bgImage", "bgImageUrl", "bgFit", "bgDim", "bgTileScale"]);
   for (const [key, value] of Object.entries(bundle.settings || {})) {
+    if (SKIP_BG_KEYS.has(key)) continue;
     sendCmd({ type: "setting-update", screen: activeScreen, key, value });
   }
 
