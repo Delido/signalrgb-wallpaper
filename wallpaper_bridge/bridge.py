@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.7-beta"
+APP_VERSION = "1.2.8-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -624,6 +624,21 @@ DEFAULT_SCREEN_SETTINGS = {
         "lastApplyMs": 0,
         "nextIdx":     0,
     },
+    # v1.2.8: Builder Monitor-Setup. Declares how the bridge-reported
+    # viewport actually splits into physical monitors so the Builder's
+    # Wall + composite-Apply use the right per-tile dimensions.
+    #   mode          "single" | "span-h" | "span-v"
+    #   orientations  per sub-tile, either "landscape" or "portrait".
+    #                 Length always matches mode's tile count (1 for
+    #                 single, 2 for span-h/-v). Portrait sub-tiles get
+    #                 a 90° CW rotation when composited into the bridge
+    #                 slot. Single mode is always landscape (no swap).
+    # Editable from the Configurator's screen-popover; Builder reads
+    # it via the WS settings push instead of its old localStorage copy.
+    "monitorSetup":    {
+        "mode":         "single",
+        "orientations": ["landscape"],
+    },
 }
 
 # Keys that get replicated to mirror screens. Per-screen physical
@@ -634,6 +649,11 @@ DEFAULT_SCREEN_SETTINGS = {
 # bgImage change through the existing replication path.
 _NON_MIRRORED_KEYS = frozenset({
     "viewportW", "viewportH", "mirrorOf", "presets", "cycle",
+    # monitorSetup describes the *physical* monitor layout per bridge
+    # screen — it's a property of the user's hardware, not a display
+    # setting. Mirroring would copy the source's span declaration onto
+    # the mirror, which has its own physical wiring.
+    "monitorSetup",
 })
 
 # Keys that get rolled up into a preset snapshot. Excludes anything the
@@ -4065,7 +4085,37 @@ class BridgeRuntime:
         # the configurator can send just `enabled` or `intervalMin`
         # without resetting `lastApplyMs`/`nextIdx`.
         "cycle",
+        # v1.2.8: Builder Monitor-Setup. Sanitised in the setter below
+        # so a malformed payload can't poison the config.
+        "monitorSetup",
     }
+
+    @staticmethod
+    def _sanitise_monitor_setup(value):
+        """Coerce a Configurator-sent monitorSetup payload into the
+        known shape {mode, orientations[]}. Unknown modes fall back
+        to "single"; orientations are clipped to the tile count and
+        normalised to landscape unless explicitly "portrait"."""
+        if not isinstance(value, dict):
+            return {"mode": "single", "orientations": ["landscape"]}
+        mode = value.get("mode")
+        if mode not in ("single", "span-h", "span-v"):
+            mode = "single"
+        tile_count = 1 if mode == "single" else 2
+        raw = value.get("orientations")
+        out = []
+        if isinstance(raw, list):
+            for item in raw:
+                out.append("portrait" if item == "portrait" else "landscape")
+        # Pad / clip to the mode's tile count.
+        while len(out) < tile_count:
+            out.append("landscape")
+        out = out[:tile_count]
+        # Single mode never carries a portrait flag — the tile IS the
+        # bridge's reported viewport, no rotation applies.
+        if mode == "single":
+            out = ["landscape"]
+        return {"mode": mode, "orientations": out}
 
     def _get_mirrors_of(self, source: int) -> list[int]:
         """Return every screen index whose `mirrorOf` currently points
@@ -4109,6 +4159,11 @@ class BridgeRuntime:
         if self._is_mirror(screen):
             print(f"[settings] screen {screen} is a mirror; ignoring {key!r}")
             return None
+        # monitorSetup gets sanitised before persisting so a malformed
+        # payload (wrong mode string, wrong orientation list length)
+        # can't poison the config or break the Builder reading it back.
+        if key == "monitorSetup":
+            value = self._sanitise_monitor_setup(value)
         def mutate(s):
             s[key] = value
         snap = self._mutate_screen(screen, mutate)

@@ -781,6 +781,22 @@
     line-height: 1;
     min-width: 26px;
   }
+  /* v1.2.8: read-only summary chip — replaces the inline editor since
+     monitorSetup is bridge-owned and edited from the Configurator. */
+  .monitor-setup-row .ms-summary {
+    flex: 1 1 auto;
+    font-size: 12px;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+  .ms-edit-link {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .ms-edit-link:hover { text-decoration: underline; }
 
   /* ── v1.2.4: Editing-Slot banner ──
      Sits above the canvas toolbar while a wall slot is being edited
@@ -1632,6 +1648,10 @@ const TRANSLATIONS = {
                           de: "2 Monitore — horizontaler Span" },
   "setup.mode.span_v":  { en: "2 monitors — vertical span",
                           de: "2 Monitore — vertikaler Span" },
+  "setup.edit_in_configurator": {
+    en: "→ Edit the layout in the Configurator's screen settings popover",
+    de: "→ Aufbau im Configurator über das Bildschirm-Einstellungen-Popover ändern",
+  },
   "wall.applied_summary_line": {
     en: "Screen {n} ({w}×{h}) ← {tiles}/{total} tile(s)",
     de: "Screen {n} ({w}×{h}) ← {tiles}/{total} Kachel(n)",
@@ -1648,6 +1668,12 @@ const TRANSLATIONS = {
   "wall.menu.file":     { en: "Choose file…",       de: "Datei wählen…" },
   "wall.menu.library":  { en: "From library…",      de: "Aus Bibliothek…" },
   "wall.menu.canvas":   { en: "Use current canvas", de: "Aktuelle Leinwand nutzen" },
+  "wall.menu.currentbg":{ en: "Load this screen's current background",
+                          de: "Aktuelles Hintergrundbild dieses Screens laden" },
+  "wall.currentbg.none":   { en: "No current background on this screen.",
+                             de: "Auf diesem Screen ist kein aktuelles Hintergrundbild gesetzt." },
+  "wall.currentbg.failed": { en: "Loading current background failed: {msg}",
+                             de: "Laden des aktuellen Hintergrunds fehlgeschlagen: {msg}" },
   "wall.menu.edit":     { en: "Edit in main canvas", de: "Im Haupteditor öffnen" },
   "wall.menu.clear":    { en: "Clear",              de: "Leeren" },
   // v1.2.4 — per-slot in-place edit flow
@@ -4006,20 +4032,14 @@ let bridgeScreenCount = 1;    // = bridgeScreens.length
 try { localStorage.removeItem("signalrgb.builder.wall_screen_count"); }
 catch (_) {}
 
-// v1.2.5: monitorSetup persistence
+// v1.2.8: monitorSetup is bridge-owned now (per-screen field in
+// bridge config, edited from the Configurator's screen popover). We
+// no longer write it from here — loadWallViewports pulls the live
+// value from /config. The old localStorage key is wiped on startup
+// so stale state from v1.2.5-1.2.7 doesn't shadow the bridge value.
 const MONITOR_SETUP_KEY = "signalrgb.builder.monitor_setup";
-function loadMonitorSetup() {
-  try {
-    const raw = localStorage.getItem(MONITOR_SETUP_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) { return []; }
-}
-function saveMonitorSetup() {
-  try { localStorage.setItem(MONITOR_SETUP_KEY, JSON.stringify(monitorSetup)); }
-  catch (_) {}
-}
+try { localStorage.removeItem(MONITOR_SETUP_KEY); } catch (_) {}
+function saveMonitorSetup() { /* no-op since v1.2.8 */ }
 
 // Build the flat wallScreens (= tile descriptors) from bridgeScreens
 // + monitorSetup. One bridge screen produces one or two tiles
@@ -4106,12 +4126,22 @@ async function loadWallViewports() {
         bgImage:   String(s.bgImage || ""),
       });
     }
-    // Reconcile monitorSetup length with bridgeScreens. Existing entries
-    // beyond the new count are dropped; missing entries default to "single".
-    monitorSetup = loadMonitorSetup();
-    while (monitorSetup.length < bridgeScreenCount) monitorSetup.push({ mode: "single" });
-    monitorSetup.length = bridgeScreenCount;
-    saveMonitorSetup();
+    // v1.2.8: pull monitorSetup directly from /config — single source
+    // of truth lives in bridge.config["screens"][i]["monitorSetup"],
+    // edited via the Configurator's screen-popover. The Builder is
+    // read-only for this field now (it'd otherwise race with the
+    // Configurator over who owns the value).
+    monitorSetup = [];
+    for (let i = 0; i < bridgeScreenCount; i++) {
+      const s = arr[i] || {};
+      const ms = (s && typeof s.monitorSetup === "object" && s.monitorSetup)
+        ? s.monitorSetup
+        : { mode: "single", orientations: ["landscape"] };
+      monitorSetup.push({
+        mode: ms.mode || "single",
+        orientations: Array.isArray(ms.orientations) ? ms.orientations.slice() : ["landscape"],
+      });
+    }
 
     rebuildWallScreens();
   } catch (_) { /* keep current state */ }
@@ -4121,13 +4151,16 @@ async function loadWallViewports() {
 
 // Render the per-bridge-screen mode-picker row list. Tile preview
 // next to each picker visually confirms what mode will produce.
+// v1.2.8: read-only summary. Edit happens in the Configurator's
+// screen-popover; the Builder just shows the current setup + a link.
 function renderMonitorSetup() {
   const host = document.getElementById("monitor-setup-list");
   if (!host) return;
   host.innerHTML = "";
   for (let i = 0; i < bridgeScreens.length; i++) {
     const bs   = bridgeScreens[i];
-    const mode = (monitorSetup[i] && monitorSetup[i].mode) || "single";
+    const setup = monitorSetup[i] || { mode: "single", orientations: ["landscape"] };
+    const mode  = setup.mode || "single";
     const row = document.createElement("div");
     row.className = "monitor-setup-row";
 
@@ -4141,80 +4174,20 @@ function renderMonitorSetup() {
     resLbl.textContent = bs.reportedW + " × " + bs.reportedH;
     row.appendChild(resLbl);
 
-    const sel = document.createElement("select");
-    for (const opt of [
-      { v: "single", k: "setup.mode.single"  },
-      { v: "span-h", k: "setup.mode.span_h"  },
-      { v: "span-v", k: "setup.mode.span_v"  },
-    ]) {
-      const o = document.createElement("option");
-      o.value = opt.v; o.textContent = t(opt.k);
-      sel.appendChild(o);
+    // Mode summary (read-only chip). Adds the orientation chips for
+    // span modes so the user can verify the layout at a glance.
+    const summary = document.createElement("span");
+    summary.className = "ms-summary";
+    let summaryText = t("setup.mode." + mode.replace("-", "_"));
+    if (mode !== "single" && Array.isArray(setup.orientations)) {
+      const tags = setup.orientations.map((o) =>
+        (o === "portrait") ? t("setup.orient.portrait_short") : t("setup.orient.landscape_short"));
+      summaryText += " " + tags.join(" ");
     }
-    sel.value = mode;
-    sel.addEventListener("change", () => {
-      const newMode = sel.value;
-      const prev = monitorSetup[i] || {};
-      // Preserve existing orientations between span modes; reset on
-      // single mode because single has no rotation semantics (the
-      // bridge already reports the actual screen orientation as part
-      // of its viewport size).
-      let orient;
-      if (newMode === "single") {
-        orient = ["landscape"];
-      } else {
-        orient = Array.isArray(prev.orientations) ? prev.orientations.slice() : [];
-        while (orient.length < 2) orient.push("landscape");
-        orient.length = 2;
-      }
-      monitorSetup[i] = { mode: newMode, orientations: orient };
-      saveMonitorSetup();
-      rebuildWallScreens();
-      renderMonitorSetup();
-      renderWall();
-      updateWallApplyState();
-    });
-    row.appendChild(sel);
+    summary.textContent = summaryText;
+    row.appendChild(summary);
 
-    // v1.2.6: per-sub-tile orientation toggles. Only meaningful when
-    // a setup has > 1 tile, so the single-mode row hides them. Each
-    // button cycles landscape ↔ portrait for that sub-tile; portrait
-    // tiles get a 90° CW rotation at composite time.
-    // Skipped in custom mode — that mode has per-tile orientation
-    // built into the tile-row editor below.
-    const tileCount = (mode === "single") ? 1 : 2;
-    if (tileCount > 1 && mode !== "custom") {
-      const orientBox = document.createElement("div");
-      orientBox.className = "ms-orient";
-      orientBox.style.display = "flex";
-      orientBox.style.gap = "3px";
-      for (let sub = 0; sub < tileCount; sub++) {
-        const orient = _tileOrientation(monitorSetup[i], sub);
-        const ob = document.createElement("button");
-        ob.type = "button";
-        ob.className = "btn ms-orient-btn";
-        ob.title = t("setup.orient.title", { n: sub + 1 });
-        ob.textContent = (orient === "portrait")
-          ? t("setup.orient.portrait_short")
-          : t("setup.orient.landscape_short");
-        ob.addEventListener("click", () => {
-          const cur = monitorSetup[i] || { mode };
-          const orientations = Array.isArray(cur.orientations) ? cur.orientations.slice() : [];
-          while (orientations.length < tileCount) orientations.push("landscape");
-          orientations[sub] = (orientations[sub] === "portrait") ? "landscape" : "portrait";
-          monitorSetup[i] = { mode: cur.mode || mode, orientations };
-          saveMonitorSetup();
-          rebuildWallScreens();
-          renderMonitorSetup();
-          renderWall();
-        });
-        orientBox.appendChild(ob);
-      }
-      row.appendChild(orientBox);
-    }
-
-    // Tile preview — 1 box for single, 2 split for span. Keeps a
-    // fixed 36×18 footprint so the row height doesn't jump on mode change.
+    // Tile preview — visual confirmation of the split.
     const preview = document.createElement("div");
     preview.className = "ms-preview";
     if (mode === "span-h") {
@@ -4234,6 +4207,19 @@ function renderMonitorSetup() {
     row.appendChild(preview);
 
     host.appendChild(row);
+  }
+
+  // Edit-in-Configurator link below the rows — opens the Configurator
+  // in a new tab where the user can change the mode + orientation via
+  // the screen-popover.
+  if (bridgeScreens.length > 0) {
+    const editLink = document.createElement("a");
+    editLink.className = "ms-edit-link";
+    editLink.href = "/configurator";
+    editLink.target = "_blank";
+    editLink.rel = "noopener";
+    editLink.textContent = t("setup.edit_in_configurator");
+    host.appendChild(editLink);
   }
 }
 
@@ -4395,6 +4381,14 @@ function _buildWallMenu() {
     '<button type="button" data-action="canvas">' +
       '<span class="icon">🖼️</span>' +
       '<span data-i18n="wall.menu.canvas"></span></button>' +
+    // v1.2.8: load the bridge screen's currently-applied background
+    // straight into the slot, ready for further edits. Useful for
+    // "tweak what's already on-screen" — was previously a manual
+    // chain of (open file picker → navigate to screens dir → pick
+    // file) that most users wouldn't think to try.
+    '<button type="button" data-action="currentbg">' +
+      '<span class="icon">🪞</span>' +
+      '<span data-i18n="wall.menu.currentbg"></span></button>' +
     // v1.2.4: per-tile in-place editing. "Edit" loads the slot's
     // current image into the main Builder canvas + arms the
     // "Save → Slot N" CTA. All existing tools (color, auto-cut,
@@ -4416,11 +4410,12 @@ function _buildWallMenu() {
     const idx = _wallMenuIdx;
     _closeWallMenu();
     if (idx < 0) return;
-    if      (action === "file")    triggerWallFilePick(idx);
-    else if (action === "library") openLibraryDialog((it) => loadWallSlotFromLibrary(idx, it.file));
-    else if (action === "canvas")  loadWallSlotFromCurrentCanvas(idx);
-    else if (action === "edit")    editWallSlot(idx);
-    else if (action === "clear")   clearWallSlot(idx);
+    if      (action === "file")      triggerWallFilePick(idx);
+    else if (action === "library")   openLibraryDialog((it) => loadWallSlotFromLibrary(idx, it.file));
+    else if (action === "canvas")    loadWallSlotFromCurrentCanvas(idx);
+    else if (action === "currentbg") loadWallSlotFromCurrentBackground(idx);
+    else if (action === "edit")      editWallSlot(idx);
+    else if (action === "clear")     clearWallSlot(idx);
   });
   _wallMenuEl = el;
   return el;
@@ -4442,9 +4437,19 @@ async function editWallSlot(idx) {
   }
   try {
     _editingWallSlot = idx;
+    // v1.2.8: edit canvas matches the TARGET monitor's resolution so
+    // pixel-accurate edits map 1:1 to the physical monitor. If the
+    // loaded image's aspect ratio doesn't match, we contain-fit it
+    // (centred, no upscale) leaving the unfilled area transparent —
+    // user can then reposition / paint to taste. Saving back via
+    // loadWallSlotFromCurrentCanvas captures the target-sized result.
+    const tile  = wallScreens[idx] || {};
+    const tgtW  = Math.max(1, parseInt(tile.w, 10) || (slot.img.naturalWidth  || slot.img.width));
+    const tgtH  = Math.max(1, parseInt(tile.h, 10) || (slot.img.naturalHeight || slot.img.height));
+    const fitted = _imageOnTargetCanvas(slot.img, tgtW, tgtH);
     applySourceImage(
-      (slot.name || ("slot-" + (idx + 1))) + " (Slot " + (idx + 1) + ")",
-      slot.img
+      (slot.name || ("slot-" + (idx + 1))) + " (Slot " + (idx + 1) + " · " + tgtW + "×" + tgtH + ")",
+      fitted
     );
     _renderEditingSlotBanner();
     toast(t("wall.editing", { n: idx + 1 }), "good");
@@ -4453,6 +4458,30 @@ async function editWallSlot(idx) {
     _renderEditingSlotBanner();
     toast(t("toast.decode_failed", { name: slot.name || "slot" }), "bad");
   }
+}
+
+// Build a target-W×H canvas, draw `img` inside it with `contain` fit
+// (centred, no upscale). Returns the canvas so callers can hand it to
+// applySourceImage like any other source image. Letterbox stays
+// transparent — the wallpaper page's alpha pipeline handles that as
+// the background showing through.
+function _imageOnTargetCanvas(img, tgtW, tgtH) {
+  const c = document.createElement("canvas");
+  c.width = tgtW; c.height = tgtH;
+  const ctx2 = c.getContext("2d");
+  const iw = img.naturalWidth  || img.width;
+  const ih = img.naturalHeight || img.height;
+  if (!iw || !ih) return c;
+  // contain fit: scale by min(targetW/imgW, targetH/imgH); never
+  // upscale past 1:1 because upscaling an under-res source just
+  // bakes blur into the wallpaper.
+  const scale = Math.min(tgtW / iw, tgtH / ih, 1);
+  const drawW = Math.round(iw * scale);
+  const drawH = Math.round(ih * scale);
+  const dx    = Math.round((tgtW - drawW) / 2);
+  const dy    = Math.round((tgtH - drawH) / 2);
+  ctx2.drawImage(img, dx, dy, drawW, drawH);
+  return c;
 }
 
 async function saveEditingSlot() {
@@ -4513,9 +4542,10 @@ function showWallFrameMenu(idx, frame) {
   // Refresh per-open labels (i18n may have changed).
   el.querySelector('[data-action="file"]    span:last-child').textContent = t("wall.menu.file");
   el.querySelector('[data-action="library"] span:last-child').textContent = t("wall.menu.library");
-  el.querySelector('[data-action="canvas"]  span:last-child').textContent = t("wall.menu.canvas");
-  el.querySelector('[data-action="edit"]    span:last-child').textContent = t("wall.menu.edit");
-  el.querySelector('[data-action="clear"]   span:last-child').textContent = t("wall.menu.clear");
+  el.querySelector('[data-action="canvas"]    span:last-child').textContent = t("wall.menu.canvas");
+  el.querySelector('[data-action="currentbg"] span:last-child').textContent = t("wall.menu.currentbg");
+  el.querySelector('[data-action="edit"]      span:last-child').textContent = t("wall.menu.edit");
+  el.querySelector('[data-action="clear"]     span:last-child').textContent = t("wall.menu.clear");
   // Edit is only meaningful when the slot has an image to operate on;
   // disable it otherwise so the user isn't tempted into the "slot is
   // empty" toast path.
@@ -4524,6 +4554,13 @@ function showWallFrameMenu(idx, frame) {
   // nothing is staged.
   el.querySelector('[data-action="canvas"]').disabled = !originalData;
   el.querySelector('[data-action="clear"]').disabled  = !wallSlots[idx];
+  // currentbg: enabled only when the bridge screen owning this tile
+  // actually has a current background to load.
+  const ownerBridgeIdx = wallScreens[_wallMenuIdx] && wallScreens[_wallMenuIdx].bridgeIdx;
+  const hasCurrent = (typeof ownerBridgeIdx === "number")
+    && bridgeScreens[ownerBridgeIdx]
+    && bridgeScreens[ownerBridgeIdx].bgImage;
+  el.querySelector('[data-action="currentbg"]').disabled = !hasCurrent;
 
   el.classList.add("show");
   // Position: prefer below + left-aligned with the frame. Clamp to
@@ -4577,6 +4614,39 @@ async function loadWallSlotFromCurrentCanvas(idx) {
 function clearWallSlot(idx) {
   wallSlots[idx] = null;
   renderWall();
+}
+
+// v1.2.8: load the bridge screen's currently-applied background image
+// into the slot, ready for further edits. Useful for "I want to tweak
+// what's already on-screen" without round-tripping through the file
+// system. The bridge stores the bgImage as a relative or absolute path
+// — we route it through the same /image proxy the wall-frame preview
+// uses so paths outside the wallpaper-page origin work too.
+async function loadWallSlotFromCurrentBackground(idx) {
+  const tile = wallScreens[idx];
+  if (!tile) return;
+  const owner = bridgeScreens[tile.bridgeIdx];
+  if (!owner || !owner.bgImage) {
+    toast(t("wall.currentbg.none"), "bad");
+    return;
+  }
+  try {
+    const url  = currentBgUrl(owner.bgImage);
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const blob    = await resp.blob();
+    const img     = await fileToImage(blob);
+    const dataUrl = await blobToDataUrl(blob);
+    const name = (String(owner.bgImage).split(/[\\/]/).pop() || "current");
+    wallSlots[idx] = { img, name, blob, dataUrl, source: "currentbg" };
+    renderWall();
+    // Drop the user straight into the edit flow, matching the
+    // empty-tile + file-pick UX.
+    editWallSlot(idx);
+  } catch (e) {
+    console.warn("[wall] currentbg load failed:", e);
+    toast(t("wall.currentbg.failed", { msg: e.message || String(e) }), "bad");
+  }
 }
 
 // Slice the current canvas into one chunk per screen, sized
@@ -4824,10 +4894,13 @@ async function applyWall() {
   }
 
   let ok = 0, fail = null, total = 0;
+  const perBridgeStatus = [];   // [{n, status: "ok"|"fail", err?}]
   for (const [bridgeIdx, tileIndices] of byBridge.entries()) {
     // Skip bridge screens whose every tile is empty — nothing to push.
     if (!tileIndices.some((i) => wallSlots[i])) continue;
     total++;
+    console.log("[wall.apply] bridge=" + bridgeIdx,
+      "tiles=" + tileIndices.filter((i) => wallSlots[i]).length + "/" + tileIndices.length);
     try {
       const first = wallScreens[tileIndices[0]];
       const composite = document.createElement("canvas");
@@ -4863,14 +4936,37 @@ async function applyWall() {
         }
       }
       const pngBlob = await new Promise((res) => composite.toBlob(res, "image/png"));
+      console.log("[wall.apply] POST /screen/" + bridgeIdx + "/background",
+        "bytes=" + pngBlob.size, "dim=" + composite.width + "x" + composite.height);
       const r = await fetch("/screen/" + bridgeIdx + "/background", {
         method: "POST",
         headers: { "Content-Type": "image/png" },
         body: pngBlob,
       });
       if (!r.ok) throw new Error("HTTP " + r.status);
+      // v1.2.8: actually inspect the bridge's {"ok":bool} body so a
+      // backend-side failure (mirror block, file write error) doesn't
+      // silently look like success. The bridge always responds 200 OK
+      // for malformed-but-handleable inputs, so HTTP status alone
+      // isn't enough.
+      let body = null;
+      try { body = await r.json(); }
+      catch (_) { /* tolerate empty / non-JSON */ }
+      if (body && body.ok === false) {
+        throw new Error("bridge declined background update");
+      }
       ok++;
+      perBridgeStatus.push({ n: bridgeIdx + 1, status: "ok" });
+      console.log("[wall.apply] bridge=" + bridgeIdx + " ok");
+      // Tiny pause between consecutive POSTs so the bridge can finish
+      // its file-write + push-settings cycle before the next composite
+      // arrives. Pure paranoia — the bridge serializes on its own
+      // event loop — but cheap insurance against perceived "didn't
+      // apply" on the second screen.
+      await new Promise((res) => setTimeout(res, 60));
     } catch (e) {
+      console.warn("[wall.apply] bridge=" + bridgeIdx + " failed:", e);
+      perBridgeStatus.push({ n: bridgeIdx + 1, status: "fail", err: e.message || String(e) });
       if (!fail) fail = e;
     }
   }

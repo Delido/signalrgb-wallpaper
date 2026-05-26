@@ -395,6 +395,28 @@
     cursor: pointer;
     transition: color 0.12s, background 0.12s, border-color 0.12s;
   }
+  #screen-popover .ms-orient-pop {
+    display: inline-flex; gap: 4px;
+  }
+  #screen-popover .ms-orient-pop button {
+    padding: 3px 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit; font-size: 14px;
+    line-height: 1;
+    min-width: 30px;
+  }
+  #screen-popover .ms-orient-pop button:hover {
+    border-color: #3a6ba8;
+  }
+  #screen-popover .ms-orient-pop button.portrait {
+    background: var(--accent-bg);
+    color: #d8e6fc;
+    border-color: #3a6ba8;
+  }
   #screen-popover .btn-reset:hover {
     color: #ffbcbc; background: rgba(180,50,50,0.15); border-color: #6a2828;
   }
@@ -1133,6 +1155,29 @@
     Independent — this screen has its own settings.
   </div>
   <div class="pop-divider"></div>
+  <!-- v1.2.8: Monitor-Setup picker. Declares whether this screen's
+       reported viewport is a single physical monitor or a span of
+       two (horizontal / vertical). The Builder reads this back via
+       the WS settings push so its Wall tiles + composite-Apply use
+       the right per-tile dimensions. Per-sub-tile orientation chips
+       appear when a span mode is picked. -->
+  <div class="pop-row">
+    <span class="lbl" data-i18n="setup.label">Layout</span>
+    <select id="screen-popover-setup-mode">
+      <option value="single" data-i18n="setup.mode.single">1 monitor</option>
+      <option value="span-h" data-i18n="setup.mode.span_h">2 — H span</option>
+      <option value="span-v" data-i18n="setup.mode.span_v">2 — V span</option>
+    </select>
+  </div>
+  <div class="pop-row" id="screen-popover-orient-row" style="display: none;">
+    <span class="lbl" data-i18n="setup.orient.label">Orientation</span>
+    <div class="ms-orient-pop" id="screen-popover-orient"></div>
+  </div>
+  <div class="pop-hint" data-i18n="setup.popover_hint">
+    Used by the Builder's Monitor Wall — declare a span if the
+    bridge viewport actually covers more than one physical monitor.
+  </div>
+  <div class="pop-divider"></div>
   <button class="btn-reset" id="screen-popover-reset" type="button"
           data-i18n="reset_screen.label">Reset this screen…</button>
 </div>
@@ -1648,8 +1693,23 @@ const TRANSLATIONS = {
                               de: "Beta-Releases einschließen" },
   "system.check_now":       { en: "Check now",            de: "Jetzt prüfen" },
   "system.open_release":    { en: "Open releases page",   de: "Releases-Seite öffnen" },
-  "screen_popover.trigger_title": { en: "Screen settings (mirror, reset)",
-                              de: "Bildschirm-Einstellungen (Spiegeln, Zurücksetzen)" },
+  "screen_popover.trigger_title": { en: "Screen settings (mirror, layout, reset)",
+                              de: "Bildschirm-Einstellungen (Spiegeln, Layout, Zurücksetzen)" },
+  "setup.label":            { en: "Layout",                de: "Aufbau" },
+  "setup.mode.single":      { en: "1 monitor",             de: "1 Monitor" },
+  "setup.mode.span_h":      { en: "2 — H span",            de: "2 — H-Span" },
+  "setup.mode.span_v":      { en: "2 — V span",            de: "2 — V-Span" },
+  "setup.orient.label":     { en: "Orientation",           de: "Ausrichtung" },
+  "setup.orient.landscape_short": { en: "▭", de: "▭" },
+  "setup.orient.portrait_short":  { en: "▯", de: "▯" },
+  "setup.orient.title": {
+    en: "Sub-tile {n} — click to toggle landscape / portrait",
+    de: "Unter-Kachel {n} — Klick wechselt Quer-/Hochformat",
+  },
+  "setup.popover_hint": {
+    en: "Used by the Builder's Monitor Wall — declare a span if the bridge viewport actually covers more than one physical monitor.",
+    de: "Wird von der Monitor-Wand im Builder genutzt — Span deklarieren wenn das Bridge-Viewport tatsächlich mehrere physische Monitore abdeckt.",
+  },
   "section.profiles":       { en: "Per-app profiles",     de: "Pro-App-Profile" },
   "profiles.hint":          { en: "When a matching .exe is focused, swap the chosen screen's preset slot automatically. Reverts to the previous state when the foreground changes away. One rule active at a time — order in the list = priority on conflict.",
                               de: "Wenn eine passende .exe im Vordergrund ist, wird der gewählte Preset-Slot automatisch angewendet. Beim Wechsel weg von der App wird der vorherige Zustand wiederhergestellt. Es ist immer nur eine Regel aktiv — die Reihenfolge in der Liste ist die Priorität bei Konflikten." },
@@ -3636,7 +3696,75 @@ function showScreenPopover() {
   popoverEl.classList.add("show");
   // Re-render before showing so the dropdown matches current state.
   renderMirrorBar();
+  renderMonitorSetupPopover();
 }
+
+// v1.2.8: Monitor-Setup popover renderer. Pulls from settings.monitorSetup
+// (per-screen, written by the bridge in its WS settings push) and renders
+// the mode select + per-sub-tile orientation chips. Edits write back via
+// setSetting("monitorSetup", ...) — the bridge persists, sanitises, and
+// echoes the change to every connected client (Configurator + Builder).
+function renderMonitorSetupPopover() {
+  const modeSel  = document.getElementById("screen-popover-setup-mode");
+  const orientRow = document.getElementById("screen-popover-orient-row");
+  const orientBox = document.getElementById("screen-popover-orient");
+  if (!modeSel || !orientRow || !orientBox) return;
+  const setup = (settings && settings.monitorSetup) || { mode: "single", orientations: ["landscape"] };
+  modeSel.value = setup.mode || "single";
+  // Orientation chips only meaningful when there's > 1 sub-tile.
+  if (modeSel.value === "single") {
+    orientRow.style.display = "none";
+    return;
+  }
+  orientRow.style.display = "";
+  const orientations = Array.isArray(setup.orientations)
+    ? setup.orientations.slice() : [];
+  while (orientations.length < 2) orientations.push("landscape");
+  orientBox.innerHTML = "";
+  for (let sub = 0; sub < 2; sub++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = (orientations[sub] === "portrait") ? "portrait" : "";
+    btn.title = t("setup.orient.title", { n: sub + 1 });
+    btn.textContent = (orientations[sub] === "portrait")
+      ? t("setup.orient.portrait_short")
+      : t("setup.orient.landscape_short");
+    btn.addEventListener("click", () => {
+      const cur = (settings && settings.monitorSetup) || {};
+      const ors = Array.isArray(cur.orientations) ? cur.orientations.slice() : [];
+      while (ors.length < 2) ors.push("landscape");
+      ors[sub] = (ors[sub] === "portrait") ? "landscape" : "portrait";
+      setSetting("monitorSetup", { mode: cur.mode || modeSel.value, orientations: ors });
+      // Optimistic re-render — the WS echo will refresh again on arrival.
+      renderMonitorSetupPopover();
+    });
+    orientBox.appendChild(btn);
+  }
+}
+
+// Mode select listener — fires once on first popover open.
+(function bindMonitorSetupModeSelect() {
+  const modeSel = document.getElementById("screen-popover-setup-mode");
+  if (!modeSel) return;
+  modeSel.addEventListener("change", () => {
+    const newMode = modeSel.value;
+    // Preserve existing orientations across mode toggles; reset on
+    // single mode (the bridge sanitiser would coerce it to landscape
+    // anyway, but doing it here means the optimistic re-render shows
+    // the right state immediately).
+    let ors;
+    if (newMode === "single") {
+      ors = ["landscape"];
+    } else {
+      const cur = (settings && settings.monitorSetup) || {};
+      ors = Array.isArray(cur.orientations) ? cur.orientations.slice() : [];
+      while (ors.length < 2) ors.push("landscape");
+      ors.length = 2;
+    }
+    setSetting("monitorSetup", { mode: newMode, orientations: ors });
+    renderMonitorSetupPopover();
+  });
+})();
 function hideScreenPopover() {
   if (popoverEl) popoverEl.classList.remove("show");
 }

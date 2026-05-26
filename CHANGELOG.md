@@ -4,6 +4,90 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.8-beta] - 2026-05-26
+
+> Monitor-Setup moves to the bridge config — single source of truth
+> shared between Configurator + Builder. Builder edit canvas now sizes
+> to the target monitor's resolution so under-sized images can be
+> positioned with intent. New tile-menu entry pulls the screen's
+> currently-applied background into a slot for tweaking. Plus a fix
+> for the silent Apply failures on the 2nd bridge screen.
+
+### Added — Monitor-Setup persists in bridge config
+
+The per-screen `monitorSetup = {mode, orientations[]}` field moves
+from Builder's localStorage into `bridge.config["screens"][N]
+["monitorSetup"]`. Bridge sanitises every incoming payload (unknown
+modes coerce to `single`, orientations clipped to tile-count,
+single-mode forced to `landscape`). Mirror-screens skip the
+replication because monitorSetup describes physical hardware, not
+display config.
+
+### Added — Monitor-Setup picker in the Configurator screen-popover
+
+Per-screen layout + orientation now editable from the same popover
+that hosts Mirror and Reset. Mode select (`1 monitor` / `2 H span` /
+`2 V span`) plus a ▭/▯ chip per sub-tile when a span mode is
+picked. Writes go through `setting-update` like every other per-
+screen field, so every connected client (Configurator + Builder)
+re-renders on the WS echo.
+
+### Changed — Builder Monitor-Setup section is now read-only
+
+The Builder's Monitor-Setup rows render the active mode +
+orientation summary + a tile preview, but the inline editors are
+gone. A "→ Edit the layout in the Configurator's screen settings
+popover" link points users to the canonical editor so two clients
+can't race on writes. The old `signalrgb.builder.monitor_setup`
+localStorage key is wiped on first v1.2.8 load.
+
+### Added — "Load this screen's current background" tile menu entry
+
+New row in the wall-tile right-click menu. Fetches the bridge
+screen's currently-applied `bgImage` via the existing `/image`
+proxy, drops it into the slot, and opens it in the in-place edit
+flow. Disabled when the screen has no current background.
+Replaces the manual "open file picker → navigate to screens dir
+→ pick file" chain users wouldn't think to try.
+
+### Added — Edit canvas matches target monitor resolution
+
+`editWallSlot()` now opens the Builder canvas at the tile's
+target W×H (with portrait swap if applicable). Under-sized images
+are contain-fitted into the canvas (centred, no upscale,
+transparent letterbox) so pixel-accurate edits map 1:1 to the
+physical monitor. The user sees their image with the correct
+target aspect ratio + has room to reposition / paint around it
+via the existing brushes.
+
+### Fixed — Apply silently dropped on the 2nd bridge screen
+
+The Builder's `applyWall` checked HTTP status only. The bridge
+always responds 200 OK even when the actual file write failed
+(mirror block, lock contention, disk error) — it just sets
+`ok:false` in the JSON body. v1.2.8 parses that body and treats
+`ok:false` as a per-bridge failure with a clear error in the
+toast + console.log. Adds a 60 ms breather between consecutive
+POSTs as insurance against any timing weirdness on the bridge
+side. Per-bridge status is now logged to the browser console for
+easier diagnosis.
+
+### Other
+
+- New i18n keys: `setup.label`, `setup.popover_hint`,
+  `setup.orient.label`, `setup.edit_in_configurator`,
+  `wall.menu.currentbg`, `wall.currentbg.none`,
+  `wall.currentbg.failed`.
+- `_NON_MIRRORED_KEYS` extended with `monitorSetup` so mirrors keep
+  their own physical-layout declaration.
+- `_sanitise_monitor_setup()` validates incoming payloads end-to-
+  end so a malformed Configurator send can't poison the persisted
+  config.
+- `wall.menu.currentbg` button disables when the owning bridge
+  screen has no current background.
+
+---
+
 ## [1.2.7-beta] - 2026-05-26
 
 > Builder Monitor-Setup cleanup pass. Fixes the bug where a stuck
