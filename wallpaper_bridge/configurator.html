@@ -81,6 +81,41 @@
     border-color: var(--border);
   }
   .tab.inactive { display: none; }
+  .tab .tab-text { display: inline; }
+  /* v1.2.10: per-tab settings gear — sibling to .tab so each monitor
+     has its own clearly-belonging settings entry instead of one
+     shared trigger. */
+  .tab-gear {
+    margin-left: -2px; margin-right: 2px;
+    margin-bottom: 6px;
+    width: 24px; height: 28px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+  }
+  .tab-gear:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+    border-color: var(--border);
+  }
+  .tab-gear svg {
+    width: 14px; height: 14px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .tab-gear.inactive { display: none; }
+  .tab-gear.active {
+    color: #d8e6fc;
+    background: var(--accent-bg);
+    border-color: #3a6ba8;
+  }
+  /* Hide the legacy single shared trigger if anything still renders it. */
+  .screen-popover-trigger { display: none !important; }
 
   .screencount-pick {
     margin-left: auto;
@@ -2666,15 +2701,49 @@ function toast(msg, kind, undoAction) {
 // ─────────────────────────────────────────────────────────────────────────────
 let screenCount = N_SCREENS;   // overridden by every settings push
 
+// v1.2.10: per-tab settings gear instead of one shared trigger at the
+// end of the row. Each tab gets its own gear button rendered as a
+// sibling (can't nest buttons inside the tab itself). Click switches
+// to that tab + opens the popover anchored under it, so settings for
+// the right screen are always one click away from the tab itself.
 for (let i = 0; i < N_SCREENS; i++) {
   const tab = document.createElement("button");
   tab.className = "tab" + (i === 0 ? " active" : "");
   tab.dataset.screen = i;
-  // Label is filled by refreshTabLabels() once /config tells us the
-  // per-screen viewport — defaults to "Screen N" until then.
-  tab.textContent = t("screens.label_simple", { n: i + 1 });
+  // Inner <span> holds the label so refreshTabLabels() can replace
+  // text without nuking the per-tab badge children.
+  const textSpan = document.createElement("span");
+  textSpan.className = "tab-text";
+  textSpan.textContent = t("screens.label_simple", { n: i + 1 });
+  tab.appendChild(textSpan);
   tab.addEventListener("click", () => switchScreen(i));
   els.tabs.appendChild(tab);
+
+  // Per-tab settings gear. Rendered inline next to the tab so each
+  // monitor has its own clearly-belonging-to-it settings entry.
+  const gear = document.createElement("button");
+  gear.type = "button";
+  gear.className = "tab-gear";
+  gear.dataset.screen = i;
+  gear.title = t("screen_popover.trigger_title");
+  gear.innerHTML =
+    '<svg viewBox="0 0 24 24">' +
+      '<circle cx="12" cy="12" r="3"/>' +
+      '<path d="M12 4v2"/><path d="M12 18v2"/>' +
+      '<path d="M4 12h2"/><path d="M18 12h2"/>' +
+      '<path d="M6 6l1.5 1.5"/><path d="M16.5 16.5L18 18"/>' +
+      '<path d="M6 18l1.5-1.5"/><path d="M16.5 7.5L18 6"/>' +
+    '</svg>';
+  gear.addEventListener("click", (e) => {
+    e.stopPropagation();
+    // Switching to the tab first ensures the popover edits land on
+    // the right screen (settings + WS connection follow activeScreen).
+    if (i !== activeScreen) switchScreen(i);
+    // showScreenPopover() reads the gear via its data-screen so the
+    // anchor is the just-clicked gear, not the legacy trigger.
+    showScreenPopover(gear);
+  });
+  els.tabs.appendChild(gear);
 }
 
 // Each tab shows "Screen N — WxH" when a wallpaper page has connected
@@ -2697,14 +2766,15 @@ async function refreshTabLabels() {
       const i = parseInt(tab.dataset.screen, 10);
       if (!isFinite(i)) return;
       const s = screens[i];
-      // tab.textContent assignments below blow away any badges
-      // attached; we re-add the badge in renderTabMirrorBadges()
-      // below so badges survive the poll cycle.
+      // v1.2.10: label lives in an inner .tab-text span so we don't
+      // blow away the mirror badge child node on every poll. Falls
+      // back to tab.textContent for any orphan tab without the span.
+      const target = tab.querySelector(".tab-text") || tab;
       if (s && s.viewportW > 0 && s.viewportH > 0) {
-        tab.textContent = t("screens.label_with_res",
+        target.textContent = t("screens.label_with_res",
                             { n: i + 1, w: s.viewportW, h: s.viewportH });
       } else {
-        tab.textContent = t("screens.label_simple", { n: i + 1 });
+        target.textContent = t("screens.label_simple", { n: i + 1 });
       }
     });
     renderOverviewCard(screens);
@@ -2790,27 +2860,10 @@ function renderOverviewCard(screens) {
 // anchored under the trigger; popover contains the mirror picker
 // and the Reset-this-screen button. Replaces the full-width
 // mirror-bar that the older betas put under the tab row.
-(function buildScreenSettingsTrigger() {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "screen-popover-trigger";
-  btn.id = "screen-popover-trigger";
-  btn.title = t("screen_popover.trigger_title");
-  btn.innerHTML =
-    '<svg viewBox="0 0 24 24">' +
-      '<circle cx="12" cy="12" r="3"/>' +
-      '<path d="M12 4v2"/><path d="M12 18v2"/>' +
-      '<path d="M4 12h2"/><path d="M18 12h2"/>' +
-      '<path d="M6 6l1.5 1.5"/><path d="M16.5 16.5L18 18"/>' +
-      '<path d="M6 18l1.5-1.5"/><path d="M16.5 7.5L18 6"/>' +
-    '</svg>';
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    toggleScreenPopover();
-  });
-  els.tabs.appendChild(btn);
-  els.screenPopoverTrigger = btn;
-})();
+// v1.2.10: the single shared "Screen settings" gear at the end of
+// the tab row is replaced by a per-tab gear (built inline next to
+// each tab above). els.screenPopoverTrigger stays null; legacy
+// showScreenPopover callers that pass no anchor are a no-op.
 
 // Right-aligned screen-count picker. Replaces the legacy Tk dialog's
 // "Number of screens" knob — sends `bridge-setting-update screenCount`
@@ -2857,6 +2910,12 @@ function applyScreenCount(n) {
   document.querySelectorAll(".tab").forEach((t) => {
     const idx = parseInt(t.dataset.screen, 10);
     t.classList.toggle("inactive", idx >= n);
+  });
+  // v1.2.10: per-tab settings gears hide alongside their tabs so the
+  // row stays in sync with the active screenCount.
+  document.querySelectorAll(".tab-gear").forEach((g) => {
+    const idx = parseInt(g.dataset.screen, 10);
+    g.classList.toggle("inactive", idx >= n);
   });
   // If the currently active tab just got hidden (user lowered the
   // screen count), fall back to Screen 1 so the UI doesn't show stale
@@ -3697,11 +3756,20 @@ function renderTabMirrorBadges() {
     badge.classList.remove("hidden");
     badge.textContent = "↳ " + (m + 1);
   });
-  // Light up the gear trigger if the current screen is mirroring.
-  if (els.screenPopoverTrigger) {
-    const isMirroring = settings && Number.isInteger(settings.mirrorOf);
-    els.screenPopoverTrigger.classList.toggle("active", !!isMirroring);
-  }
+  // v1.2.10: light up each tab's gear when its screen is mirroring,
+  // not the (now-gone) single shared trigger.
+  document.querySelectorAll(".tab-gear").forEach((g) => {
+    const i = parseInt(g.dataset.screen, 10);
+    if (!isFinite(i)) return;
+    let isMirroring = false;
+    if (i === activeScreen && settings && Number.isInteger(settings.mirrorOf)) {
+      isMirroring = true;
+    } else if (_lastConfigSnapshot && Array.isArray(_lastConfigSnapshot.screens)) {
+      const s = _lastConfigSnapshot.screens[i];
+      if (s && Number.isInteger(s.mirrorOf)) isMirroring = true;
+    }
+    g.classList.toggle("active", isMirroring);
+  });
 }
 
 let _lastConfigSnapshot = null;
@@ -3788,11 +3856,14 @@ function toggleScreenPopover() {
   if (popoverEl.classList.contains("show")) hideScreenPopover();
   else showScreenPopover();
 }
-function showScreenPopover() {
-  if (!popoverEl || !els.screenPopoverTrigger) return;
-  // Anchor under the trigger, right-aligned to its right edge so the
-  // popover stays within the viewport even on narrow screens.
-  const r = els.screenPopoverTrigger.getBoundingClientRect();
+function showScreenPopover(anchorEl) {
+  if (!popoverEl) return;
+  // v1.2.10: anchor is the per-tab gear that was clicked. Falls back
+  // to the legacy single trigger if no anchor was passed (kept for
+  // older call sites that haven't been migrated to per-tab gears).
+  const anchor = anchorEl || els.screenPopoverTrigger;
+  if (!anchor) return;
+  const r = anchor.getBoundingClientRect();
   const popW = 320;   // matches min-width + a bit of buffer
   let left = r.right + window.scrollX - popW;
   if (left < 8) left = 8;
@@ -3897,6 +3968,9 @@ document.addEventListener("click", (e) => {
   if (!popoverEl || !popoverEl.classList.contains("show")) return;
   if (popoverEl.contains(e.target)) return;
   if (els.screenPopoverTrigger && els.screenPopoverTrigger.contains(e.target)) return;
+  // v1.2.10: per-tab gears each open the popover anchored to themselves
+  // — clicks on any of them shouldn't close-and-reopen.
+  if (e.target.closest && e.target.closest(".tab-gear")) return;
   hideScreenPopover();
 });
 document.addEventListener("keydown", (e) => {

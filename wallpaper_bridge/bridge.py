@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.9-beta"
+APP_VERSION = "1.2.10-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1766,6 +1766,14 @@ class Broadcaster:
                     try:
                         s = self.get_settings(i)
                         m = s.get("mirrorOf")
+                        # v1.2.10: pass through monitorSetup so the Builder
+                        # can pick it up via its /config poll (Builder has
+                        # no persistent WS so the settings push doesn't
+                        # reach it). Without this, Configurator-side span
+                        # changes were silently ignored by the Builder.
+                        ms = s.get("monitorSetup")
+                        if not isinstance(ms, dict):
+                            ms = {"mode": "single", "orientations": ["landscape"]}
                         screens.append({
                             "viewportW": int(s.get("viewportW") or 0),
                             "viewportH": int(s.get("viewportH") or 0),
@@ -1776,10 +1784,13 @@ class Broadcaster:
                             # mirrorOf surfaces in the overview as a small
                             # indicator on mirroring tiles.
                             "mirrorOf":  (int(m) if isinstance(m, int) else None),
+                            "monitorSetup": ms,
                         })
                     except Exception:
                         screens.append({"viewportW": 0, "viewportH": 0,
-                                        "bgImage": "", "mirrorOf": None})
+                                        "bgImage": "", "mirrorOf": None,
+                                        "monitorSetup": {"mode": "single",
+                                                         "orientations": ["landscape"]}})
                 payload = json.dumps({
                     "screenCount": count,
                     "screens": screens,

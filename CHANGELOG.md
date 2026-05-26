@@ -4,6 +4,73 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.10-beta] - 2026-05-26
+
+> Three fixes from the v1.2.9 test pass. The big one is on the bridge:
+> `/config` was hand-building the per-screen dicts without
+> `monitorSetup`, so Configurator-side span changes never reached the
+> Builder. Plus a click-behavior change on the Wall tiles to surface
+> the action menu more discoverably, and the single shared "Screen
+> settings" gear becomes a per-tab gear so each monitor has its own
+> clearly-belonging entry.
+
+### Fixed — /config didn't pass through monitorSetup
+
+The Builder reads `/config` instead of subscribing to WS settings
+pushes (it has no persistent socket). The /config handler was
+constructing each `screens[i]` dict with only `viewportW`,
+`viewportH`, `bgImage`, and `mirrorOf` — `monitorSetup` was
+silently dropped. So Configurator-side "set Screen 1 to 2 H span"
+updates were correctly persisted by the bridge + visible to the
+Configurator (it uses WS), but the Builder never saw them and
+kept rendering everything as single-mode.
+
+`/config` now includes `monitorSetup` (with a safe default fallback
+if the screen has none) so the Builder's poll picks up Configurator
+edits within its 3 s cadence + the visibilitychange tab-focus
+refresh.
+
+### Changed — Wall tile click opens the context menu
+
+Pre-v1.2.10 a tile click jumped to a default action:
+
+- Empty tile → file picker
+- Filled tile → edit-in-canvas
+
+That hid the menu's other entries — most users wouldn't think to
+right-click to discover "Load current background", "Use current
+canvas", "From library", "Clear". v1.2.10 makes every tile click
+open the context menu so all options are one click away from
+discovery. Right-click still works as a synonym for muscle memory.
+
+### Changed — Per-tab settings gear instead of one shared trigger
+
+The single "Screen settings" gear at the end of the tab row only
+ever operated on the active screen, but it didn't visually belong
+to any specific tab. v1.2.10 renders one gear per tab, sibling to
+each tab button. Click switches to that tab + opens the popover
+anchored under that gear. Inactive gears hide in lockstep with
+their tab's `inactive` class, and the gear lights up in accent
+colour when its screen is mirroring (was the old shared
+trigger's job).
+
+The legacy `.screen-popover-trigger` element is no longer rendered
+and is force-hidden via CSS as a defensive backstop.
+
+### Other
+
+- `showScreenPopover()` now takes an optional `anchorEl` argument
+  so the popover position follows whichever gear was clicked,
+  not a hard-coded singleton.
+- Outside-click listener now treats clicks on any `.tab-gear` as
+  in-popover so opening the popover from a different tab doesn't
+  close-and-reopen.
+- Tab label moved into an inner `.tab-text` span so per-tab
+  badges (mirror indicator) survive label refreshes from the
+  `/config` poll.
+
+---
+
 ## [1.2.9-beta] - 2026-05-26
 
 > Two complaints from the v1.2.8 test pass — the Builder didn't pick

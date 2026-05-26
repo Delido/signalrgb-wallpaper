@@ -4306,26 +4306,21 @@ function renderWall() {
       : t("wall.drop_here");
     frame.appendChild(hint);
 
-    // v1.2.5 click behavior:
-    //   empty tile  → open file picker directly
-    //   filled tile → drop straight into the in-place edit flow
-    //   right-click (anywhere) → the legacy popup with all options
-    //                            (library / canvas / clear / etc.)
-    frame.addEventListener("click", (e) => {
-      // Suppress the click if a drag just ended (set by attachFreeDrag).
+    // v1.2.10 click behavior: every tile click opens the context menu
+    // with all options (File / Library / Canvas / Current bg / Edit /
+    // Clear). The pre-v1.2.10 shortcuts (empty→file picker, filled→edit)
+    // hid the menu's other entries — users couldn't discover "Load
+    // current background" without right-clicking, and right-click isn't
+    // an obvious affordance on a desktop card. Right-click still works
+    // as a synonym so existing muscle memory is preserved.
+    const openMenu = (e) => {
       if (frame.__suppressClick) return;
-      e.stopPropagation();
-      if (slot && slot.img) {
-        editWallSlot(i);
-      } else {
-        triggerWallFilePick(i);
-      }
-    });
-    frame.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
       showWallFrameMenu(i, frame);
-    });
+    };
+    frame.addEventListener("click", openMenu);
+    frame.addEventListener("contextmenu", openMenu);
     // Drag-drop a file directly onto the frame still works.
     ["dragenter", "dragover"].forEach((ev) => {
       frame.addEventListener(ev, (e) => {
