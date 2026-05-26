@@ -1192,16 +1192,12 @@
            whatever the user defines here. -->
       <div id="monitor-setup-list" class="monitor-setup-list"></div>
 
-      <div class="row" style="margin-top: 12px;">
-        <label for="wall-screen-count" data-i18n="wall.screen_count">Bridge screens</label>
-        <select id="wall-screen-count">
-          <option value="auto" data-i18n="wall.screen_count.auto">Auto (from bridge)</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-        </select>
-      </div>
+      <!-- v1.2.7: the "Bildschirme" override picker was removed. The
+           number of screens now comes from the bridge's /config, and
+           each screen's split is declared via the Monitor-Setup rows
+           above. Anyone who genuinely needs to test layouts for
+           monitor counts they don't own can change `screenCount` in
+           the Configurator's System section. -->
       <div class="row">
         <label for="wall-layout" data-i18n="wall.layout">Tile layout</label>
         <select id="wall-layout">
@@ -1213,11 +1209,9 @@
       </div>
       <div class="wall-canvas" id="wall-canvas"></div>
       <div class="wall-status" id="wall-status">
-        <div class="hint wall-span-hint" id="wall-span-hint"
-             style="display: none;"
-             data-i18n="wall.span_suggestion">
-          Canvas aspect matches the wall — try Span across monitors.
-        </div>
+        <!-- v1.2.7: wall-span-hint removed alongside the Span button —
+             the auto-suggestion pointed at a button that no longer
+             exists. -->
         <div class="hint wall-staged-hint" id="wall-staged-hint"
              style="display: none;"></div>
       </div>
@@ -1225,15 +1219,12 @@
         <button class="btn primary wall-apply-btn" id="wall-apply" type="button" disabled
                 data-i18n="wall.apply">Apply Wall to screens</button>
         <div class="btn-row wall-secondary-row">
-          <!-- v1.2.6: "Span canvas" hidden in Simple mode — it slices
-               the single-canvas image into wall slots, which conflicts
-               with the v1.2.5 per-tile direct-edit flow. Still visible
-               in Advanced for the legacy Load → big-image → split workflow. -->
-          <button class="btn simple-hide" id="wall-span" type="button" disabled
-                  data-i18n="wall.span_btn"
-                  title="Slice the current canvas into one chunk per monitor and stage every frame at once.">
-            ⇔ Span canvas
-          </button>
+          <!-- v1.2.7: "Span canvas" button removed entirely. The
+               per-tile direct-edit flow (v1.2.5) supersedes it — each
+               tile gets its own image + edits, and Apply composites
+               them back into one PNG per bridge screen, so a separate
+               "slice the central canvas into N chunks" pre-step has
+               nothing left to do. -->
           <button class="btn" id="wall-clear" type="button" disabled
                   data-i18n="wall.clear">Clear</button>
           <button class="btn" id="wall-reset-pos" type="button" style="display:none;"
@@ -1634,7 +1625,7 @@ const TRANSLATIONS = {
                           de: "Anzahl Bildschirme + Anordnung wählen. Jede Kachel ist ein eigener Slot — eine gefüllte Kachel anklicken und „Im Haupteditor öffnen“ wählen, um Auto-Cut / Pinsel / Farbpicker nur auf diesem Bild zu nutzen." },
   "wall.hint4":         { en: "Start here. Tell the Builder how the bridge-reported screens map to real monitors (a 5120×1440 screen might actually be a 2-monitor span). Each resulting tile is its own slot — click an empty tile to load an image, click a filled tile to edit it in the main canvas. Apply rebuilds one image per bridge screen, composited from your tiles.",
                           de: "Hier starten. Sag dem Builder, wie die vom Bridge gemeldeten Bildschirme zu echten Monitoren passen (ein 5120×1440-Schirm kann in Wahrheit ein 2-Monitor-Span sein). Jede daraus entstehende Kachel ist ein eigener Slot — leere Kachel anklicken um Bild zu laden, gefüllte Kachel anklicken um sie im Haupteditor zu bearbeiten. „Apply“ setzt pro Bridge-Schirm ein Composite-Bild aus deinen Kacheln zusammen." },
-  "setup.bridge_screen": { en: "Bridge {n}", de: "Bridge {n}" },
+  "setup.bridge_screen": { en: "Screen {n}", de: "Screen {n}" },
   "setup.mode.single":  { en: "1 monitor (use as-is)",
                           de: "1 Monitor (so verwenden)" },
   "setup.mode.span_h":  { en: "2 monitors — horizontal span",
@@ -1642,8 +1633,8 @@ const TRANSLATIONS = {
   "setup.mode.span_v":  { en: "2 monitors — vertical span",
                           de: "2 Monitore — vertikaler Span" },
   "wall.applied_summary_line": {
-    en: "Bridge {n} ({w}×{h}) ← {tiles}/{total} tile(s)",
-    de: "Bridge {n} ({w}×{h}) ← {tiles}/{total} Kachel(n)",
+    en: "Screen {n} ({w}×{h}) ← {tiles}/{total} tile(s)",
+    de: "Screen {n} ({w}×{h}) ← {tiles}/{total} Kachel(n)",
   },
   "wall.tile_applied": { en: "applied", de: "angewendet" },
   "setup.orient.landscape_short": { en: "▭", de: "▭" },
@@ -4007,16 +3998,13 @@ let wallSlots         = [];
 let wallScreenCount   = 0;    // = wallScreens.length (kept for legacy refs)
 let bridgeScreenCount = 1;    // = bridgeScreens.length
 
-// v1.2.4: user-set bridge-screen count override. null = use /config's
-// screenCount; 1..4 = pin to that count. Persisted in localStorage.
-const WALL_SCREEN_OVERRIDE_KEY = "signalrgb.builder.wall_screen_count";
-let wallScreenCountOverride = (() => {
-  try {
-    const v = localStorage.getItem(WALL_SCREEN_OVERRIDE_KEY);
-    const n = parseInt(v, 10);
-    return (n >= 1 && n <= 4) ? n : null;
-  } catch (_) { return null; }
-})();
+// v1.2.7: bridge-screen-count override removed. Builder now uses
+// /config's `screenCount` directly. Anyone needing to test other
+// counts can change `screenCount` in the Configurator's System
+// section. The localStorage key is also wiped on startup so the
+// migration is automatic and we don't carry forward stale state.
+try { localStorage.removeItem("signalrgb.builder.wall_screen_count"); }
+catch (_) {}
 
 // v1.2.5: monitorSetup persistence
 const MONITOR_SETUP_KEY = "signalrgb.builder.monitor_setup";
@@ -4056,10 +4044,15 @@ function rebuildWallScreens() {
     const mode  = setup.mode || "single";
 
     const make = (subIdx, slotW, slotH, xOff, yOff) => {
-      const orient = _tileOrientation(setup, subIdx);
-      // Visual + edit dimensions: swap on portrait so the user works
-      // on a portrait canvas; bridge slot dimensions (slotW/slotH) +
-      // offset stay as-is — they describe where the rotated image
+      // Single mode forces landscape — its tile IS the bridge's
+      // reported viewport, so no rotation makes sense. Span modes
+      // read the per-sub-tile orientation flag set by the toggle UI.
+      const orient = (mode === "single")
+        ? "landscape"
+        : _tileOrientation(setup, subIdx);
+      // User-facing edit canvas: swapped on portrait so the user works
+      // on a portrait surface; bridge slot dimensions (slotW/slotH) +
+      // offset stay as-is — they describe where the (rotated) image
       // lands inside the bridge-resolution composite.
       const eW = (orient === "portrait") ? slotH : slotW;
       const eH = (orient === "portrait") ? slotW : slotH;
@@ -4100,9 +4093,7 @@ async function loadWallViewports() {
     if (!r.ok) return;
     const cfg = await r.json();
     const detectedCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
-    bridgeScreenCount = wallScreenCountOverride
-      ? Math.max(1, Math.min(4, wallScreenCountOverride))
-      : detectedCount;
+    bridgeScreenCount = detectedCount;
     bridgeScreens = [];
     const arr = Array.isArray(cfg.screens) ? cfg.screens : [];
     for (let i = 0; i < bridgeScreenCount; i++) {
@@ -4162,15 +4153,21 @@ function renderMonitorSetup() {
     }
     sel.value = mode;
     sel.addEventListener("change", () => {
-      // Preserve existing orientations if the user just toggles modes
-      // (single ↔ span-h ↔ span-v); resize the array to match the new
-      // tile count.
+      const newMode = sel.value;
       const prev = monitorSetup[i] || {};
-      const orient = Array.isArray(prev.orientations) ? prev.orientations.slice() : [];
-      const newCount = (sel.value === "single") ? 1 : 2;
-      while (orient.length < newCount) orient.push("landscape");
-      orient.length = newCount;
-      monitorSetup[i] = { mode: sel.value, orientations: orient };
+      // Preserve existing orientations between span modes; reset on
+      // single mode because single has no rotation semantics (the
+      // bridge already reports the actual screen orientation as part
+      // of its viewport size).
+      let orient;
+      if (newMode === "single") {
+        orient = ["landscape"];
+      } else {
+        orient = Array.isArray(prev.orientations) ? prev.orientations.slice() : [];
+        while (orient.length < 2) orient.push("landscape");
+        orient.length = 2;
+      }
+      monitorSetup[i] = { mode: newMode, orientations: orient };
       saveMonitorSetup();
       rebuildWallScreens();
       renderMonitorSetup();
@@ -4183,8 +4180,10 @@ function renderMonitorSetup() {
     // a setup has > 1 tile, so the single-mode row hides them. Each
     // button cycles landscape ↔ portrait for that sub-tile; portrait
     // tiles get a 90° CW rotation at composite time.
+    // Skipped in custom mode — that mode has per-tile orientation
+    // built into the tile-row editor below.
     const tileCount = (mode === "single") ? 1 : 2;
-    if (tileCount > 1) {
+    if (tileCount > 1 && mode !== "custom") {
       const orientBox = document.createElement("div");
       orientBox.className = "ms-orient";
       orientBox.style.display = "flex";
@@ -4238,27 +4237,7 @@ function renderMonitorSetup() {
   }
 }
 
-// Wire the v1.2.4 monitor-count picker. Defers until the DOM has the
-// element (script tag runs after the picker is in the DOM thanks to
-// the file's bottom-of-body script position).
-(function bindWallScreenCountPicker() {
-  const sel = document.getElementById("wall-screen-count");
-  if (!sel) return;
-  // Reflect saved state onto the picker on first render.
-  sel.value = wallScreenCountOverride ? String(wallScreenCountOverride) : "auto";
-  sel.addEventListener("change", () => {
-    const v = sel.value;
-    if (v === "auto") {
-      wallScreenCountOverride = null;
-      try { localStorage.removeItem(WALL_SCREEN_OVERRIDE_KEY); } catch (_) {}
-    } else {
-      wallScreenCountOverride = Math.max(1, Math.min(4, parseInt(v, 10) || 1));
-      try { localStorage.setItem(WALL_SCREEN_OVERRIDE_KEY, String(wallScreenCountOverride)); }
-      catch (_) {}
-    }
-    loadWallViewports();
-  });
-})();
+// v1.2.7: bindWallScreenCountPicker removed — the dropdown is gone.
 
 // Mirror the wallpaper page's path normaliser: http(s)/data URLs pass
 // through; file:// + absolute paths route through the /image proxy.

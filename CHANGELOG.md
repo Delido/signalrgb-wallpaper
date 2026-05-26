@@ -4,6 +4,80 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.7-beta] - 2026-05-26
+
+> Builder Monitor-Setup cleanup pass. Fixes the bug where a stuck
+> portrait-orientation flag from a previous span edit made every
+> single-mode screen render as portrait too. Drops the now-pointless
+> "Bildschirme" override picker and the "⇔ Canvas spannen" button
+> entirely, and renames "Bridge N" → "Screen N" so the labels match
+> what Lively / Wallpaper Engine actually call them.
+
+### Fixed — Single-mode tiles inherited a leftover portrait flag
+
+Before v1.2.7 the per-sub-tile orientation toggle ran for span
+modes only, but the `orientations[]` array stored in
+`monitorSetup` survived mode switches. So a screen that the user
+had once set to "span-h" with a portrait sub-tile, then switched
+back to "single", silently kept `orientations: ["portrait"]` and
+the single-mode tile rendered as a portrait swap of the bridge's
+viewport (e.g. a 2560×1440 screen showed up as a 1440×2560 tile
+with no UI to undo it).
+
+`rebuildWallScreens()` now hard-codes `landscape` for single-mode
+tiles — the tile IS the bridge's reported viewport, no rotation
+math applies. The orientation array is also reset to
+`["landscape"]` on every switch back to single mode so the stored
+state stays clean.
+
+### Changed — "Bridge N" → "Screen N" labels
+
+Every Monitor-Setup row + the Apply-summary toast now reads
+"Screen 1" instead of "Bridge 1". Matches the wording Lively and
+Wallpaper Engine use; the "bridge" framing was an internal-API
+leak.
+
+### Removed — "Bildschirme" override picker
+
+The Monitor Wall section's Auto / 1 / 2 / 3 / 4 picker (added in
+v1.2.4 to override the bridge-reported `screenCount`) is gone.
+Per-screen splits are now what users actually care about, and
+they're already in the Monitor-Setup rows above. Anyone who
+genuinely needs a different bridge `screenCount` can change it
+in the Configurator's System section — single source of truth.
+
+The localStorage key `signalrgb.builder.wall_screen_count` is
+wiped on first v1.2.7 load so stale overrides don't carry over.
+
+### Removed — "⇔ Canvas spannen" button + auto-suggestion hint
+
+Already hidden in Simple mode since v1.2.6; v1.2.7 drops it from
+Advanced too. The button took the central canvas and sliced it
+into wall slots, which is the inverse of the v1.2.5 per-tile
+direct-edit flow (each tile already gets its own image directly).
+Keeping it on the Advanced surface was just a wrong-click trap.
+
+The "Canvas aspect matches the wall — try Span across monitors"
+auto-suggestion banner is gone for the same reason — it pointed
+at a button that no longer exists.
+
+### Reverted — partial v1.2.6 custom-mode addition
+
+v1.2.6 shipped half a "custom" mode (rebuildWallScreens branch +
+mode-picker option) without the per-tile editor UI. Backed out so
+the dropdown doesn't expose a mode that has no editing surface.
+A proper custom mode for non-rectangular spans (landscape +
+portrait monitor pair → 4000×2560 bounding box) is the right
+direction; it just needs the bridge to own the layout state so
+the Configurator + Builder share the same definition.
+
+### Other
+
+- New comment in the Monitor Wall section explaining where to
+  change `screenCount` now that the inline picker is gone.
+
+---
+
 ## [1.2.6-beta] - 2026-05-25
 
 > v1.2.5 fixes. The new tile-first flow exposed three regressions in
