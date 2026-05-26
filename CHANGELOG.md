@@ -4,6 +4,125 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-26
+
+> Third stable release. Graduates the v1.2.x-beta line (17 betas
+> across 2026-05-24..26) into a single shipped version. The headline
+> feature is the Builder's Monitor-Setup workflow — declaring how
+> bridge-reported screens map to physical monitors so the per-tile
+> edit + composite-apply pipeline can handle real-world span setups
+> (ultrawide-as-two-monitors, landscape+portrait pairs, etc.).
+>
+> Everything below is *what changed since v1.1.0 stable*; the
+> intermediate `1.2.0-beta` … `1.2.17-beta` entries stay in this
+> file for forensic detail but the user-visible highlights are
+> grouped here.
+
+### Configurator
+
+- Live-preview iframe shows exactly how the current settings render
+  (real widgets, real ambient, real bg) scaled into a small preview
+  panel. Preview-mode flag on the wallpaper page disables
+  parallax3d / pixelfx / audio listener inside the iframe so it
+  doesn't fight the real instance.
+- Quick Looks: seven pre-built bundles (Cyberpunk Streamer, Minimal
+  Productivity, Gaming, Music Studio, Holiday Vibes, News Desk,
+  Focus Mode, Stream Overlay, Pomodoro, Minimal Calendar). Apply is
+  atomic via `quick-look-apply`; doesn't touch the background;
+  auto-snapshots current state to preset slot 1 so a wrong pick is
+  one click away from revert.
+- Left section-nav rail with icon buttons + hover-expand labels.
+- Per-tab "Screen settings" gear replaces the single shared trigger
+  popover. Hosts the Mirror picker, Monitor-Setup picker, and
+  Reset-this-screen button.
+- Monitor-Setup visual picker (single / 2 H span / 2 V span) +
+  per-monitor portrait/landscape rotation buttons.
+- New System section migrates the tray's old "Advanced" submenu
+  toggles (preset hotkeys, fullscreen pause, update check / betas,
+  reload config / wallpapers, re-import bundles) into the
+  Configurator. Tray becomes a thin launcher.
+- Mobile / tablet stylesheet (`@media (max-width: 720px)`).
+
+### Builder
+
+- Simple / Advanced mode toggle. Simple is the default; hides
+  brush tools, merge workflow, and history list while keeping
+  Undo / Redo visible.
+- Monitor Wall is the entry-point. Each declared sub-tile is its
+  own slot — click to load a file (or library, or current
+  background, or current canvas), drops straight into in-place
+  editing. Right-click for the full menu.
+- Per-tile orientation chips (▭ landscape / ▯ portrait); portrait
+  tiles get a 90° CW rotation at composite-apply time.
+- "Apply Wall to screens" composites one PNG per bridge screen,
+  cover-fitting each tile into its declared sub-slot. Handles
+  non-rectangular spans correctly (landscape + portrait monitor
+  pair).
+- Pick-colour-from-reference-image modal in the click-pixel tool.
+- Ctrl+Shift+A hotkey for Auto-Cut from any tool context.
+- Auto-Cut nudge on first image load (3× pulse on the AI button).
+- Keyboard nav on wall tiles (Tab + Enter/Space + Delete).
+
+### Wallpaper page
+
+- New widgets: RSS feed reader (RSS 2.0 + Atom). Plus all
+  pre-existing widgets gain optional header bars + tile shells.
+- Animated background support — MP4 / WebM / MOV / M4V routed
+  through a `<video>` element, GIF / image extensions still on
+  the old image-div path.
+- Bridge-offline standby card with scan-line + pulse animation,
+  fades in after >5 s without a live WS so users know the bridge
+  process needs starting.
+- WebSocket reconnect with exponential backoff (1.5 s → 30 s cap).
+- Widget-body refactor — per-widget layouts moved off the
+  `.widget-X` root onto `.widget-X .widget-body` so the optional
+  header strip doesn't get pulled into per-widget flex layouts.
+
+### Bridge
+
+- Per-screen `monitorSetup` field in `bridge.config["screens"][N]`,
+  edited from the Configurator screen popover, read by the Builder
+  via `/config` poll. Sanitiser validates incoming payloads.
+- `quick-look-apply` + `widgets-set` WS commands for atomic widget
+  array replacement under one `_mutate_screen` call.
+- Magic-byte sniff on `/screen/N/background` POSTs.
+- Stale `bgImage` paths dropped on `load_config`; runtime 404 on
+  the `/image` proxy self-heals by POSTing `bgImage: ""` back.
+- Per-screen widget ID counter (`_widgetIdSeq`) replaces the
+  ms-stamp + count IDs that could collide on rapid Quick Looks.
+- Cycle scheduler's `lastApplyMs` re-arms on every manual
+  background upload so the cycle doesn't immediately roll back the
+  user's custom background.
+- Tray Advanced submenu shrinks to per-screen quick-add-widget +
+  quick-effects; the rest lives in the Configurator's System
+  section. Adds an "Export diagnostics bundle…" entry (config +
+  library + summary metadata + reimport log as a single ZIP on
+  the Desktop, OneDrive-aware path).
+
+### Installer
+
+- MSIX-Lively support — `msix-lively-loopback-exempt.ps1` grants
+  `CheckNetIsolation LoopbackExempt` so the AppContainer-sandboxed
+  WebView2 can reach `ws://127.0.0.1:17320/`. Also fixes the
+  install path detection wildcard (Store-prefixed package names).
+
+### Compatibility notes
+
+- Configs from v1.1.x auto-migrate via `setdefault` for every new
+  `DEFAULT_SCREEN_SETTINGS` key (monitorSetup, _widgetIdSeq, etc).
+- Pre-v1.2.5 wall-positions localStorage keys keep working.
+- v1.2.5-1.2.7 left behind `signalrgb.builder.monitor_setup`
+  localStorage and `signalrgb.builder.wall_screen_count`; both
+  wiped on first launch of v1.2.0 stable.
+
+### Beta cycle for forensic detail
+
+The 17-beta journey, with each beta's notable changes, follows
+this section: [1.2.0-beta] … [1.2.17-beta]. Public release notes
+should just point at this stable entry.
+
+---
+
 ## [1.2.17-beta] - 2026-05-26
 
 > v1.2.16 Hotfix — `quick-look-apply` WS-Messages wurden silent
