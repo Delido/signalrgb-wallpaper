@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.13-beta"
+APP_VERSION = "1.2.14-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1095,6 +1095,12 @@ TRANSLATIONS = {
     "tray.configurator":        {"en": "Configurator…",           "de": "Konfigurator…"},
     "tray.builder":             {"en": "Build Wallpaper…",        "de": "Wallpaper bauen…"},
     "tray.help":                {"en": "Help…",                   "de": "Hilfe…"},
+    "tray.export_diagnostics":  {"en": "Export diagnostics bundle…",
+                                 "de": "Diagnose-Paket exportieren…"},
+    "diagnostics.done":         {"en": "Diagnostics bundle saved to {path}",
+                                 "de": "Diagnose-Paket gespeichert: {path}"},
+    "diagnostics.failed":       {"en": "Diagnostics export failed: {msg}",
+                                 "de": "Diagnose-Export fehlgeschlagen: {msg}"},
     "tray.status":              {"en": "System status…",          "de": "Systemstatus…"},
     # ── System Status dialog ────────────────────────────────────────
     "status.title":             {"en": "System status",
@@ -3574,6 +3580,15 @@ class BridgeRuntime:
                     except OSError: pass
             with self.config_lock:
                 self.config["screens"][str(screen)]["bgImage"] = str(target)
+                # v1.2.14: a manual background upload re-arms the
+                # auto-cycle clock so the cycle doesn't immediately
+                # roll back to whatever was scheduled. Without this,
+                # uploading a custom background to a cycle-enabled
+                # screen would silently get overwritten on the next
+                # CycleScheduler tick.
+                cycle = self.config["screens"][str(screen)].get("cycle")
+                if isinstance(cycle, dict):
+                    cycle["lastApplyMs"] = int(time.time() * 1000)
                 cfg_snapshot = json.loads(json.dumps(self.config))
             try:
                 save_config(cfg_snapshot)
@@ -5271,6 +5286,7 @@ class TrayApp:
             pystray.MenuItem(tr("tray.advanced"), pystray.Menu(
                 pystray.MenuItem(tr("tray.quick_add_widget"), pystray.Menu(self._widget_menu_items)),
                 pystray.MenuItem(tr("tray.quick_effects"),    pystray.Menu(self._effects_menu_items)),
+                pystray.MenuItem(tr("tray.export_diagnostics"), self._export_diagnostics),
             )),
             pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
             pystray.Menu.SEPARATOR,
@@ -5382,6 +5398,66 @@ class TrayApp:
             webbrowser.open(url, new=2)
         except Exception as e:
             print(f"[tray] failed to open browser: {e}")
+
+    def _export_diagnostics(self, icon, item):
+        """v1.2.14: bundle the bridge config + last-known errors +
+        screen / library / install paths into a single ZIP on the
+        user's Desktop so bug reports stop needing five round-trips
+        of 'paste your config' / 'paste the log' / etc. Secrets-redacted:
+        the only field we knowingly carry that could leak anything is
+        bgImage absolute paths — those stay because they're useful for
+        diagnosing path issues."""
+        import zipfile, traceback
+        try:
+            desktop = Path.home() / "Desktop"
+            if not desktop.exists():
+                desktop = Path.home()
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            out = desktop / f"signalrgb-wallpaper-diagnostics-{stamp}.zip"
+            with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+                # config.json (redacted copy)
+                try:
+                    with self.config_lock:
+                        cfg = json.loads(json.dumps(self.config))
+                    zf.writestr("config.json", json.dumps(cfg, indent=2, ensure_ascii=False))
+                except Exception as e:
+                    zf.writestr("config.json.error", f"snapshot failed: {e}")
+                # Version + platform + paths summary
+                summary = {
+                    "app_version":    APP_VERSION,
+                    "python_version": sys.version,
+                    "platform":       sys.platform,
+                    "config_path":    str(config_path()),
+                    "screens_dir":    str(screens_dir()),
+                    "library_dir":    str(library_dir()),
+                    "frozen":         bool(getattr(sys, "frozen", False)),
+                    "executable":     str(getattr(sys, "executable", "")),
+                    "exported_at":    stamp,
+                }
+                zf.writestr("summary.json", json.dumps(summary, indent=2))
+                # library.json — useful for catalogue + cycle debugging
+                try:
+                    cat = library_dir() / "library.json"
+                    if cat.exists():
+                        zf.writestr("library.json", cat.read_text(encoding="utf-8"))
+                except Exception as e:
+                    zf.writestr("library.json.error", str(e))
+                # Re-import log (last run)
+                try:
+                    reimport_log = Path(os.environ.get("TEMP",
+                        str(Path.home() / "AppData" / "Local" / "Temp"))) / "signalrgb-reimport.log"
+                    if reimport_log.exists():
+                        zf.writestr("reimport.log", reimport_log.read_text(encoding="utf-8", errors="replace"))
+                except Exception as e:
+                    zf.writestr("reimport.log.error", str(e))
+            print(f"[diagnostics] exported {out}")
+            self._tray_notify(tr("diagnostics.done", path=out.name),
+                              tr("tray.export_diagnostics"))
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"[diagnostics] export failed: {e}\n{tb}")
+            self._tray_notify(tr("diagnostics.failed", msg=str(e)),
+                              tr("tray.export_diagnostics"))
 
     def _open_help(self, icon, item):
         # Help page — scenario walkthroughs (1/2/3/4 monitors × Lively /

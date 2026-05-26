@@ -1065,7 +1065,16 @@ const PREVIEW_MODE = _URL_PARAMS.get("preview") === "1";
 function wsUrl() {
   return "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
 }
-const RECONNECT_MS = 1500;
+// v1.2.14: exponential backoff so a downed bridge doesn't get
+// hammered at 1500 ms × 4 screens = ~3 attempts/sec. Each ws.onclose
+// doubles the delay until cap; ws.onopen resets to the floor.
+const RECONNECT_MS_MIN = 1500;
+const RECONNECT_MS_MAX = 30000;
+let _reconnectMs = RECONNECT_MS_MIN;
+function _scheduleReconnect() {
+  setTimeout(connect, _reconnectMs);
+  _reconnectMs = Math.min(RECONNECT_MS_MAX, _reconnectMs * 2);
+}
 
 function setScreenIndex(n) {
   n = parseInt(n, 10);
@@ -1244,7 +1253,7 @@ function connect() {
   try { ws = new WebSocket(url); }
   catch (e) {
     statusEl.textContent = "ws error: " + e.message;
-    setTimeout(connect, RECONNECT_MS);
+    _scheduleReconnect();
     return;
   }
   ws.binaryType = "arraybuffer";
@@ -1253,15 +1262,18 @@ function connect() {
     statusEl.classList.remove("bad");
     statusEl.classList.add("ok");
     disarmStandbyCard();
+    // v1.2.14: a successful connect resets the backoff window so a
+    // brief bridge restart doesn't penalise the next disconnect.
+    _reconnectMs = RECONNECT_MS_MIN;
     reportViewport();
   };
   ws.onerror = () => {};
   ws.onclose = () => {
-    statusEl.textContent = "disconnected — retrying…";
+    statusEl.textContent = "disconnected — retrying in " + Math.round(_reconnectMs / 100) / 10 + "s…";
     statusEl.classList.remove("ok");
     statusEl.classList.add("bad");
     armStandbyCard();
-    setTimeout(connect, RECONNECT_MS);
+    _scheduleReconnect();
   };
   ws.onmessage = (ev) => {
     // Binary frame = one rendered frame from the plugin via the bridge.

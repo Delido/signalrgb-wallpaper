@@ -218,6 +218,45 @@
     #section-nav { display: none; }
   }
 
+  /* v1.2.14: Mobile / tablet-portrait viewport adjustments. The
+     Configurator was desktop-only until v1.2.13 — on a tablet the
+     sticky tab row + screen-count picker overflowed, section
+     headers collapsed weirdly, and the screen popover landed
+     offscreen. */
+  @media (max-width: 720px) {
+    header { padding: 10px 12px; gap: 8px; }
+    header h1 { font-size: 15px; }
+    .tabs {
+      padding: 0 8px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+    }
+    .tab { padding: 8px 10px; font-size: 12px; white-space: nowrap; }
+    .tab-gear { width: 22px; height: 26px; }
+    .screencount-pick {
+      margin-left: 0;
+      padding: 4px 0 2px;
+      width: 100%;
+      justify-content: flex-end;
+    }
+    main { padding: 12px; }
+    section.card { margin-bottom: 12px; border-radius: 6px; }
+    section.card > header.section-head { padding: 10px 12px; }
+    section.card > header.section-head h2 { font-size: 14px; }
+    .row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+    }
+    .row label { flex: 0 0 auto; padding-bottom: 2px; }
+    #screen-popover {
+      /* Cap to viewport width and reposition via JS in narrow mode. */
+      min-width: 0;
+      max-width: calc(100vw - 24px);
+    }
+    .look-card { min-width: 0; }
+  }
+
   section.card {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -2034,6 +2073,8 @@ const TRANSLATIONS = {
   "looks.confirm":          { en: "Apply \"{name}\" to {screen}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.",
                               de: "„{name}\" auf {screen} anwenden? Ersetzt Effekte, Widget-Stil und das Widget-Layout. Bestehende Widgets werden entfernt. Der Hintergrund bleibt erhalten." },
   "looks.applied":          { en: "Applied {name}",             de: "{name} angewendet" },
+  "looks.autosnapshot":     { en: "Current state saved to Preset slot 1 (revert via Presets section)",
+                              de: "Aktueller Zustand in Preset-Slot 1 gespeichert (zurücksetzen über Presets-Bereich)" },
   "widgets.add_label":      { en: "Add a widget:",        de: "Widget hinzufügen:" },
   "widgets.empty":          { en: "No widgets on this screen yet — pick one below to add.",
                               de: "Noch keine Widgets auf diesem Bildschirm — unten eines auswählen." },
@@ -2304,6 +2345,82 @@ const LOOK_BUNDLES = [
                    showHeader: false } },
     ],
   },
+  // ── v1.2.14 bundles ──────────────────────────────────────────────────────
+  {
+    id: "stream-overlay",
+    name: "Stream Overlay",
+    desc: "Now-playing pinned bottom-left, clock top-right, audio spectrum strip across the bottom. Transparent tiles so the bg shines through — built for OBS scenes that already have alpha.",
+    tint: "rgb(120, 220, 180)",
+    settings: {
+      glowStrength:    70,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "off",
+      audioGlow:       "spectrum",
+      audioGlowIntensity: 50,
+      audioGlowTint:   true,
+      widgetTileStyle: "clear",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "clock",          x:  50, y:  50, w: 260, h:  90,
+        options: { style: "digital", format24h: true, tintFromGlow: true,
+                   showHeader: false, textScale: 1.1 } },
+      { type: "now-playing",    x:  50, y: 800, w: 500, h: 110,
+        options: { tintFromGlow: true, showProgress: true,
+                   showHeader: false, textScale: 1.1 } },
+      { type: "audio-spectrum", x: 600, y: 800, w: 600, h: 110,
+        options: { tintFromGlow: true, showHeader: false } },
+    ],
+  },
+  {
+    id: "pomodoro",
+    name: "Pomodoro",
+    desc: "25-minute focus countdown + sticky note with the technique recap. Quote of the day for a context-shift between rounds.",
+    tint: "rgb(255, 130, 100)",
+    settings: {
+      glowStrength:    40,
+      barLayout:       "lay-off",
+      showBars:        false,
+      ambientEffect:   "off",
+      audioGlow:       "off",
+      widgetTileStyle: "glass",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "countdown",   x:  60, y:  60, w: 480, h: 240,
+        options: { label: "Pomodoro", units: "hms",
+                   tintFromGlow: true,
+                   showHeader: true, textScale: 1.5 } },
+      { type: "sticky-note", x:  60, y: 330, w: 480, h: 200,
+        options: { text: "Pomodoro\n• 25 min focus\n• 5 min break\n• 4 rounds → 15 min long break",
+                   color: "pink", showHeader: false } },
+      { type: "quote",       x:  60, y: 560, w: 480, h: 140,
+        options: { tintFromGlow: true, showHeader: false } },
+    ],
+  },
+  {
+    id: "minimal-calendar",
+    name: "Minimal Calendar",
+    desc: "Just the date — a big analog clock + a tall calendar. No effects, no glow. For users who want the wallpaper to be the calendar.",
+    tint: "rgb(170, 180, 200)",
+    settings: {
+      glowStrength:    10,
+      barLayout:       "lay-off",
+      showBars:        false,
+      ambientEffect:   "off",
+      audioGlow:       "off",
+      widgetTileStyle: "clear",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "clock",    x:  80, y:  80, w: 320, h: 320,
+        options: { style: "analog", format24h: true, tintFromGlow: false,
+                   showHeader: false } },
+      { type: "calendar", x: 440, y:  80, w: 480, h: 380,
+        options: { weekStart: 1, tintFromGlow: false, showHeader: false } },
+    ],
+  },
 ];
 
 function renderLookBundles() {
@@ -2330,6 +2447,14 @@ function applyLookBundle(bundle) {
   const msg = t("looks.confirm", { name: bundle.name, screen: screenLabel })
             || `Apply "${bundle.name}" to ${screenLabel}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.`;
   if (!confirm(msg)) return;
+
+  // v1.2.14: snapshot the screen's current state into preset slot 1
+  // before applying so the user can 1-click revert via the Presets
+  // section. Slot 1 is chosen because it's the most-prominent slot
+  // in the UI; if the user already had something there it gets
+  // overwritten — same trade-off as any other autosave.
+  sendCmd({ type: "preset-save", screen: activeScreen, slot: 0 });
+  toast(t("looks.autosnapshot"), "good");
 
   // 1. Push every setting in the bundle as a setting-update msg.
   //    Bridge persists each + broadcasts; wallpaper page repaints.

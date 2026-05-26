@@ -498,13 +498,59 @@
   #toast.bad  { border-color: #6a2828; color: #ffb8b8; }
 
   /* Library picker dialog — full-screen overlay, centred grid of tiles. */
-  #lib-dialog {
+  #lib-dialog, #ref-pick-dialog {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.55);
     display: none; align-items: center; justify-content: center;
     z-index: 200;
   }
-  #lib-dialog.show { display: flex; }
+  #lib-dialog.show, #ref-pick-dialog.show { display: flex; }
+  /* v1.2.14: reference-image picker modal. Bigger card than the
+     library dialog because the user needs to actually see + click
+     colours in the image. */
+  .ref-pick-card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+    padding: 16px;
+    width: min(85vw, 1100px);
+    max-height: 90vh;
+    display: flex; flex-direction: column;
+  }
+  .ref-pick-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 10px;
+  }
+  .ref-pick-head h2 { font-size: 14px; margin: 0; color: var(--text); flex: 0 0 auto; }
+  .ref-pick-head .ref-pick-hover {
+    display: inline-flex; align-items: center; gap: 8px;
+    flex: 1 1 auto;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .ref-pick-head .ref-pick-swatch {
+    width: 22px; height: 22px;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .ref-pick-canvas-wrap {
+    flex: 1 1 auto;
+    overflow: auto;
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    margin-bottom: 8px;
+  }
+  #ref-pick-canvas {
+    display: block;
+    max-width: 100%;
+    cursor: crosshair;
+    image-rendering: pixelated;
+  }
   .lib-dialog-card {
     background: var(--panel-2);
     border: 1px solid var(--border);
@@ -615,6 +661,14 @@
     transition: border-color 0.12s, transform 0.12s;
   }
   .wall-frame:hover     { border-color: #3a6ba8; transform: translateY(-1px); }
+  /* v1.2.14: visible focus ring for keyboard nav. Same accent colour
+     as the hover state but more saturated + offset so screen-reader /
+     keyboard users can see where Tab landed. */
+  .wall-frame:focus-visible {
+    outline: 2px solid #6ab0ff;
+    outline-offset: 2px;
+    border-color: #6ab0ff;
+  }
   .wall-frame.dragover  { border-color: #5b8fd1; background-color: #1a2438; }
   .wall-frame.loaded    { border-color: #3aa86d; box-shadow: inset 0 0 0 2px #0c0e13, 0 0 0 2px rgba(58,168,109,0.35), 0 2px 6px rgba(0,0,0,0.5); }
   .wall-frame.has-current { opacity: 0.92; }
@@ -931,6 +985,21 @@
           <input id="threshold" type="range" min="0" max="200" value="30">
           <span class="val" id="threshold-val">30</span>
         </div>
+        <!-- v1.2.14: pick from a reference image. The user loads a
+             reference (typically a screenshot of an existing wallpaper
+             or a colour palette), clicks a colour inside the modal,
+             then back on the main canvas the same colour-match logic
+             runs as if they'd clicked that pixel on the source. -->
+        <div class="btn-row" style="margin-top: 6px;">
+          <label class="btn" for="ref-pick-input"
+                 data-i18n="opt.ref_pick">Pick from reference image…</label>
+          <input id="ref-pick-input" type="file"
+                 accept="image/png,image/jpeg,image/webp,image/bmp,image/gif"
+                 style="display:none">
+          <button class="btn" id="ref-pick-clear" type="button" disabled
+                  data-i18n="opt.ref_clear">Clear ref</button>
+        </div>
+        <div class="stat" id="ref-pick-stat" style="margin-top: 4px;"></div>
       </div>
 
       <div class="tool-options-group" data-tools="bounded">
@@ -1290,6 +1359,33 @@
   </div>
 </div>
 
+<!-- v1.2.14: reference-image picker modal. Shows the loaded reference
+     full-size; clicking a pixel sends the colour back to the colour
+     tool's tolerance-based remove logic as if the user had clicked
+     that pixel on the source. Crosshair cursor + colour swatch
+     preview at the bottom while hovering. -->
+<div id="ref-pick-dialog" role="dialog" aria-modal="true">
+  <div class="ref-pick-card">
+    <div class="ref-pick-head">
+      <h2 data-i18n="ref_pick.title">Pick colour from reference</h2>
+      <span class="ref-pick-hover">
+        <span class="ref-pick-swatch" id="ref-pick-swatch"></span>
+        <span id="ref-pick-rgb" class="ref-pick-rgb">—</span>
+      </span>
+      <button class="btn" id="ref-pick-close" type="button"
+              data-i18n="ref_pick.close">Close</button>
+    </div>
+    <div class="ref-pick-canvas-wrap">
+      <canvas id="ref-pick-canvas"></canvas>
+    </div>
+    <div class="hint" data-i18n="ref_pick.hint">
+      Click any colour in the reference. The same tolerance setting
+      from the left panel decides how broad the match is on the
+      source canvas.
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -1551,6 +1647,18 @@ const TRANSLATIONS = {
                           de: "Modell-Download fehlgeschlagen: {msg}. Otsu-Modus probieren oder Internetverbindung prüfen." },
 
   // Toolbox button tooltips.
+  "opt.ref_pick":     { en: "Pick from reference image…",
+                        de: "Aus Referenzbild wählen…" },
+  "opt.ref_clear":    { en: "Clear ref",            de: "Referenz löschen" },
+  "ref_pick.title":   { en: "Pick colour from reference",
+                        de: "Farbe aus Referenz wählen" },
+  "ref_pick.close":   { en: "Close",                de: "Schließen" },
+  "ref_pick.hint":    { en: "Click any colour in the reference. The same tolerance setting from the left panel decides how broad the match is on the source canvas.",
+                        de: "Beliebige Farbe in der Referenz anklicken. Die Toleranz-Einstellung aus dem linken Panel bestimmt wie breit der Match auf der Quell-Leinwand ist." },
+  "ref_pick.loaded":  { en: "Reference loaded ({w}×{h})",
+                        de: "Referenz geladen ({w}×{h})" },
+  "ref_pick.applied": { en: "Removed colour {hex} from canvas",
+                        de: "Farbe {hex} aus Leinwand entfernt" },
   "tool.color.tip":   { en: "Click pixel — remove similar colours",
                         de: "Pixel anklicken — ähnliche Farben entfernen" },
   "tool.bounded.tip": { en: "Click in region — drag rectangle, then click colours inside",
@@ -1640,6 +1748,10 @@ const TRANSLATIONS = {
                             de: "Klicken zum Bearbeiten · Rechtsklick für Menü" },
   "wall.drop_here":     { en: "Click / drop image (right-click = more)",
                           de: "Klicken / Bild ablegen (Rechtsklick = mehr)" },
+  "wall.tile_aria":     { en: "Monitor {n} ({w}×{h}) — {state}",
+                          de: "Monitor {n} ({w}×{h}) — {state}" },
+  "wall.tile_filled":   { en: "image staged",     de: "Bild bereit" },
+  "wall.tile_empty":    { en: "empty",            de: "leer" },
   "wall.hint3":         { en: "Pick how many monitors + how they're arranged. Each tile is its own slot — click a filled tile and pick \"Edit in main canvas\" to use Auto-Cut / brushes / colour-pick on just that monitor's image.",
                           de: "Anzahl Bildschirme + Anordnung wählen. Jede Kachel ist ein eigener Slot — eine gefüllte Kachel anklicken und „Im Haupteditor öffnen“ wählen, um Auto-Cut / Pinsel / Farbpicker nur auf diesem Bild zu nutzen." },
   "wall.hint4":         { en: "Start here. Tell the Builder how the bridge-reported screens map to real monitors (a 5120×1440 screen might actually be a 2-monitor span). Each resulting tile is its own slot — click an empty tile to load an image, click a filled tile to edit it in the main canvas. Apply rebuilds one image per bridge screen, composited from your tiles.",
@@ -2641,6 +2753,14 @@ document.addEventListener("keydown", (e) => {
   } else if ((k === "z" && e.shiftKey) || k === "y") {
     e.preventDefault();
     els.redoBtn.click();
+  } else if (k === "a" && e.shiftKey) {
+    // v1.2.14: Ctrl+Shift+A = run Auto-Cut on the current canvas
+    // with the AI panel's currently-selected mode + threshold. The
+    // pre-v1.2.14 path required selecting the AI tool from the
+    // toolbox + clicking "Run auto cut" — three actions for what's
+    // the single most useful Builder operation.
+    e.preventDefault();
+    if (els.aiRunBtn && !els.aiRunBtn.disabled) els.aiRunBtn.click();
   }
 });
 
@@ -2957,6 +3077,108 @@ els.canvas.addEventListener("click", (e) => {
   updateHistory();
   applyMask();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.2.14 — Pick colour from reference image
+//
+// User picks a reference (typically a screenshot or palette), the
+// modal renders it on a canvas, mouseover updates a swatch preview,
+// click sends the picked RGB back through the same pushClick path
+// the regular click-pixel tool uses. Tolerance comes from the
+// existing slider — reference-pick is just an alternate INPUT for
+// the same "remove similar colours" operation.
+// ─────────────────────────────────────────────────────────────────────────────
+(function refPickInit() {
+  const input    = document.getElementById("ref-pick-input");
+  const clearBtn = document.getElementById("ref-pick-clear");
+  const stat     = document.getElementById("ref-pick-stat");
+  const dlg      = document.getElementById("ref-pick-dialog");
+  const closeBtn = document.getElementById("ref-pick-close");
+  const refCanv  = document.getElementById("ref-pick-canvas");
+  const swatch   = document.getElementById("ref-pick-swatch");
+  const rgbLbl   = document.getElementById("ref-pick-rgb");
+  if (!input || !dlg || !refCanv) return;
+
+  let refImg = null;
+
+  function openDialog() {
+    if (!refImg) return;
+    // Render the reference at native resolution (capped at 1600px on
+    // the long axis so mega-PNGs don't blow up the page). The
+    // canvas-wrap is scroll-enabled for the rare case it does.
+    const MAX = 1600;
+    const iw = refImg.naturalWidth, ih = refImg.naturalHeight;
+    const scale = Math.min(1, MAX / Math.max(iw, ih));
+    refCanv.width  = Math.round(iw * scale);
+    refCanv.height = Math.round(ih * scale);
+    refCanv.getContext("2d").drawImage(refImg, 0, 0, refCanv.width, refCanv.height);
+    dlg.classList.add("show");
+    if (rgbLbl) rgbLbl.textContent = "—";
+    if (swatch) swatch.style.background = "#000";
+  }
+  function closeDialog() { dlg.classList.remove("show"); }
+  closeBtn?.addEventListener("click", closeDialog);
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) closeDialog(); });
+
+  input.addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      refImg = await fileToImage(f);
+      clearBtn.disabled = false;
+      if (stat) {
+        stat.textContent = t("ref_pick.loaded", {
+          w: refImg.naturalWidth, h: refImg.naturalHeight,
+        });
+      }
+      openDialog();
+    } catch (_) {
+      if (stat) stat.textContent = t("toast.decode_failed", { name: f.name });
+    }
+  });
+
+  clearBtn?.addEventListener("click", () => {
+    refImg = null;
+    clearBtn.disabled = true;
+    if (stat) stat.textContent = "";
+  });
+
+  function pixelAt(e) {
+    const r = refCanv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) * refCanv.width  / r.width);
+    const y = Math.floor((e.clientY - r.top)  * refCanv.height / r.height);
+    if (x < 0 || y < 0 || x >= refCanv.width || y >= refCanv.height) return null;
+    const d = refCanv.getContext("2d").getImageData(x, y, 1, 1).data;
+    return { r: d[0], g: d[1], b: d[2], a: d[3] };
+  }
+  function _hex(r, g, b) {
+    const h = (n) => n.toString(16).padStart(2, "0");
+    return "#" + h(r) + h(g) + h(b);
+  }
+
+  refCanv.addEventListener("mousemove", (e) => {
+    const p = pixelAt(e);
+    if (!p) return;
+    if (swatch) swatch.style.background = `rgb(${p.r},${p.g},${p.b})`;
+    if (rgbLbl) rgbLbl.textContent =
+      _hex(p.r, p.g, p.b) + "  rgb(" + p.r + "," + p.g + "," + p.b + ")";
+  });
+
+  refCanv.addEventListener("click", (e) => {
+    if (!originalData) return;     // No source loaded — nothing to act on.
+    const p = pixelAt(e);
+    if (!p) return;
+    pushClick({
+      kind: "color", r: p.r, g: p.g, b: p.b,
+      threshold: parseInt(els.threshold.value, 10),
+    });
+    updateHistory();
+    applyMask();
+    toast(t("ref_pick.applied", { hex: _hex(p.r, p.g, p.b) }), "good");
+    closeDialog();
+  });
+})();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG overlay — render the in-progress polygon/ellipse with draggable
@@ -4297,7 +4519,15 @@ function renderWall() {
     const sz   = frameSizeFor(scr, layout);
     const curUrl = currentBgUrl(scr.bgImage);
 
+    // v1.2.14: wall frames are interactive — make them keyboard-focusable
+    // so screen-reader users can navigate. role="button" + tabindex=0
+    // gives Tab + Enter/Space the same effect as a click.
     const frame = document.createElement("div");
+    frame.setAttribute("role", "button");
+    frame.setAttribute("tabindex", "0");
+    frame.setAttribute("aria-label",
+      t("wall.tile_aria", { n: i + 1, w: scr.w, h: scr.h,
+                            state: slot ? t("wall.tile_filled") : t("wall.tile_empty") }));
     frame.className = "wall-frame" +
       (slot ? " loaded" :
         (curUrl ? " has-current" : " empty"));
@@ -4341,6 +4571,18 @@ function renderWall() {
     };
     frame.addEventListener("click", openMenu);
     frame.addEventListener("contextmenu", openMenu);
+    // v1.2.14: keyboard activation. Enter / Space mirror the click;
+    // Delete / Backspace clears the slot for quick muscle-memory
+    // wipes without round-tripping through the menu.
+    frame.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openMenu(e);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && wallSlots[i]) {
+        e.preventDefault();
+        clearWallSlot(i);
+      }
+    });
     // Drag-drop a file directly onto the frame still works.
     ["dragenter", "dragover"].forEach((ev) => {
       frame.addEventListener(ev, (e) => {

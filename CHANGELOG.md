@@ -4,6 +4,115 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.14-beta] - 2026-05-26
+
+> Second audit pass — 9 items from the v1.2.13 review list land in
+> this beta. Three new Quick Look bundles, an in-Builder reference-
+> image colour picker, a one-click diagnostics export, full keyboard
+> navigation on the wall tiles, and a WebSocket reconnect backoff
+> that stops the wallpaper page from hammering a downed bridge.
+
+### Added — Pick colour from reference image (Builder)
+
+New "Pick from reference image…" button under the Click-pixel tool's
+options. Loads any image into a modal at native resolution, hovering
+over it previews the colour as both a swatch + an RGB / hex string,
+clicking sends that colour back through the same tolerance-based
+remove path the canvas click uses. The reference stays in memory
+until "Clear ref" so users can keep popping it open while iterating
+on the source. Useful for "I want to cut everything matching the
+neon-cyan in this other wallpaper" workflows that previously needed
+GIMP / Photoshop.
+
+### Added — Auto-Cut hotkey (Ctrl+Shift+A)
+
+Long-standing UX gap: running Auto-Cut on the current canvas required
+selecting the AI tool from the toolbox + clicking "Run auto cut" — 3
+actions for the single most-used Builder operation. v1.2.14 binds
+Ctrl+Shift+A to fire the AI panel's Run button directly. Works from
+any tool context as long as `originalData` is loaded and the run
+button isn't already busy with a previous run.
+
+### Added — Auto-snapshot before Quick Look apply
+
+`applyLookBundle` now saves the screen's current state to preset
+slot 1 before pushing the bundle. Users who try a Look and don't
+like it can revert in 1 click via the Presets section instead of
+losing whatever they had configured. Slot 1 is overwritten — same
+trade-off as any other autosave.
+
+### Added — Three new Quick Look bundles
+
+- **Stream Overlay** — Transparent tiles, now-playing pinned
+  bottom-left, clock top-right, audio spectrum strip across the
+  bottom. For OBS scenes that already have alpha.
+- **Pomodoro** — 25-minute countdown, sticky note with the
+  technique recap, quote of the day for context-shifts between
+  rounds.
+- **Minimal Calendar** — Big analog clock + tall calendar, no
+  effects, no glow. For users who want the wallpaper to *be* the
+  calendar.
+
+### Added — Diagnostics export (Tray → Advanced)
+
+New "Export diagnostics bundle…" entry under the tray's Advanced
+submenu. Packages the current config.json, library.json, summary
+metadata (app version, Python version, install paths) and the last
+re-import log into a single ZIP on the user's Desktop. For bug
+reports that previously needed five round-trips of "paste your
+config / paste your log / which version".
+
+### Added — Keyboard navigation for Wall tiles (Builder)
+
+Every wall tile now has `role="button"` + `tabindex="0"` so Tab
+walks through them and Enter / Space opens the action menu. Delete
+/ Backspace clears a filled slot for quick muscle-memory wipes.
+Visible focus ring (accent-blue outline) so screen-reader and
+keyboard-only users can see where focus landed. `aria-label` on
+each tile reads "Monitor N (WxH) — image staged / empty".
+
+### Added — Configurator narrow-viewport stylesheet
+
+New `@media (max-width: 720px)` block. Tab row scrolls horizontally
+instead of overflowing, section-card row labels stack above their
+controls, the screen popover caps to viewport width, and the header
+shrinks. The Configurator stays usable on a tablet / phone-landscape
+even though the desktop is the primary target.
+
+### Fixed — WebSocket reconnect storm on downed bridge
+
+Pre-v1.2.14 every wallpaper page polled `ws://127.0.0.1:17320/`
+every 1500 ms while the bridge was down — at 4 screens that's ~3
+attempts/sec banging into a dead port. v1.2.14 adds exponential
+backoff: 1.5 s → 3 s → 6 s → 12 s → 24 s → capped at 30 s. A
+successful `ws.onopen` resets to the floor so a quick bridge
+restart doesn't penalise the next disconnect. The disconnect
+status line now also shows the next retry delay so users can tell
+the page hasn't given up.
+
+### Fixed — Auto-cycle could overwrite a manual background upload
+
+`_update_background` now bumps the cycle's `lastApplyMs` to "now"
+whenever a manual upload lands. Before v1.2.14, uploading a custom
+background to a cycle-enabled screen would get silently rolled back
+on the next CycleScheduler tick (~10 min default). Now the cycle
+waits the full intervalMin after a manual override before
+considering a switch.
+
+### Other
+
+- New i18n keys: `wall.tile_aria`, `wall.tile_filled`,
+  `wall.tile_empty`, `opt.ref_pick`, `opt.ref_clear`,
+  `ref_pick.title`, `ref_pick.close`, `ref_pick.hint`,
+  `ref_pick.loaded`, `ref_pick.applied`, `looks.autosnapshot`,
+  `tray.export_diagnostics`, `diagnostics.done`,
+  `diagnostics.failed`.
+- "Apply background to all screens" was flagged in the v1.2.13 audit
+  but verified to already work via the existing `apply-all` button
+  on the Background card (bgImage is in `SECTION_KEYS["card-bg"].keys`).
+
+---
+
 ## [1.2.13-beta] - 2026-05-26
 
 > Sweep through the audit list: 14 of the 22 reported issues fixed,
