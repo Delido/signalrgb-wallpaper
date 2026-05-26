@@ -1372,8 +1372,6 @@ const els = {
   wallLayout:   $("wall-layout"),
   wallCanvas:   $("wall-canvas"),
   wallApply:    $("wall-apply"),
-  wallSpan:     $("wall-span"),
-  wallSpanHint: $("wall-span-hint"),
   wallStagedHint: $("wall-staged-hint"),
   wallClear:    $("wall-clear"),
   wallResetPos: $("wall-reset-pos"),
@@ -1899,7 +1897,7 @@ function applySourceImage(displayName, source) {
   updateCanvasStat();
   // Refresh Span button + suggestion hint now that canvas has new
   // dimensions (its aspect ratio drives the hint).
-  if (typeof updateWallSpanState === "function") updateWallSpanState();
+  // v1.2.13: updateWallSpanState call site retired with the function.
 }
 
 function fileToImage(file) {
@@ -4112,9 +4110,20 @@ function rebuildWallScreens() {
   wallSlots.length = wallScreenCount;
 }
 
+// v1.2.13: abort the previous in-flight /config fetch when a fresh
+// loadWallViewports fires. Visibilitychange + 3s interval can stack
+// up; without abort the last (not the most recent) wins on slow
+// connections and the Wall paint flickers between states.
+let _wallViewportsAbort = null;
 async function loadWallViewports() {
   try {
-    const r = await fetch("/config", { cache: "no-store" });
+    if (_wallViewportsAbort) {
+      try { _wallViewportsAbort.abort(); } catch (_) {}
+    }
+    const ctrl = new AbortController();
+    _wallViewportsAbort = ctrl;
+    const r = await fetch("/config", { cache: "no-store", signal: ctrl.signal });
+    if (_wallViewportsAbort === ctrl) _wallViewportsAbort = null;
     if (!r.ok) return;
     const cfg = await r.json();
     const detectedCount = Math.max(1, Math.min(4, parseInt(cfg.screenCount, 10) || 1));
@@ -4266,6 +4275,12 @@ function renderWall() {
   const layout = (els.wallLayout && els.wallLayout.value) || "horizontal";
   const canvas = els.wallCanvas;
   if (!canvas) return;
+  // v1.2.13: skip re-renders while the user is mid-drag in free-form
+  // mode — the /config poll's 3 s tick would otherwise clear
+  // wall-canvas.innerHTML and yank the dragged frame out from under
+  // them. The drag's mouseup re-fires renderWall via saveWallPositions
+  // → render path, so we won't miss a paint.
+  if (_wallFrameDragActive) return;
   canvas.classList.toggle("layout-vertical", layout === "vertical");
   canvas.classList.toggle("layout-2x2",      layout === "2x2");
   canvas.classList.toggle("layout-free",     layout === "free");
@@ -4443,10 +4458,13 @@ async function editWallSlot(idx) {
     // (centred, no upscale) leaving the unfilled area transparent —
     // user can then reposition / paint to taste. Saving back via
     // loadWallSlotFromCurrentCanvas captures the target-sized result.
+    // v1.2.13: prefer the pristine origImg when present so re-opens
+    // don't compound the letterbox transparency across edit cycles.
     const tile  = wallScreens[idx] || {};
-    const tgtW  = Math.max(1, parseInt(tile.w, 10) || (slot.img.naturalWidth  || slot.img.width));
-    const tgtH  = Math.max(1, parseInt(tile.h, 10) || (slot.img.naturalHeight || slot.img.height));
-    const fitted = _imageOnTargetCanvas(slot.img, tgtW, tgtH);
+    const src   = slot.origImg || slot.img;
+    const tgtW  = Math.max(1, parseInt(tile.w, 10) || (src.naturalWidth  || src.width));
+    const tgtH  = Math.max(1, parseInt(tile.h, 10) || (src.naturalHeight || src.height));
+    const fitted = _imageOnTargetCanvas(src, tgtW, tgtH);
     applySourceImage(
       (slot.name || ("slot-" + (idx + 1))) + " (Slot " + (idx + 1) + " · " + tgtW + "×" + tgtH + ")",
       fitted
@@ -4601,9 +4619,16 @@ async function loadWallSlotFromCurrentCanvas(idx) {
     const blob = await canvasToBlob();
     const img  = await fileToImage(blob);
     const dataUrl = await blobToDataUrl(blob);
+    // v1.2.13: preserve the prior origImg/origBlob if the slot was
+    // an Edit-flow save (so a follow-up edit re-contains from the
+    // pristine source). New "Use current canvas" actions without a
+    // prior origImg fall back to the canvas snapshot as origin.
+    const prev = wallSlots[idx] || {};
     wallSlots[idx] = {
       img, name: (sourceName || "canvas") + ".png",
       blob, dataUrl, source: "canvas",
+      origImg:  prev.origImg  || img,
+      origBlob: prev.origBlob || blob,
     };
     renderWall();
   } catch (e) {
@@ -4638,7 +4663,10 @@ async function loadWallSlotFromCurrentBackground(idx) {
     const img     = await fileToImage(blob);
     const dataUrl = await blobToDataUrl(blob);
     const name = (String(owner.bgImage).split(/[\\/]/).pop() || "current");
-    wallSlots[idx] = { img, name, blob, dataUrl, source: "currentbg" };
+    wallSlots[idx] = {
+      img, name, blob, dataUrl, source: "currentbg",
+      origImg: img, origBlob: blob,
+    };
     renderWall();
     // Drop the user straight into the edit flow, matching the
     // empty-tile + file-pick UX.
@@ -4660,51 +4688,11 @@ async function loadWallSlotFromCurrentBackground(idx) {
 // Height = canvas.height (the canvas is assumed pre-cropped to the
 // wall's combined aspect ratio; if it isn't, each screen's bgFit
 // setting handles the residual squash).
-async function spanCanvasAcrossWall() {
-  if (!originalData) {
-    toast(t("wall.span_no_canvas"), "bad");
-    return;
-  }
-  if (wallScreenCount < 2) {
-    toast(t("wall.span_single_screen"), "bad");
-    return;
-  }
-  const totalW = wallScreens.reduce((s, scr) => s + (scr.w || 1920), 0);
-  let cursor = 0;
-  for (let i = 0; i < wallScreenCount; i++) {
-    const scr = wallScreens[i] || { w: 1920, h: 1080 };
-    const fraction = (scr.w || 1920) / totalW;
-    // Round chunk widths but absorb rounding error into the last
-    // chunk so cumulative offsets land flush at canvas.width.
-    const isLast = (i === wallScreenCount - 1);
-    const chunkW = isLast
-      ? els.canvas.width - cursor
-      : Math.round(els.canvas.width * fraction);
-    const chunkH = els.canvas.height;
-    try {
-      const scratch = document.createElement("canvas");
-      scratch.width  = chunkW;
-      scratch.height = chunkH;
-      scratch.getContext("2d").drawImage(
-        els.canvas, cursor, 0, chunkW, chunkH, 0, 0, chunkW, chunkH);
-      const pngBlob = await new Promise((res) => scratch.toBlob(res, "image/png"));
-      const img = await fileToImage(pngBlob);
-      const dataUrl = await blobToDataUrl(pngBlob);
-      wallSlots[i] = {
-        img,
-        name: (sourceName || "canvas") + "-span-" + (i + 1) + ".png",
-        blob: pngBlob,
-        dataUrl,
-        source: "span",
-      };
-    } catch (e) {
-      console.warn("[wall] span chunk", i, "failed:", e);
-    }
-    cursor += chunkW;
-  }
-  renderWall();
-  toast(t("wall.span_done", { n: wallScreenCount }), "good");
-}
+// v1.2.13: spanCanvasAcrossWall removed — the button was deleted in
+// v1.2.7 and the function had nothing reaching it anymore. The
+// per-tile direct-edit flow (v1.2.5) plus composite-on-apply
+// (v1.2.5) cover the same "one source image stretched across all
+// monitors" goal by other means.
 
 // localStorage-backed positions keyed by screen count so a layout for
 // 2 monitors survives switching temporarily to 3 and back.
@@ -4734,6 +4722,11 @@ function defaultFreePosition(idx, sz) {
   return { x, y };
 }
 
+// v1.2.13: shared "free-form drag in progress" flag. renderWall reads
+// this to skip its `canvas.innerHTML = ""` re-render so the 3 s poll
+// can't yank the dragged frame mid-drag.
+let _wallFrameDragActive = false;
+
 function attachFreeDrag(frame, idx) {
   // Pointer-events drag. We listen on the frame itself so dragging
   // inside the workspace doesn't fight with the file-drop overlay;
@@ -4746,6 +4739,7 @@ function attachFreeDrag(frame, idx) {
     if (e.target.closest && e.target.closest(".actions")) return;
     if (e.button !== 0) return;
     active = true; moved = false;
+    _wallFrameDragActive = true;
     startX = e.clientX; startY = e.clientY;
     baseX = parseFloat(frame.style.left) || 0;
     baseY = parseFloat(frame.style.top)  || 0;
@@ -4768,6 +4762,7 @@ function attachFreeDrag(frame, idx) {
   const onUp = () => {
     if (!active) return;
     active = false;
+    _wallFrameDragActive = false;
     frame.classList.remove("dragging");
     if (moved) {
       // Persist the latest positions across all frames.
@@ -4816,6 +4811,10 @@ async function loadWallSlotFromFile(idx, file) {
     const dataUrl = await blobToDataUrl(file);
     wallSlots[idx] = {
       img, name: file.name, blob: file, dataUrl,
+      // v1.2.13: keep the unmodified source so a follow-up Edit
+      // re-fits from the original instead of from the previously
+      // target-sized + letterboxed canvas.
+      origImg: img, origBlob: file,
     };
     renderWall();
     // v1.2.5: drop the user straight into the edit flow for the
@@ -4836,7 +4835,10 @@ async function loadWallSlotFromLibrary(idx, libFile) {
     const blob = await r.blob();
     const img = await fileToImage(blob);
     const dataUrl = await blobToDataUrl(blob);
-    wallSlots[idx] = { img, name: libFile, blob, dataUrl };
+    wallSlots[idx] = {
+      img, name: libFile, blob, dataUrl,
+      origImg: img, origBlob: blob,
+    };
     renderWall();
   } catch (_) {
     toast(t("toast.decode_failed", { name: libFile }), "bad");
@@ -4865,7 +4867,7 @@ function updateWallApplyState() {
       els.wallStagedHint.style.display = "none";
     }
   }
-  if (typeof updateWallSpanState === "function") updateWallSpanState();
+  // v1.2.13: updateWallSpanState call site retired with the function.
 }
 
 // v1.2.5 — composite-aware apply.
@@ -4907,9 +4909,12 @@ async function applyWall() {
       composite.width  = first.bridgeW;
       composite.height = first.bridgeH;
       const cctx = composite.getContext("2d");
-      // Stretch each tile to its declared bridge slot (slotW × slotH
-      // at xOffset/yOffset). We don't preserve source aspect ratio —
-      // the user picked an image expecting it to cover its monitor.
+      // v1.2.13: cover-fit each tile into its bridge slot — the
+      // wallpaper page treats backgrounds as "cover" by default, so
+      // doing the equivalent at composite time avoids the
+      // double-fit / squashed look that pre-v1.2.13's raw stretch
+      // produced when source aspect ratio diverged from slot aspect.
+      // The source is cropped (centred) to fill slotW × slotH.
       //
       // v1.2.6: portrait tiles are rotated 90° CW when stamped so the
       // user's portrait-shaped edit lands correctly in its
@@ -4922,17 +4927,25 @@ async function applyWall() {
         if (!slot || !slot.img) continue;
         const sw = tile.slotW || tile.w;
         const sh = tile.slotH || tile.h;
+        const iw = slot.img.naturalWidth  || slot.img.width  || sw;
+        const ih = slot.img.naturalHeight || slot.img.height || sh;
+        // For portrait tiles the rotation effectively swaps the
+        // landing rectangle's W/H from the source's perspective.
+        const targetW = (tile.orientation === "portrait") ? sh : sw;
+        const targetH = (tile.orientation === "portrait") ? sw : sh;
+        // Cover-fit math: pick the larger scale so one axis fills,
+        // then centre-crop the other.
+        const scale = Math.max(targetW / iw, targetH / ih);
+        const dw = iw * scale, dh = ih * scale;
+        const dx = (targetW - dw) / 2, dy = (targetH - dh) / 2;
         if (tile.orientation === "portrait") {
           cctx.save();
-          // Place origin at the slot's top-right corner, rotate 90° CW.
-          // Then drawImage at (0,0,sh,sw) lays the portrait-source
-          // image into a landscape-shaped slot.
           cctx.translate(tile.xOffset + sw, tile.yOffset);
           cctx.rotate(Math.PI / 2);
-          cctx.drawImage(slot.img, 0, 0, sh, sw);
+          cctx.drawImage(slot.img, dx, dy, dw, dh);
           cctx.restore();
         } else {
-          cctx.drawImage(slot.img, tile.xOffset, tile.yOffset, sw, sh);
+          cctx.drawImage(slot.img, tile.xOffset + dx, tile.yOffset + dy, dw, dh);
         }
       }
       const pngBlob = await new Promise((res) => composite.toBlob(res, "image/png"));
@@ -5013,7 +5026,6 @@ async function applyWall() {
 
 if (els.wallLayout)  els.wallLayout.addEventListener("change", renderWall);
 if (els.wallApply)   els.wallApply.addEventListener("click", applyWall);
-if (els.wallSpan)    els.wallSpan.addEventListener("click", spanCanvasAcrossWall);
 if (els.wallClear)   els.wallClear.addEventListener("click", () => {
   wallSlots = wallSlots.map(() => null);
   renderWall();
@@ -5024,38 +5036,8 @@ if (els.wallResetPos) els.wallResetPos.addEventListener("click", () => {
   renderWall();
 });
 
-// Enable / hint the Span button based on (a) canvas loaded and (b)
-// canvas aspect ratio close enough to the wall's total aspect that
-// splitting won't visibly distort. Called from updateWallApplyState
-// and whenever a new image lands on the canvas.
-function updateWallSpanState() {
-  if (!els.wallSpan) return;
-  const hasCanvas = !!originalData;
-  const multi = wallScreenCount >= 2;
-  els.wallSpan.disabled = !(hasCanvas && multi);
-  if (!els.wallSpanHint) return;
-  // The "try Span" suggestion is redundant once any slot is staged —
-  // the staged-ready hint takes priority then.
-  const anyStaged = wallSlots.some((s) => s);
-  if (!hasCanvas || !multi || anyStaged) {
-    els.wallSpanHint.style.display = "none";
-    return;
-  }
-  // Compute wall's combined aspect (sum of widths / common height).
-  // We normalise each screen to a virtual unit-height first so an
-  // ultrawide + a vertical monitor mix doesn't favour the larger
-  // physical pixels.
-  let virtualW = 0;
-  for (const s of wallScreens) {
-    if (s && s.w > 0 && s.h > 0) virtualW += s.w / s.h;
-  }
-  if (virtualW <= 0) { els.wallSpanHint.style.display = "none"; return; }
-  const wallAR = virtualW;                                   // virtual h = 1
-  const canvasAR = els.canvas.width / Math.max(1, els.canvas.height);
-  // Suggest when within ±5%; below that, span would noticeably distort.
-  const within5pct = Math.abs(canvasAR - wallAR) / wallAR < 0.05;
-  els.wallSpanHint.style.display = within5pct ? "" : "none";
-}
+// v1.2.13: updateWallSpanState removed — pointed at the dead Span
+// button + its hint banner; both gone since v1.2.7.
 
 loadWallViewports();
 // v1.2.9: tighter poll cadence + tab-focus refresh so a Configurator-side

@@ -2610,6 +2610,21 @@ async function fetchRss(rec) {
     foot.textContent = "Click ⚙ to set a feed URL";
     return;
   }
+  // v1.2.13: only allow http(s) URLs — a javascript:/data:/file: URL
+  // shouldn't be feedable, and rejecting them here is cheaper than
+  // chasing CEF-version-specific browser behaviour.
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      foot.textContent = "error: only http(s) feeds supported";
+      foot.classList.add("err");
+      return;
+    }
+  } catch (_) {
+    foot.textContent = "error: invalid URL";
+    foot.classList.add("err");
+    return;
+  }
   foot.textContent = "fetching…";
   try {
     const resp = await fetch(url, { cache: "no-store" });

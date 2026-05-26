@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.12-beta"
+APP_VERSION = "1.2.13-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1144,8 +1144,6 @@ TRANSLATIONS = {
         "de": "Re-Import fehlgeschlagen — Details in %TEMP%\\signalrgb-reimport.log."},
     "tray.reload_wallpapers":   {"en": "Reload wallpaper pages",
                                  "de": "Wallpaper-Seiten neu laden"},
-    "tray.preset_hotkeys":      {"en": "Preset hotkeys (Ctrl+Shift+1..4)",
-                                 "de": "Preset-Hotkeys (Strg+Umschalt+1..4)"},
     "tray.updates":             {"en": "Updates",                 "de": "Updates"},
     "tray.about":               {"en": "About…",                  "de": "Über…"},
     "tray.quit":                {"en": "Quit",                    "de": "Beenden"},
@@ -1311,6 +1309,27 @@ def load_config() -> dict:
             s["presets"] = list(s["presets"]) + [None] * (PRESET_SLOTS - len(s["presets"]))
         elif len(s["presets"]) > PRESET_SLOTS:
             s["presets"] = list(s["presets"])[:PRESET_SLOTS]
+        # v1.2.13: drop stale bgImage references whose file no longer
+        # exists on disk. Pre-v1.2.13 a manual cleanup of the screens
+        # folder left bgImage pointing into the void; the wallpaper
+        # page would silently fail to load anything and the
+        # Configurator's library overview rendered a broken thumbnail.
+        bg = s.get("bgImage")
+        if isinstance(bg, str) and bg:
+            # Only check absolute paths — http(s)/data URLs pass
+            # through. Network reachability isn't our problem.
+            looks_local = not bg.startswith(("http://", "https://", "data:"))
+            if looks_local:
+                bg_path = bg.replace("file://", "").lstrip("/")
+                # bridge stores paths the wallpaper-page-side proxy
+                # consumes; treat absolute paths or screens-dir
+                # relatives as resolvable here.
+                try:
+                    if not Path(bg).exists() and not (screens_dir() / bg_path).exists():
+                        print(f"[config] dropping stale bgImage for screen {n}: {bg}")
+                        s["bgImage"] = ""
+                except Exception:
+                    pass
     return cfg
 
 
@@ -1834,6 +1853,28 @@ class Broadcaster:
                     if 0 < content_length <= MAX_BACKGROUND_UPLOAD_BYTES:
                         try:
                             body = await reader.readexactly(content_length)
+                            # v1.2.13: magic-byte sniff so an arbitrary
+                            # binary payload pretending to be a PNG via
+                            # Content-Type can't land in the screens/
+                            # folder. PNG + JPEG + WebP + GIF + the
+                            # ISO-BMFF video containers the wallpaper
+                            # page can play back.
+                            valid = (
+                                body[:8] == b"\x89PNG\r\n\x1a\n" or
+                                body[:3] == b"\xff\xd8\xff" or
+                                (body[:4] == b"RIFF" and body[8:12] == b"WEBP") or
+                                body[:6] in (b"GIF87a", b"GIF89a") or
+                                body[:4] == b"\x1aE\xdf\xa3" or
+                                (len(body) > 12 and body[4:8] == b"ftyp")
+                            )
+                            if not valid:
+                                http_error(writer, 400,
+                                    "background payload not recognised (PNG / JPEG / WebP / GIF / MP4 / WebM / MOV expected)")
+                                try: await writer.drain()
+                                except Exception: pass
+                                try: writer.close()
+                                except Exception: pass
+                                return
                             ok = self.update_background(screen_idx, body)
                             if ok:
                                 await self.push_settings(screen_idx, self.get_settings(screen_idx))
@@ -3512,7 +3553,15 @@ class BridgeRuntime:
         setting at it. Unique-timestamped filename so the wallpaper page
         sees a new URL and refetches (avoids stale-cache hits). Old
         screen-N-*.png files are deleted so the screens/ folder doesn't
-        bloat over many edits."""
+        bloat over many edits.
+
+        v1.2.13 note: called from the asyncio loop's HTTP handler, but
+        file I/O here is sync. PNG writes are small (~MB) and screens/
+        glob deletes are bounded, so the loop block is acceptable.
+        Heavier I/O (or really pathological screens/ folders) could be
+        offloaded via asyncio.to_thread; left synchronous for now since
+        the codepath is hot enough that thread-pool overhead would cost
+        more than the few-ms block."""
         if self._block_if_mirror(screen, "background-upload"):
             return False
         try:
@@ -3617,9 +3666,14 @@ class BridgeRuntime:
 
         def mutate(s):
             existing = s.setdefault("widgets", [])
-            # Compose a new id deterministic-ish from current count + ms time
-            # so two rapid clicks don't collide.
-            new_id = f"w_{int(time.time() * 1000) % 10_000_000}_{len(existing)}"
+            # v1.2.13: per-screen monotonic counter persisted in
+            # config so IDs stay collision-free even when two screens
+            # rapid-add widgets in the same millisecond (Quick Looks
+            # was a real culprit). Falls back to the ms-time scheme
+            # only when the counter is missing for some reason.
+            counter = int(s.get("_widgetIdSeq", 0)) + 1
+            s["_widgetIdSeq"] = counter
+            new_id = f"w_s{screen}_{counter}"
             # Merge bundle options over defaults so callers (Look bundles)
             # can override just the fields they care about; everything else
             # stays at the type's defaults.
@@ -4163,18 +4217,21 @@ class BridgeRuntime:
         # (lastApplyMs / nextIdx) across config changes.
         if key == "cycle":
             return self._update_cycle(screen, value)
-        # Mutations on a mirror are rejected at the bridge as a safety net
-        # — the Configurator already disables UI controls, but a stale
-        # tab or a future REST client mustn't be able to drift a mirror
-        # away from its source.
-        if self._is_mirror(screen):
-            print(f"[settings] screen {screen} is a mirror; ignoring {key!r}")
-            return None
         # monitorSetup gets sanitised before persisting so a malformed
         # payload (wrong mode string, wrong orientation list length)
         # can't poison the config or break the Builder reading it back.
         if key == "monitorSetup":
             value = self._sanitise_monitor_setup(value)
+        # Mutations on a mirror are rejected at the bridge as a safety
+        # net — the Configurator already disables UI controls, but a
+        # stale tab or a future REST client mustn't be able to drift
+        # a mirror away from its source.
+        # monitorSetup is the one exception: it's in _NON_MIRRORED_KEYS
+        # because it describes physical hardware (not display config),
+        # so a mirror screen still owns its own layout declaration.
+        if key != "monitorSetup" and self._is_mirror(screen):
+            print(f"[settings] screen {screen} is a mirror; ignoring {key!r}")
+            return None
         def mutate(s):
             s[key] = value
         snap = self._mutate_screen(screen, mutate)

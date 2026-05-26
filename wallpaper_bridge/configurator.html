@@ -114,8 +114,6 @@
     background: var(--accent-bg);
     border-color: #3a6ba8;
   }
-  /* Hide the legacy single shared trigger if anything still renders it. */
-  .screen-popover-trigger { display: none !important; }
 
   .screencount-pick {
     margin-left: auto;
@@ -330,13 +328,9 @@
     pointer-events: none;
   }
 
-  /* Mirror-mode controls (v1.2.1 redesign).
-     The old full-width "mirror-bar" was visually heavy and split the
-     mirror-picker from the Reset button it was always seen alongside.
-     New layout: a compact mirror badge inside each screen tab + a
-     dedicated "Screen settings" popover trigger anchored to the tab
-     row. Both the picker and the Reset button live inside the popover
-     so a single click brings up all per-screen controls at once. */
+  /* Mirror-mode controls. Compact mirror badge inside each screen tab;
+     the picker + reset button live in the per-tab "Screen settings"
+     popover instead of the pre-v1.2.1 full-width bar. */
   .tab .tab-mirror-badge {
     display: inline-flex; align-items: center;
     margin-left: 6px;
@@ -350,33 +344,8 @@
     pointer-events: none;
   }
   .tab .tab-mirror-badge.hidden { display: none; }
-  .screen-popover-trigger {
-    /* Lives in the tab row, immediately right of the last visible
-       tab. Inherits the screencount picker's footprint so it doesn't
-       reflow when the user shows/hides extra screens. */
-    margin-left: 4px;
-    margin-bottom: 6px;
-    width: 28px; height: 28px;
-    background: transparent;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center;
-    transition: color 0.12s, background 0.12s, border-color 0.12s;
-  }
-  .screen-popover-trigger:hover {
-    color: var(--text); background: rgba(255,255,255,0.04);
-    border-color: #3a6ba8;
-  }
-  .screen-popover-trigger.active {
-    color: #d8e6fc; background: var(--accent-bg); border-color: #3a6ba8;
-  }
-  .screen-popover-trigger svg {
-    width: 16px; height: 16px;
-    stroke: currentColor; fill: none;
-    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
-  }
+  /* v1.2.13: legacy .screen-popover-trigger CSS removed — per-tab
+     gear replaced the single shared trigger in v1.2.10. */
   #screen-popover {
     position: absolute;
     z-index: 30;
@@ -2062,8 +2031,8 @@ const TRANSLATIONS = {
   "section.looks":          { en: "Quick Looks",                de: "Quick Looks" },
   "looks.hint":             { en: "Pre-built combinations — background + effects + widgets — for the most common desktop archetypes. Pick one to replace the current screen's configuration with the bundle.",
                               de: "Vorgebaute Kombinationen — Hintergrund + Effekte + Widgets — für die häufigsten Desktop-Archetypen. Pick einen aus, ersetzt die aktuelle Bildschirm-Konfiguration mit dem Bundle." },
-  "looks.confirm":          { en: "Apply \"{name}\" to {screen}? This replaces background, effects, widget tile-style, and the widget layout. Existing widgets will be removed.",
-                              de: "„{name}\" auf {screen} anwenden? Ersetzt Hintergrund, Effekte, Widget-Stil und das Widget-Layout. Bestehende Widgets werden entfernt." },
+  "looks.confirm":          { en: "Apply \"{name}\" to {screen}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.",
+                              de: "„{name}\" auf {screen} anwenden? Ersetzt Effekte, Widget-Stil und das Widget-Layout. Bestehende Widgets werden entfernt. Der Hintergrund bleibt erhalten." },
   "looks.applied":          { en: "Applied {name}",             de: "{name} angewendet" },
   "widgets.add_label":      { en: "Add a widget:",        de: "Widget hinzufügen:" },
   "widgets.empty":          { en: "No widgets on this screen yet — pick one below to add.",
@@ -2163,10 +2132,13 @@ const LOOK_BUNDLES = [
       parallax3d:      15,
     },
     widgets: [
+      // v1.2.13: clock loses the header strip. A 26px header inside a
+      // 200×200 square squashes the analog face to a 200×174 oval.
+      // Header off keeps the circle round.
       { type: "clock",       x:   50, y:   50, w: 200, h: 200,
-        options: { style: "analog", format24h: true, tintFromGlow: true, showHeader: true } },
+        options: { style: "analog", format24h: true, tintFromGlow: true, showHeader: false } },
       { type: "now-playing", x:   50, y:  280, w: 380, h: 130,
-        options: { tintFromGlow: true, showProgress: true, showHeader: true, tileStyle: "glass" } },
+        options: { tintFromGlow: true, showProgress: true, showHeader: true } },
       { type: "cpu-meter",   x:   50, y:  430, w: 180, h: 100,
         options: { tintFromGlow: true, showHeader: true } },
       { type: "ram-meter",   x:  250, y:  430, w: 180, h: 100,
@@ -2853,10 +2825,9 @@ function renderOverviewCard(screens) {
 // anchored under the trigger; popover contains the mirror picker
 // and the Reset-this-screen button. Replaces the full-width
 // mirror-bar that the older betas put under the tab row.
-// v1.2.10: the single shared "Screen settings" gear at the end of
-// the tab row is replaced by a per-tab gear (built inline next to
-// each tab above). els.screenPopoverTrigger stays null; legacy
-// showScreenPopover callers that pass no anchor are a no-op.
+// v1.2.13: shared trigger fully retired in v1.2.10; the dangling
+// comment + els.screenPopoverTrigger reference were removed in the
+// cleanup pass.
 
 // Right-aligned screen-count picker. Replaces the legacy Tk dialog's
 // "Number of screens" knob — sends `bridge-setting-update screenCount`
@@ -3850,12 +3821,9 @@ function toggleScreenPopover() {
   else showScreenPopover();
 }
 function showScreenPopover(anchorEl) {
-  if (!popoverEl) return;
-  // v1.2.10: anchor is the per-tab gear that was clicked. Falls back
-  // to the legacy single trigger if no anchor was passed (kept for
-  // older call sites that haven't been migrated to per-tab gears).
-  const anchor = anchorEl || els.screenPopoverTrigger;
-  if (!anchor) return;
+  if (!popoverEl || !anchorEl) return;
+  // v1.2.10: anchor is the per-tab gear that was clicked.
+  const anchor = anchorEl;
   const r = anchor.getBoundingClientRect();
   const popW = 320;   // matches min-width + a bit of buffer
   let left = r.right + window.scrollX - popW;
@@ -3960,7 +3928,6 @@ function hideScreenPopover() {
 document.addEventListener("click", (e) => {
   if (!popoverEl || !popoverEl.classList.contains("show")) return;
   if (popoverEl.contains(e.target)) return;
-  if (els.screenPopoverTrigger && els.screenPopoverTrigger.contains(e.target)) return;
   // v1.2.10: per-tab gears each open the popover anchored to themselves
   // — clicks on any of them shouldn't close-and-reopen.
   if (e.target.closest && e.target.closest(".tab-gear")) return;

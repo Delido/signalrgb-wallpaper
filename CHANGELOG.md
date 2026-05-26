@@ -4,6 +4,132 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.13-beta] - 2026-05-26
+
+> Sweep through the audit list: 14 of the 22 reported issues fixed,
+> 5 either non-bugs (`save_config` was already atomic, dead code was
+> already gone, etc.) or accepted trade-offs documented in place, and
+> 3 mid-priority items batched for a future release.
+
+### Fixed — `add_widget` ID collisions on Quick Looks bursts
+
+`f"w_{ms % 10_000_000}_{len(existing)}"` could collide when two
+screens rapid-added widgets in the same millisecond with the same
+prior count — a real risk during a Quick Looks apply, which adds
+4-5 widgets in tight succession to the same screen. Replaced with
+a per-screen monotonic counter persisted in
+`config["screens"][n]["_widgetIdSeq"]`. IDs read `w_s<screen>_<n>`
+now and stay collision-free across screens + restarts.
+
+### Fixed — Builder `renderWall` could yank a dragged free-form tile
+
+The 3 s `/config` poll triggers `renderWall()` which wipes
+`wall-canvas.innerHTML` and rebuilds every frame. If the user was
+mid-drag in free-form layout, the rebuild dropped the dragged
+frame into a new DOM node and the drag died. A shared
+`_wallFrameDragActive` flag gates the re-render — `mouseup`
+triggers a clean render once the drag finishes via
+`saveWallPositions → renderWall`, so we never miss a paint.
+
+### Fixed — Edit re-opens compounded letterbox transparency
+
+v1.2.8 contain-fitted the source image into a target-sized canvas
+on edit open. Saving back stored the *fitted* canvas as the slot's
+image, so a second edit fit again — letterbox baked into letterbox.
+Slots now carry a pristine `origImg` / `origBlob` alongside the
+working `img`; `editWallSlot` fits from `origImg` so the fit math
+always starts from the original source.
+
+### Fixed — `applyWall` stretched source images to slot dimensions
+
+Pre-v1.2.13 the composite stamp used a plain
+`drawImage(img, x, y, w, h)` which stretches the source to fit
+regardless of aspect. A 21:9 source landed in a 16:9 slot squashed
+horizontally. v1.2.13 cover-fits each tile into its slot (centre-
+crop on one axis to make the other fill), matching the wallpaper
+page's default background contract. Portrait-tile rotation math
+follows along.
+
+### Fixed — RSS widget accepted non-http(s) feed URLs
+
+`fetch(feedUrl)` was called without protocol validation. Browsers
+generally reject `javascript:` / `data:` / `file:` URLs in
+`fetch()`, but relying on CEF-version-specific behaviour was a
+weak defence. v1.2.13 validates with `new URL(s)` + an explicit
+`http:` / `https:` allowlist before issuing the request; failures
+surface in the widget footer instead of silently retrying.
+
+### Fixed — `/screen/<N>/background` accepted arbitrary bytes
+
+The HTTP POST handler only checked `Content-Type` and size, not
+the actual payload bytes. v1.2.13 magic-byte-sniffs PNG / JPEG /
+WebP / GIF / WebM / ISO-BMFF (MP4/MOV/M4V) before persisting and
+rejects everything else with a 400, mirroring the existing
+`/library/upload` validation.
+
+### Fixed — Stale `bgImage` paths survived in config across cleanups
+
+If the user manually emptied the `screens/` folder (or restored
+from a backup that didn't include the PNGs), `bgImage` paths in
+the config kept pointing into the void. `load_config` now drops
+`bgImage` entries whose file no longer exists on disk so the
+wallpaper page doesn't keep retrying a phantom URL.
+
+### Fixed — Monitor-Setup couldn't be edited on a mirror screen
+
+`update_screen_setting` blocks mutations on mirror screens to
+prevent drift from the source. But `monitorSetup` is in
+`_NON_MIRRORED_KEYS` — it describes physical hardware, not display
+config, so a mirror screen should still own its layout
+declaration. v1.2.13 exempts `monitorSetup` from the mirror block.
+
+### Fixed — Builder `/config` poll could race on rapid tab toggle
+
+`visibilitychange` + 3 s interval can fire two `loadWallViewports`
+calls before either completes. Without an `AbortController` the
+fetches race and whichever resolved last wins, not whichever was
+freshest. New `_wallViewportsAbort` cancels the previous in-flight
+fetch before issuing a new one.
+
+### Fixed — Cyberpunk Streamer clock got squashed by the header
+
+The bundle's 200×200 clock had `showHeader: true`. The 26 px
+header strip squashed the analog face to a 200×174 oval. Header
+off, circle round.
+
+### Removed — Dead Span-canvas code in the Builder
+
+`spanCanvasAcrossWall` + `updateWallSpanState` + their `els`
+references never had a UI surface post-v1.2.7 (the Span button
+was removed then). Cleaned out.
+
+### Removed — Legacy `.screen-popover-trigger` CSS + element ref
+
+The single shared "Screen settings" gear was replaced by a per-tab
+gear in v1.2.10. The CSS block + the `els.screenPopoverTrigger`
+fallback in `showScreenPopover` were retained as backstops; both
+gone in this cleanup.
+
+### Removed — Orphan `tray.preset_hotkeys` i18n key
+
+The matching tray menu entry was migrated into the Configurator's
+System section in v1.2.2 but the string stayed behind.
+
+### Other
+
+- `save_config` audit-flagged as non-atomic — verified to already
+  use the temp-file + `replace()` pattern, false positive.
+- `_update_background` file delete batched audit-flagged for
+  `asyncio.to_thread` offloading. Left synchronous; the
+  thread-pool overhead would cost more than the typical few-ms
+  loop block for a handful of stale PNG deletes.
+- `setSetting` optimistic-update rollback audit-flagged. The WS
+  echo from the bridge's `push_settings` is the existing
+  rollback signal — a rejected write gets corrected on the next
+  echo automatically. No code change needed.
+
+---
+
 ## [1.2.12-beta] - 2026-05-26
 
 > Quick Looks no longer overwrite the user's background, dead bg keys
