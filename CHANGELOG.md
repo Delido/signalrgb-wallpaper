@@ -4,6 +4,29 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.17-beta] - 2026-05-26
+
+> v1.2.16 Hotfix — `quick-look-apply` WS-Messages wurden silent
+> gedropt weil die Type-Whitelist im handle_client_message-Vorfilter
+> nicht erweitert wurde. Quick Looks "applied" Toast erschien, aber
+> nichts passierte tatsächlich auf dem Screen.
+
+### Fixed — Quick Looks applied but nothing happened
+
+`handle_client_message` rejects unknown WS message types as a
+safety net against newer-client → older-bridge protocol drift. The
+new `quick-look-apply` type was added to `_on_widget_command`'s
+dispatch table in v1.2.16 but I forgot the corresponding whitelist
+entry one frame up, so every Quick Look apply got silently dropped
+at the WS entry point. From the user's POV: pre-bundle widgets
+stayed, no new ones appeared, "Applied X" toast showed but no
+visible change.
+
+`widgets-set` and the rest of v1.2.16's command types were in the
+whitelist already; only `quick-look-apply` slipped through.
+
+---
+
 ## [1.2.16-beta] - 2026-05-26
 
 > Quick Looks ließen pre-Bundle Widgets manchmal mit-leben + die
