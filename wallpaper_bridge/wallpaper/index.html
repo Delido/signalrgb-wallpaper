@@ -1120,9 +1120,25 @@ function ensureZones(cols, rows) {
   lastCols = cols; lastRows = rows;
   document.documentElement.style.setProperty("--cols", cols);
   document.documentElement.style.setProperty("--rows", rows);
+  // v1.2.18: grid geometry changed → invalidate the per-zone colour
+  // cache so the next renderFrame paints every zone fresh.
+  zoneLastColor = null;
 }
 
 function rgbCss(r, g, b) { return "rgb(" + r + "," + g + "," + b + ")"; }
+
+// v1.2.18: cache last RGB per zone packed into a Uint32 (R<<16|G<<8|B)
+// so renderFrame can skip the DOM style write when the colour hasn't
+// changed. For typical SignalRGB effects (smooth gradients, slow
+// pulses) most zones only change every few frames — pre-v1.2.18 we
+// were writing all w*h zones on every UDP datagram, which at 32×32×60fps
+// = 61 440 style mutations/sec saturated the main thread and starved
+// the 1 s widget tick. The cache resets when ensureZones rebuilds the
+// grid.
+let zoneLastColor = null;
+function _resetZoneColorCache(total) {
+  zoneLastColor = new Int32Array(total).fill(-1);
+}
 
 function renderFrame(buf) {
   // Honor Lively's pause-wallpapers / page-hidden state: drop frames so
@@ -1151,16 +1167,26 @@ function renderFrame(buf) {
   // 16×9 grid at 60 fps (≈ 8 600 fewer property accesses/sec).
   if (isGridLayout()) {
     const total = w * h;
+    if (!zoneLastColor || zoneLastColor.length !== total) _resetZoneColorCache(total);
     for (let i = 0; i < total; i++) {
       const r = buf[off], g = buf[off + 1], b = buf[off + 2];
-      zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+      const packed = (r << 16) | (g << 8) | b;
+      if (zoneLastColor[i] !== packed) {
+        zoneLastColor[i] = packed;
+        zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+      }
       if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
       off += 3;
     }
   } else {
+    if (!zoneLastColor || zoneLastColor.length !== w) _resetZoneColorCache(w);
     for (let i = 0; i < w; i++) {
       const r = buf[off], g = buf[off + 1], b = buf[off + 2];
-      zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+      const packed = (r << 16) | (g << 8) | b;
+      if (zoneLastColor[i] !== packed) {
+        zoneLastColor[i] = packed;
+        zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+      }
       if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
       off += 3;
     }

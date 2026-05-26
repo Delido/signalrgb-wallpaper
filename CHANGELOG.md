@@ -4,6 +4,50 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-05-26
+
+> Two perf / stability fixes shipping on top of v1.2.0 stable. Resolves
+> the long-reported "Bridge.exe at 500+ MB RAM" + "widgets lag when
+> SignalRGB is sending" issues. Both root-caused to the per-frame
+> rendering pipeline: a buffer-without-backpressure leak in the
+> bridge, and uniform DOM mutations in the wallpaper-page paint
+> regardless of whether the colour actually changed.
+
+### Fixed — Bridge memory grew unbounded under slow wallpaper clients
+
+`Broadcaster.broadcast_frame` called `writer.write(frame)` for every
+connected client every frame without any backpressure check. Asyncio's
+`StreamWriter` accepts the bytes into its output buffer regardless of
+whether the underlying socket has drained, so a wallpaper page that
+reads frames slowly (heavy widget tick, GPU-bound paint) lets the
+bridge-side buffer grow indefinitely. Observed in v1.1 / early v1.2
+testing as Bridge.exe holding 500+ MB resident.
+
+v1.2.1 adds a per-client check: if
+`transport.get_write_buffer_size() > 256 KiB` (~5 full-grid 32×32
+frames at the typical 60 fps cadence) the frame is dropped for that
+client. SignalRGB sends a fresh frame every ~16 ms anyway, so a
+dropped frame costs at most one render. Pre-v1.2.1 the buffer would
+just keep growing.
+
+### Fixed — Widget lag when SignalRGB sends frames
+
+The wallpaper page wrote `zoneEls[i].style.background = ...` for
+every zone on every UDP frame. At a 32×32 grid (1024 zones) × 60
+fps that's 61 440 DOM-style mutations per second — enough to
+saturate the JS main thread and starve the 1 s widget tick
+`setInterval`. Even when SignalRGB effects produced smooth
+gradients where most zones were stable.
+
+v1.2.1 caches the last-rendered RGB per zone packed into an
+`Int32Array` and skips the style write when the colour hasn't
+changed. For typical SignalRGB content (pulses, gradients, slow
+breathing) the effective DOM-write rate drops by 70–95%. The cache
+resets when `ensureZones` rebuilds the grid (count / aspect-ratio
+change in the plugin's Settings).
+
+---
+
 ## [1.2.0] - 2026-05-26
 
 > Third stable release. Graduates the v1.2.x-beta line (17 betas

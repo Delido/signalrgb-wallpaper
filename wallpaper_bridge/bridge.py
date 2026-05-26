@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1613,6 +1613,19 @@ class Broadcaster:
 
     # ----- broadcasting (called from asyncio loop) -----
 
+    # v1.2.18: backpressure threshold for the per-client TCP send
+    # buffer. Above this we drop frames for that client instead of
+    # adding to its pending writes. The wallpaper page reads WS
+    # binary frames at variable speed (heavy widget tick + paint can
+    # block the main thread); without backpressure the asyncio
+    # StreamWriter's buffer grew indefinitely → 590 MB resident
+    # observed in v1.1 / early v1.2 testing. 256 KiB ≈ 80 frames at
+    # the typical 16×9×3 = 432-byte single-packet payload, or ~5
+    # full-grid 32×32 frames; plenty of headroom for a brief
+    # client-side hitch without dropping anything visible, but caps
+    # the leak.
+    _CLIENT_WRITE_BUFFER_LIMIT = 256 * 1024
+
     async def broadcast_frame(self, screen: int, payload: bytes):
         # Skip while paused — no point shipping per-frame UDP-derived
         # bytes when the wallpaper page is going to drop them anyway. The
@@ -1630,6 +1643,15 @@ class Broadcaster:
         dead = []
         for w in clients:
             try:
+                # v1.2.18: per-client backpressure. transport.get_write_buffer_size()
+                # is the StreamWriter's pending-bytes counter; if it's
+                # above our cap the client is reading slower than we're
+                # writing and adding more frames just leaks memory. The
+                # plugin sends a fresh frame every ~16 ms anyway, so a
+                # dropped frame here costs the user at most one render.
+                tr = w.transport
+                if tr is not None and tr.get_write_buffer_size() > self._CLIENT_WRITE_BUFFER_LIMIT:
+                    continue
                 w.write(frame)
             except Exception:
                 dead.append(w)
