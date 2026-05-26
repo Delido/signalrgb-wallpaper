@@ -4,6 +4,22 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.11-beta] - 2026-05-26
+
+> Tiny follow-up: Undo / Redo buttons surface in Simple mode again.
+
+### Changed — Undo / Redo visible in Simple mode
+
+The History `<section>` was wholesale `simple-hide`'d in v1.2.3
+when Simple mode shipped, which silently hid Undo / Redo too —
+users running an Auto-Cut they didn't like had no escape hatch
+besides reloading the slot. v1.2.11 keeps the Undo / Redo row
+visible in Simple mode while leaving the per-step History list +
+"Reset all edits" hidden (those are geared at the multi-step
+brush edits the Simple flow doesn't surface anyway).
+
+---
+
 ## [1.2.10-beta] - 2026-05-26
 
 > Three fixes from the v1.2.9 test pass. The big one is on the bridge:

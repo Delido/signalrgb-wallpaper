@@ -1050,14 +1050,19 @@
       </div>
     </section>
 
-    <section class="simple-hide">
+    <!-- v1.2.11: Undo / Redo always visible — even in Simple mode the
+         user needs to be able to walk back an Auto-Cut they're not
+         happy with. The full History list + Reset-all stay
+         Advanced-only because they're geared at heavier multi-step
+         edits the Simple flow doesn't expose anyway. -->
+    <section>
       <h2 data-i18n="section.history">History</h2>
-      <div class="history" id="history"></div>
+      <div class="history simple-hide" id="history"></div>
       <div class="btn-row" style="margin-top: 8px;">
         <button class="btn" id="undo-btn" disabled data-i18n="btn.undo">Undo</button>
         <button class="btn" id="redo-btn" disabled data-i18n="btn.redo">Redo</button>
       </div>
-      <div class="btn-row" style="margin-top: 6px;">
+      <div class="btn-row simple-hide" style="margin-top: 6px;">
         <button class="btn danger" id="reset-edits-btn" disabled data-i18n="btn.reset_edits">Reset all edits</button>
       </div>
     </section>
