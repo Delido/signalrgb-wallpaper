@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1127,6 +1127,8 @@ TRANSLATIONS = {
                                  "de": "Hilfe öffnen"},
     "status.btn.refresh":       {"en": "Refresh",
                                  "de": "Aktualisieren"},
+    "tray.pause":               {"en": "Pause glow + animations",
+                                 "de": "Glow + Animationen pausieren"},
     "tray.lock_all":            {"en": "🔓 Lock widgets (all screens)",
                                  "de": "🔓 Widgets sperren (alle Bildschirme)"},
     "tray.unlock_all":          {"en": "🔒 Unlock widgets (all screens)",
@@ -3533,7 +3535,12 @@ class BridgeRuntime:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.broadcaster: Broadcaster | None = None
         self._ready = threading.Event()
+        # _paused is the fullscreen-watcher-driven flag; _manual_paused
+        # is the tray's explicit Pause toggle. Effective pause (frame
+        # drop + the wallpaper-page PAUSED badge) is the OR of both —
+        # see _is_paused(). v1.2.3.
         self._paused = False
+        self._manual_paused = False
         self.fullscreen_watcher = FullscreenWatcher(
             on_state_change=self._on_fullscreen_state,
             is_enabled=self._is_fullscreen_pause_enabled,
@@ -3554,7 +3561,21 @@ class BridgeRuntime:
             return int(self.config.get("screenCount", 1))
 
     def _is_paused(self) -> bool:
-        return self._paused
+        # Effective pause = fullscreen-induced OR manual tray toggle.
+        return self._paused or self._manual_paused
+
+    def set_manual_pause(self, paused: bool):
+        """Tray Pause/Resume entry. Independent of the fullscreen
+        watcher — a manual pause holds even when no fullscreen app is
+        foreground, and a manual resume doesn't override an active
+        fullscreen pause (the watcher's flag stays set until the app
+        leaves foreground)."""
+        self._manual_paused = bool(paused)
+        if self.broadcaster:
+            self.broadcaster.push_pause_threadsafe(self._is_paused())
+
+    def is_manual_paused(self) -> bool:
+        return self._manual_paused
 
     def _is_fullscreen_pause_enabled(self) -> bool:
         with self.config_lock:
@@ -3574,9 +3595,11 @@ class BridgeRuntime:
 
     def _on_fullscreen_state(self, paused: bool):
         # Called from the watcher thread when fullscreen-active flips.
+        # Push the COMBINED state so a manual pause isn't cleared when
+        # a fullscreen app leaves the foreground.
         self._paused = bool(paused)
         if self.broadcaster:
-            self.broadcaster.push_pause_threadsafe(self._paused)
+            self.broadcaster.push_pause_threadsafe(self._is_paused())
 
     def _update_background(self, screen: int, png_bytes: bytes) -> bool:
         """Persist a builder-uploaded PNG and point the screen's bgImage
@@ -5442,6 +5465,15 @@ class TrayApp:
             pystray.MenuItem(
                 tr("tray.lock_all") if any_unlocked else tr("tray.unlock_all"),
                 self._toggle_widgets_lock_all),
+            # v1.2.3: manual Pause / Resume. Independent of the
+            # fullscreen-watcher auto-pause; freezes glow + animations
+            # on every screen on demand (e.g. to save GPU while AFK
+            # without launching a fullscreen app). Checkmark reflects
+            # the current manual state.
+            pystray.MenuItem(
+                tr("tray.pause"),
+                self._toggle_manual_pause,
+                checked=lambda _i: self.bridge.is_manual_paused()),
             pystray.Menu.SEPARATOR,
             # v1.2.1: most of the old "Advanced" submenu moved into the
             # Configurator's new System section. What stays here are the
@@ -5481,6 +5513,13 @@ class TrayApp:
                 if s.get("widgetsLocked") is False:
                     return True
         return False
+
+    def _toggle_manual_pause(self, icon, item):
+        new_state = not self.bridge.is_manual_paused()
+        self.bridge.set_manual_pause(new_state)
+        try: icon.update_menu()
+        except Exception: pass
+        print(f"[tray] manual pause -> {new_state}")
 
     def _toggle_widgets_lock_all(self, icon, item):
         target_locked = self._any_screen_unlocked()    # if any unlocked → lock everything

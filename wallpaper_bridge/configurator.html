@@ -4408,19 +4408,39 @@ function _renderTourStep() {
     spot.style.display = "none";
     return;
   }
-  try { el.scrollIntoView({ behavior: "smooth", block: "center" }); }
-  catch (_) {}
-  // Give the smooth-scroll a tick to settle before measuring.
+  // v1.2.3: if the step targets a collapsed section card (or an
+  // element inside one), expand it first so the spotlight lands on
+  // the actual content, not a 1-line collapsed header. The pre-v1.2.3
+  // tour spotlighted collapsed cards → the highlighted region was a
+  // sliver and the tooltip landed off-screen for later steps.
+  const card = el.closest ? el.closest("section.card") : null;
+  if (card && card.classList.contains("collapsed")) {
+    card.classList.remove("collapsed");
+  }
+  // Scroll the target near the top of the viewport (not center) so a
+  // tall card's whole body + the tooltip below it stay on-screen.
+  // Offset accounts for the sticky header (~53px) + tab row (~40px).
+  const STICKY_OFFSET = 110;
+  try {
+    const y = el.getBoundingClientRect().top + window.scrollY - STICKY_OFFSET;
+    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+  } catch (_) {}
+  // Give the smooth-scroll + the expand reflow a tick to settle.
   setTimeout(() => {
     const r = el.getBoundingClientRect();
     spot.style.display = "block";
     spot.style.left   = (r.left - 6)   + "px";
     spot.style.top    = (r.top  - 6)   + "px";
     spot.style.width  = (r.width  + 12) + "px";
-    spot.style.height = (r.height + 12) + "px";
+    // Clamp spotlight height to the viewport so a tall card doesn't
+    // push the highlight ring (and the tooltip placement math) off
+    // the bottom of the screen.
+    const maxSpotH = window.innerHeight - (r.top - 6) - 20;
+    spot.style.height = Math.min(r.height + 12, Math.max(40, maxSpotH)) + "px";
+    const spotBottom = (r.top - 6) + parseFloat(spot.style.height);
     // Place the tooltip below the spotlight when there's room, else above.
     const tipW = 320, tipH = tip.offsetHeight || 180;
-    const wantBelow = r.bottom + 14 + tipH <= window.innerHeight - 10;
+    const wantBelow = spotBottom + 14 + tipH <= window.innerHeight - 10;
     tip.style.transform = "";
     tip.style.right = "";
     tip.style.bottom = "";
@@ -4429,11 +4449,11 @@ function _renderTourStep() {
     if (left < 10) left = 10;
     tip.style.left = left + "px";
     if (wantBelow) {
-      tip.style.top = (r.bottom + 14) + "px";
+      tip.style.top = (spotBottom + 14) + "px";
     } else {
       tip.style.top = Math.max(10, r.top - tipH - 14) + "px";
     }
-  }, 280);
+  }, 320);
 }
 
 function advanceTour() {

@@ -209,16 +209,24 @@
   input[type="file"] { display: none; }
 
   .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-  .row label { flex: 0 0 88px; color: var(--text-dim); }
-  .row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .row label { flex: 0 0 78px; color: var(--text-dim); }
+  /* v1.2.3: min-width:0 lets the range slider shrink below its
+     intrinsic ~129px min-width. Without it, the label + slider + value
+     row overflowed the 260px tool-options panel and forced a
+     horizontal scrollbar (the value behind "Tolerance" was the
+     visible symptom). */
+  .row input[type=range] { flex: 1 1 0; min-width: 0; accent-color: var(--accent); }
   .row .val {
-    flex: 0 0 36px; text-align: right; font-variant-numeric: tabular-nums;
+    flex: 0 0 30px; text-align: right; font-variant-numeric: tabular-nums;
   }
   .row select {
-    flex: 1; padding: 5px 7px; border-radius: 4px;
+    flex: 1 1 0; min-width: 0; padding: 5px 7px; border-radius: 4px;
     background: var(--panel-2); color: var(--text);
     border: 1px solid var(--border); font: inherit;
   }
+  /* Belt-and-braces: the tool-options column never shows a horizontal
+     scrollbar; vertical only. */
+  #tool-options-panel { overflow-x: hidden; }
 
   .check-row { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
   .check-row input { accent-color: var(--accent); }
@@ -947,6 +955,10 @@
     <button class="mode-btn" id="mode-advanced" type="button" role="tab"
             data-i18n="mode.advanced">Advanced</button>
   </div>
+  <!-- v1.2.3: replay the first-run tour. The tour auto-fires once;
+       this button lets users re-run it (or run it after dismissing). -->
+  <button class="btn" id="tour-btn" type="button"
+          data-i18n="header.tour" style="margin-left: 8px;">Tour</button>
 </header>
 
 <main>
@@ -1263,6 +1275,10 @@
       <div class="stat" id="img-stat" data-i18n="stat.no_image">No image loaded.</div>
       <div class="btn-row" style="margin-top: 8px;">
         <button class="btn" id="rotate-btn" disabled data-i18n="btn.rotate">Rotate 90°</button>
+        <button class="btn" id="flip-h-btn" disabled data-i18n="btn.flip_h"
+                title="Mirror left ↔ right — handy for the same image flipped across two monitors">⇄ Flip H</button>
+        <button class="btn" id="flip-v-btn" disabled data-i18n="btn.flip_v"
+                title="Mirror top ↕ bottom">⇅ Flip V</button>
       </div>
     </section>
 
@@ -1457,6 +1473,8 @@ const els = {
   openLibBtn:   $("open-library-btn"),
   imgStat:      $("img-stat"),
   rotateBtn:    $("rotate-btn"),
+  flipHBtn:     $("flip-h-btn"),
+  flipVBtn:     $("flip-v-btn"),
 
   mergeMode:    $("merge-mode"),
   mergeHint:    $("merge-hint"),
@@ -1896,6 +1914,8 @@ const TRANSLATIONS = {
   "lib.save.done":    { en: "Saved {label} to library", de: "{label} in Bibliothek gespeichert" },
   "stat.no_image":    { en: "No image loaded.",de: "Kein Bild geladen." },
   "btn.rotate":       { en: "Rotate 90°",      de: "90° drehen" },
+  "btn.flip_h":       { en: "⇄ Flip H",        de: "⇄ H spiegeln" },
+  "btn.flip_v":       { en: "⇅ Flip V",        de: "⇅ V spiegeln" },
 
   // Right panel — Merge.
   "section.merge":   { en: "Merge two images", de: "Zwei Bilder zusammenführen" },
@@ -1926,6 +1946,7 @@ const TRANSLATIONS = {
   "tour.next":            { en: "Next",                de: "Weiter" },
   "tour.done":            { en: "Got it",              de: "Verstanden" },
   "tour.progress":        { en: "{n} / {total}",       de: "{n} / {total}" },
+  "header.tour":          { en: "Tour",                de: "Tour" },
   "tour.welcome.title":   { en: "Wallpaper Builder",   de: "Wallpaper Builder" },
   "tour.welcome.body":    { en: "Quick tour of the Builder. Hit Skip any time to dismiss.",
                             de: "Kurze Tour durch den Builder. Mit Überspringen jederzeit beenden." },
@@ -2287,6 +2308,8 @@ els.mergeGo.addEventListener("click", () => {
 
 function setControlsEnabled(on) {
   els.rotateBtn.disabled    = !on;
+  if (els.flipHBtn) els.flipHBtn.disabled = !on;
+  if (els.flipVBtn) els.flipVBtn.disabled = !on;
   els.saveBtn.disabled      = !on;
   els.saveLibBtn.disabled   = !on;
   els.zoomOut.disabled      = !on;
@@ -2396,6 +2419,45 @@ els.rotateBtn.addEventListener("click", () => {
   fitZoom();
   updateCanvasStat();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.2.3 — Mirror / flip
+//
+// Unlike Rotate (which transforms every edit operation's coords to
+// stay non-destructive), Flip BAKES the current rendered canvas —
+// including any transparency cuts — into a fresh source image, then
+// resets the edit stack. Flip is normally an early "I want this image
+// mirrored across both monitors" operation, so trading the undo
+// history is acceptable + keeps the code robust (no per-kind coord
+// math to get subtly wrong). Both axes supported.
+// ─────────────────────────────────────────────────────────────────────────────
+function _flipCanvas(horizontal) {
+  if (!originalData) return;
+  const w = els.canvas.width, h = els.canvas.height;
+  // Snapshot the current visible canvas (edits already applied via
+  // applyMask) into a scratch, draw it back mirrored.
+  const tmp = document.createElement("canvas");
+  tmp.width = w; tmp.height = h;
+  tmp.getContext("2d").drawImage(els.canvas, 0, 0);
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(horizontal ? w : 0, horizontal ? 0 : h);
+  ctx.scale(horizontal ? -1 : 1, horizontal ? 1 : -1);
+  ctx.drawImage(tmp, 0, 0);
+  ctx.restore();
+  // The flipped pixels (with their baked alpha) become the new source.
+  originalData = ctx.getImageData(0, 0, w, h);
+  clicks = [];
+  redoStack = [];
+  cancelShapeEdit();
+  boundedRegion = null;
+  updateActiveRegionOverlay();
+  applyMask();
+  updateHistory();
+  updateCanvasStat();
+}
+els.flipHBtn?.addEventListener("click", () => _flipCanvas(true));
+els.flipVBtn?.addEventListener("click", () => _flipCanvas(false));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool switching
@@ -5558,6 +5620,7 @@ function startBuilderTour() {
   _bRenderTourStep();
 }
 window.startBuilderTour = startBuilderTour;   // for manual re-run
+document.getElementById("tour-btn")?.addEventListener("click", startBuilderTour);
 
 // Fire on first visit. Skipped if the user already dismissed it.
 (function _bMaybeFireTour() {

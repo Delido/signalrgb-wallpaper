@@ -4,6 +4,71 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-05-26
+
+> Batch of UX fixes from a test session: manual pause in the tray, a
+> working Configurator tour, a Builder tour button, the threshold-
+> slider scrollbar, and image flip/mirror in the Builder.
+
+### Added — Tray Pause / Resume
+
+New "Pause glow + animations" entry in the tray menu, independent
+of the fullscreen auto-pause. Freezes glow + ambient + widget
+animation on every screen on demand — handy for saving GPU while
+AFK without launching a fullscreen app. Checkmark reflects the
+current manual state. Effective pause = fullscreen-auto OR manual,
+so a manual resume doesn't override an active fullscreen pause.
+
+### Added — Image flip / mirror in the Builder
+
+New ⇄ Flip H and ⇅ Flip V buttons next to Rotate in the Load
+section. Mirrors the canvas left↔right or top↕bottom — built for
+the "same image flipped across two monitors" look. Flip bakes the
+current canvas (including transparency cuts) into a fresh source
+and resets the edit stack, so it's best used early. (Advanced-mode
+section; switch from Simple if you don't see it.)
+
+### Added — Builder tour + Tour button
+
+The Builder gained a first-run tour in v1.2.2 but no way to replay
+it. v1.2.3 adds a "Tour" button in the Builder header that re-runs
+the 7-step walkthrough any time.
+
+### Fixed — Configurator tour landed off-screen on collapsed cards
+
+The tour's later steps (Presets, System) spotlighted collapsed
+section cards — the highlight ring was a 1-line sliver and the
+tooltip jumped off the bottom of the viewport. v1.2.3:
+
+- Expands the target card (removes `.collapsed`) before measuring,
+  so the spotlight covers the real content.
+- Scrolls the target near the top of the viewport (offset for the
+  sticky header + tab row) instead of centring it.
+- Clamps the spotlight height to the viewport so a tall card can't
+  push the ring + tooltip off-screen.
+
+### Fixed — Builder tool-options panel showed a horizontal scrollbar
+
+Range sliders have an intrinsic ~129px min-width that flexbox won't
+shrink without `min-width: 0`. In the 260px tool-options column the
+label + slider + value row overflowed → horizontal scrollbar (the
+value behind "Tolerance" was the visible symptom). v1.2.3 adds
+`min-width: 0` to the slider + select, trims the label / value
+widths, and sets `overflow-x: hidden` on the panel.
+
+### Investigated — LibreHardwareMonitor DLL instead of REST server
+
+Requested: drop the "install LHM + enable its Remote Web Server"
+step by loading `LibreHardwareMonitorLib.dll` directly. **Verdict:
+not worth it.** The DLL needs the WinRing0 kernel driver for most
+sensors (CPU temps, voltages), which forces admin elevation — that
+breaks the bridge's no-admin install promise, a worse UX than
+"install LHM once". It'd also pull in pythonnet + the .NET runtime
+(fragile under PyInstaller) and add MPL-2.0 source-availability
+obligations. The current REST approach stays.
+
+---
+
 ## [1.2.2] - 2026-05-26
 
 > Polish + doc refresh on top of v1.2.1. Fixes the "Load current
@@ -248,8 +313,8 @@ hotfix release tagged v1.2.1 stable. One-line index — `git show
 
 - **v1.2.17-beta** — hotfix: `quick-look-apply` was being silently
   dropped at the WS whitelist
-- **v1.2.16-beta** — atomic Quick Look apply (snapshot + settings
-  + widget-replace in one mutate); stale bgImage 404 self-heal
+- **v1.2.16-beta** — atomic Quick Look apply (snapshot, settings,
+  widget-replace in one mutate); stale bgImage 404 self-heal
 - **v1.2.15-beta** — diagnostics export landed in OneDrive shadow
   folder, now opens Explorer with the ZIP pre-selected
 - **v1.2.14-beta** — audit round 2: WS reconnect backoff, keyboard
@@ -915,6 +980,6 @@ been running it daily on his own machines for the last weeks
 without surfacing anything that screams "still beta". Dropping the
 suffix.
 
-
-> Pre-v1.0 betas are archived in [docs/CHANGELOG-archive.md](docs/CHANGELOG-archive.md) for forensic detail.
-
+> Pre-v1.0 betas are archived in
+> [docs/CHANGELOG-archive.md](docs/CHANGELOG-archive.md) for forensic
+> detail.
