@@ -4,6 +4,58 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-05-26
+
+> Critical pause-handling fix. The tray "Pause" toggle, the bridge's
+> fullscreen-auto-pause, and `document.visibilitychange` all worked
+> *for ~250 ms* and then silently un-paused themselves — the rAF
+> probe was overriding any external pause every interval tick.
+
+### Fixed — Manual / fullscreen pause un-paused itself after 250 ms
+
+The wallpaper page had a `setInterval` probe that watches the rAF
+tick rate to auto-detect when Lively / the OS has suspended
+rendering (Lively's "pause-on-fullscreen" works by suspending
+WebView2 at the OS level). When the probe saw rAF ticking
+normally, it called `setPaused(false)` — which clobbered the
+state any external source (tray, bridge fullscreen-watcher,
+visibilitychange) had just set to true.
+
+User-visible symptom: clicking "Pause glow + animations" in the
+tray showed the PAUSED badge briefly, then everything resumed
+on its own. Same for the bridge's fullscreen-pause hook —
+worked on Lively builds that suspend WebView2 (because rAF
+actually stopped), failed on builds that don't suspend (because
+the probe overrode our pause).
+
+v1.2.5 splits the pause state into two slots:
+
+- `_externalPaused` — set by the bridge WS `paused` message,
+  Lively's `livelyWallpaperPlaybackChanged` callback, and
+  `document.visibilitychange`. Persistent until externally cleared.
+- `_renderingPaused` — set by the rAF probe only.
+
+Effective `isPaused` is the OR of both. The rAF probe never
+touches `_externalPaused`, so manual + auto pauses now stick.
+
+### Fixed — Audio-glow kept animating during pause
+
+The audio-glow canvas's `tick()` was the only rAF render loop in
+the wallpaper page that missed the `if (isPaused) return;` guard.
+Pre-v1.2.5 the spectrum / waveform / pulse animation kept
+running on top of an otherwise frozen wallpaper. v1.2.5 adds
+the guard.
+
+### Fixed — Background video kept playing during pause
+
+`<video id="bg-video" autoplay loop>` kept playing during a
+manual / fullscreen pause. v1.2.5 calls `bgVideoEl.pause()` /
+`.play()` from the central `_recomputePaused()` helper so a
+video bg actually freezes when the wallpaper is paused (and
+resumes on un-pause).
+
+---
+
 ## [1.2.4] - 2026-05-26
 
 > Configurator tour positioning fix + Rotate/Flip moved to the

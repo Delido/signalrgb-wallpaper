@@ -1761,19 +1761,49 @@ window.wallpaperPropertyListener = {
 // wired up below so newer Lively builds that push the event through get a
 // proper hook.
 // ─────────────────────────────────────────────────────────────────────────────
+// v1.2.5: split pause into two flags. The pre-v1.2.5 setPaused was
+// a single bool — the rAF probe below set it to "false" every 250 ms
+// when rAF was ticking normally, which silently overrode any
+// external pause (from the tray "Pause" toggle, the bridge's
+// fullscreen-pause WS message, or document.visibilitychange) within
+// a few hundred milliseconds. User report: "er zeigt kurz pause an
+// und startet sich wieder".
+//
+// Now: _externalPaused is set by the bridge / Lively callback /
+// visibility events (persistent). _renderingPaused is set by the
+// rAF probe (auto-detected when the page is suspended). Effective
+// pause is the OR of both — and the rAF probe never touches
+// _externalPaused.
+let _externalPaused = false;
+let _renderingPaused = false;
 let isPaused = false;
 const pausedBadgeEl = document.getElementById("paused-badge");
-function setPaused(p) {
-  p = !!p;
-  if (p === isPaused) return;
-  isPaused = p;
-  console.log("[wallpaper] paused =", p);
-  // Always-visible badge so the user can verify the pause hook fires
-  // regardless of the showStatus debug overlay toggle.
-  if (pausedBadgeEl) pausedBadgeEl.classList.toggle("on", p);
+function _recomputePaused() {
+  const next = _externalPaused || _renderingPaused;
+  if (next === isPaused) return;
+  isPaused = next;
+  console.log("[wallpaper] paused =", isPaused,
+              "(external=" + _externalPaused + ", rendering=" + _renderingPaused + ")");
+  if (pausedBadgeEl) pausedBadgeEl.classList.toggle("on", isPaused);
   if (showStatusEnabled) {
-    flashDebug(p ? "paused (Lively)" : "resumed (Lively)");
+    flashDebug(isPaused ? "paused" : "resumed");
   }
+  // Hard-pause the background video element so a moving MP4 doesn't
+  // keep playing under a "paused" wallpaper. Resume on unpause.
+  try {
+    if (bgVideoEl && bgVideoEl.src) {
+      if (isPaused) bgVideoEl.pause();
+      else { const p = bgVideoEl.play(); if (p && p.catch) p.catch(() => {}); }
+    }
+  } catch (_) {}
+}
+function setPaused(p) {
+  _externalPaused = !!p;
+  _recomputePaused();
+}
+function _setRenderingPaused(p) {
+  _renderingPaused = !!p;
+  _recomputePaused();
 }
 
 
@@ -1846,8 +1876,10 @@ let _lastRafTickMs = performance.now();
 })();
 setInterval(() => {
   const stale = performance.now() - _lastRafTickMs;
-  const renderingPaused = stale > 500;
-  if (renderingPaused !== isPaused) setPaused(renderingPaused);
+  // v1.2.5: only flips the rendering-suspension flag. The external
+  // pause (bridge tray toggle, Lively callback, visibilitychange)
+  // sits in its own slot so this probe can't clobber it.
+  _setRenderingPaused(stale > 500);
 }, 250);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3710,6 +3742,12 @@ const audioGlow = (function () {
   }
 
   function tick() {
+    // v1.2.5: respect the global pause. Pre-v1.2.5 the audio-glow
+    // canvas kept animating its spectrum / waveform / pulse even
+    // when the tray manually paused (or fullscreen-pause kicked in),
+    // because this tick missed the isPaused guard the other rAF
+    // loops had.
+    if (isPaused) { raf = requestAnimationFrame(tick); return; }
     ctx.clearRect(0, 0, viewW, viewH);
     const k = intensity / 100;
     if (mode === "pulse") {
