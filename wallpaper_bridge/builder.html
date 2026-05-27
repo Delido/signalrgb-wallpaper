@@ -1215,6 +1215,16 @@
       <button class="btn btn-icon" id="zoom-100"   disabled data-i18n-title="zoom.actual" title="Actual size">100%</button>
       <button class="btn btn-icon" id="zoom-in"    disabled data-i18n-title="zoom.in" title="Zoom in">+</button>
       <span class="zoom-display" id="zoom-display">—</span>
+      <!-- v1.2.4: transform tools live here (formerly in the Advanced-
+           only Load section). Reachable from Simple mode during slot
+           edits — the "mirror image across two monitors" workflow
+           especially. -->
+      <button class="btn btn-icon" id="rotate-btn" disabled
+              data-i18n-title="btn.rotate" title="Rotate 90°">⟳</button>
+      <button class="btn btn-icon" id="flip-h-btn" disabled
+              data-i18n-title="btn.flip_h" title="Flip horizontal">⇄</button>
+      <button class="btn btn-icon" id="flip-v-btn" disabled
+              data-i18n-title="btn.flip_v" title="Flip vertical">⇅</button>
       <div class="spacer"></div>
       <label class="check-row" style="margin-right: 12px; gap: 6px;">
         <input type="checkbox" id="glow-preview">
@@ -1273,13 +1283,9 @@
                 data-i18n="btn.open_library">Open from library…</button>
       </div>
       <div class="stat" id="img-stat" data-i18n="stat.no_image">No image loaded.</div>
-      <div class="btn-row" style="margin-top: 8px;">
-        <button class="btn" id="rotate-btn" disabled data-i18n="btn.rotate">Rotate 90°</button>
-        <button class="btn" id="flip-h-btn" disabled data-i18n="btn.flip_h"
-                title="Mirror left ↔ right — handy for the same image flipped across two monitors">⇄ Flip H</button>
-        <button class="btn" id="flip-v-btn" disabled data-i18n="btn.flip_v"
-                title="Mirror top ↕ bottom">⇅ Flip V</button>
-      </div>
+      <!-- v1.2.4: Rotate / Flip moved from this Advanced-only Load
+           section into the always-visible canvas-toolbar so they're
+           reachable from Simple mode (during slot editing). -->
     </section>
 
     <details class="merge-details">

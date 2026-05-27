@@ -4408,52 +4408,72 @@ function _renderTourStep() {
     spot.style.display = "none";
     return;
   }
-  // v1.2.3: if the step targets a collapsed section card (or an
-  // element inside one), expand it first so the spotlight lands on
-  // the actual content, not a 1-line collapsed header. The pre-v1.2.3
-  // tour spotlighted collapsed cards → the highlighted region was a
-  // sliver and the tooltip landed off-screen for later steps.
+  // v1.2.4: expand a collapsed target card before measuring so the
+  // spotlight lands on real content, not a 1-line header.
   const card = el.closest ? el.closest("section.card") : null;
   if (card && card.classList.contains("collapsed")) {
     card.classList.remove("collapsed");
   }
-  // Scroll the target near the top of the viewport (not center) so a
-  // tall card's whole body + the tooltip below it stay on-screen.
-  // Offset accounts for the sticky header (~53px) + tab row (~40px).
-  const STICKY_OFFSET = 110;
+  // INSTANT scroll — not smooth. The pre-v1.2.4 tour scrolled with
+  // behavior:"smooth" then measured after a fixed 320 ms timeout, but
+  // smooth scroll routinely takes longer than that, so the rect we
+  // measured was still at the pre-scroll position → spotlight +
+  // tooltip both landed wrong. An instant scroll lets us measure on
+  // the very next frame with a position that's already final.
+  const STICKY_OFFSET = 110;   // sticky header (~53px) + tab row (~40px) + margin
   try {
     const y = el.getBoundingClientRect().top + window.scrollY - STICKY_OFFSET;
-    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    window.scrollTo({ top: Math.max(0, y) });   // instant
   } catch (_) {}
-  // Give the smooth-scroll + the expand reflow a tick to settle.
-  setTimeout(() => {
+  // Two rAFs: one for the scroll + expand reflow to apply, one to
+  // measure the settled layout.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
     const r = el.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // Spotlight on the element, clamped to the viewport so a tall card
+    // can't bleed the ring (and its bottom-edge math) off-screen.
+    const sLeft = Math.max(4, r.left - 6);
+    const sTop  = Math.max(4, r.top  - 6);
+    const sW    = Math.min(r.width + 12, vw - sLeft - 4);
+    const sH    = Math.min(r.height + 12, vh - sTop - 4);
     spot.style.display = "block";
-    spot.style.left   = (r.left - 6)   + "px";
-    spot.style.top    = (r.top  - 6)   + "px";
-    spot.style.width  = (r.width  + 12) + "px";
-    // Clamp spotlight height to the viewport so a tall card doesn't
-    // push the highlight ring (and the tooltip placement math) off
-    // the bottom of the screen.
-    const maxSpotH = window.innerHeight - (r.top - 6) - 20;
-    spot.style.height = Math.min(r.height + 12, Math.max(40, maxSpotH)) + "px";
-    const spotBottom = (r.top - 6) + parseFloat(spot.style.height);
-    // Place the tooltip below the spotlight when there's room, else above.
-    const tipW = 320, tipH = tip.offsetHeight || 180;
-    const wantBelow = spotBottom + 14 + tipH <= window.innerHeight - 10;
-    tip.style.transform = "";
-    tip.style.right = "";
-    tip.style.bottom = "";
-    let left = r.left;
-    if (left + tipW > window.innerWidth - 10) left = window.innerWidth - tipW - 10;
-    if (left < 10) left = 10;
-    tip.style.left = left + "px";
-    if (wantBelow) {
-      tip.style.top = (spotBottom + 14) + "px";
-    } else {
-      tip.style.top = Math.max(10, r.top - tipH - 14) + "px";
+    spot.style.left   = sLeft + "px";
+    spot.style.top    = sTop  + "px";
+    spot.style.width  = Math.max(40, sW) + "px";
+    spot.style.height = Math.max(40, sH) + "px";
+
+    // Tooltip placement: try each candidate slot in priority order,
+    // pick the first that fits fully on-screen without covering the
+    // spotlight's centre. Always clamped so it can never go off-screen
+    // (the bug the user kept hitting on tall cards / late steps).
+    const tipW = tip.offsetWidth  || 320;
+    const tipH = tip.offsetHeight || 180;
+    const gap  = 14;
+    const spotRight = sLeft + parseFloat(spot.style.width);
+    const spotBottom = sTop + parseFloat(spot.style.height);
+    const clampLeft = (x) => Math.max(10, Math.min(vw - tipW - 10, x));
+    const clampTop  = (y) => Math.max(10, Math.min(vh - tipH - 10, y));
+    const candidates = [
+      { x: spotRight + gap,        y: sTop },                 // right of spotlight
+      { x: sLeft - tipW - gap,     y: sTop },                 // left of spotlight
+      { x: sLeft,                  y: spotBottom + gap },     // below
+      { x: sLeft,                  y: sTop - tipH - gap },    // above
+    ];
+    let placed = null;
+    for (const c of candidates) {
+      const fits = c.x >= 10 && c.x + tipW <= vw - 10
+                && c.y >= 10 && c.y + tipH <= vh - 10;
+      if (fits) { placed = c; break; }
     }
-  }, 320);
+    // Fallback: pin to the bottom-right corner, fully clamped. This is
+    // what catches the "spotlight fills the whole viewport" case (a
+    // tall Background / Widgets card) where no side has room.
+    if (!placed) placed = { x: vw - tipW - 16, y: vh - tipH - 16 };
+    tip.style.transform = "";
+    tip.style.right = ""; tip.style.bottom = "";
+    tip.style.left = clampLeft(placed.x) + "px";
+    tip.style.top  = clampTop(placed.y) + "px";
+  }));
 }
 
 function advanceTour() {

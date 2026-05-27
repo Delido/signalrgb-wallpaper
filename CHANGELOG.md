@@ -4,6 +4,48 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-05-26
+
+> Configurator tour positioning fix + Rotate/Flip moved to the
+> always-visible canvas toolbar.
+
+### Fixed — Configurator tour landed off-screen on tall cards
+
+Even after v1.2.3's expand + clamp, steps 6 / 7 / 8 (Background,
+Widgets, Presets) still placed the tooltip way down or off the
+viewport. Root cause: `window.scrollTo({behavior: "smooth"})`
+followed by a fixed-timeout measurement. Smooth scrolls routinely
+take longer than the 320 ms timeout, so the rect we measured was
+still at the *pre-scroll* position → spotlight + tooltip both
+landed wrong.
+
+v1.2.4 switches the scroll to instant (`behavior` omitted),
+measures across two `requestAnimationFrame`s (scroll + expand
+reflow → measure on the settled layout), and rewrites the tooltip
+placement as a candidate-fallback chain:
+
+1. Right of the spotlight
+2. Left of the spotlight
+3. Below it
+4. Above it
+5. **Fallback**: pinned to the bottom-right corner of the viewport
+   (this catches the "spotlight fills the whole viewport" case
+   that broke step 6/7 — a tall Background or Widgets card).
+
+Every candidate is clamped to a 10 px viewport margin, so the
+tooltip can never go off-screen.
+
+### Changed — Rotate / Flip moved to the canvas toolbar
+
+v1.2.3 added ⇄ Flip H / ⇅ Flip V next to Rotate in the Load
+section — but that section is `simple-hide`'d in Simple mode, so
+the buttons were invisible exactly when users wanted them (during
+in-place slot editing). v1.2.4 moves all three transform icons
+(⟳ ⇄ ⇅) into the canvas-toolbar (next to the zoom controls),
+always visible regardless of mode.
+
+---
+
 ## [1.2.3] - 2026-05-26
 
 > Batch of UX fixes from a test session: manual pause in the tray, a
