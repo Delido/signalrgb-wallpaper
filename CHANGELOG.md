@@ -4,6 +4,62 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.6-beta] - 2026-05-26
+
+> Beta: fixes the "Failed to load Python DLL" install error some users
+> hit, plus a deep dive that found video screen-backgrounds were
+> broken end-to-end since v1.2.0 + a couple of latent bridge issues.
+
+### Fixed — "Failed to load Python DLL python313.dll" on some machines
+
+A user hit `Failed to load Python DLL ...python313.dll. LoadLibrary:
+The specified module could not be found.` on the update launch. The
+misleading message actually means a *dependency* of python313.dll —
+the MSVC runtime (`vcruntime140.dll` / `vcruntime140_1.dll`) — wasn't
+found. The bridge is built from the Microsoft Store Python, and
+PyInstaller doesn't reliably pull those DLLs into the `--onefile`
+bundle from that Python distribution (they live in System32 on the
+build machine so the local exe runs fine, masking it). Users without
+the VC++ 2015-2022 Redistributable then hit the error.
+
+`build.ps1` now explicitly `--add-binary`s `vcruntime140.dll` +
+`vcruntime140_1.dll` from System32 into the bundle, so they're always
+present regardless of the build Python or the user's installed
+runtimes.
+
+### Fixed — Video screen-backgrounds were broken end-to-end (since v1.2.0)
+
+Two latent bugs in the v1.2.0 "video backgrounds" feature, only
+reachable for video set as a *screen* background (the live-preview
++ Builder path):
+
+1. **`_update_background` saved every upload as `.png`** regardless
+   of content, so an MP4 landed as `screen-N-<ms>.png`. The wallpaper
+   page's video detection (`VIDEO_BG_EXTS`) keys off the URL
+   extension → it never recognised the file as a video and tried to
+   paint it as a still. v1.2.6 magic-byte-sniffs the upload and saves
+   the real extension (`.mp4` / `.webm` / `.mov` / `.m4v` / `.mkv`).
+2. **The `/image` proxy rejected video extensions with 415** and had
+   no HTTP Range support. Browsers require `206 Partial Content`
+   range responses to play a `<video>` from a URL. v1.2.6 rewrites
+   the proxy: serves video MIME types, honours single-range
+   requests with a proper `206` + `Content-Range`, advertises
+   `Accept-Ranges: bytes`, and **streams in 256 KiB chunks** instead
+   of reading the whole file into RAM (a 300 MB video bg used to
+   spike the bridge's memory 300 MB per request).
+
+### Fixed — Unbounded WebSocket client frame could OOM the bridge
+
+`read_client_text_frame` read whatever payload length the client's
+frame header claimed — up to 2^64 bytes via the 8-byte length field
+— with no cap. A bug or a malicious local client could make
+`readexactly(n)` try to buffer multiple GB. v1.2.6 caps client text
+frames at 4 MiB (the largest legitimate message, a 4-monitor
+widgets array, is a few KB) and drops the connection on anything
+larger.
+
+---
+
 ## [1.2.5] - 2026-05-26
 
 > Critical pause-handling fix. The tray "Pause" toggle, the bridge's

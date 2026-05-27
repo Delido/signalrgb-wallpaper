@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.2.6-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -784,8 +784,19 @@ LAYOUT_CHOICES   = [
 ]
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"}
+# v1.2.6: the /image proxy must also serve the video containers the
+# wallpaper page's <video> bg element plays — a video set as a screen
+# background lands as screens\screen-N-*.mp4 and the wallpaper page
+# routes it through /image?path= just like an image. Pre-v1.2.6 the
+# proxy rejected these extensions with 415, so video backgrounds set
+# via the Builder / library never actually loaded on the wallpaper.
+VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
+SERVABLE_EXTS = IMAGE_EXTS | VIDEO_EXTS
 mimetypes.add_type("image/svg+xml", ".svg")
 mimetypes.add_type("image/webp",   ".webp")
+mimetypes.add_type("video/mp4",    ".m4v")
+mimetypes.add_type("video/x-matroska", ".mkv")
+mimetypes.add_type("video/quicktime",  ".mov")
 
 
 # ============================================================================
@@ -1418,6 +1429,17 @@ async def read_client_text_frame(reader) -> str | None:
         n = struct.unpack(">H", await reader.readexactly(2))[0]
     elif n == 127:
         n = struct.unpack(">Q", await reader.readexactly(8))[0]
+    # v1.2.6: cap the frame size. The wallpaper page only ever sends
+    # small single-frame JSON blobs (largest is a Quick-Look apply,
+    # a few KB). A header claiming a multi-GB payload — from a bug or
+    # a malicious local client — would otherwise make readexactly(n)
+    # try to buffer that much and OOM the bridge. 4 MiB is generous
+    # headroom (a 4-monitor widgets array can't approach it) and far
+    # below anything dangerous.
+    MAX_TEXT_FRAME = 4 * 1024 * 1024
+    if n > MAX_TEXT_FRAME:
+        print(f"[ws] rejecting oversized client frame: {n} bytes")
+        return None
     # Browser → server frames MUST be masked per RFC 6455. Reject anything
     # else (defensive — should never happen with real browser clients).
     mask = await reader.readexactly(4) if masked else b"\x00\x00\x00\x00"
@@ -1458,33 +1480,108 @@ def http_error(writer, code: int, message: str):
     writer.write(head + body)
 
 
-def http_serve_image(writer, query: str):
+async def http_serve_image(writer, query: str, range_hdr: str = ""):
+    """Serve an image or video file by absolute path.
+
+    v1.2.6 rewrite:
+      • Accepts video extensions (was image-only → 415 on video bgs).
+      • Honours HTTP Range requests with a 206 Partial Content
+        response. Browsers REQUIRE range support to play a <video>
+        element from a URL — without it Chromium/CEF often refuse to
+        start playback or re-download the whole clip every loop.
+      • Streams the file in 256 KiB chunks instead of read_bytes()-ing
+        the whole thing into RAM (a 300 MB video bg used to spike the
+        bridge's memory by 300 MB per request).
+    """
     params = urllib.parse.parse_qs(query)
     raw_path = params.get("path", [""])[0]
     if not raw_path:
         return http_error(writer, 400, "missing 'path' query parameter")
     path = urllib.parse.unquote(raw_path)
     ext = os.path.splitext(path)[1].lower()
-    if ext not in IMAGE_EXTS:
+    if ext not in SERVABLE_EXTS:
         return http_error(writer, 415, f"unsupported extension: {ext or '(none)'}")
     abs_path = os.path.abspath(path)
     if not os.path.isfile(abs_path):
         return http_error(writer, 404, f"file not found: {abs_path}")
     try:
-        with open(abs_path, "rb") as f:
-            data = f.read()
+        size = os.path.getsize(abs_path)
     except OSError as e:
-        return http_error(writer, 403, f"cannot read file: {e}")
+        return http_error(writer, 403, f"cannot stat file: {e}")
     content_type = mimetypes.guess_type(abs_path)[0] or "application/octet-stream"
-    head = (
-        f"HTTP/1.1 200 OK\r\n"
-        f"Content-Type: {content_type}\r\n"
-        f"Content-Length: {len(data)}\r\n"
-        f"Cache-Control: max-age=10\r\n"
-        f"Access-Control-Allow-Origin: *\r\n"
-        f"Connection: close\r\n\r\n"
-    ).encode()
-    writer.write(head + data)
+    is_video = ext in VIDEO_EXTS
+
+    # Parse a single-range "bytes=START-END" header. We don't bother
+    # with multi-range (browsers asking a <video> for one range at a
+    # time is the only case that matters here).
+    start, end = 0, size - 1
+    partial = False
+    if range_hdr.lower().startswith("bytes="):
+        try:
+            spec = range_hdr.split("=", 1)[1].split(",", 1)[0].strip()
+            lo, _, hi = spec.partition("-")
+            if lo == "":
+                # suffix range: bytes=-N → last N bytes
+                n = int(hi)
+                start = max(0, size - n)
+                end = size - 1
+            else:
+                start = int(lo)
+                end = int(hi) if hi else size - 1
+            end = min(end, size - 1)
+            if start > end or start >= size:
+                # Unsatisfiable — RFC says 416 with Content-Range */size.
+                head = (
+                    f"HTTP/1.1 416 Range Not Satisfiable\r\n"
+                    f"Content-Range: bytes */{size}\r\n"
+                    f"Access-Control-Allow-Origin: *\r\n"
+                    f"Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head)
+                return
+            partial = True
+        except (ValueError, IndexError):
+            start, end = 0, size - 1
+            partial = False
+
+    length = end - start + 1
+    # Image cache is short (background swaps want freshness); video is
+    # immutable-ish per timestamped filename so it can cache longer.
+    cache = "public, max-age=86400" if is_video else "max-age=10"
+    status = "206 Partial Content" if partial else "200 OK"
+    head_lines = [
+        f"HTTP/1.1 {status}",
+        f"Content-Type: {content_type}",
+        f"Content-Length: {length}",
+        "Accept-Ranges: bytes",
+        f"Cache-Control: {cache}",
+        "Access-Control-Allow-Origin: *",
+        "Connection: close",
+    ]
+    if partial:
+        head_lines.insert(3, f"Content-Range: bytes {start}-{end}/{size}")
+    writer.write(("\r\n".join(head_lines) + "\r\n\r\n").encode())
+
+    # Stream the requested byte window in chunks with backpressure so a
+    # large video doesn't balloon the bridge's memory.
+    CHUNK = 256 * 1024
+    try:
+        with open(abs_path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                buf = f.read(min(CHUNK, remaining))
+                if not buf:
+                    break
+                writer.write(buf)
+                remaining -= len(buf)
+                try:
+                    await writer.drain()
+                except Exception:
+                    break
+    except OSError as e:
+        # Headers already sent; best we can do is stop writing.
+        print(f"[image] read failed mid-stream: {e}")
 
 
 def parse_query_screen(target: str) -> int:
@@ -1787,8 +1884,9 @@ class Broadcaster:
 
         if method == "GET" and target.startswith("/image"):
             query = target.split("?", 1)[1] if "?" in target else ""
+            range_hdr = headers.get(b"range", b"").decode("latin-1")
             try:
-                http_serve_image(writer, query)
+                await http_serve_image(writer, query, range_hdr)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
             try: await writer.drain()
@@ -3601,28 +3699,55 @@ class BridgeRuntime:
         if self.broadcaster:
             self.broadcaster.push_pause_threadsafe(self._is_paused())
 
-    def _update_background(self, screen: int, png_bytes: bytes) -> bool:
-        """Persist a builder-uploaded PNG and point the screen's bgImage
-        setting at it. Unique-timestamped filename so the wallpaper page
-        sees a new URL and refetches (avoids stale-cache hits). Old
-        screen-N-*.png files are deleted so the screens/ folder doesn't
-        bloat over many edits.
+    @staticmethod
+    def _sniff_bg_ext(data: bytes) -> str:
+        """Magic-byte → file extension for a screen-background upload.
+        v1.2.6: pre-v1.2.6 every upload was saved as `.png` regardless
+        of content. A video uploaded as a screen bg therefore landed as
+        `screen-N-<ms>.png` holding MP4 bytes — and the wallpaper page's
+        VIDEO_BG_EXTS detection keys off the URL extension, so it never
+        recognised the file as a video and tried to render it as a still
+        image. Sniffing the real container + saving the right extension
+        is what makes video screen-backgrounds actually play."""
+        if data[:8] == b"\x89PNG\r\n\x1a\n":                  return ".png"
+        if data[:3] == b"\xff\xd8\xff":                        return ".jpg"
+        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":      return ".webp"
+        if data[:6] in (b"GIF87a", b"GIF89a"):                 return ".gif"
+        if data[:4] == b"\x1aE\xdf\xa3":                       return ".webm"
+        if len(data) > 12 and data[4:8] == b"ftyp":
+            sub = data[8:12]
+            if   sub == b"qt  ":                               return ".mov"
+            elif sub.startswith(b"M4V"):                       return ".m4v"
+            else:                                              return ".mp4"
+        return ".png"   # default — the builder always sends PNG
 
-        v1.2.13 note: called from the asyncio loop's HTTP handler, but
-        file I/O here is sync. PNG writes are small (~MB) and screens/
-        glob deletes are bounded, so the loop block is acceptable.
-        Heavier I/O (or really pathological screens/ folders) could be
-        offloaded via asyncio.to_thread; left synchronous for now since
-        the codepath is hot enough that thread-pool overhead would cost
-        more than the few-ms block."""
+    def _update_background(self, screen: int, png_bytes: bytes) -> bool:
+        """Persist an uploaded background + point the screen's bgImage
+        at it. Unique-timestamped filename so the wallpaper page sees a
+        new URL and refetches (avoids stale-cache hits). Old
+        screen-N-* files (any extension) are deleted so the screens/
+        folder doesn't bloat over many edits.
+
+        v1.2.6: the file extension is now sniffed from the bytes
+        (image OR video container) instead of hard-coded `.png`, so
+        video backgrounds get a `.mp4` / `.webm` / … name the wallpaper
+        page recognises and plays through its <video> element.
+
+        Note: called from the asyncio loop's HTTP handler with sync
+        file I/O. PNG writes are small; a video write can be tens of
+        MB but uploads are infrequent (one per Apply), so the brief
+        loop block is acceptable vs. thread-pool overhead."""
         if self._block_if_mirror(screen, "background-upload"):
             return False
         try:
             millis = int(time.time() * 1000)
-            target = screens_dir() / f"screen-{screen}-{millis}.png"
+            ext = self._sniff_bg_ext(png_bytes)
+            target = screens_dir() / f"screen-{screen}-{millis}{ext}"
             target.write_bytes(png_bytes)
-            for old in screens_dir().glob(f"screen-{screen}-*.png"):
-                if old != target:
+            # Delete every prior screen-N-* file regardless of extension
+            # (a screen could switch from a .png still to a .mp4 video).
+            for old in screens_dir().glob(f"screen-{screen}-*"):
+                if old != target and old.is_file():
                     try: old.unlink()
                     except OSError: pass
             with self.config_lock:

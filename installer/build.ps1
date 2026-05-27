@@ -51,6 +51,30 @@ Write-Host "[2/5] Rebuilding SignalRGBBridge.exe" -ForegroundColor Yellow
 Push-Location $bridgeDir
 try {
     Remove-Item "build_bridge", "dist_bridge", "*.spec" -Recurse -Force -ErrorAction SilentlyContinue
+
+    # v1.2.6: explicitly bundle the MSVC runtime DLLs python313.dll
+    # depends on. When PyInstaller builds from the Microsoft Store
+    # Python (WindowsApps\python.exe), it sometimes fails to pull
+    # vcruntime140.dll / vcruntime140_1.dll into the --onefile bundle
+    # — the build machine has them in System32 so the local exe runs
+    # fine, but users WITHOUT the VC++ 2015-2022 Redistributable hit
+    # "Failed to load Python DLL ... python313.dll. LoadLibrary: The
+    # specified module could not be found." (the real missing module
+    # is the vcruntime dependency, not python313.dll itself).
+    # Adding them with --add-binary guarantees they're in the bundle
+    # regardless of how the build Python was installed.
+    $vcDlls = @()
+    foreach ($dll in "vcruntime140.dll", "vcruntime140_1.dll") {
+        $sys = Join-Path $env:SystemRoot "System32\$dll"
+        if (Test-Path $sys) {
+            $vcDlls += "--add-binary"
+            $vcDlls += "$sys;."
+            Write-Host "  bundling $dll from System32" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  WARN: $dll not found in System32 — relying on PyInstaller auto-detect" -ForegroundColor Yellow
+        }
+    }
+
     & python -m PyInstaller `
         --onefile --noconsole `
         --name SignalRGBBridge `
@@ -59,6 +83,7 @@ try {
         --collect-submodules PIL `
         --collect-all psutil `
         --collect-all winrt `
+        @vcDlls `
         --add-data "builder.html;." `
         --add-data "configurator.html;." `
         --add-data "help.html;." `
