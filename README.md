@@ -104,6 +104,18 @@ manual file copies, no terminal.
 > 📸 **Step-by-step walkthrough with screenshots:**
 > [docs/installation.md](docs/installation.md#installer-walkthrough)
 
+**Fastest path — winget:**
+
+```powershell
+winget install Delido.SignalRGBWallpaper
+```
+
+That pulls the latest signed installer from GitHub Releases and
+runs it with the default options. Everything below applies — you
+just skip the manual download step.
+
+**Manual download:**
+
 1. Grab `SignalRGBWallpaperSetup-<version>.exe` from
    [Releases](https://github.com/Delido/signalrgb-wallpaper/releases/latest).
 2. Run it. **No admin needed** — installs per-user. The wizard's
