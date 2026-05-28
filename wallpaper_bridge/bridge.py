@@ -507,24 +507,16 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.9-beta"
+APP_VERSION = "1.2.10-beta"
 
-# v1.2.9-beta: diagnostic build that removes the SMTC / now-playing
-# feature *entirely* so a maintainer can confirm whether a long-
-# running RSS / memory build-up is driven by the Bridge → NPSMSvc →
-# Spotify cascade or by something else. When False:
-#   • NowPlayingPoller is never constructed (no winrt import, no
-#     SMTCManager handle, no 1 Hz IPC).
-#   • The "now-playing" widget type is removed from WIDGET_DEFAULTS,
-#     so the palette in Configurator / Builder hides it and any
-#     widget-add command for that type is silently rejected.
-#   • SysStatsPoller never merges a `nowPlaying` field into its
-#     1 Hz JSON push.
-# Pre-existing now-playing widgets in a user's config stay in the
-# JSON (we don't mutate persisted state); the wallpaper page just
-# never receives data for them, so they render their "--" idle
-# state. Flip back to True to re-enable.
-ENABLE_NOWPLAYING = False
+# Diagnostic kill-switch retained from v1.2.9. When False the entire
+# NowPlayingPoller / SMTC code path is removed at startup (no winrt
+# import, no SMTCManager handle, no IPC). v1.2.10 re-enables it by
+# default because the proper fix is the widget-aware idle-gate
+# below — pollers now only run when a widget that consumes their
+# data is actually placed somewhere. Flip to False to re-arm the
+# diagnostic build for further debugging.
+ENABLE_NOWPLAYING = True
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -3106,10 +3098,19 @@ class SysStatsPoller:
 
     def __init__(self, broadcaster: 'Broadcaster',
                  hwmon: 'HwMonPoller | None' = None,
-                 nowplaying: 'NowPlayingPoller | None' = None):
+                 nowplaying: 'NowPlayingPoller | None' = None,
+                 should_poll=None):
         self.broadcaster = broadcaster
         self.hwmon = hwmon
         self.nowplaying = nowplaying
+        # v1.2.10: callable()->bool gate. False = skip the psutil
+        # collect + WS push entirely (the snapshot wouldn't have a
+        # widget reader, so there's no point even sampling). The
+        # default `has_any_clients`-only gate from v1.2.8 still
+        # polled whenever a wallpaper page was open; v1.2.10's
+        # widget-aware gate is the proper "zero cost when nothing
+        # consumes the data" behaviour.
+        self._should_poll = should_poll
         self._stop = threading.Event()
         self._last_net = None       # (sent, recv) from previous tick
         self._last_net_ts = 0.0
@@ -3136,14 +3137,16 @@ class SysStatsPoller:
         try: psutil.cpu_percent(interval=None)
         except Exception: pass
         while not self._stop.is_set():
-            # v1.2.8: idle-gate. Skip psutil's full collect + the
-            # push_sysstats_threadsafe roundtrip when no wallpaper page
-            # is connected — saves a 1 Hz JSON encode + futile broadcast.
+            # v1.2.10: widget-aware idle-gate. Skip psutil's full
+            # collect + push when no widget consuming sysstats data
+            # (cpu-meter, ram-meter, hardware-sensor via hwmon merge,
+            # now-playing via nowplaying merge) is placed.
             try:
-                has_clients = bool(self.broadcaster.has_any_clients())
+                poll = self._should_poll() if self._should_poll else \
+                       bool(self.broadcaster.has_any_clients())
             except Exception:
-                has_clients = True
-            if has_clients:
+                poll = True
+            if poll:
                 try:
                     snap = self._collect()
                     self.broadcaster.push_sysstats_threadsafe(snap)
@@ -3790,6 +3793,47 @@ class BridgeRuntime:
         # same handlers the tray's Advanced submenu used to call.
         # None-safe — every callsite null-checks before dispatching.
         self.tray = None
+
+    def placed_widget_types(self) -> set:
+        """Set of widget-type strings currently placed across all
+        screens. Used by the poller idle-gate so a poller only ticks
+        when a widget that consumes its data is actually placed
+        somewhere. CPython dict-iteration on `self.config` is atomic
+        for snapshot purposes — we deliberately skip `config_lock`
+        here because the callable fires every second from background
+        threads and a stale read just costs one wasted (or skipped)
+        poll which the next second corrects."""
+        out = set()
+        try:
+            for s in (self.config.get("screens", {}) or {}).values():
+                if not isinstance(s, dict):
+                    continue
+                for w in (s.get("widgets", []) or []):
+                    if isinstance(w, dict):
+                        t = w.get("type")
+                        if isinstance(t, str):
+                            out.add(t)
+        except Exception:
+            pass
+        return out
+
+    def _poller_gate(self, *widget_types: str):
+        """Returns a callable that returns True iff at least one
+        wallpaper page is connected AND at least one of the given
+        widget types is placed on some screen. Used to drive the
+        NowPlaying / HwMon / SysStats pollers — they each run at
+        1 Hz, so the closure has to be cheap. Closes over self for
+        a fresh snapshot on every call. Fails open on exception so
+        a bug here can never silently disable a feature."""
+        needed = set(widget_types)
+        def gate() -> bool:
+            try:
+                if not self.broadcaster.has_any_clients():
+                    return False
+                return bool(needed & self.placed_widget_types())
+            except Exception:
+                return True
+        return gate
 
     def _get_settings(self, screen: int) -> dict:
         with self.config_lock:
@@ -5055,7 +5099,15 @@ class BridgeRuntime:
         # The HwMon poller starts even when LHM isn't running — it'll just
         # report `online: false` until the user starts LibreHardwareMonitor
         # with its Remote Web Server enabled.
-        self.hwmon = HwMonPoller(should_poll=self.broadcaster.has_any_clients)
+        # v1.2.10: HwMon LHM poll only fires when a hardware-sensor
+        # widget is placed somewhere. The Configurator's
+        # /hwmon/sensors picker still works — when the user opens
+        # the picker without a sensor widget placed we either
+        # serve a stale snapshot (last successful poll) or "no
+        # sensors". A "place a hardware-sensor widget first" UX
+        # nudge would be nicer but is out of scope for the leak
+        # hardening pass.
+        self.hwmon = HwMonPoller(should_poll=self._poller_gate("hardware-sensor"))
         self.hwmon.start()
         # Let the broadcaster's /hwmon/sensors HTTP handler reach the
         # poller's snapshot + status. Set here rather than via __init__
@@ -5092,14 +5144,27 @@ class BridgeRuntime:
         # no IPC. SysStatsPoller's `nowplaying=` is left None so its
         # 1 Hz JSON push omits the nowPlaying field entirely.
         if ENABLE_NOWPLAYING:
-            self.nowplaying = NowPlayingPoller(should_poll=self.broadcaster.has_any_clients)
+            # v1.2.10: SMTC poll only when a now-playing widget is
+            # placed. With no such widget the entire
+            # Bridge → NPSMSvc → Spotify → DWM → WebView2 cascade
+            # the user observed in v1.2.6 stays cold even with the
+            # wallpaper page running.
+            self.nowplaying = NowPlayingPoller(should_poll=self._poller_gate("now-playing"))
             self.nowplaying.start()
         else:
             self.nowplaying = None
-            print("[nowplaying] disabled by ENABLE_NOWPLAYING=False (v1.2.9 diagnostic build)")
+            print("[nowplaying] disabled by ENABLE_NOWPLAYING=False")
+        # v1.2.10: SysStats is the carrier for hwmon + nowplaying
+        # payloads as well as its own CPU/RAM/network samples, so
+        # its gate is the union of every widget that reads any of
+        # those fields. With none of them placed the bridge is
+        # truly idle: no psutil collect, no WS push, no JSON encode.
         self.sysstats = SysStatsPoller(self.broadcaster,
                                        hwmon=self.hwmon,
-                                       nowplaying=self.nowplaying)
+                                       nowplaying=self.nowplaying,
+                                       should_poll=self._poller_gate(
+                                           "cpu-meter", "ram-meter",
+                                           "hardware-sensor", "now-playing"))
         self.sysstats.start()
         try:
             loop.run_until_complete(self._serve())

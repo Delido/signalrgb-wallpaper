@@ -4,6 +4,51 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.10-beta] - 2026-05-28
+
+> Beta: the permanent-fix candidate that supersedes the v1.2.9
+> diagnostic build. Now-Playing / SMTC is **re-enabled** but the
+> idle-gate on every poller is now widget-aware — pollers only
+> fire when a widget that consumes their data is actually placed
+> somewhere. Zero cost when nothing reads the data, even with the
+> wallpaper page running.
+
+### Hardened — Widget-aware poller idle-gate
+
+User observed their v1.2.6 leak surfaced after a 12 h run with
+**no widgets configured at all**. v1.2.8's idle-gate was too loose
+to catch that case: it only checked "is a wallpaper page
+connected?" and the answer was yes (Lively was running), so the
+SMTC / LHM / sysstats pollers continued their 1 Hz IPC chain —
+into receivers (NPSMSvc → Spotify → DWM → WebView2) that nobody
+on our end was even consuming.
+
+v1.2.10 tightens the gate. A new `BridgeRuntime.placed_widget_types()`
+returns the set of widget-type strings currently placed across
+all screens; each poller gets a closure that returns True iff
+at least one client is connected AND at least one widget in its
+"served types" set is placed.
+
+| Poller            | Polls when these widgets are placed |
+| ----------------- | ----------------------------------- |
+| `NowPlayingPoller`| `now-playing` |
+| `HwMonPoller`     | `hardware-sensor` |
+| `SysStatsPoller`  | `cpu-meter` / `ram-meter` / `hardware-sensor` / `now-playing` |
+
+Pure-client widgets (clock, calendar, sticky-note, countdown,
+picture-frame, quote, weather, rss, audio-spectrum) need no
+backend data so no poller fires for them. A user with only those
+placed sees the bridge sit at essentially zero CPU + flat memory
+no matter how long Lively / WE runs.
+
+### Changed — `ENABLE_NOWPLAYING` defaults back to True
+
+The v1.2.9 hard-kill-switch is kept (flip to False to re-arm
+the diagnostic build) but defaults to True now that the proper
+fix is wired up. Existing v1.2.9 installs that confirmed the
+SMTC cascade was the source should move to v1.2.10 to get the
+feature back — it'll only fire when actually needed.
+
 ## [1.2.9-beta] - 2026-05-28
 
 > Diagnostic beta. Same hardening as v1.2.8 **plus** the entire
