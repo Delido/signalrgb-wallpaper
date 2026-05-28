@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.7-beta"
+APP_VERSION = "1.2.8-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1710,6 +1710,22 @@ class Broadcaster:
                     print(f"[-] ws screen={screen} (total: {total})")
                     return
 
+    def has_any_clients(self) -> bool:
+        """Lock-free snapshot of whether ANY wallpaper page is currently
+        connected (any screen, any role). Pollers use this as an idle
+        gate so they don't drive their respective IPC pipelines (SMTC,
+        LHM HTTP, psutil collect + JSON broadcast) when no widget on a
+        live page can render the result. CPython dict-values iteration
+        is atomic; race with an in-flight add() at worst drops one
+        tick, recovered next second."""
+        try:
+            for s in self.clients_by_screen.values():
+                if s:
+                    return True
+            return False
+        except Exception:
+            return True   # fail open — prefer wasted poll over silent break
+
     def has_clients_for(self, screen: int) -> bool:
         """Lock-free snapshot of whether any wallpaper page is currently
         listening on a given screen. Used by UdpReceiver.datagram_received
@@ -2745,9 +2761,15 @@ class HwMonPoller:
     POLL_INTERVAL_S = 1.0
     REQUEST_TIMEOUT_S = 0.8
 
-    def __init__(self):
+    def __init__(self, should_poll=None):
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        # v1.2.8: callable()->bool gate. False = skip the HTTP GET to
+        # LibreHardwareMonitor; the snapshot from the previous successful
+        # poll is kept around for the /hwmon/sensors HTTP endpoint that
+        # the Configurator's sensor-picker hits. No-clients means no
+        # widget is reading it, so the cost is wasted.
+        self._should_poll = should_poll
         # path -> {"value": float, "raw": "45.5 °C", "unit": "°C"}
         self._snapshot: dict[str, dict] = {}
         self._last_ok_ts: float = 0.0
@@ -2792,6 +2814,16 @@ class HwMonPoller:
 
     def _run(self):
         while not self._stop.is_set():
+            # v1.2.8: idle-gate. Skip the HTTP GET when no wallpaper
+            # page is connected — the snapshot has no reader.
+            try:
+                poll = self._should_poll() if self._should_poll else True
+            except Exception:
+                poll = True
+            if not poll:
+                if self._stop.wait(self.POLL_INTERVAL_S):
+                    return
+                continue
             try:
                 req = urllib.request.Request(self.DEFAULT_URL,
                                               headers={"User-Agent": "SignalRGBBridge"})
@@ -2923,11 +2955,25 @@ class NowPlayingPoller:
 
     POLL_INTERVAL_S = 1.0
 
-    def __init__(self):
+    def __init__(self, should_poll=None):
         self._stop     = threading.Event()
         self._snapshot: dict = {}
         self._thread: threading.Thread | None = None
         self._available = False
+        # v1.2.8: callable()->bool gate. When supplied and returns
+        # False we skip the SMTC tick entirely — saves a 1 Hz IPC
+        # roundtrip Bridge→NPSMSvc→Spotify (and the DWM/WebView2
+        # render cascade that Spotify triggers in response) when no
+        # wallpaper page is even connected to consume the snapshot.
+        self._should_poll = should_poll
+        # v1.2.8: cached SMTCManager singleton. winrt's
+        # request_async() advertises returning the same manager each
+        # call but the COM ref-counting in winrt-Python isn't always
+        # clean on repeated calls, so we resolve it once on the first
+        # tick and reuse on every subsequent tick. This is the single
+        # biggest source of the NPSMSvc / Spotify / DWM cascade load
+        # the user observed when the bridge was under stress.
+        self._mgr = None
         try:
             # Detect optional deps once at construction so we don't
             # eat the import cost on every poll if they're missing.
@@ -2944,7 +2990,7 @@ class NowPlayingPoller:
         self._thread = threading.Thread(
             target=self._run, daemon=True, name="nowplaying-poll")
         self._thread.start()
-        print("[nowplaying] poller running (1 Hz)")
+        print("[nowplaying] poller running (1 Hz, idle-gated)")
 
     def stop(self):
         self._stop.set()
@@ -2964,15 +3010,25 @@ class NowPlayingPoller:
             return
         try:
             while not self._stop.is_set():
+                # v1.2.8: idle-gate. If no wallpaper page is connected,
+                # skip the SMTC roundtrip — nothing on the receiving
+                # end can render the snapshot anyway, and the IPC
+                # cascade (NPSMSvc → Spotify → DWM) is the load the
+                # user observed building up.
                 try:
-                    snap = loop.run_until_complete(self._tick())
-                    if snap is not None:
-                        self._snapshot = snap
-                except Exception as e:
-                    # Keep going even when SMTC throws — common during
-                    # session-switch (track change), the next tick recovers.
-                    if not isinstance(e, asyncio.CancelledError):
-                        print(f"[nowplaying] tick failed: {e}")
+                    poll = self._should_poll() if self._should_poll else True
+                except Exception:
+                    poll = True
+                if poll:
+                    try:
+                        snap = loop.run_until_complete(self._tick())
+                        if snap is not None:
+                            self._snapshot = snap
+                    except Exception as e:
+                        # Keep going even when SMTC throws — common during
+                        # session-switch (track change), the next tick recovers.
+                        if not isinstance(e, asyncio.CancelledError):
+                            print(f"[nowplaying] tick failed: {e}")
                 if self._stop.wait(self.POLL_INTERVAL_S):
                     return
         finally:
@@ -2980,10 +3036,12 @@ class NowPlayingPoller:
             except Exception: pass
 
     async def _tick(self) -> dict | None:
-        from winrt.windows.media.control import (
-            GlobalSystemMediaTransportControlsSessionManager as _Mgr,
-        )
-        mgr = await _Mgr.request_async()
+        if self._mgr is None:
+            from winrt.windows.media.control import (
+                GlobalSystemMediaTransportControlsSessionManager as _Mgr,
+            )
+            self._mgr = await _Mgr.request_async()
+        mgr = self._mgr
         session = mgr.get_current_session()
         if session is None:
             return {}   # no media playing
@@ -3059,11 +3117,19 @@ class SysStatsPoller:
         try: psutil.cpu_percent(interval=None)
         except Exception: pass
         while not self._stop.is_set():
+            # v1.2.8: idle-gate. Skip psutil's full collect + the
+            # push_sysstats_threadsafe roundtrip when no wallpaper page
+            # is connected — saves a 1 Hz JSON encode + futile broadcast.
             try:
-                snap = self._collect()
-                self.broadcaster.push_sysstats_threadsafe(snap)
-            except Exception as e:
-                print(f"[sysstats] tick failed: {e}")
+                has_clients = bool(self.broadcaster.has_any_clients())
+            except Exception:
+                has_clients = True
+            if has_clients:
+                try:
+                    snap = self._collect()
+                    self.broadcaster.push_sysstats_threadsafe(snap)
+                except Exception as e:
+                    print(f"[sysstats] tick failed: {e}")
             if self._stop.wait(1.0):
                 return
 
@@ -4904,7 +4970,19 @@ class BridgeRuntime:
                 rid = str(msg.get("id", ""))
                 if rid:
                     self.remove_profile(rid)
-        threading.Thread(target=run, daemon=True, name="widget-mutate").start()
+        # v1.2.8: previously this spawned a fresh OS thread per WS
+        # command. Builder per-tile drag + Quick Looks fire 60-100
+        # widget-update messages per drag and Configurator sliders
+        # likewise stream setting-update at high rate — over a 12 h
+        # session that meant thousands of thread spawns. Windows
+        # commits thread stack pages lazily but the high-water marks
+        # accumulate in the process commit charge even after the
+        # threads exit, plus each thread's run() closure pinned the
+        # message dict + _mutate_screen's deep-copied config in heap
+        # until the disk write completed. Submitting to the loop's
+        # default ThreadPoolExecutor (~32 workers, recycled) keeps
+        # the off-loop file-write isolation but caps thread count.
+        self.loop.run_in_executor(None, run)
 
     def update_viewport(self, screen: int, w, h) -> dict | None:
         """Stash the wallpaper page's actual viewport size so the configurator
@@ -4958,7 +5036,7 @@ class BridgeRuntime:
         # The HwMon poller starts even when LHM isn't running — it'll just
         # report `online: false` until the user starts LibreHardwareMonitor
         # with its Remote Web Server enabled.
-        self.hwmon = HwMonPoller()
+        self.hwmon = HwMonPoller(should_poll=self.broadcaster.has_any_clients)
         self.hwmon.start()
         # Let the broadcaster's /hwmon/sensors HTTP handler reach the
         # poller's snapshot + status. Set here rather than via __init__
@@ -4990,7 +5068,7 @@ class BridgeRuntime:
         # so the now-playing widget can render whatever the user has
         # active (Spotify, Groove, browser HTML5 audio, etc.). No-op
         # when the winrt-Windows.Media.Control package isn't bundled.
-        self.nowplaying = NowPlayingPoller()
+        self.nowplaying = NowPlayingPoller(should_poll=self.broadcaster.has_any_clients)
         self.nowplaying.start()
         self.sysstats = SysStatsPoller(self.broadcaster,
                                        hwmon=self.hwmon,

@@ -4,6 +4,63 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.8-beta] - 2026-05-28
+
+> Beta: continues the v1.2.7 leak hunt with three targeted fixes after
+> the user spotted that NPSMSvc / Spotify / DWM / WebView2 all spike
+> together when the bridge is under stress — the *cascade* is the load,
+> not just our process.
+
+### Hardened — Widget-command thread spawn replaced with executor pool
+
+`_on_widget_command` used to `threading.Thread(target=run).start()`
+for every WS message — `widget-update`, `setting-update`,
+`viewport`, `quick-look-apply`, `widgets-set`, the lot. A single
+Builder per-tile drag fires 60-100 `widget-update` frames; a slider
+in the Configurator fires `setting-update` at the same rate; Quick
+Looks bundles cascade through `widgets-set` + `setting-update` +
+`preset-save`. Over a 12 h session that meant thousands of
+short-lived OS threads. They exited cleanly (daemon=True) but
+Windows commits thread stack pages lazily and the high-water marks
+accumulate in the process commit charge, plus each thread's run()
+closure pinned the message dict + the deep-copied config in
+`_mutate_screen` until the disk write returned (slow under OneDrive
+sync). The handler now submits to the asyncio loop's default
+ThreadPoolExecutor (~32 workers, recycled) which preserves the
+off-loop file-write isolation but caps thread count.
+
+### Hardened — SMTC manager cached + idle-gated
+
+`NowPlayingPoller._tick` called
+`GlobalSystemMediaTransportControlsSessionManager.request_async()`
+every second. The WinRT spec says this returns a singleton, but the
+COM ref-counting in the winrt-Python bindings isn't always clean on
+repeated calls, and each call triggers an IPC roundtrip
+Bridge → NPSMSvc → registered media app (Spotify, Edge, Groove, …)
+that the receiving app responds to by re-marshalling its metadata
+and cover art. The user observed all four
+(NPSMSvc / Spotify / DWM / WebView2) spiking together when the bridge
+was hot — confirming the cascade.
+
+The poller now resolves the manager exactly once on the first tick
+and reuses the cached reference on every subsequent tick. The
+visible knock-on for the user is the Task Manager "red" group going
+quiet outside of actual track changes.
+
+### Hardened — Pollers skip work when no wallpaper page is connected
+
+`NowPlayingPoller`, `HwMonPoller` and `SysStatsPoller` previously
+polled (and pushed) at their 1 Hz cadence forever regardless of
+whether a wallpaper page was connected to consume the snapshot.
+Closing Lively / Wallpaper Engine left the bridge driving an IPC
+load nobody could observe. All three now check
+`Broadcaster.has_any_clients()` (lock-free dict-values scan) before
+the expensive part of each tick and short-circuit when nothing is
+connected. The HwMon snapshot from the last successful poll is kept
+so the Configurator's `/hwmon/sensors` HTTP picker still returns
+something useful when a user opens the picker without an active
+wallpaper.
+
 ## [1.2.7-beta] - 2026-05-28
 
 > Beta: same "high CPU + ~556 MB after 12 h" pattern resurfaced for a
