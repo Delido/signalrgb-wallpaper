@@ -507,7 +507,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.6-beta"
+APP_VERSION = "1.2.7-beta"
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -1710,6 +1710,20 @@ class Broadcaster:
                     print(f"[-] ws screen={screen} (total: {total})")
                     return
 
+    def has_clients_for(self, screen: int) -> bool:
+        """Lock-free snapshot of whether any wallpaper page is currently
+        listening on a given screen. Used by UdpReceiver.datagram_received
+        as a sync short-circuit: if nobody's listening, skip the whole
+        broadcast pipeline (no asyncio.Task, no frame encode). CPython
+        dict reads are atomic so we don't need to await self._lock here
+        — a false negative just drops one frame, which the next datagram
+        recovers from instantly."""
+        try:
+            s = self.clients_by_screen.get(int(screen))
+            return bool(s)
+        except Exception:
+            return False
+
     # ----- broadcasting (called from asyncio loop) -----
 
     # v1.2.18: backpressure threshold for the per-client TCP send
@@ -1758,20 +1772,24 @@ class Broadcaster:
             await self.remove(w)
 
     async def push_pause(self, paused: bool):
-        msg = json.dumps({"type": "paused", "paused": bool(paused)})
-        frame = encode_text_frame(msg)
         async with self._lock:
             all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
+        if not all_clients:
+            return
+        msg = json.dumps({"type": "paused", "paused": bool(paused)})
+        frame = encode_text_frame(msg)
         dead = []
         for w in all_clients:
             try:
+                tr = w.transport
+                if tr is not None and tr.get_write_buffer_size() > self._CLIENT_WRITE_BUFFER_LIMIT:
+                    continue
                 w.write(frame)
             except Exception:
                 dead.append(w)
         for w in dead:
             await self.remove(w)
-        if all_clients:
-            print(f"[push] paused={paused} -> {len(all_clients)} client(s)")
+        print(f"[push] paused={paused} -> {len(all_clients)} client(s)")
 
     def push_pause_threadsafe(self, paused: bool):
         asyncio.run_coroutine_threadsafe(self.push_pause(paused), self.loop)
@@ -1783,16 +1801,21 @@ class Broadcaster:
         tray's *Reload wallpaper pages* entry to force a refresh
         after a v0.X.Y upgrade so users don't have to manually re-
         import the Lively/WE bundle for every JS update."""
-        msg = json.dumps({"type": "reload"})
-        frame = encode_text_frame(msg)
         async with self._lock:
             roles = getattr(self, "client_roles", {}) or {}
             all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
             # Filter to wallpaper-role clients only.
             targets = [w for w in all_clients if roles.get(w, "wallpaper") == "wallpaper"]
+        if not targets:
+            return
+        msg = json.dumps({"type": "reload"})
+        frame = encode_text_frame(msg)
         dead = []
         for w in targets:
             try:
+                tr = w.transport
+                if tr is not None and tr.get_write_buffer_size() > self._CLIENT_WRITE_BUFFER_LIMIT:
+                    continue
                 w.write(frame)
             except Exception:
                 dead.append(w)
@@ -1819,6 +1842,9 @@ class Broadcaster:
         dead = []
         for w in clients:
             try:
+                tr = w.transport
+                if tr is not None and tr.get_write_buffer_size() > self._CLIENT_WRITE_BUFFER_LIMIT:
+                    continue
                 w.write(frame)
             except Exception:
                 dead.append(w)
@@ -1849,14 +1875,26 @@ class Broadcaster:
         """Broadcast a single sysstats payload to every connected client.
         snapshot keys: cpu (0..100), ram (0..100), netDown / netUp (bytes/s),
         uptime (seconds), and 'ts' (epoch ms).
+        v1.2.7: snapshot client list FIRST and skip the JSON encode +
+        text-frame wrap if nobody's listening. Previously the bridge
+        json.dumps()'d a fresh sysstats payload every second forever
+        even when no wallpaper page was connected — small per-call,
+        but adds heap pressure across a 12 h session. Also applies
+        the per-client 256 KiB backpressure cap broadcast_frame uses.
         """
-        msg = json.dumps({"type": "sysstats", "data": snapshot})
-        frame = encode_text_frame(msg)
         async with self._lock:
             all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
+        if not all_clients:
+            return
+        msg = json.dumps({"type": "sysstats", "data": snapshot})
+        frame = encode_text_frame(msg)
         dead = []
         for w in all_clients:
-            try: w.write(frame)
+            try:
+                tr = w.transport
+                if tr is not None and tr.get_write_buffer_size() > self._CLIENT_WRITE_BUFFER_LIMIT:
+                    continue
+                w.write(frame)
             except Exception: dead.append(w)
         for w in dead:
             await self.remove(w)
@@ -3526,7 +3564,25 @@ class UdpReceiver(asyncio.DatagramProtocol):
                 self.warned_bad += 1
                 print(f"[udp] malformed datagram from {addr}: len={len(data)} head={data[:8].hex()}")
             return
+        # v1.2.7: short-circuit before any broadcaster work if the
+        # bridge is paused (tray / fullscreen) or no client is
+        # listening on this screen. The SignalRGB plugin keeps
+        # sending at 60+ Hz × N screens regardless of whether anyone
+        # is consuming the data — and prior versions still ran the
+        # full encode/task-creation path for each packet, which over
+        # ~12 h showed up as ~23 % CPU + a steadily growing Python
+        # heap from the per-frame bytes allocations. Doing this gate
+        # in datagram_received (sync, on the loop's selector thread)
+        # avoids spinning up an asyncio.Task per dropped frame.
         magic1 = data[1]
+        screen_hint = data[2] if len(data) >= 3 else 0
+        try:
+            if self.broadcaster.get_paused():
+                return
+        except Exception:
+            pass
+        if not self.broadcaster.has_clients_for(screen_hint):
+            return
         if magic1 == 0x52:           # 'R' — original single-packet frame
             screen = data[2]
             self.count += 1
@@ -4949,18 +5005,69 @@ class BridgeRuntime:
 
     async def _serve(self):
         ws_server = await asyncio.start_server(self.broadcaster.handle_client, WS_HOST, WS_PORT)
-        await self.loop.create_datagram_endpoint(
+        udp_transport, udp_protocol = await self.loop.create_datagram_endpoint(
             lambda: UdpReceiver(self.broadcaster, self.loop),
             local_addr=(UDP_HOST, UDP_PORT),
         )
+        # Keep a ref to the UdpReceiver so the heartbeat below can
+        # read its partials count for diagnostics.
+        self._udp_protocol = udp_protocol
         print("SignalRGB Wallpaper bridge — multi-screen + tray")
         print(f"  UDP listener: udp://{UDP_HOST}:{UDP_PORT}  (plugin -> bridge)")
         print(f"  WS server:    ws://{WS_HOST}:{WS_PORT}/?screen=N")
         print(f"  HTTP images:  http://{WS_HOST}:{WS_PORT}/image?path=<absolute path>")
         print(f"  Config:       {config_path()}")
+        # v1.2.7: heap-fragmentation heartbeat. CPython's pymalloc
+        # holds onto arenas allocated under bursty workloads even
+        # after objects are freed; without a periodic forced GC the
+        # process RSS drifts up over a multi-hour session driven by
+        # 60 Hz × N_screens UDP frame churn even when our reachable
+        # set stays bounded. A gc.collect() every 60 s nudges
+        # generation-2 GC to release empty arenas back to the OS,
+        # and a single log line surfaces the trend so the next
+        # diagnostic export captures the curve.
+        self.loop.create_task(self._diag_heartbeat())
         self._ready.set()
         async with ws_server:
             await ws_server.serve_forever()
+
+    async def _diag_heartbeat(self):
+        import gc
+        try:
+            import psutil  # type: ignore
+            _proc = psutil.Process()
+        except Exception:
+            _proc = None
+        # gc every 60 s; log line every 5 min so logs stay readable.
+        tick = 0
+        while True:
+            try:
+                await asyncio.sleep(60)
+                gc.collect()
+                tick += 1
+                if tick % 5 == 0:
+                    try:
+                        rss_mb = (_proc.memory_info().rss / (1024 * 1024)) if _proc else 0.0
+                    except Exception:
+                        rss_mb = 0.0
+                    try:
+                        n_clients = sum(len(s) for s in self.broadcaster.clients_by_screen.values())
+                    except Exception:
+                        n_clients = 0
+                    try:
+                        n_tasks = sum(1 for t in asyncio.all_tasks(self.loop) if not t.done())
+                    except Exception:
+                        n_tasks = 0
+                    try:
+                        n_partials = len(getattr(self._udp_protocol, "partials", {}) or {})
+                    except Exception:
+                        n_partials = 0
+                    print(f"[diag] rss={rss_mb:.1f}MB tasks={n_tasks} "
+                          f"clients={n_clients} partials={n_partials}")
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                print(f"[diag] heartbeat error: {e}")
 
 
 # ============================================================================

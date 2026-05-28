@@ -4,6 +4,59 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.7-beta] - 2026-05-28
+
+> Beta: same "high CPU + ~556 MB after 12 h" pattern resurfaced for a
+> user even on top of v1.2.1's per-frame backpressure fix. This beta
+> hardens the bridge's relay loop so the bridge stops doing per-frame
+> work when nobody's listening, brings the other `push_*` channels in
+> line with the broadcaster's backpressure, and adds a periodic GC +
+> diag heartbeat so the next report can pinpoint exactly which counter
+> moves.
+
+### Hardened — Bridge no longer encodes / schedules per-frame work when paused or no clients
+
+`UdpReceiver.datagram_received` previously created an `asyncio.Task` for
+every inbound UDP frame and let `broadcast_frame` decide whether to
+short-circuit (paused / no clients). With the SignalRGB plugin pushing
+60+ Hz × N screens forever regardless of bridge state, that meant
+~120+ throwaway tasks per second over a 12 h session — each one
+allocates a coroutine, a future, and (when it ran) a fresh
+`encode_binary_frame` bytes object. Tasks completed quickly so the
+*reachable* set stayed bounded, but the constant churn fragments
+CPython's pymalloc heap; arenas allocated during bursty load aren't
+reliably returned to the OS, so process RSS drifts up over hours even
+without a true reference leak.
+
+v1.2.7 gates the work in `datagram_received` itself (sync, on the
+selector thread): if `get_paused()` is True or `has_clients_for(screen)`
+returns false, the datagram is dropped before any task is created and
+before any frame buffer is allocated. The plugin keeps sending; the
+bridge silently absorbs.
+
+### Hardened — `push_sysstats` / `push_pause` / `push_reload_all` / `push_settings` now share broadcaster backpressure
+
+`broadcast_frame` got per-client write-buffer backpressure in v1.2.1
+(skip-when-buffer > 256 KiB) but the other four push channels still
+wrote unconditionally. None of them are high-rate so the bound was
+small, but a slow / wedged client would let the `StreamWriter`'s
+internal buffer grow uncapped on each tick of sysstats forever. All
+four channels now read `transport.get_write_buffer_size()` and skip
+the write when over the cap. They also snapshot the client list and
+early-return without encoding JSON when no clients are connected — a
+small per-second CPU win for the headless-bridge case.
+
+### Added — Periodic `gc.collect()` + diagnostic heartbeat
+
+A daemon task on the bridge's asyncio loop runs `gc.collect()` every
+60 s to nudge generation-2 collection to release empty arenas back to
+the OS, and once every 5 minutes prints one `[diag]` log line with
+the process RSS, live asyncio task count, connected client count, and
+in-flight chunked-frame partials. Cost is negligible (a forced GC on
+an idle Python heap is sub-ms) and the heartbeat lets the next
+diagnostics export carry a memory-curve over time so we can attribute
+any future drift to a specific counter rather than guessing again.
+
 ## [1.2.6-beta] - 2026-05-26
 
 > Beta: fixes the "Failed to load Python DLL" install error some users
