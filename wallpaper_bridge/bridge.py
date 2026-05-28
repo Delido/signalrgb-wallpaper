@@ -349,26 +349,34 @@ class UpdateChecker:
             if sys.platform == "win32":
                 import ctypes
                 # /MERGETASKS forces the auto-update installer to ALSO run
-                # the host-bundle + plugin file-copy tasks AND the
-                # autostart [Run] entry that relaunches the bridge.
-                # Without it, `Flags: checkedonce` on those tasks
-                # defaults them OFF during silent re-install:
-                #   • bridge.exe swaps fine (no task gate)
-                #   • plugin, Lively ZIPs, WE bundle stay at the
-                #     previous-install state (file gates: see .iss)
-                #   • the [Run] entry that re-launches the new bridge
-                #     ALSO doesn't fire because it's gated by Tasks:
-                #     autostart → user has a fresh bridge.exe on disk
-                #     but no running process until they click the
-                #     Start-menu shortcut or reboot
+                # the host-bundle + plugin file-copy tasks. Without it,
+                # `Flags: checkedonce` on those tasks defaults them OFF
+                # during silent re-install — plugin / Lively ZIPs / WE
+                # bundle would stay at the previous-install state.
+                #
+                # v1.2.11: `autostart` deliberately REMOVED from this
+                # list. Inno's [Run] entry for autostart launched the
+                # bridge in a token / search-path context that on some
+                # user setups caused `LoadLibrary(python313.dll)` to
+                # fail with "specified module not found" — the bundled
+                # vcruntime DLLs are present but the OS loader couldn't
+                # resolve them in that context. Users saw the
+                # post-install error popup and the bridge never auto-
+                # started; manual launch from the Start menu worked
+                # fine. The relaunch is now driven by the delayed cmd
+                # launcher we spawn below — runs as a normal user
+                # process with no Inno-side context contamination.
+                # The autostart Registry value still installs (it's in
+                # [Registry], not gated by [Run]) so the bridge comes
+                # up at next Windows login regardless.
+                #
                 # autoinstall + openconfigurator deliberately omitted:
                 # the former would re-download Lively every update,
                 # the latter would pop a browser tab every update.
                 mergetasks = (
                     "installplugin,"
                     "installlively,installlively\\autoimport,"
-                    "installwallpaperengine,"
-                    "autostart"
+                    "installwallpaperengine"
                 )
                 args = ('/SILENT /SUPPRESSMSGBOXES /NORESTART '
                         f'/MERGETASKS="{mergetasks}"')
@@ -402,6 +410,48 @@ class UpdateChecker:
         if on_done:
             try: on_done(str(target), None)
             except Exception: pass
+        # v1.2.11: schedule a user-context relaunch of the new bridge
+        # exe ~25 s from now (long enough for Inno to finish replacing
+        # files + drop locks) via a detached cmd.exe. We deliberately
+        # do NOT lean on Inno's [Run] section to launch the bridge
+        # after install: that path runs in Inno's installer-spawned
+        # token context, which on some user setups (AV / EDR /
+        # Controlled-Folder-Access policies that key off process
+        # ancestry) refuses LoadLibrary on the PyInstaller _MEI temp
+        # extraction directory even when every required DLL is
+        # bundled. Spawning the relaunch from a plain cmd.exe child
+        # of the OLD bridge process — itself running as the logged-in
+        # user — gives the new bridge a clean user-context token and
+        # the DLL search behaves normally. cmd.exe survives our
+        # `os._exit` thanks to CREATE_BREAKAWAY_FROM_JOB; the bridge
+        # path is the same after the update (`sys.executable`) so we
+        # can hard-code it.
+        try:
+            import subprocess as _sp
+            exe_path = sys.executable
+            delay_s = 25
+            # PING acts as a wait that doesn't depend on cmd builtins;
+            # `start "" /B` spawns the new bridge fully detached so the
+            # wrapping cmd exits immediately afterwards.
+            cmdline = (
+                f'ping -n {delay_s + 1} 127.0.0.1 >NUL && '
+                f'start "" /B "{exe_path}"'
+            )
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+            _sp.Popen(
+                ['cmd', '/c', cmdline],
+                creationflags=(DETACHED_PROCESS
+                               | CREATE_NEW_PROCESS_GROUP
+                               | CREATE_BREAKAWAY_FROM_JOB),
+                stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                close_fds=True,
+            )
+            _log(f"delayed relaunch scheduled (T+{delay_s}s -> {exe_path})")
+        except Exception as e:
+            _log(f"delayed relaunch spawn FAILED — user will need to start "
+                 f"the bridge manually after install ({e})")
         # Give the spawned installer a moment to grab its handles
         # before we kill the bridge process. Bumped from 1.5 s to 3 s
         # so AV real-time-scan of the just-downloaded exe has time to
@@ -507,7 +557,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.10-beta"
+APP_VERSION = "1.2.11-beta"
 
 # Diagnostic kill-switch retained from v1.2.9. When False the entire
 # NowPlayingPoller / SMTC code path is removed at startup (no winrt

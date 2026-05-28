@@ -4,6 +4,61 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.11-beta] - 2026-05-28
+
+> Beta: makes the **tray's "Download + install update"** flow
+> robust. A user hit the "Failed to load Python DLL python313.dll"
+> error again — but only after the tray-triggered silent update,
+> not on fresh installs or on manual launch from the Start menu.
+> Two coordinated fixes target both halves of the failure mode
+> (DLL load + the new bridge not coming up afterwards).
+
+### Fixed — DLL load failure + missing auto-restart after tray update
+
+Symptom: after `Tray → Updates → Download + install update`, the
+post-install Inno `[Run]` step popped a *"Failed to load Python
+DLL `…\_MEI…\python313.dll`. LoadLibrary: The specified module
+could not be found"* dialog and the new bridge never started.
+Starting the bridge manually from the Start menu worked. Diagnosis:
+the bundled DLLs (including the v1.2.6 vcruntime fix) are correct,
+but Inno's `[Run]` launches the bridge in a token / process-
+ancestry context that on some AV / EDR / Controlled-Folder-Access
+setups refuses `LoadLibrary` on `%TEMP%\_MEI<random>\` — the
+PyInstaller `--onefile` extraction dir.
+
+Fix is two-layered:
+
+**Layer 1: structural.** PyInstaller switched from `--onefile` to
+`--onedir`. The bundle is now a directory under `{app}\` containing
+`SignalRGBBridge.exe` + `_internal\` (python313.dll, vcruntime,
+.pyd extension modules, HTML/CSS data files). There is no
+extraction step at launch and no temp directory involved — the OS
+loader resolves DLL dependencies straight from the install dir, so
+the `%TEMP%` LoadLibrary failure mode is removed entirely. Side-
+effect bonus: bridge startup is ~2x faster (no 8000-file extract
+per launch).
+
+**Layer 2: launch path.** The tray's `_download_install_worker`
+now drops `autostart` from the silent installer's `/MERGETASKS`
+string — so Inno's `[Run]` won't try to launch the bridge in its
+own context — and instead spawns a detached `cmd.exe` child of the
+*current* bridge process to schedule the relaunch ~25 s later
+(`ping -n 26 127.0.0.1 >NUL && start "" /B "<exe>"`). The cmd
+inherits the bridge's user-context token (`CREATE_BREAKAWAY_FROM_JOB`
+keeps it alive after the bridge's `os._exit`), so the new bridge
+launches as a normal user process — no Inno-context contamination,
+no AV gate. The Registry autostart entry still installs, so the
+bridge also comes up cleanly at the next Windows login.
+
+### Migration notes
+
+Existing v1.2.6 → v1.2.10 installs that upgrade to v1.2.11 will
+see a small layout change in their install directory: the
+`_internal\` subfolder appears next to `SignalRGBBridge.exe`. The
+exe path stays identical (`{app}\SignalRGBBridge.exe`), so Start-
+menu shortcuts, the Registry autostart entry, the Lively / WE
+bundle paths and the SignalRGB plugin are all unaffected.
+
 ## [1.2.10-beta] - 2026-05-28
 
 > Beta: the permanent-fix candidate that supersedes the v1.2.9

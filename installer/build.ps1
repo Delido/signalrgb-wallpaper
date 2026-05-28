@@ -75,8 +75,20 @@ try {
         }
     }
 
+    # v1.2.11: --onefile -> --onedir.
+    # --onefile bundles everything into one exe that extracts to
+    # %TEMP%\_MEI<random>\ on each launch and LoadLibrary()s
+    # python313.dll from there. Some user setups (AV / EDR / token-
+    # context from the Inno [Run] launcher) refuse the LoadLibrary
+    # on %TEMP% even when every required DLL is bundled, producing
+    # the "Failed to load Python DLL python313.dll" error. --onedir
+    # keeps the bridge exe + its DLLs together in {app}\ so the OS
+    # loader resolves dependencies from the install dir directly —
+    # no extraction step, no temp-path search, no race with AV's
+    # file scanner. Side-effect bonus: startup is ~2x faster
+    # because we skip the 8000-file extract on every launch.
     & python -m PyInstaller `
-        --onefile --noconsole `
+        --onedir --noconsole `
         --name SignalRGBBridge `
         --hidden-import pystray._win32 `
         --collect-all pystray `

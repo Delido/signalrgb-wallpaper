@@ -97,8 +97,17 @@ Name: "openconfigurator"; \
   GroupDescription: "Additional setup:"; Flags: checkedonce
 
 [Files]
-; Bridge + tray
-Source: "..\wallpaper_bridge\dist_bridge\SignalRGBBridge.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Bridge + tray. v1.2.11: PyInstaller now builds --onedir, so the
+; bundle is a directory at dist_bridge\SignalRGBBridge\ containing
+; SignalRGBBridge.exe plus an _internal\ subfolder with python313.dll,
+; vcruntime, .pyd extension modules and the wallpaper / configurator
+; HTML data. We copy the whole tree into {app}\ so the exe sits at
+; {app}\SignalRGBBridge.exe (same path as before) but its DLLs live
+; permanently next to it instead of getting extracted to %TEMP%\_MEI*
+; on every launch. Fixes the "Failed to load Python DLL" error users
+; saw after the tray's silent-update flow on AV-strict setups.
+Source: "..\wallpaper_bridge\dist_bridge\SignalRGBBridge\*"; DestDir: "{app}"; \
+  Flags: ignoreversion recursesubdirs createallsubdirs
 ; PS helper for the tray's "Re-import wallpaper bundles" entry — the
 ; bridge shells out to this script after locating it next to the exe.
 Source: "reimport-wallpaper-bundles.ps1"; DestDir: "{app}"; Flags: ignoreversion
