@@ -8,6 +8,15 @@
      it via ?screen=N. Default 0; screen0.zip / screen1.zip / screen2.zip
      each ship with a different content value. -->
 <meta name="signalrgb-screen-index" content="0">
+<!-- v1.2.12: bundle version stamp. installer/build.ps1 replaces
+     `__WALLPAPER_VERSION__` with the bridge version at bundle-staging
+     time, so a Lively / WE wallpaper imported from a v1.2.5 installer
+     keeps "1.2.5" here even after the bridge is upgraded to v1.2.12.
+     The page sends this on WS hello so the bridge can spot the
+     mismatch and push a "re-import bundles" hint. When the file is
+     served from the dev tree (not via installer), the placeholder
+     stays as-is and the bridge reports "wallpaper: dev". -->
+<meta name="signalrgb-wallpaper-version" content="__WALLPAPER_VERSION__">
 <style>
   html, body {
     margin: 0; padding: 0;
@@ -75,6 +84,67 @@
                   pointer-events: none; user-select: none; }
   #paused-badge.on { display: block; }
 
+  /* v1.2.12: version-mismatch banner. Shown when the bridge spots that
+     our wallpaper bundle (Lively / WE ZIP) is older than the running
+     bridge. Anchored bottom-right so it doesn't fight the standby card
+     in the centre. Subdued amber, click-through. */
+  #version-banner {
+    position: fixed; right: 14px; bottom: 14px;
+    z-index: 6;
+    pointer-events: none;
+    display: none;
+    max-width: 380px;
+    padding: 10px 14px;
+    background: rgba(48, 32, 8, 0.92);
+    border: 1px solid rgba(255, 178, 64, 0.45);
+    border-radius: 10px;
+    color: rgba(255, 222, 170, 0.96);
+    font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
+    font-size: 12.5px;
+    line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+  #version-banner.on { display: block; }
+  #version-banner b { color: rgba(255, 200, 90, 1); }
+  #version-banner code {
+    font-family: ui-monospace, Consolas, monospace;
+    background: rgba(0, 0, 0, 0.32);
+    padding: 1px 5px; border-radius: 4px;
+  }
+  /* v1.2.12: hard-hide all glow + animation layers while paused. The
+     rAF loops on ambient / audio-glow / pixelfx / parallax keep
+     scheduling at 60 Hz even when paused (they early-return after the
+     reschedule), and while that costs ~0% JS-CPU, WebView2's compositor
+     wakes on every rAF and re-runs every `filter: blur()` / canvas
+     filter on every frame because it can't tell that the source is
+     static. Removing the layers from the compositor at `display: none`
+     drops the GPU cost from ~10 % to ~0 % on dGPU-rich setups.
+     #bg + widgets stay visible — pause means "stop the glow + motion",
+     not "black screen". */
+  body.paused-glow #bars,
+  body.paused-glow #bars-canvas,
+  body.paused-glow #ambient-canvas,
+  body.paused-glow #audioglow-canvas,
+  body.paused-glow #pixelfx-canvas { display: none !important; }
+
+  /* v1.2.12: Glass-tile backdrop-filter quality buckets. Default
+     (no body.glass-quality-*) uses the 6px-blur rules further down.
+     - low : remove backdrop-filter, slightly higher bg alpha so the
+             tile still reads. This is the biggest GPU win — backdrop
+             blur is the single most expensive op on the page.
+     - high: restore 12px blur (pre-v1.2.12 quality) for GPU-rich rigs. */
+  body.glass-quality-low.widget-tile-glass .widget,
+  body.glass-quality-low .widget.tile-glass {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(15, 22, 36, 0.78) !important;
+  }
+  body.glass-quality-high.widget-tile-glass .widget,
+  body.glass-quality-high .widget.tile-glass {
+    backdrop-filter: blur(12px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
+  }
+
   /* ── Bridge-offline standby card ── (v1.2.1)
      Visible only after the WS has been disconnected for >5s, so a
      bridge restart that completes in <5s never flashes this. Sits
@@ -90,9 +160,14 @@
     pointer-events: none;
     opacity: 0; transition: opacity 0.4s ease;
     padding: 28px 36px;
-    background: rgba(10, 14, 22, 0.78);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    /* v1.2.12: dropped backdrop-filter (was blur(14px) saturate(140%))
+       and bumped background opacity 0.78 -> 0.94. The card is visible
+       exactly when the bridge is down — i.e. the wallpaper page has
+       no useful work otherwise — and a per-frame backdrop-blur over
+       the card's ~400×220 px area was burning ~10-15% GPU forever in
+       that state. The solid-ish bg keeps the same hierarchy without
+       the blur cost. */
+    background: rgba(10, 14, 22, 0.94);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
@@ -130,6 +205,23 @@
     background: rgba(106, 176, 255, 0.12);
     border: 1px solid rgba(106, 176, 255, 0.45);
     display: flex; align-items: center; justify-content: center;
+    /* v1.2.12: the pulse animation moved to a ::after pseudo so it
+       uses transform + opacity instead of box-shadow. box-shadow
+       animations are paint operations (browser must re-rasterise
+       the element with a different shadow extent every keyframe
+       step); transform + opacity stay on the compositor and cost
+       essentially nothing. The icon itself just needs to host the
+       pseudo via position: relative. */
+    position: relative;
+  }
+  #standby-card .standby-icon::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    background: rgba(106, 176, 255, 0.32);
+    z-index: -1;
+    pointer-events: none;
     animation: standby-pulse 2.4s ease-in-out infinite;
   }
   #standby-card .standby-icon svg {
@@ -138,8 +230,8 @@
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   }
   @keyframes standby-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(106, 176, 255, 0.40); }
-    50%      { box-shadow: 0 0 0 14px rgba(106, 176, 255, 0); }
+    0%, 100% { transform: scale(0.92); opacity: 0; }
+    50%      { transform: scale(1.32); opacity: 0.7; }
   }
   #standby-card .standby-title {
     font-size: 17px; font-weight: 600;
@@ -175,6 +267,27 @@
        pill / stripe layouts (far fewer zones) keep their transition. */
     contain: strict;
   }
+
+  /* v1.2.12: canvas grid renderer. Sized internally to the SignalRGB
+     grid resolution (~32×32); CSS scales it to fill the viewport, and
+     the browser interpolates + applies the blur on the GPU as part of
+     compositing. One putImageData per frame replaces ~1024 DOM style
+     writes per frame on a 32×32 grid under heavy SignalRGB effects. */
+  #bars-canvas {
+    position: fixed; inset: 0; z-index: 1;
+    pointer-events: none;
+    width: 100%; height: 100%;
+    filter: blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+    /* `pixelated` looks blocky; default `auto` smooths bilinearly,
+       and combined with the blur the result is visually identical to
+       the DOM-div grid. */
+    image-rendering: auto;
+    display: none;     /* shown only when currentLayout === "lay-grid" */
+  }
+  #bars-canvas.on { display: block; }
+  /* When the canvas grid is active, hide the DOM-div #bars container
+     entirely so we don't double-paint. */
+  #bars.bars-canvas-active { display: none; }
 
   /* ── Layout: Vertical Stripes ───────────────────────────────────────────── */
   #bars.lay-vstripes { display: flex; flex-direction: row; }
@@ -321,8 +434,24 @@
      v1.0 transparent-overlay look. */
   body.widget-tile-glass .widget {
     background: rgba(15, 22, 36, 0.55);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    /* v1.2.12: blur radius 12px -> 6px. backdrop-filter blur is the
+       single most expensive GPU op on the page — every glass widget
+       re-samples the wallpaper area behind it each frame the source
+       changes, and the cost scales with kernel size² (12px kernel
+       reads ~49 texels per output pixel, 6px reads ~13). On Crystal
+       Glow with every zone changing every frame, an 8-widget glass
+       layout was driving ~10-15% GPU on a 4070 Ti just for the
+       backdrop-filter passes. Visual difference at 6px is minor;
+       the saturation lift keeps the "glassy" feel.
+       contain: paint scopes the dirty area so a widget animation
+       (clock seconds, etc.) can't invalidate paint of neighbours.
+       will-change: backdrop-filter hints the compositor to keep a
+       cached blur texture per widget so a static source frame
+       doesn't recompute the blur on every rAF wakeup. */
+    backdrop-filter: blur(6px) saturate(140%);
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    contain: paint;
+    will-change: backdrop-filter;
     border: var(--widget-tile-border);
     border-radius: var(--widget-tile-radius);
     box-shadow: var(--widget-tile-shadow);
@@ -357,8 +486,12 @@
      style (clear background, no border, no shadow). */
   .widget.tile-glass {
     background: rgba(15, 22, 36, 0.55);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    /* v1.2.12: match the body.widget-tile-glass rule above (blur
+       12px -> 6px + cache hints). */
+    backdrop-filter: blur(6px) saturate(140%);
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    contain: paint;
+    will-change: backdrop-filter;
     border: var(--widget-tile-border);
     border-radius: var(--widget-tile-radius);
     box-shadow: var(--widget-tile-shadow);
@@ -968,6 +1101,14 @@
 </head>
 <body>
 <div id="bars" class="lay-grid"></div>
+<!-- v1.2.12: Canvas-based grid renderer. Active only when the layout is
+     "lay-grid"; pills / stripes / off keep the DOM-div pipeline because
+     they need per-zone CSS (border-radius pills, box-shadows, transitions)
+     that doesn't translate to canvas at their low zone counts. The
+     internal canvas size matches the SignalRGB grid resolution
+     (e.g. 32×32); CSS scales it to viewport so a single putImageData()
+     of a ~4 KiB buffer replaces ~1024 DOM style writes per frame. -->
+<canvas id="bars-canvas" aria-hidden="true"></canvas>
 <div id="bg" role="img" aria-label=""></div>
 <!-- v1.2-dev: animated-background support. Hidden by default; the
      wallpaper page swaps to the <video> element when bgImage's
@@ -992,6 +1133,9 @@
 </div>
 <div id="status" class="bad hidden">starting…</div>
 <div id="paused-badge">⏸ PAUSED</div>
+<!-- v1.2.12: version-mismatch banner. Bridge pushes the inner content
+     after the hello handshake when the wallpaper bundle is older. -->
+<div id="version-banner" aria-hidden="true"></div>
 <!-- v1.2.1: "bridge offline" standby overlay. Hidden until the WS has
      been disconnected for >5s; fades back out as soon as the bridge is
      reachable. The card is purely informational — pointer-events:none
@@ -1046,6 +1190,32 @@ let SCREEN_INDEX = (function () {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 })();
 
+// v1.2.12: wallpaper bundle version. Reads from the <meta> tag the
+// installer's build.ps1 stamps at staging time (`__WALLPAPER_VERSION__`
+// placeholder -> "1.2.X"). When the file is served from the dev tree
+// the placeholder stays intact and we report "dev" — the bridge then
+// surfaces "wallpaper: dev" instead of triggering a stale-bundle hint.
+const WALLPAPER_VERSION = (function () {
+  try {
+    const m = document.querySelector('meta[name="signalrgb-wallpaper-version"]');
+    const raw = m && m.getAttribute("content");
+    if (!raw || raw.indexOf("__") === 0) return "dev";
+    return String(raw);
+  } catch (_) { return "dev"; }
+})();
+
+function showVersionMismatchBanner(bridgeVer, wallpaperVer) {
+  const el = document.getElementById("version-banner");
+  if (!el) return;
+  el.innerHTML =
+    "<b>Wallpaper bundle out of date.</b><br>" +
+    "Bridge: <code>" + escapeHtml(String(bridgeVer || "?")) + "</code> · " +
+    "Wallpaper: <code>" + escapeHtml(String(wallpaperVer || "?")) + "</code><br>" +
+    "Open the tray menu → <b>Re-import wallpaper bundles</b> " +
+    "(or Configurator → System) and re-add the wallpaper in Lively / WE.";
+  el.classList.add("on");
+}
+
 // ── Preview mode (v1.2-dev) ──
 // When the wallpaper page is loaded as an <iframe> inside the
 // Configurator's live-preview panel, certain features have to be
@@ -1095,6 +1265,50 @@ const bgVideoEl = document.getElementById("bg-video");
 const VIDEO_BG_EXTS = /\.(mp4|webm|mov|m4v|mkv)(\?.*)?$/i;
 const dimEl = document.getElementById("dim");
 const barsEl = document.getElementById("bars");
+// v1.2.12: canvas grid renderer. The canvas's internal pixel size tracks
+// the SignalRGB grid resolution (e.g. 32×32), not the viewport — CSS
+// scales it to fill the screen and the blur filter on the canvas element
+// runs on a single flat texture instead of a 1024-child composited
+// layer. _gridImage is reused frame-to-frame; its alpha lane is set to
+// 255 on allocation and never touched again.
+const barsCanvasEl = document.getElementById("bars-canvas");
+const barsCanvasCtx = barsCanvasEl.getContext("2d", { alpha: true });
+let _gridImage = null;     // ImageData for the current grid size
+let _gridImageKey = "";    // "WxH" cache key so we only allocate on resize
+function _ensureGridImage(w, h) {
+  const key = w + "x" + h;
+  if (_gridImageKey === key) return;
+  _gridImageKey = key;
+  if (barsCanvasEl.width !== w)  barsCanvasEl.width  = w;
+  if (barsCanvasEl.height !== h) barsCanvasEl.height = h;
+  _gridImage = barsCanvasCtx.createImageData(w, h);
+  // Pre-fill alpha = 255; renderFrame writes only RGB lanes per pixel.
+  const d = _gridImage.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = 255;
+}
+// v1.2.12: which renderer the grid layout uses — "dom" (default,
+// N×M divs with style.background writes) or "canvas" (one canvas +
+// putImageData). DOM is cheaper on GPU (solid-rect fast path), canvas
+// is cheaper on CPU. Set via the gridRenderer per-screen setting from
+// the Configurator. Only takes effect when currentLayout is "lay-grid".
+let gridRenderer = "dom";
+function _syncGridCanvasVisibility() {
+  const useCanvas = (currentLayout === "lay-grid") && (gridRenderer === "canvas");
+  if (useCanvas) {
+    barsCanvasEl.classList.add("on");
+    barsEl.classList.add("bars-canvas-active");
+  } else {
+    barsCanvasEl.classList.remove("on");
+    barsEl.classList.remove("bars-canvas-active");
+    // Clear the canvas so a stale snapshot doesn't bleed through if
+    // the user later flips back to canvas mode.
+    barsCanvasCtx.clearRect(0, 0, barsCanvasEl.width, barsCanvasEl.height);
+    // Force the DOM grid to repaint every zone on its first frame
+    // back — without resetting the colour cache the un-stale zones
+    // would skip writes and the grid would stay blank.
+    zoneLastColor = null;
+  }
+}
 const statusEl = document.getElementById("status");
 
 const LAYOUT_CLASSES = ["lay-grid", "lay-vstripes", "lay-hstripes", "lay-pills", "lay-off"];
@@ -1107,6 +1321,14 @@ let frames = 0, fpsT0 = performance.now();
 function isGridLayout() { return currentLayout === "lay-grid"; }
 
 function ensureZones(cols, rows) {
+  // v1.2.12: skip the DOM-zone build when the grid layout is using
+  // the canvas renderer — the canvas path never reads zoneEls, so
+  // building 1024 invisible <div>s on every grid-size change just
+  // wastes DOM nodes and a re-style pass. The switch-back path
+  // (user flips gridRenderer back to "dom") works because
+  // zoneEls is empty in canvas mode → the `zoneEls.length === wantTotal`
+  // check below fails and the loop builds fresh divs at that point.
+  if (isGridLayout() && gridRenderer === "canvas") return;
   const wantTotal = isGridLayout() ? cols * rows : cols;
   if (zoneEls.length === wantTotal && cols === lastCols && rows === lastRows) return;
   barsEl.innerHTML = "";
@@ -1140,11 +1362,29 @@ function _resetZoneColorCache(total) {
   zoneLastColor = new Int32Array(total).fill(-1);
 }
 
+// v1.2.12: render-rate cap. The SignalRGB plugin sends UDP frames as fast
+// as it can (often ~60 Hz). For a blurred glow layer, anything past ~30 Hz
+// is perceptually identical — the blur visually low-pass-filters the
+// time domain too. Capping renderFrame at ~30 Hz halves the JS main-thread
+// load under heavy SignalRGB effects (Crystal Glow et al.) which leaves
+// room for the ambient-effects rAF and the widget tick to run smoothly.
+// Worst-case extra latency between an RGB change in SignalRGB and the
+// glow on screen is ~33 ms (one frame), imperceptible against the blur.
+//
+// Defaults match the bridge's matching outgoing cap (also 30 Hz). The
+// `frameRate` setting drives both, kept as one value so the two stay
+// in lockstep.
+let RENDER_INTERVAL_MS = 33;
+let _lastRenderTs = 0;
+
 function renderFrame(buf) {
   // Honor Lively's pause-wallpapers / page-hidden state: drop frames so
   // the glow layer freezes on the last rendered colours. We still consume
   // the WS message (so the queue doesn't back up) but skip the DOM writes.
   if (isPaused) return;
+  const _now = performance.now();
+  if (_now - _lastRenderTs < RENDER_INTERVAL_MS) return;
+  _lastRenderTs = _now;
   // Wire: [S][R][screen u8][wH][wL][hH][hL][rgb...]  -> 7-byte header
   if (buf.length < 7) return;
   if (buf[0] !== 0x53 || buf[1] !== 0x52) return;
@@ -1166,17 +1406,53 @@ function renderFrame(buf) {
   // less CSS-variable indirection per zone-per-frame, adds up across a
   // 16×9 grid at 60 fps (≈ 8 600 fewer property accesses/sec).
   if (isGridLayout()) {
-    const total = w * h;
-    if (!zoneLastColor || zoneLastColor.length !== total) _resetZoneColorCache(total);
-    for (let i = 0; i < total; i++) {
-      const r = buf[off], g = buf[off + 1], b = buf[off + 2];
-      const packed = (r << 16) | (g << 8) | b;
-      if (zoneLastColor[i] !== packed) {
-        zoneLastColor[i] = packed;
-        zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+    if (gridRenderer === "canvas") {
+      // Canvas path. One putImageData per frame replaces ~1024 DOM
+      // style writes; cheap on CPU but shifts cost to GPU because the
+      // browser bilinear-upsamples a tiny (32×32-ish) texture across
+      // the full viewport and re-applies the blur filter every frame.
+      // Whether that trade is favourable depends on the user's
+      // hardware (RTX-class dGPU users have reported a measurable GPU
+      // bump under heavy SignalRGB effects), so this path is opt-in
+      // via the gridRenderer setting in the Configurator. We deliberately
+      // skip the per-zone colour cache here — writing all ~4 KiB
+      // unconditionally is cheaper than reading + comparing first.
+      _ensureGridImage(w, h);
+      const data = _gridImage.data;
+      const total = w * h;
+      let di = 0;   // ImageData lane offset (RGBA, alpha pre-set to 255)
+      for (let i = 0; i < total; i++) {
+        const r = buf[off], g = buf[off + 1], b = buf[off + 2];
+        data[di]     = r;
+        data[di + 1] = g;
+        data[di + 2] = b;
+        // data[di + 3] stays 255 from _ensureGridImage
+        if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
+        off += 3;
+        di += 4;
       }
-      if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
-      off += 3;
+      barsCanvasCtx.putImageData(_gridImage, 0, 0);
+    } else {
+      // DOM path (default). One <div> per zone with style.background
+      // writes. The per-zone colour cache short-circuits writes when
+      // a zone's colour didn't change vs. last frame; Chromium has a
+      // fast-path for solid-rectangle composites so even at 32×32×60Hz
+      // the cost is dominated by the changed-zone count, not the
+      // grid resolution. Lighter on GPU than the canvas path on
+      // RTX-class dGPU setups; cheaper there for "Crystal Glow"-style
+      // every-zone-every-frame workloads with the 30 Hz render cap.
+      const total = w * h;
+      if (!zoneLastColor || zoneLastColor.length !== total) _resetZoneColorCache(total);
+      for (let i = 0; i < total; i++) {
+        const r = buf[off], g = buf[off + 1], b = buf[off + 2];
+        const packed = (r << 16) | (g << 8) | b;
+        if (zoneLastColor[i] !== packed) {
+          zoneLastColor[i] = packed;
+          zoneEls[i].style.background = "rgb(" + r + "," + g + "," + b + ")";
+        }
+        if (tintSamples && tintSamples.length < 16) tintSamples.push([r, g, b]);
+        off += 3;
+      }
     }
   } else {
     if (!zoneLastColor || zoneLastColor.length !== w) _resetZoneColorCache(w);
@@ -1291,6 +1567,16 @@ function connect() {
     // v1.2.14: a successful connect resets the backoff window so a
     // brief bridge restart doesn't penalise the next disconnect.
     _reconnectMs = RECONNECT_MS_MIN;
+    // v1.2.12: announce our bundle version so the bridge can spot a
+    // stale Lively / WE bundle. The bridge replies with
+    // {type:"version-mismatch", ...} when we're behind; we render a
+    // small banner via showVersionMismatchBanner() in onmessage.
+    try {
+      ws.send(JSON.stringify({
+        type: "hello",
+        wallpaperVersion: WALLPAPER_VERSION,
+      }));
+    } catch (_) {}
     reportViewport();
   };
   ws.onerror = () => {};
@@ -1323,6 +1609,12 @@ function connect() {
           }
         } else if (msg && msg.type === "paused") {
           setPaused(!!msg.paused);
+        } else if (msg && msg.type === "version-mismatch") {
+          // v1.2.12: bridge spotted our wallpaper bundle is older than
+          // its APP_VERSION. Light up the bottom-right banner so the
+          // user knows to run "Re-import wallpaper bundles" from the
+          // tray or Configurator's System section.
+          showVersionMismatchBanner(msg.bridge, msg.wallpaper);
         } else if (msg && msg.type === "reload") {
           // Tray's *Reload wallpaper pages* command — hot-reload the
           // wallpaper page so a fresh installer's index.html lands
@@ -1355,6 +1647,11 @@ function connect() {
     }
   };
 }
+// v1.2.12: arm the canvas grid renderer for the default "lay-grid" boot
+// state — barLayout's setting handler is what normally toggles it, but
+// settings haven't been pushed yet on the very first frame, and the
+// page starts with the lay-grid CSS class baked into the HTML.
+_syncGridCanvasVisibility();
 connect();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1631,6 +1928,36 @@ function applyProperty(name, val) {
       barsEl.classList.add(cls);
       currentLayout = cls;
       lastCols = 0; lastRows = 0;
+      // v1.2.12: flip the canvas-vs-div renderer to match the new layout.
+      _syncGridCanvasVisibility();
+      break;
+    }
+    case "gridRenderer":
+      // v1.2.12: per-screen renderer pick for the grid layout. Anything
+      // other than the literal "canvas" stays on the DOM path so a
+      // typo can't accidentally silently break the page.
+      gridRenderer = val === "canvas" ? "canvas" : "dom";
+      _syncGridCanvasVisibility();
+      break;
+    case "frameRate": {
+      // v1.2.12: per-screen render-rate cap, paired with the bridge's
+      // outgoing broadcast cap. 20 / 30 / 60 Hz are the offered buckets
+      // (Performance / Balanced / Quality), but we coerce anything in
+      // (0, 240] for safety.
+      const rate = (typeof val === "number" && isFinite(val))
+        ? val
+        : parseInt(val, 10);
+      const clamped = (rate > 0 && rate <= 240) ? rate : 30;
+      RENDER_INTERVAL_MS = Math.max(1, Math.round(1000 / clamped));
+      break;
+    }
+    case "glassQuality": {
+      // v1.2.12: low / medium (default) / high backdrop-filter buckets.
+      // Implemented via body classes that the CSS at the top of <head>
+      // hooks into; medium = no class so the default 6px rule wins.
+      const cls = (val === "low" || val === "high") ? "glass-quality-" + val : null;
+      document.body.classList.remove("glass-quality-low", "glass-quality-high");
+      if (cls) document.body.classList.add(cls);
       break;
     }
     case "showBars":
@@ -1785,6 +2112,22 @@ function _recomputePaused() {
   console.log("[wallpaper] paused =", isPaused,
               "(external=" + _externalPaused + ", rendering=" + _renderingPaused + ")");
   if (pausedBadgeEl) pausedBadgeEl.classList.toggle("on", isPaused);
+  // v1.2.12: drop all GPU-heavy filter layers out of the compositor
+  // when paused. See the body.paused-glow CSS rule for the layer list
+  // + rationale. This is what actually pulls the GPU back to ~0 %; the
+  // rAF early-return alone leaves the compositor running at 60 Hz on
+  // static-but-still-laid-out blur layers.
+  document.body.classList.toggle("paused-glow", isPaused);
+  // v1.2.12: the four ambient/audioglow/pixelfx/parallax rAF loops
+  // now stop scheduling new frames while paused (was: kept scheduling
+  // and early-returned, which still woke WebView2's compositor at
+  // 60 Hz and forced re-composition of every CSS filter / backdrop-
+  // filter layer). Each module listens for this event and re-arms
+  // its own rAF chain when it goes back to running.
+  if (!isPaused) {
+    try { window.dispatchEvent(new Event("wallpaper-resume")); }
+    catch (_) {}
+  }
   if (showStatusEnabled) {
     flashDebug(isPaused ? "paused" : "resumed");
   }
@@ -1869,16 +2212,29 @@ document.addEventListener("visibilitychange", () => {
 // is in a paused / hidden state — flip setPaused(true). When ticks resume,
 // flip back. Catches every flavour of pause Lively/the OS might apply, no
 // reliance on Lively-specific hooks firing.
+// v1.2.12: throttle the rAF probe cascade so we don't wake WebView2's
+// compositor 60×/s just to take a timestamp. setTimeout schedules the
+// NEXT rAF 200 ms later — net effect is ~5 Hz rAF instead of 60 Hz.
+// The 250 ms setInterval below still detects pause via the 500 ms
+// staleness threshold (a paused page never fires the rAF, so the
+// timestamp doesn't advance regardless of how often we'd otherwise
+// schedule one). Saves ~1-2% baseline CPU on Lively / WE pages where
+// the only thing keeping the compositor warm is this probe.
 let _lastRafTickMs = performance.now();
-(function probeRafLoop() {
+function probeRafLoop() {
   _lastRafTickMs = performance.now();
-  requestAnimationFrame(probeRafLoop);
-})();
+  setTimeout(() => requestAnimationFrame(probeRafLoop), 200);
+}
+requestAnimationFrame(probeRafLoop);
 setInterval(() => {
   const stale = performance.now() - _lastRafTickMs;
   // v1.2.5: only flips the rendering-suspension flag. The external
   // pause (bridge tray toggle, Lively callback, visibilitychange)
   // sits in its own slot so this probe can't clobber it.
+  // v1.2.12: with the 200 ms self-throttle above, a non-paused page
+  // updates _lastRafTickMs every ~216 ms (200 ms setTimeout + ~16 ms
+  // rAF latency). 500 ms staleness still cleanly distinguishes that
+  // from a truly paused page (where rAF doesn't fire at all).
   _setRenderingPaused(stale > 500);
 }, 250);
 
@@ -2315,6 +2671,10 @@ function setWidgets(list) {
     applyWidgetPosition(rec, w);
     applyWidgetOptions(rec, w);
   }
+  // v1.2.12: any widget mutation (add / remove / opts change) can flip
+  // _anyTintedWidget()'s answer, so drop the cache and let the next
+  // renderFrame re-compute it once.
+  _invalidateTintedCache();
 }
 
 function createWidget(w) {
@@ -2820,12 +3180,22 @@ setInterval(() => {
 // already-decoded zone colours, so it doesn't add a second parse pass. Picks
 // the average of the first few zones; widgets that opted in pick this up via
 // the --w-tint CSS variable on the next applyOptions cycle (also any tick).
+// v1.2.12: cached. renderFrame hits this every tick (30 Hz) so a
+// linear scan over widgetNodes was the dominant cost in the
+// otherwise-tiny renderFrame epilogue once the grid render itself
+// got optimised. _invalidateTintedCache() is called from every
+// widget mutation path so the cache stays correct without polling.
+let _tintedCache = null;
 function _anyTintedWidget() {
+  if (_tintedCache !== null) return _tintedCache;
+  let any = false;
   for (const rec of widgetNodes.values()) {
-    if (rec.opts && rec.opts.tintFromGlow) return true;
+    if (rec.opts && rec.opts.tintFromGlow) { any = true; break; }
   }
-  return false;
+  _tintedCache = any;
+  return any;
 }
+function _invalidateTintedCache() { _tintedCache = null; }
 
 function updateTintFromFrame(zoneColors) {
   if (!zoneColors || !zoneColors.length) return;
@@ -2913,28 +3283,91 @@ const ambient = (function () {
   function stop() {
     if (raf) { cancelAnimationFrame(raf); raf = null; }
     particles = [];
+    // Drop any pooled corpses — they belong to the previous preset's
+    // object shape and would leak Matrix column structs into Snow's
+    // particle array otherwise. Length = 0 keeps the array's backing
+    // store but discards references for GC.
+    recyclePool.length = 0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  // Per-preset recycle pool for particle objects. Only presets that
+  // define respawn(p, w, h) participate; the rest stay on the
+  // allocate-fresh-on-spawn path so behaviour is unchanged for them.
+  // Cleared on preset switch via stop().
+  const recyclePool = [];
+
   function tick(now) {
+    // v1.2.12: rAF cancel-on-pause. Pre-v1.2.12 we rescheduled
+    // unconditionally and then early-returned — JS-CPU cost ≈ 0 but
+    // the 60 Hz wakeups kept WebView2's compositor warm and forced
+    // it to re-evaluate every CSS filter / backdrop-filter layer on
+    // the page every frame. Now we stop the chain entirely; the
+    // window-level "wallpaper-resume" event listener below picks it
+    // back up on unpause.
+    if (isPaused) { raf = null; return; }
     raf = requestAnimationFrame(tick);
-    if (isPaused) return;
     const dt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
     const def = AMBIENT_PRESETS[preset];
     if (!def) return;
     const target = def.targetCount(density, viewW, viewH);
-    while (particles.length < target) particles.push(def.spawn(viewW, viewH));
+    // Spawn — prefer recycled corpses if the preset can respawn them
+    // in place, else allocate fresh.
+    while (particles.length < target) {
+      const reuse = def.respawn ? recyclePool.pop() : undefined;
+      if (reuse !== undefined) {
+        def.respawn(reuse, viewW, viewH);
+        particles.push(reuse);
+      } else {
+        particles.push(def.spawn(viewW, viewH));
+      }
+    }
+    // Step + compact via swap-and-pop instead of Array.splice. splice
+    // shifts O(n) elements per dead particle, so a burst of deaths
+    // degrades the step phase to O(n^2). Order doesn't matter for
+    // any of our ambient presets — Matrix columns, snow flakes,
+    // sparks, etc. are all rendered with identical z-order.
     for (let i = particles.length - 1; i >= 0; i--) {
-      if (!def.step(particles[i], dt, viewW, viewH)) particles.splice(i, 1);
+      if (!def.step(particles[i], dt, viewW, viewH)) {
+        const dead = particles[i];
+        const last = particles.length - 1;
+        if (i !== last) particles[i] = particles[last];
+        particles.pop();
+        // Only recycle when the preset knows how to respawn — else
+        // the corpse goes straight to GC like before.
+        if (def.respawn) recyclePool.push(dead);
+      }
     }
     ctx.clearRect(0, 0, viewW, viewH);
     const tint = tintEnabled ? currentTintCss : null;
-    for (const p of particles) def.render(ctx, p, tint);
+    // Optional once-per-frame setup (e.g. Matrix hoists its font + colour
+    // LUT here so the per-particle loop never re-parses the font or builds
+    // a fresh colour string per glyph).
+    if (typeof def.before === "function") def.before(ctx, tint);
+    // Prefer renderAll(ctx, particles, tint) when the preset offers
+    // it — that path can batch glyphs / strokes across particles so
+    // expensive context-state changes (fillStyle, strokeStyle, font)
+    // happen O(buckets) times instead of O(particles × glyphs).
+    if (typeof def.renderAll === "function") {
+      def.renderAll(ctx, particles, tint);
+    } else {
+      for (const p of particles) def.render(ctx, p, tint);
+    }
     // Optional post-pass for effects that need to draw across the
     // whole particle set (e.g. constellation's connecting lines).
     if (typeof def.after === "function") def.after(ctx, particles, tint);
   }
+
+  // v1.2.12: resume the rAF chain when the page comes off pause. The
+  // tick() above stops scheduling when isPaused goes true, so without
+  // this listener the ambient effect would stay frozen after unpause.
+  window.addEventListener("wallpaper-resume", () => {
+    if (preset !== "off" && !raf) {
+      lastT = performance.now();
+      raf = requestAnimationFrame(tick);
+    }
+  });
 
   return {
     setPreset(p) {
@@ -2965,6 +3398,13 @@ const MATRIX_CHARSET =
   "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン" +
   "0123456789" +
   "!@#$%&*?:;+=-";
+// String-indexing (`MATRIX_CHARSET[i]`) returns a fresh 1-char string
+// on every access — a hidden allocator at ~2400 lookups/spawn-burst +
+// ~120 flicker-swaps/sec across the column set. Array-indexing returns
+// the same interned string reference, so this pre-split table is the
+// cheapest correct way to fetch a glyph in the hot Matrix paths.
+const MATRIX_CHARS = Array.from(MATRIX_CHARSET);
+const MATRIX_CHARS_LEN = MATRIX_CHARS.length;
 
 const AMBIENT_PRESETS = {
   snow: {
@@ -3354,7 +3794,7 @@ const AMBIENT_PRESETS = {
       const len = 8 + Math.floor(Math.random() * 18);
       const chars = new Array(len);
       for (let i = 0; i < len; i++) {
-        chars[i] = MATRIX_CHARSET[(Math.random() * MATRIX_CHARSET.length) | 0];
+        chars[i] = MATRIX_CHARS[(Math.random() * MATRIX_CHARS_LEN) | 0];
       }
       return {
         // Snap x to a 16 px grid so columns align visually instead
@@ -3366,6 +3806,27 @@ const AMBIENT_PRESETS = {
         swapTimer: 0,
       };
     },
+    // Reset an already-allocated column object in place. The ambient
+    // driver pops a dead column from the recycle pool and routes it
+    // through respawn() instead of allocating a fresh {chars, …} +
+    // backing array on every column birth. With Matrix's ~120 columns
+    // continuously dying and respawning, this kills the GC churn that
+    // was producing visible frame-time spikes on multi-monitor.
+    respawn(p, w, h) {
+      // Reuse the existing chars array — it stays at its previous
+      // length so we never reallocate. Pick a fresh length and
+      // either extend or shrink to fit without `new Array`.
+      const len = 8 + Math.floor(Math.random() * 18);
+      const chars = p.chars;
+      if (chars.length !== len) chars.length = len;
+      for (let i = 0; i < len; i++) {
+        chars[i] = MATRIX_CHARS[(Math.random() * MATRIX_CHARS_LEN) | 0];
+      }
+      p.x = ((Math.random() * w / 16) | 0) * 16;
+      p.y = -len * 16 - Math.random() * 200;
+      p.speed = 100 + Math.random() * 160;
+      p.swapTimer = 0;
+    },
     step: (p, dt, w, h) => {
       p.y += p.speed * dt;
       p.swapTimer += dt;
@@ -3374,29 +3835,93 @@ const AMBIENT_PRESETS = {
       if (p.swapTimer > 0.16) {
         p.swapTimer = 0;
         const idx = (Math.random() * p.chars.length) | 0;
-        p.chars[idx] = MATRIX_CHARSET[(Math.random() * MATRIX_CHARSET.length) | 0];
+        p.chars[idx] = MATRIX_CHARS[(Math.random() * MATRIX_CHARS_LEN) | 0];
       }
       return p.y - p.chars.length * 16 < h + 20;
     },
-    render: (ctx, p, tint) => {
+    // Once per frame: set the font a single time (re-parsing it per column
+    // was the dominant cost) and (re)build a 16-step colour lookup so the
+    // per-glyph render path never allocates a colour string. Rebuilt only
+    // when the tint state actually changes.
+    before(ctx, tint) {
       ctx.font = "13px Consolas, 'Courier New', monospace";
       ctx.textBaseline = "top";
-      const n = p.chars.length;
-      for (let i = 0; i < n; i++) {
-        const y = p.y - i * 16;
-        if (y < -16) continue;
-        const fade = 1 - i / n;
-        const a = fade * 0.85;
-        if (i === 0) {
-          // Head: always near-white so the stream's leading edge
-          // reads against any background.
-          ctx.fillStyle = "rgba(220,255,220," + a + ")";
-        } else if (tint) {
-          ctx.fillStyle = rgbToRgba(tint, a * 0.7);
-        } else {
-          ctx.fillStyle = "hsla(120, 80%, 55%, " + (a * 0.85) + ")";
+      if (this._tint === tint && this._head) return;
+      this._tint = tint;
+      const head = this._head = new Array(16);
+      const body = this._body = new Array(16);
+      for (let k = 0; k < 16; k++) {
+        const a = ((k + 0.5) / 16) * 0.85;   // representative alpha for bucket
+        head[k] = "rgba(220,255,220," + a.toFixed(3) + ")";
+        body[k] = tint
+          ? rgbToRgba(tint, +(a * 0.7).toFixed(3))
+          : "hsla(120,80%,55%," + (a * 0.85).toFixed(3) + ")";
+      }
+    },
+    // Batched whole-frame render. Each ctx.fillStyle = ... write parses
+    // the CSS colour string fresh (Chromium's fillStyle cache is a
+    // 1-entry LRU keyed on the previous value, so any alternation
+    // thrashes it), so the per-particle render path used to set
+    // fillStyle ~2000 times per frame on a typical scene. Bucketing
+    // glyphs by their fade-LUT index and head/body class first means
+    // fillStyle changes at most 32 times per frame total (16 head
+    // buckets + 16 body buckets), regardless of particle count.
+    //
+    // The bucket backing arrays are allocated lazily once and reused;
+    // setting `.length = 0` resets the bucket without freeing the
+    // underlying storage so steady state is allocation-free.
+    renderAll(ctx, particles) {
+      let bx = this._bucketXs, by = this._bucketYs, bc = this._bucketCs;
+      if (!bx) {
+        bx = this._bucketXs = new Array(32);
+        by = this._bucketYs = new Array(32);
+        bc = this._bucketCs = new Array(32);
+        for (let k = 0; k < 32; k++) {
+          bx[k] = []; by[k] = []; bc[k] = [];
         }
-        ctx.fillText(p.chars[i], p.x, y);
+      }
+      // Reset bucket lengths (without re-allocating).
+      for (let k = 0; k < 32; k++) {
+        bx[k].length = 0; by[k].length = 0; bc[k].length = 0;
+      }
+      // Bucket pass: classify every visible glyph by its fade bucket
+      // and head/body status. Buckets 0–15 are the bright "head" of
+      // each column, 16–31 are the tinted body.
+      const np = particles.length;
+      for (let pi = 0; pi < np; pi++) {
+        const p = particles[pi];
+        const n = p.chars.length;
+        const px = p.x;
+        const py = p.y;
+        const pchars = p.chars;
+        for (let i = 0; i < n; i++) {
+          const y = (py - i * 16) | 0;
+          if (y < -16) continue;
+          let k = ((1 - i / n) * 16) | 0;
+          if (k > 15) k = 15;
+          const slot = i === 0 ? k : k + 16;
+          const xs = bx[slot], ys = by[slot], cs = bc[slot];
+          xs[xs.length] = px;
+          ys[ys.length] = y;
+          cs[cs.length] = pchars[i];
+        }
+      }
+      // Draw pass: fillStyle changes once per non-empty bucket.
+      const head = this._head, body = this._body;
+      for (let k = 0; k < 16; k++) {
+        const hl = bx[k].length;
+        if (hl) {
+          ctx.fillStyle = head[k];
+          const xs = bx[k], ys = by[k], cs = bc[k];
+          for (let j = 0; j < hl; j++) ctx.fillText(cs[j], xs[j], ys[j]);
+        }
+        const k2 = k + 16;
+        const bl = bx[k2].length;
+        if (bl) {
+          ctx.fillStyle = body[k];
+          const xs = bx[k2], ys = by[k2], cs = bc[k2];
+          for (let j = 0; j < bl; j++) ctx.fillText(cs[j], xs[j], ys[j]);
+        }
       }
     },
   },
@@ -3747,7 +4272,12 @@ const audioGlow = (function () {
     // when the tray manually paused (or fullscreen-pause kicked in),
     // because this tick missed the isPaused guard the other rAF
     // loops had.
-    if (isPaused) { raf = requestAnimationFrame(tick); return; }
+    // v1.2.12: stop the rAF chain entirely on pause (was rescheduling
+    // unconditionally, which kept WebView2's compositor warm at 60 Hz
+    // on hidden / static-source layers). The window-level
+    // "wallpaper-resume" listener at the bottom of this IIFE arms a
+    // new chain when isPaused goes false.
+    if (isPaused) { raf = null; return; }
     ctx.clearRect(0, 0, viewW, viewH);
     const k = intensity / 100;
     if (mode === "pulse") {
@@ -3817,6 +4347,13 @@ const audioGlow = (function () {
     return "rgba(" + m[1] + "," + m[2] + "," + m[3] + "," + a + ")";
   }
 
+  // v1.2.12: rearm the rAF chain when the page comes off pause.
+  window.addEventListener("wallpaper-resume", () => {
+    if (mode !== "off" && !raf) {
+      raf = requestAnimationFrame(tick);
+    }
+  });
+
   return {
     setMode(m) {
       mode = m || "off";
@@ -3867,8 +4404,11 @@ const pixelfx = (function () {
   }
 
   function tick(now) {
+    // v1.2.12: rAF cancel-on-pause. See ambient.tick for the long
+    // form; resume listener at the bottom of this IIFE re-arms.
+    if (isPaused) { raf = null; return; }
+    if (!active()) return;
     raf = requestAnimationFrame(tick);
-    if (isPaused || !active()) return;
     const dt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
     if (wantsTrail() && cursorX > -50 && cursorY > -50) {
@@ -3926,6 +4466,14 @@ const pixelfx = (function () {
     ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
   });
 
+  // v1.2.12: rearm the rAF chain when the page comes off pause.
+  window.addEventListener("wallpaper-resume", () => {
+    if (mode !== "off" && !raf) {
+      lastT = performance.now();
+      raf = requestAnimationFrame(tick);
+    }
+  });
+
   return {
     setMode(m) {
       const allowed = ["off","trail","glow","ripple","all"];
@@ -3977,8 +4525,13 @@ const parallax = (function () {
   function lerp(a, b, t) { return a + (b - a) * t; }
 
   function tick() {
+    // v1.2.12: rAF cancel-on-pause. See ambient.tick for rationale;
+    // resume listener at the bottom of this IIFE re-arms. The
+    // strength<=0 path lets the chain die too — setStrength()
+    // handles start/stop based on strength so that's the canonical
+    // restart vector when the user dials parallax back up.
+    if (isPaused || strength <= 0) { raf = null; return; }
     raf = requestAnimationFrame(tick);
-    if (isPaused || strength <= 0) return;
     const w = window.innerWidth  || 1920;
     const h = window.innerHeight || 1080;
     // Normalised cursor offset from centre, clamped to [-1, 1].
@@ -4007,6 +4560,13 @@ const parallax = (function () {
     bgEl.style.transform = "";    // snap back to no-offset
     curX = 0; curY = 0;
   }
+
+  // v1.2.12: rearm the rAF chain when the page comes off pause.
+  window.addEventListener("wallpaper-resume", () => {
+    if (strength > 0 && !raf) {
+      raf = requestAnimationFrame(tick);
+    }
+  });
 
   return {
     setStrength(v) {

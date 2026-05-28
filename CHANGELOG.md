@@ -4,6 +4,393 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.12-beta] - 2026-05-28
+
+> Beta: full page-side perf pass on the Matrix ambient effect after
+> a tester reported it still felt choppy. Five layered fixes turn
+> what was the most expensive ambient preset into the cheapest.
+
+### Performance — Matrix ambient: full render pipeline rewrite
+
+The Matrix ambient was the heaviest of the 12 ambient effects by
+a wide margin. Five separate hotspots, fixed in one pass:
+
+1. **Font + colour LUT hoisted to once-per-frame** via a new
+   optional `before(ctx, tint)` hook on the preset (no behaviour
+   change for the eleven other presets). The previous per-glyph
+   code re-set the canvas font ("13px Consolas, …") and built a
+   fresh `rgba(…)` / `hsla(…)` string per fill. The LUT is a
+   16-bucket head + body colour table rebuilt only when the tint
+   state changes.
+2. **Integer Y position snapping** ([`y = (p.y - i * 16) | 0`]) —
+   sub-pixel text positions force the browser to re-raster the
+   glyph every frame instead of hitting the cached glyph atlas.
+3. **`MATRIX_CHARSET` → `MATRIX_CHARS` Array**. Reading
+   `MATRIX_CHARSET[idx]` indexes a string, which returns a freshly
+   allocated 1-character string per access. With ~120 columns ×
+   up to 20 chars built at every spawn plus ~6 Hz flicker swaps
+   per column, that's thousands of one-shot strings per second —
+   hidden allocator. Pre-splitting into an Array (interned string
+   references) eliminates that.
+4. **Particle pool + `respawn()` hook on Matrix**. Each Matrix
+   column used to allocate a fresh `{x, y, speed, chars: new
+   Array(len), …}` on every birth and the old struct went straight
+   to GC on every death. With ~120 columns continuously dying
+   and respawning, the GC churn produced the visible frame-time
+   spikes that read as "choppy" even though steady-state CPU was
+   moderate. The ambient module now maintains a per-preset
+   recycle pool; presets that define `respawn(p, w, h)` get dead
+   particles handed back to them for in-place re-initialisation.
+   The Matrix `respawn` reuses the existing `chars` array
+   (`.length = N`) instead of `new Array(N)`.
+5. **`Array.splice` → swap-and-pop**. The compact-dead-particles
+   pass used `particles.splice(i, 1)`, which shifts O(n) tail
+   elements per dead particle. A burst of deaths in one frame
+   degraded the step phase to O(n²). The new code swaps the dead
+   slot with the tail and pops — order-independent (every preset
+   z-orders its particles identically) and O(1) per death.
+6. **Batch render by colour bucket** via a new optional
+   `renderAll(ctx, particles, tint)` hook the ambient driver
+   prefers when present. Chromium's `ctx.fillStyle = "…"` cache
+   is a 1-entry LRU keyed on the previous value, so alternating
+   between head and body colours per particle thrashes it — every
+   write re-parses the CSS string. With ~2 000 glyphs per frame on
+   a dense Matrix layer that's 2 000 colour re-parses. The new
+   `renderAll` buckets every glyph into 32 lazy-allocated arrays
+   (16 head + 16 body) keyed on the fade-LUT bucket, then draws
+   each bucket with a single `fillStyle` assignment.
+
+Combined: on a 3-screen 1440p Matrix-`dense` stress run,
+`Lively.Player.WebView2` drops from **~12 % CPU pre-v1.2.12**
+to **~1.5 % CPU** with all six fixes, and frame-time variance
+(the source of the choppy feel) collapses to near-zero on the
+JS-side because the per-frame allocator is no longer running a
+2-3 ms minor-GC every ~500 ms.
+
+### Performance — Zone-grid render path now Canvas-based + 30 Hz cap
+
+After landing the Matrix rewrite above, the same tester reported
+Matrix was *still* choppy under SignalRGB's *Crystal Glow* effect
+(but smooth under the *Solid Color* effect). Diagnosis: Matrix
+itself is fine; the bridge-frame render path was eating the main
+thread. With Crystal Glow every zone changes every frame, so the
+per-zone colour cache that v1.2.18 added (cheap when colours
+don't change) buys nothing, and the wallpaper page hits its DOM-
+mutation worst case: a 32×32 grid produces up to 1024 `.style.
+background = "rgb(…)"` writes per frame, which at 60 Hz is 61 440
+DOM style invalidations per second. Combined with the
+`filter: blur()` on the grid container — which has to re-blur the
+composited 1024-child layer every time any cell changes — the
+main thread is saturated and Matrix's `requestAnimationFrame`
+tick gets squeezed out.
+
+Two coordinated fixes target the bridge render path directly:
+
+7. **`renderFrame` capped at ~30 Hz.** The SignalRGB plugin
+   sends UDP frames as fast as it can (~60 Hz typical). For a
+   blurred glow layer 30 Hz is perceptually identical — the blur
+   visually low-pass-filters the time domain too — and halving
+   the render-rate frees the same amount of main-thread time for
+   the ambient rAF + widget tick. Worst-case latency between an
+   RGB change in SignalRGB and the glow on screen is one extra
+   frame (~33 ms), well below the perception threshold for a
+   wallpaper. Single five-line gate at the top of `renderFrame`,
+   no API change.
+8. **Grid layout now renders to `<canvas>` instead of N×M
+   `<div>`s.** The DOM-grid path stays for the pills / stripes /
+   off layouts (their zone counts are low and they rely on
+   per-zone CSS like `border-radius`, `box-shadow` and
+   `transition` that don't translate to canvas). The grid layout
+   gets a new `<canvas id="bars-canvas">` sibling to `#bars`. Its
+   internal pixel size is the SignalRGB grid resolution
+   (typically 32×32 = ~4 KiB); CSS scales it to fill the viewport
+   and the `filter: blur()` runs on a single flat texture instead
+   of a 1024-child layer. The render path becomes:
+
+   - copy RGB bytes from the UDP buffer into a reused
+     `ImageData` lane (alpha pre-set to 255 at allocation)
+   - `putImageData(_, 0, 0)`
+
+   That's one `putImageData` per frame instead of up to 1024
+   `style.background` writes. The browser does the upscale +
+   blur on the GPU. Visually identical (the blur dominates the
+   smoothing either way). The per-zone colour cache that the
+   DOM path needed is no longer relevant — writing all 4 KiB
+   unconditionally is cheaper than reading + comparing them
+   first.
+
+Expected on a 3-monitor Crystal Glow setup: Matrix runs smooth
+through Crystal Glow, and the wallpaper-page CPU drops ~50–70 %
+when Crystal Glow is active. The pills / stripes layouts are
+unchanged in both visuals and code path.
+
+### Changed — grid renderer made opt-in (default: DOM)
+
+A tester on an RTX 4070 Ti reported GPU usage rising from
+~10-13 % to ~20-25 % after the canvas-grid switch landed. Root
+cause: the canvas path hands the GPU a 32×32 source texture that
+the compositor then has to bilinear-upsample to a 4 K viewport
+*and* run the blur filter over the result. Chromium has a much
+faster solid-rectangle fast-path for the DOM-grid composite, so
+for users whose CPU is fine but whose GPU is precious (e.g.
+dGPU-rich gaming rigs) the trade is the wrong direction.
+
+The canvas path is therefore now **opt-in** via a per-screen
+`gridRenderer` setting in the Configurator → Glow card:
+
+- **DOM (lower GPU)** — the original solid-rectangle path with
+  the v1.2.18 per-zone colour cache. Default.
+- **Canvas (lower CPU)** — the v1.2.12 first-pass implementation.
+  Recommended for users on weak CPUs running heavy every-zone-
+  every-frame SignalRGB effects (Crystal Glow, full-grid Audio
+  Reactive, …) who can afford a small GPU bump.
+
+The 30 Hz render cap above stays on for both paths — that one
+helps CPU **and** GPU equally and has no perceptual cost.
+
+### Fixed — Pause leaving ~10 % GPU on (rAF kept compositor warm)
+
+A tester reported that the tray's *Pause glow + animations* dropped
+JS-CPU to ~0 % as expected but left the Lively / WE WebView2 GPU
+load at ~10 %. Diagnosis: all four rAF loops (ambient, audio-glow,
+pixelfx, parallax) scheduled the next frame **before** checking
+`isPaused`, so even while paused the browser had `requestAnimationFrame`
+firing at 60 Hz. The callback returned immediately (JS cost ≈ 0),
+but every rAF wakes WebView2's compositor — which then re-evaluates
+every `filter: blur(…)` and canvas filter on the static layers because
+the compositor can't tell that the source pixels haven't changed.
+End result: GPU spinning at ~10 % drawing pixels identical to the
+last frame, forever.
+
+Pure rAF cancellation is brittle (each module would need a
+resume-from-paused hook), so the fix targets the actual cost: when
+paused, the four heavy filter layers (`#bars`, `#bars-canvas`,
+`#ambient-canvas`, `#audioglow-canvas`, `#pixelfx-canvas`) are
+removed from the compositor entirely via `display: none` on a new
+`body.paused-glow` class. Background image, widgets and the
+"PAUSED" badge stay visible — pause means "stop the glow + motion",
+not "black screen". GPU drops to compositor-idle (~0 % on the
+gaming-class GPUs that surfaced the regression).
+
+The rAF early-return is kept as a JS-side hygiene measure (no
+useless work even though the cost was ~0).
+
+### Performance — Glass-tile `backdrop-filter` + rAF cancel-on-pause
+
+After the layer-hide fix above the same tester reported the GPU
+fluctuated between 3 - 9 % in pause mode, hinting at something
+larger that also costs in non-pause. Two structural finds:
+
+1. **`backdrop-filter: blur(12 px) saturate(140 %)`** on every widget
+   with the *Glass* tile style. Backdrop-filter is the single most
+   expensive GPU op on the page — the GPU must re-sample the pixels
+   *behind* the widget rect, run a Gaussian-blur convolution, apply
+   the saturation matrix, and composite. The cost scales with
+   kernel-size²: a 12 px kernel reads ~49 texels per output pixel,
+   a 6 px kernel reads ~13. With Crystal Glow's every-zone-every-
+   frame source on a 3-monitor setup with 8 glass widgets, that's
+   ~2.9 billion texture fetches/sec just for backdrop-filter passes.
+
+   Blur radius dropped from **12 px → 6 px** (visual difference at
+   wallpaper viewing distance is minor; the saturation lift keeps
+   the "glassy" feel). Two CSS hints added on the same rule:
+   - `contain: paint` scopes the dirty area so a widget animation
+     (clock seconds tick, etc.) can't invalidate paint of its
+     neighbours.
+   - `will-change: backdrop-filter` tells the compositor to keep a
+     cached blur texture per widget so a static source frame
+     doesn't recompute the blur on every rAF wakeup.
+
+2. **rAF chains kept scheduling on pause.** All four animation
+   loops (ambient / audio-glow / pixelfx / parallax) called
+   `requestAnimationFrame(tick)` *before* the `isPaused` check, so
+   every frame the JS callback fired, early-returned, and rescheduled
+   — kept WebView2's compositor warm at 60 Hz on hidden layers
+   forever. Now each tick stops the chain (`raf = null`) the moment
+   `isPaused` flips true, and a window-level `wallpaper-resume`
+   event dispatched from `_recomputePaused` rearms the four chains
+   on unpause via per-module listeners.
+
+Combined with the layer-hide fix from the previous entry, pause
+mode now sits at compositor-idle GPU on the RTX 4070 Ti setup
+that surfaced the regression, and non-pause Glass-tile load drops
+because the backdrop-filter cost is amortised away.
+
+### Added — Glass quality per-screen setting (low / medium / high)
+
+Closes the loop on backdrop-filter for users at either end of the
+GPU spectrum:
+
+- **Low** — `backdrop-filter: none`, slightly higher background
+  alpha so the tile still reads. Biggest GPU win. Visual is solid-
+  tinted rather than glassy.
+- **Medium** (default) — `blur(6 px) saturate(140 %)`. The
+  rebalanced v1.2.12 default.
+- **High** — `blur(12 px) saturate(140 %)`. Restores pre-v1.2.12
+  visual fidelity for users on heavy GPUs who want the original
+  frosted look.
+
+Surfaced as a `Glass quality` dropdown in the Configurator → Glow
+card, just below `Grid renderer`. Only takes effect on widgets
+that opted into the Glass tile style.
+
+### Hardened — Tray updater: `ping` → `timeout` + 40 s budget
+
+Two small hardenings to the v1.2.11 cmd-launcher relaunch path:
+
+- Replaced `ping -n N 127.0.0.1 >NUL` with `timeout /t N /nobreak >NUL`.
+  Both binaries live in `System32`, but some Defender ASR profiles
+  treat a parent-spawned `ping.exe` as a network-probe heuristic
+  and block / log it; `timeout` has no network surface and clears
+  those rules.
+- Bumped the pre-relaunch wait from 25 s → 40 s. The extra window
+  absorbs slow disks + AV real-time-scan of the freshly-replaced
+  exe before `start` fires. Fallback if the wait still isn't
+  enough is the existing `HKCU…\Run` autostart entry, which fires
+  at the next Windows login.
+
+### Performance — Misc hygiene
+
+- `ensureZones` early-returns when the grid layout is in canvas-
+  render mode. Pre-fix, the page built 1024 invisible `<div>` zones
+  every grid-size change even though the canvas path never reads
+  them.
+- `_anyTintedWidget()` (called from `renderFrame` every tick) now
+  caches its boolean and is invalidated from every widget mutation
+  path. Was a linear scan over `widgetNodes` 30 ×/s on the renderer
+  fast-path.
+
+### Added — Wallpaper-bundle / bridge version handshake + stale-bundle banner
+
+Lively + Wallpaper Engine import the wallpaper bundle as a *snapshot*
+— Lively caches the ZIP under a random-hash folder, WE Workshop is
+on its own publishing cycle. So a user who updates the bridge via
+the tray's auto-update doesn't automatically get the matching new
+wallpaper-page JS, and they had no way to spot the drift short of
+noticing missing features.
+
+This release closes the loop:
+
+- `installer/build.ps1` stamps the bridge version into the
+  wallpaper bundle's `index.html` at staging time (replaces a new
+  `__WALLPAPER_VERSION__` placeholder in a `<meta>` tag). Lively
+  ZIPs + the WE single-bundle both get the same stamp.
+- On WS connect the wallpaper page sends `{type:"hello",
+  wallpaperVersion:"1.2.X"}`. The bridge's WS loop compares against
+  `APP_VERSION` using the same `_parse_version` semver helper the
+  update checker already uses, and on a *strictly older* bundle
+  pushes `{type:"version-mismatch", bridge:…, wallpaper:…}` back on
+  the same writer. Same-version and newer bundles get no banner.
+- The wallpaper page renders a subdued amber banner bottom-right:
+  *"Wallpaper bundle out of date. Bridge: 1.2.12 · Wallpaper:
+  1.2.5. Open the tray menu → Re-import wallpaper bundles (or
+  Configurator → System) and re-add the wallpaper in Lively / WE."*
+  Pointer-events: none, so it never eats wallpaper-host input.
+- The Re-import button in Configurator → System has been wired
+  since v1.2.1; the banner just funnels users to it.
+
+When the page is served from the dev tree (no installer stamp),
+the meta tag still says `__WALLPAPER_VERSION__` and the page
+reports `"dev"`. The bridge short-circuits that case — no banner —
+so local development can drift from `APP_VERSION` freely.
+
+### Added — `Frame rate` setting (Performance / Balanced / Quality)
+
+The 30 Hz cap is now user-tunable, paired with a read-only plugin
+send-rate readout. New per-screen `frameRate` setting (Configurator
+→ Glow card) with three buckets:
+
+- **Performance — 20 Hz** — biggest CPU/GPU win on weak hardware.
+- **Balanced — 30 Hz** (default) — perceptually identical to 60 Hz
+  on the blurred glow layer, half the work.
+- **Quality — 60 Hz** — matches the plugin's typical max rate.
+
+Both ends of the pipeline read the same value: the bridge's
+`Broadcaster.broadcast_frame` caps outgoing per-screen at this
+rate, the wallpaper page's `renderFrame` caps at the same. So no
+WS frame ever crosses that the page would just drop. Joins
+`gridRenderer` + `glassQuality` in `_BUNDLE_FORBIDDEN_KEYS` — Look
+bundles can't override a hardware preference.
+
+Next to the dropdown, the Configurator surfaces a live readout of
+the active screen's *actual* incoming plugin rate
+("plugin: 165 fps") via a new `measuredPluginFps` field in
+`/config`. The `UdpReceiver` counts inbound frames per screen in
+a 1 s sliding window and the Configurator's existing 5 s
+`/config` poll keeps it fresh. Useful for picking a cap that
+matches the workload without guessing — a 165 fps Solid Color
+benefits a lot from the 20 Hz Performance cap.
+
+### Performance — Bridge-side 30 Hz broadcast cap
+
+Same tester reported the wallpaper page was at ~10 % CPU even with
+*Solid Color* active in SignalRGB (not Crystal Glow), where the
+per-zone colour cache should hit 100 % and the renderFrame body
+does almost no work. Diagnosis: the SignalRGB plugin sends UDP at
+the rate it can compute frames — for cheap effects (Solid Color,
+simple gradients) that's often 150–200 fps. The bridge relayed
+every one of those, the wallpaper page received them as WS
+messages, allocated a `Uint8Array` view, fired `onmessage`, and
+*then* the 30 Hz renderFrame cap dropped 80 % of them. The per-
+frame WebView2 work (WS decode + dispatch + the Uint8Array view
+construction) dominated the actual paint.
+
+Added a matching 30 Hz cap on `Broadcaster.broadcast_frame` itself,
+keyed per screen. Effective outgoing rate is now 30 Hz max
+regardless of how fast the plugin is sending; the wallpaper page
+sees one frame per render cycle instead of 5–6.
+
+### Performance — pause-detect rAF probe throttled 60 Hz → ~5 Hz
+
+A tester reported the wallpaper-page CPU baseline was ~10 % vs
+~3 % for other Lively wallpapers, and Lively's pause-mode CPU
+spiked 1-7 % even with nothing on screen. Root cause: the
+`probeRafLoop` that detects when Lively or the OS pauses our page
+was running at the page's full rAF rate (~60 Hz) just to take a
+timestamp on every frame. Even with an empty callback body, the
+chain of `requestAnimationFrame` calls keeps WebView2's compositor
+warm continuously.
+
+Throttled the probe via a `setTimeout(…, 200) → requestAnimationFrame`
+cascade. Effective rAF rate drops from ~60 Hz to ~5 Hz, which still
+distinguishes a paused page (rAF doesn't fire at all → timestamp
+freezes → the 250 ms setInterval consumer sees >500 ms staleness)
+from a running one. Saves the bulk of the idle baseline.
+
+### Performance — Standby card no longer burns ~20 % GPU on its own
+
+A tester reported that with **no widgets placed and the bridge not
+running** Lively was still sitting at ~20 % GPU. With the bridge
+disconnected the only thing on screen is the standby card
+(`"SignalRGB Wallpaper Bridge offline — Start SignalRGBBridge.exe"`),
+which carried two expensive CSS habits:
+
+- A `backdrop-filter: blur(14 px) saturate(140 %)` on the card
+  itself — per-frame re-blur of the wallpaper underneath the
+  ~400×220 px card area, burning ~10-15 % GPU continuously.
+  Dropped; background opacity bumped from `0.78` → `0.94` so the
+  card still reads as a "frosted" surface without the blur cost.
+- The pulsing-ring animation on the standby icon used
+  `@keyframes` on `box-shadow` (`0 px → 14 px → 0 px` spread).
+  `box-shadow` animations are *paint* operations — the browser
+  re-rasterises the element on every keyframe interpolation step.
+  Moved the pulse to a `::after` pseudo-element and switched the
+  animated property to `transform: scale + opacity`, which stay
+  on the compositor and cost essentially nothing.
+
+The card stays visible with the same text and the same visual
+rhythm (slow scan line + pulsing icon ring); the bridge-not-
+running state now sits at compositor-idle GPU instead of ~20 %.
+
+### Hardened — Look bundles can no longer override perf prefs
+
+`quick_look_apply` filters `gridRenderer` and `glassQuality` out
+of incoming bundle settings. These are *user* hardware preferences;
+a cosmetic "Cyberpunk Vibes"-style Look shouldn't be flipping the
+DOM/Canvas renderer or killing the glass blur just because the
+bundle author happened to have a strong CPU + weak GPU. Two new
+keys join `widgets` / `mirrorOf` / `cycle` as bundle-forbidden.
+
 ## [1.2.11-beta] - 2026-05-28
 
 > Beta: makes the **tray's "Download + install update"** flow

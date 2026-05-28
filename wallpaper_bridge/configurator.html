@@ -1488,6 +1488,48 @@
         <input type="range" id="grid-blur" min="0" max="120" step="1">
         <span class="val" id="grid-blur-val">30 px</span>
       </div>
+      <!-- v1.2.12: grid renderer pick. DOM is the default and the
+           cheaper-on-GPU path for solid-coloured zones; Canvas trades
+           a small GPU bump for a noticeably lower CPU under heavy
+           every-zone-every-frame SignalRGB effects (Crystal Glow et al.).
+           Only applies when Layout above is set to Pixel grid. -->
+      <div class="row">
+        <label for="grid-renderer" data-i18n="glow.grid_renderer">Grid renderer</label>
+        <select id="grid-renderer">
+          <option value="dom">DOM (lower GPU)</option>
+          <option value="canvas">Canvas (lower CPU)</option>
+        </select>
+      </div>
+      <!-- v1.2.12: glass-tile backdrop-filter quality. Backdrop-filter
+           blur is the single most expensive GPU op on the page; cost
+           grows with radius². Low strips it entirely (solid-tint look),
+           Medium uses the v1.2.12 default 6px blur, High restores the
+           pre-v1.2.12 12px blur. Only takes effect on widgets that
+           opted into the Glass tile style. -->
+      <div class="row">
+        <label for="glass-quality" data-i18n="glow.glass_quality">Glass quality</label>
+        <select id="glass-quality">
+          <option value="low">Low (no blur)</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <!-- v1.2.12: shared cap on the bridge's outgoing broadcast rate
+           and the wallpaper page's renderFrame gate. SignalRGB can
+           send UDP at 150-200+ fps for cheap effects; a blurred glow
+           layer is perceptually identical at 30 Hz, so capping there
+           halves CPU + GPU on both sides. The plugin-fps readout
+           shows the actual incoming rate so users can pick a cap
+           that makes sense for their workload. -->
+      <div class="row">
+        <label for="frame-rate" data-i18n="glow.frame_rate">Frame rate</label>
+        <select id="frame-rate">
+          <option value="20">Performance (20 Hz)</option>
+          <option value="30">Balanced (30 Hz)</option>
+          <option value="60">Quality (60 Hz)</option>
+        </select>
+        <span class="val" id="plugin-fps-val" style="font-variant-numeric: tabular-nums;">— fps</span>
+      </div>
       <div class="row">
         <label for="stripes-blur" data-i18n="glow.stripes_blur">Stripes blur</label>
         <input type="range" id="stripes-blur" min="0" max="200" step="1">
@@ -2023,6 +2065,9 @@ const TRANSLATIONS = {
   "glow.layout":            { en: "Layout",               de: "Layout" },
   "glow.strength":          { en: "Strength",             de: "Stärke" },
   "glow.grid_blur":         { en: "Grid blur",            de: "Grid-Unschärfe" },
+  "glow.grid_renderer":     { en: "Grid renderer",        de: "Grid-Renderer" },
+  "glow.glass_quality":     { en: "Glass quality",        de: "Glas-Qualität" },
+  "glow.frame_rate":        { en: "Frame rate",           de: "Bildrate" },
   "glow.stripes_blur":      { en: "Stripes blur",         de: "Streifen-Unschärfe" },
 
   "effects.ambient":        { en: "Ambient preset",       de: "Umgebungseffekt" },
@@ -2720,6 +2765,10 @@ const els = {
   glowStrengthVal:$("glow-strength-val"),
   gridBlur:       $("grid-blur"),
   gridBlurVal:    $("grid-blur-val"),
+  gridRenderer:   $("grid-renderer"),
+  glassQuality:   $("glass-quality"),
+  frameRate:      $("frame-rate"),
+  pluginFpsVal:   $("plugin-fps-val"),
   stripesBlur:    $("stripes-blur"),
   stripesBlurVal: $("stripes-blur-val"),
   ambientTiles:   $("ambient-tiles"),
@@ -2878,6 +2927,18 @@ async function refreshTabLabels() {
     });
     renderOverviewCard(screens);
     if (typeof renderTabMirrorBadges === "function") renderTabMirrorBadges();
+    // v1.2.12: surface the active screen's measured plugin send rate
+    // next to the frame-rate dropdown. Lets a user pick a cap that
+    // matches the workload without guessing — e.g. plugin shows
+    // ~160 fps -> Performance/Balanced cap saves a lot.
+    if (els.pluginFpsVal) {
+      const s = screens[activeScreen];
+      const fps = s && typeof s.measuredPluginFps === "number"
+        ? s.measuredPluginFps : 0;
+      els.pluginFpsVal.textContent = fps > 0
+        ? "plugin: " + fps.toFixed(0) + " fps"
+        : "plugin: — fps";
+    }
   } catch (_) { /* leave existing labels */ }
 }
 refreshTabLabels();
@@ -4700,6 +4761,9 @@ function fileToPngBlob(file) {
 // ─────────────────────────────────────────────────────────────────────────────
 els.glowBars   .addEventListener("change", () => setSetting("showBars",     els.glowBars.checked));
 els.glowLayout .addEventListener("change", () => setSetting("barLayout",    els.glowLayout.value));
+els.gridRenderer.addEventListener("change", () => setSetting("gridRenderer", els.gridRenderer.value));
+els.glassQuality.addEventListener("change", () => setSetting("glassQuality", els.glassQuality.value));
+els.frameRate.addEventListener("change", () => setSetting("frameRate", parseInt(els.frameRate.value, 10)));
 function bindRangeChange(rangeEl, valEl, key, suffix) {
   rangeEl.addEventListener("input",  () => { valEl.textContent = rangeEl.value + suffix; });
   rangeEl.addEventListener("change", () => setSetting(key, parseInt(rangeEl.value, 10)));
@@ -6044,6 +6108,19 @@ function renderAll() {
   // Glow
   els.glowBars.checked   = settings.showBars !== false;
   els.glowLayout.value   = settings.barLayout || "lay-grid";
+  els.gridRenderer.value = settings.gridRenderer === "canvas" ? "canvas" : "dom";
+  {
+    const gq = settings.glassQuality;
+    els.glassQuality.value = (gq === "low" || gq === "high") ? gq : "medium";
+  }
+  {
+    // v1.2.12: frame-rate dropdown reads the per-screen cap. Snap to
+    // the nearest offered bucket (20/30/60) if the persisted value is
+    // something custom.
+    const fr = parseInt(settings.frameRate, 10);
+    const snapped = (fr === 20 || fr === 30 || fr === 60) ? fr : 30;
+    els.frameRate.value = String(snapped);
+  }
   els.glowStrength.value = String(settings.glowStrength ?? 100);
   els.glowStrengthVal.textContent = (settings.glowStrength ?? 100) + " %";
   els.gridBlur.value     = String(settings.gridBlur ?? 30);

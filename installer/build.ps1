@@ -127,7 +127,15 @@ foreach ($n in 0, 1, 2, 3) {
     Copy-Item -Path $src -Destination $bundleDir -Recurse
     $idx  = Join-Path $bundleDir "index.html"
     $info = Join-Path $bundleDir "LivelyInfo.json"
-    (Get-Content $idx  -Raw) -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', ('${1}' + $n + '${2}') | Set-Content $idx  -NoNewline
+    # v1.2.12: replace the __WALLPAPER_VERSION__ placeholder + the
+    # screen-index meta tag in one Get-Content pass so we only round-
+    # trip the file once. The hello-handshake on WS connect ships the
+    # stamped value back to the bridge so a mismatch can light up the
+    # "re-import bundles" hint.
+    $idxContent = Get-Content $idx -Raw
+    $idxContent = $idxContent -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', ('${1}' + $n + '${2}')
+    $idxContent = $idxContent -replace '__WALLPAPER_VERSION__', $Version
+    Set-Content $idx -NoNewline -Value $idxContent
     (Get-Content $info -Raw) -replace '__SCREEN_LABEL__', $label | Set-Content $info -NoNewline
     # Lively bundles use thumbnail.png as the tile preview — the
     # 1920×1080 Workshop preview is dead weight here.
@@ -153,8 +161,12 @@ Remove-Item (Join-Path $weSingle "LivelyInfo.json") -Force -ErrorAction Silently
 # Reset the screen-index meta tag to 0 — WE will override it via the
 # screenIndex property below, but a non-WE preview should still load.
 $idx = Join-Path $weSingle "index.html"
-(Get-Content $idx -Raw) -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', '${1}0${2}' |
-    Set-Content $idx -NoNewline
+# v1.2.12: same combined replace as the Lively bundles — screen index
+# reset to 0 (WE will override via property) + WALLPAPER_VERSION stamp.
+$weIdxContent = Get-Content $idx -Raw
+$weIdxContent = $weIdxContent -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', '${1}0${2}'
+$weIdxContent = $weIdxContent -replace '__WALLPAPER_VERSION__', $Version
+Set-Content $idx -NoNewline -Value $weIdxContent
 $singleDesc = @"
 [b]Live SignalRGB-driven glow on your desktop wallpaper.[/b]
 

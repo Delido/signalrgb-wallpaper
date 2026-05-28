@@ -135,6 +135,17 @@ at `http://127.0.0.1:17320/configurator`. Set the screen count
 from the library strip, tweak the glow strength, optionally turn on
 an ambient effect — done.
 
+**Performance levers (Configurator → Glow card):**
+
+- **Grid renderer**: *DOM* (default, cheapest on GPU — best for
+  RTX-class hardware) or *Canvas* (lower CPU, slight GPU bump —
+  best for weaker CPUs running heavy SignalRGB effects like
+  Crystal Glow).
+- **Glass quality**: *Medium* (default, 6 px backdrop-blur on
+  Glass-tile widgets), *Low* (no blur — biggest GPU win when you
+  have many Glass widgets), or *High* (12 px blur — pre-v1.2.12
+  visual quality, GPU-heavy).
+
 ### 3 · Place SignalRGB devices
 
 Open SignalRGB → **Layouts**. Drag each *Desktop Wallpaper – Screen N*

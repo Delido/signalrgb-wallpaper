@@ -429,12 +429,23 @@ class UpdateChecker:
         try:
             import subprocess as _sp
             exe_path = sys.executable
-            delay_s = 25
-            # PING acts as a wait that doesn't depend on cmd builtins;
-            # `start "" /B` spawns the new bridge fully detached so the
-            # wrapping cmd exits immediately afterwards.
+            # v1.2.12: relaunch budget bumped from 25 s -> 40 s. The
+            # extra window absorbs slow disks + AV real-time-scan of
+            # the just-replaced exe before we try `start`.
+            delay_s = 40
+            # Switched from `ping -n N 127.0.0.1 >NUL` to `timeout /t N
+            # /nobreak >NUL` so the wait doesn't depend on the ping
+            # binary being reachable. Some Defender ASR-rule profiles
+            # treat a parent-spawned `ping.exe` as a network-probe
+            # heuristic and block / log it; `timeout` is a pure
+            # scheduler wait with no network surface. Both binaries
+            # live in System32 so neither is "missing", just gated.
+            # `&&` (not `&`) gates the start on a clean timeout exit:
+            # if timeout somehow fails (vanishingly rare), don't race
+            # the installer mid-overwrite — fall back to the
+            # HKCU\…\Run autostart firing at next Windows login.
             cmdline = (
-                f'ping -n {delay_s + 1} 127.0.0.1 >NUL && '
+                f'timeout /t {delay_s} /nobreak >NUL && '
                 f'start "" /B "{exe_path}"'
             )
             DETACHED_PROCESS = 0x00000008
@@ -557,7 +568,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.11-beta"
+APP_VERSION = "1.2.12-beta"
 
 # Diagnostic kill-switch retained from v1.2.9. When False the entire
 # NowPlayingPoller / SMTC code path is removed at startup (no winrt
@@ -602,6 +613,40 @@ DEFAULT_SCREEN_SETTINGS = {
     "showBars":     True,
     "glowStrength": 100,
     "gridBlur":     30,
+    # v1.2.12: which grid-layout renderer the wallpaper page should
+    # use — "dom" (default, one solid-colour <div> per zone) or
+    # "canvas" (single <canvas> + putImageData). DOM is cheaper on
+    # GPU (Chromium has a fast-path for solid rectangles) but
+    # writes up to N×M style attributes per frame; canvas is cheaper
+    # on CPU but shifts the cost to GPU (bilinear upsample + blur on
+    # a single 4K-ish texture). On dGPU-rich setups (RTX et al.)
+    # DOM is the better default; users with strong CPU + thirsty
+    # SignalRGB effects can flip to canvas in the Configurator.
+    "gridRenderer": "dom",
+    # v1.2.12: render-rate cap shared by the bridge's outgoing
+    # broadcast and the wallpaper page's renderFrame gate. SignalRGB
+    # sends UDP at whatever rate it can compute (often 100-200 fps
+    # for cheap effects); for a blurred glow layer 30 Hz is
+    # perceptually identical to 60 Hz, so capping there saves both
+    # halves of the pipeline. Three buckets:
+    #   20 → "Performance" — biggest CPU win, slight latency
+    #   30 → "Balanced" (default) — visually indistinguishable from
+    #        60 Hz on the blurred glow layer
+    #   60 → "Quality"     — matches the plugin's typical rate
+    "frameRate": 30,
+    # v1.2.12: glass-tile backdrop-filter quality. Per-widget
+    # backdrop-filter is the single most expensive GPU op on the
+    # page; the radius cost is quadratic. Three buckets:
+    #   • "low"    → backdrop-filter: none + slightly higher alpha
+    #     on the bg so the glass shape still reads. Saves the most
+    #     GPU; visual is solid-tinted.
+    #   • "medium" → backdrop-filter: blur(6px) saturate(140%).
+    #     Default. Drops cost ~4× from v1.2.11's 12px while keeping
+    #     the glassy feel.
+    #   • "high"   → backdrop-filter: blur(12px) saturate(140%).
+    #     Restores pre-v1.2.12 quality for users on heavy GPUs.
+    # Only applies when a widget is in the Glass tile style.
+    "glassQuality": "medium",
     "stripesBlur":  60,
     "barHeight":    38,
     "barWidth":     14,
@@ -1701,8 +1746,35 @@ class Broadcaster:
         # None until then; the /hwmon/sensors endpoint just reports
         # "online: false" if it's missing.
         self.hwmon_provider = None             # set externally; HwMonPoller
+        # v1.2.12: similarly set externally by BridgeRuntime once the
+        # UdpReceiver exists, so the /config endpoint can surface the
+        # per-screen plugin send rate ("Plugin is sending at ~165 fps")
+        # for the Configurator's frameRate picker.
+        self.udp_provider = None
         self.clients_by_screen: dict[int, set] = {}
         self._lock = asyncio.Lock()
+        # v1.2.12: per-screen last-broadcast timestamp for the
+        # outgoing rate cap. The interval per screen comes from the
+        # screen's `frameRate` setting (20 / 30 / 60 Hz); the page
+        # gates its renderFrame at the same value so the bridge
+        # never wastes a WS frame the page would just drop.
+        self._last_broadcast_per_screen: dict[int, float] = {}
+        # Fallback default if a screen's settings haven't been
+        # surfaced yet (race with first frame after startup).
+        self._BROADCAST_INTERVAL_S = 1.0 / 30.0
+
+    def _broadcast_interval_for(self, screen: int) -> float:
+        """Look up the broadcast interval (seconds) for a given
+        screen. Reads the `frameRate` setting via the get_settings
+        callback wired at construction time; gracefully falls back
+        to the 30 Hz default when the setting is missing or invalid."""
+        try:
+            rate = int(self.get_settings(screen).get("frameRate", 30))
+        except Exception:
+            return self._BROADCAST_INTERVAL_S
+        if rate <= 0 or rate > 240:
+            return self._BROADCAST_INTERVAL_S
+        return 1.0 / float(rate)
 
     def handle_client_message(self, screen: int, msg: dict):
         """Route a decoded JSON message from a wallpaper page. All widget
@@ -1825,6 +1897,16 @@ class Broadcaster:
                 return
         except Exception:
             pass
+        # v1.2.12: per-screen outgoing rate cap, driven by the
+        # screen's `frameRate` setting (20 / 30 / 60 Hz). Closes the
+        # pipeline at the source so a chatty plugin (Solid Color at
+        # ~200 fps) doesn't make WebView2 decode 5×-6× more WS
+        # frames than the page will ever render.
+        now = self.loop.time()
+        last = self._last_broadcast_per_screen.get(screen, 0.0)
+        if now - last < self._broadcast_interval_for(screen):
+            return
+        self._last_broadcast_per_screen[screen] = now
         async with self._lock:
             clients = list(self.clients_by_screen.get(screen, ()))
         if not clients:
@@ -2038,6 +2120,16 @@ class Broadcaster:
                         ms = s.get("monitorSetup")
                         if not isinstance(ms, dict):
                             ms = {"mode": "single", "orientations": ["landscape"]}
+                        # v1.2.12: per-screen measured plugin send rate.
+                        # 0.0 until the UdpReceiver's first 1 s window
+                        # closes (i.e. plugin not running yet, or just
+                        # started). Configurator displays this next to
+                        # the frameRate cap dropdown as orientation.
+                        try:
+                            mfps = float(self.udp_provider.get_measured_fps(i)) \
+                                if self.udp_provider else 0.0
+                        except Exception:
+                            mfps = 0.0
                         screens.append({
                             "viewportW": int(s.get("viewportW") or 0),
                             "viewportH": int(s.get("viewportH") or 0),
@@ -2049,12 +2141,14 @@ class Broadcaster:
                             # indicator on mirroring tiles.
                             "mirrorOf":  (int(m) if isinstance(m, int) else None),
                             "monitorSetup": ms,
+                            "measuredPluginFps": round(mfps, 1),
                         })
                     except Exception:
                         screens.append({"viewportW": 0, "viewportH": 0,
                                         "bgImage": "", "mirrorOf": None,
                                         "monitorSetup": {"mode": "single",
-                                                         "orientations": ["landscape"]}})
+                                                         "orientations": ["landscape"]},
+                                        "measuredPluginFps": 0.0})
                 payload = json.dumps({
                     "screenCount": count,
                     "screens": screens,
@@ -2765,6 +2859,44 @@ class Broadcaster:
         try: writer.close()
         except Exception: pass
 
+    async def _on_hello(self, writer, screen: int, msg: dict):
+        """v1.2.12: respond to the wallpaper page's hello handshake.
+        The page reports the version baked into its bundle (the
+        installer stamps `__WALLPAPER_VERSION__` into the index.html
+        meta tag at build time). We compare against APP_VERSION using
+        the same _parse_version helper the update checker already
+        uses; if the wallpaper is strictly older we push back a
+        version-mismatch JSON so the page can show its banner. The
+        "dev" sentinel from an un-stamped page short-circuits the
+        check — no banner — because the local dev tree is allowed to
+        drift from APP_VERSION."""
+        try:
+            wv = str(msg.get("wallpaperVersion") or "").strip()
+        except Exception:
+            wv = ""
+        if not wv or wv == "dev":
+            return
+        try:
+            bridge_t = _parse_version(APP_VERSION)
+            wp_t = _parse_version(wv)
+        except Exception:
+            return
+        if wp_t >= bridge_t:
+            return
+        # Older bundle → push the mismatch on the same writer.
+        payload = {
+            "type":      "version-mismatch",
+            "bridge":    APP_VERSION,
+            "wallpaper": wv,
+        }
+        try:
+            frame = encode_text_frame(json.dumps(payload))
+            writer.write(frame)
+            print(f"[ws] version mismatch on screen={screen}: "
+                  f"bridge={APP_VERSION}  wallpaper={wv}")
+        except Exception as e:
+            print(f"[ws] version-mismatch push failed: {e}")
+
     async def _serve_websocket(self, reader, writer, request, target):
         response = make_handshake(request)
         if not response:
@@ -2785,6 +2917,21 @@ class Broadcaster:
                 try:
                     msg = json.loads(text)
                 except Exception:
+                    continue
+                # v1.2.12: hello-handshake. The wallpaper page sends
+                # this once on WS connect with its bundle's stamped
+                # version. We compare against APP_VERSION and, on
+                # mismatch, push a `version-mismatch` JSON straight
+                # back on the same writer so the page can light up
+                # its "re-import bundle" banner. Handled inline here
+                # because handle_client_message doesn't see the
+                # writer (and broadcasting back to everyone would
+                # be wrong — only the stale page should see it).
+                if isinstance(msg, dict) and msg.get("type") == "hello":
+                    try:
+                        await self._on_hello(writer, screen, msg)
+                    except Exception as e:
+                        print(f"[ws] hello handler failed: {e}")
                     continue
                 self.handle_client_message(screen, msg)
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, OSError):
@@ -3695,6 +3842,36 @@ class UdpReceiver(asyncio.DatagramProtocol):
         self.warned_bad = 0
         self.partials: dict[tuple[int, int], dict] = {}
         self._chunk_count = 0
+        # v1.2.12: rolling per-screen UDP arrival rate. Used to surface
+        # the SignalRGB plugin's actual send rate in the Configurator
+        # ("Plugin is sending at ~165 fps") so users can pick a frameRate
+        # cap that makes sense for their workload. Sampled by counting
+        # frames inside a 1 s sliding window per screen — cheap, no
+        # background thread.
+        self._fps_window_start_per_screen: dict[int, float] = {}
+        self._fps_counter_per_screen: dict[int, int] = {}
+        self._fps_measured_per_screen: dict[int, float] = {}
+
+    def _bump_fps(self, screen: int) -> None:
+        """Account one inbound frame for `screen` and slide the 1 s
+        window forward when it expires."""
+        now = self.loop.time()
+        start = self._fps_window_start_per_screen.get(screen, 0.0)
+        if now - start >= 1.0:
+            # Window closed — commit the count as the measured rate
+            # and reset for the next second.
+            self._fps_measured_per_screen[screen] = float(
+                self._fps_counter_per_screen.get(screen, 0))
+            self._fps_counter_per_screen[screen] = 1
+            self._fps_window_start_per_screen[screen] = now
+        else:
+            self._fps_counter_per_screen[screen] = \
+                self._fps_counter_per_screen.get(screen, 0) + 1
+
+    def get_measured_fps(self, screen: int) -> float:
+        """Most recent fully-sampled 1 s frame rate for `screen`.
+        Returns 0.0 until the first window closes."""
+        return self._fps_measured_per_screen.get(screen, 0.0)
 
     def datagram_received(self, data: bytes, addr):
         if len(data) < 7 or data[0] != 0x53:
@@ -3724,12 +3901,16 @@ class UdpReceiver(asyncio.DatagramProtocol):
         if magic1 == 0x52:           # 'R' — original single-packet frame
             screen = data[2]
             self.count += 1
+            self._bump_fps(screen)
             if self.count == 1 or self.count % 600 == 0:
                 print(f"[udp] {self.count} single-packet frames "
                       f"(last: screen={screen}, {len(data)} bytes)")
             self.loop.create_task(self.broadcaster.broadcast_frame(screen, data))
             return
         if magic1 == 0x43:           # 'C' — chunked frame
+            # _bump_fps fires once per assembled frame inside
+            # _handle_chunked, not once per chunk — see the success
+            # branch there.
             self._handle_chunked(data, addr)
             return
         if self.warned_bad < 3:
@@ -3801,6 +3982,7 @@ class UdpReceiver(asyncio.DatagramProtocol):
             frame[7:] = part["rgb"]
             del self.partials[key]
             self.count += 1
+            self._bump_fps(screen)
             if self.count == 1 or self.count % 600 == 0:
                 print(f"[udp] {self.count} chunked frames assembled "
                       f"(last: screen={screen}, {w}x{h}, {chunk_count} chunks)")
@@ -4178,6 +4360,13 @@ class BridgeRuntime:
                     # widgets is handled below; mirror toggle + cycle
                     # need their own dispatch paths — not safe to
                     # cram into a Quick Look.
+                    continue
+                # v1.2.12: hardware-perf preferences (gridRenderer,
+                # glassQuality) belong to the user, not the bundle —
+                # a "Cyberpunk Vibes" Look should not flip the DOM/
+                # Canvas renderer or kill the glass blur because the
+                # bundle author happened to have a strong CPU.
+                if key in BridgeRuntime._BUNDLE_FORBIDDEN_KEYS:
                     continue
                 if key == "monitorSetup":
                     value = BridgeRuntime._sanitise_monitor_setup(value)
@@ -4678,6 +4867,7 @@ class BridgeRuntime:
         "bgImage", "bgImageUrl", "bgFit", "bgTileScale", "bgDim",
         "barLayout", "showBars", "glowStrength",
         "gridBlur", "stripesBlur", "barHeight", "barWidth",
+        "gridRenderer", "glassQuality", "frameRate",
         "showStatus",
         "ambientEffect", "ambientTint", "ambientDensity",
         "pixelfx", "parallax3d",
@@ -4694,6 +4884,16 @@ class BridgeRuntime:
         # so a malformed payload can't poison the config.
         "monitorSetup",
     }
+
+    # v1.2.12: keys that are settable via setting-update / monitor-pref
+    # paths but should NOT travel inside a Look bundle. A Quick Look
+    # captures the *visual* identity of a screen ("Cyberpunk Vibes"); the
+    # hardware-perf preferences below are user-owned and survive bundles.
+    _BUNDLE_FORBIDDEN_KEYS = frozenset({
+        "gridRenderer",
+        "glassQuality",
+        "frameRate",
+    })
 
     @staticmethod
     def _sanitise_monitor_setup(value):
@@ -5229,6 +5429,10 @@ class BridgeRuntime:
             lambda: UdpReceiver(self.broadcaster, self.loop),
             local_addr=(UDP_HOST, UDP_PORT),
         )
+        # v1.2.12: hand the UdpReceiver to the broadcaster so /config
+        # responses can include the per-screen measured plugin send
+        # rate. The receiver tracks one 1 s sliding window per screen.
+        self.broadcaster.udp_provider = udp_protocol
         # Keep a ref to the UdpReceiver so the heartbeat below can
         # read its partials count for diagnostics.
         self._udp_protocol = udp_protocol
