@@ -4,6 +4,37 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.9-beta] - 2026-05-28
+
+> Diagnostic beta. Same hardening as v1.2.8 **plus** the entire
+> Now-Playing / SMTC code path is hard-disabled, so the user
+> reporting the 12 h memory build-up can run with this for a day
+> and tell us whether the SMTC cascade
+> (Bridge → NPSMSvc → Spotify → DWM → WebView2) was the source.
+
+### Changed — Now-Playing feature fully removed (diagnostic build)
+
+A new `ENABLE_NOWPLAYING = False` constant at the top of `bridge.py`
+gates every SMTC touchpoint:
+
+- `NowPlayingPoller` is never constructed. No `winrt` import, no
+  `SMTCManager` handle, no 1 Hz IPC roundtrip.
+- The `now-playing` widget type is removed from `WIDGET_DEFAULTS`
+  on startup, so the palette in Configurator + Builder hides it
+  and any incoming `widget-add` for that type is silently rejected.
+- `SysStatsPoller` is passed `nowplaying=None`, so its 1 Hz
+  JSON push omits the `nowPlaying` field entirely.
+
+Persisted config is **not** mutated — existing now-playing widget
+entries stay in the JSON, the page just never receives data and
+renders the widget's idle placeholder. Flip the constant back to
+`True` and rebuild to restore.
+
+If 12 h with v1.2.9 stays flat: confirmed the SMTC cascade was
+the source, and the v1.2.8 manager-cache + idle-gate is the right
+permanent fix. If v1.2.9 still grows: the suspect is somewhere
+else and we have a much narrower set of suspects to look at.
+
 ## [1.2.8-beta] - 2026-05-28
 
 > Beta: continues the v1.2.7 leak hunt with three targeted fixes after

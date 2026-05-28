@@ -507,7 +507,24 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.8-beta"
+APP_VERSION = "1.2.9-beta"
+
+# v1.2.9-beta: diagnostic build that removes the SMTC / now-playing
+# feature *entirely* so a maintainer can confirm whether a long-
+# running RSS / memory build-up is driven by the Bridge → NPSMSvc →
+# Spotify cascade or by something else. When False:
+#   • NowPlayingPoller is never constructed (no winrt import, no
+#     SMTCManager handle, no 1 Hz IPC).
+#   • The "now-playing" widget type is removed from WIDGET_DEFAULTS,
+#     so the palette in Configurator / Builder hides it and any
+#     widget-add command for that type is silently rejected.
+#   • SysStatsPoller never merges a `nowPlaying` field into its
+#     1 Hz JSON push.
+# Pre-existing now-playing widgets in a user's config stay in the
+# JSON (we don't mutate persisted state); the wallpaper page just
+# never receives data for them, so they render their "--" idle
+# state. Flip back to True to re-enable.
+ENABLE_NOWPLAYING = False
 APP_AUTHOR  = "Sebastian Mendyka"
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
@@ -771,6 +788,8 @@ WIDGET_DEFAULTS = {
                     "showDate": True, "tintFromGlow": False},
     },
 }
+if not ENABLE_NOWPLAYING:
+    WIDGET_DEFAULTS.pop("now-playing", None)
 WIDGET_TYPES = list(WIDGET_DEFAULTS.keys())
 
 # Choices that must match the wallpaper HTML / CSS class names.
@@ -5068,8 +5087,16 @@ class BridgeRuntime:
         # so the now-playing widget can render whatever the user has
         # active (Spotify, Groove, browser HTML5 audio, etc.). No-op
         # when the winrt-Windows.Media.Control package isn't bundled.
-        self.nowplaying = NowPlayingPoller(should_poll=self.broadcaster.has_any_clients)
-        self.nowplaying.start()
+        # v1.2.9-beta: hard-disable path. Skip *every* SMTC touchpoint
+        # — no NowPlayingPoller instance, no winrt import, no thread,
+        # no IPC. SysStatsPoller's `nowplaying=` is left None so its
+        # 1 Hz JSON push omits the nowPlaying field entirely.
+        if ENABLE_NOWPLAYING:
+            self.nowplaying = NowPlayingPoller(should_poll=self.broadcaster.has_any_clients)
+            self.nowplaying.start()
+        else:
+            self.nowplaying = None
+            print("[nowplaying] disabled by ENABLE_NOWPLAYING=False (v1.2.9 diagnostic build)")
         self.sysstats = SysStatsPoller(self.broadcaster,
                                        hwmon=self.hwmon,
                                        nowplaying=self.nowplaying)
