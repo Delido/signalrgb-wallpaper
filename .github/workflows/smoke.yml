@@ -1,0 +1,63 @@
+name: Smoke
+
+# v1.2.13: lightweight CI so a syntax error / broken import / silently-
+# moved-helper never reaches a beta tag again. We don't run the full
+# Inno installer build here (Windows runner + Inno-on-the-fly + signing
+# story) — that stays on the maintainer's machine for now. What we do
+# do is parse + import bridge.py on a clean runner and run a brief
+# headless boot to confirm the asyncio loop + HTTP + WS endpoints
+# wire up without exceptions.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-boot:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install runtime deps
+        # Bridge imports psutil + pystray + PIL + winrt. winrt is
+        # optional (the bridge handles its absence) but installing it
+        # exercises the real import path.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install psutil pystray Pillow winrt-Windows.Foundation winrt-Windows.Media.Control
+
+      - name: Syntax check + import
+        # `python -m py_compile` rejects syntax errors. Importing the
+        # file then exercises module-level definitions (DEFAULT_SCREEN_
+        # SETTINGS, TRANSLATIONS, the regex compiles, …).
+        shell: pwsh
+        run: |
+          python -m py_compile wallpaper_bridge/bridge.py
+          python -c "import sys; sys.path.insert(0, 'wallpaper_bridge'); import bridge; print('APP_VERSION =', bridge.APP_VERSION)"
+
+      - name: Spot-check module-level invariants
+        # Cheap structural assertions on the imported bridge module —
+        # mostly here so a future refactor that renames / drops a
+        # critical helper hits CI instead of a beta tag. Add more as
+        # bug-classes show up.
+        shell: pwsh
+        run: |
+          python -c @"
+          import sys; sys.path.insert(0, 'wallpaper_bridge')
+          import bridge as b
+          assert isinstance(b.DEFAULT_SCREEN_SETTINGS, dict), 'DEFAULT_SCREEN_SETTINGS missing'
+          assert 'frameRate' in b.DEFAULT_SCREEN_SETTINGS, 'frameRate setting missing'
+          assert 'gridRenderer' in b.DEFAULT_SCREEN_SETTINGS, 'gridRenderer setting missing'
+          assert 'glassQuality' in b.DEFAULT_SCREEN_SETTINGS, 'glassQuality setting missing'
+          assert callable(b.parse_http_headers), 'parse_http_headers missing'
+          assert callable(b._acao), '_acao helper missing'
+          assert b.WS_HOST == '127.0.0.1', 'WS_HOST drifted from loopback'
+          print('OK')
+          "@

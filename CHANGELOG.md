@@ -4,6 +4,460 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-29
+
+Cuts the v1.2.7 – v1.2.13 beta line into a single stable release.
+Headline themes: **performance**, **security**, **multi-monitor
+workflow**, **video-friendly Library**.
+
+### Performance
+
+- **Matrix-ambient render pipeline rewrite** — font + colour-LUT
+  hoist, integer-Y snap, `MATRIX_CHARS` interned-string array,
+  particle pool + `respawn()` hook, `Array.splice` → swap-and-pop,
+  batched `renderAll()` by colour bucket. Lively WebView2 CPU on a
+  3-screen Matrix-dense stress run drops ~12 % → ~1.5 %.
+- **`frameRate` setting** (Performance 20 Hz / Balanced 30 Hz /
+  Quality 60 Hz). Both ends of the pipeline read the same value:
+  `Broadcaster.broadcast_frame` caps the outgoing per-screen WS
+  stream, the wallpaper page's `renderFrame` caps at the same.
+  SignalRGB's plugin frequently sends UDP at 150–200 fps for cheap
+  effects (Solid Color); at 30 Hz the blur layer is perceptually
+  identical and the pipeline does half the work. The Configurator
+  surfaces a live plugin send-rate readout next to the dropdown.
+- **Grid renderer** is now per-screen settable: default DOM (cheaper
+  on GPU via Chromium's solid-rectangle fast-path) or opt-in Canvas
+  (one `putImageData` per frame; cheaper on CPU but shifts cost to
+  the GPU on dGPU-rich setups).
+- **Pause state fix** — the tray's *Pause glow + animations* used to
+  leave ~10 % GPU because all four rAF loops (ambient / audio-glow /
+  pixelfx / parallax) kept scheduling at 60 Hz. Now: a CSS-driven
+  `body.paused-glow` class removes the five filter-heavy layers
+  from the compositor entirely, AND each rAF cancels its chain on
+  pause and rearms via a `wallpaper-resume` event.
+- **Glass-tile backdrop-filter** reduced from `blur(12 px)` to
+  `blur(6 px)` + `contain: paint` + `will-change: backdrop-filter`
+  hints, plus a new `glassQuality` per-screen setting (low / medium
+  / high) that lets users at either GPU extreme tune the cost.
+- **Standby card** ("Bridge offline") no longer burns ~20 % GPU on
+  its own — dropped the `backdrop-filter` on the card, replaced the
+  `box-shadow` pulse animation with `transform: scale` on a pseudo.
+- **`probeRafLoop` throttled** 60 Hz → ~5 Hz via setTimeout cascade.
+  Page-pause detection still works (paused page never fires rAF at
+  all); WebView2 compositor stops getting woken just for a timestamp.
+- **UdpReceiver short-circuit** before any broadcaster work when
+  paused or no client is listening on the target screen. Earlier
+  betas in this line still created an `asyncio.Task` per UDP
+  packet, churning CPython's heap unnecessarily.
+- **Per-channel backpressure** on `push_sysstats` / `push_pause` /
+  `push_reload_all` / `push_settings` (same 256 KiB cap
+  `broadcast_frame` already used).
+- **Widget-command thread pool** — the per-message `threading.Thread`
+  spawn that handled `widget-update`, `setting-update`, etc.
+  could easily fire thousands of threads during a Builder drag.
+  Now submitted to the asyncio loop's default `ThreadPoolExecutor`.
+- **SMTC manager cached** in `NowPlayingPoller`; idle-gate on all
+  pollers (`SysStats` / `HwMon` / `NowPlaying`) — they only fire
+  when a widget that actually consumes their data is placed on
+  some screen.
+- **Bridge-side broadcast cap** keyed off the same `frameRate`
+  setting the page reads — closes the WS pipeline at the source
+  instead of letting WebView2 decode 150 fps just to drop 130
+  of them.
+- **Page-side micro-fixes** — `ensureZones` early-returns in
+  canvas-render mode, `_anyTintedWidget()` cached + invalidated
+  on widget mutation, GC heartbeat every 60 s + diag log line
+  every 5 min (`[diag] rss=… tasks=… clients=… partials=…`).
+
+### Security + robustness
+
+- **Tray-update path overhauled** — PyInstaller switched from
+  `--onefile` to `--onedir` (no temp extraction, no temp-permission
+  / AV race surface; ~2× faster startup), and the post-install
+  bridge relaunch no longer leans on Inno's `[Run]` section. The
+  old bridge spawns a detached `cmd.exe` child that waits 40 s
+  via `timeout` (not `ping`, AV-friendlier) then `start "" /B`s
+  the new exe as a normal user-context process. Together this
+  closes the "Failed to load Python DLL python313.dll" error
+  several users hit after the tray-triggered silent update.
+- **CORS lockdown** — every HTTP response migrated from
+  `Access-Control-Allow-Origin: *` to a per-origin whitelist
+  (bridge loopback / `null` for file://-style WebView2 / any
+  `*.localhost` subdomain so Lively + WE's WebView2 hosts both
+  work). The WS handshake gets the same check.
+- **`/library/<file>` path-traversal hardening** — URL-decode
+  before the literal `/ \ ..` check, anchor the resolved path
+  under `library_dir()` so a symlink can't escape either.
+- **CI smoke test** workflow on push + PR (`py_compile` + import +
+  module-level invariant spot-checks).
+- **WS protocol versioning** + **config schema migration scaffold**
+  — fields land on every settings push (`wsProtocolVersion`) and a
+  `_migrate_config()` hook runs before the generic backfill so the
+  next time a key shape changes there's a clean entry point.
+- **Persistent rotating bridge log** at
+  `%LOCALAPPDATA%\SignalRGBWallpaper\logs\bridge.log` (1 MiB ring,
+  3 backups). `--noconsole` was previously dropping stdout/stderr
+  to NUL — when a user reported a silent crash there was nothing
+  to read. Diagnostics export now folds the log into the bundle.
+- **Provider init validation** — `BridgeRuntime._serve` prints a
+  loud `[init] WARNING` if `hwmon_provider` / `udp_provider`
+  aren't wired before `serve_forever`.
+- **Look bundles can't override hardware-perf prefs** —
+  `quick_look_apply` filters `gridRenderer` / `glassQuality` /
+  `frameRate` out of the incoming bundle settings.
+
+### Multi-monitor + Builder workflow
+
+- **Wallpaper-bundle / bridge version handshake** — `build.ps1`
+  stamps the bridge version into the bundle's `index.html` meta
+  tag; the page sends `{type:"hello", wallpaperVersion}` on WS
+  connect; the bridge pushes a banner-driving
+  `{type:"version-mismatch"}` back when the bundle's older than
+  `APP_VERSION`. Dev-tree pages report `"dev"` and bypass the
+  check.
+- **Configurator UX sweep** — *Open library folder* button next to
+  *Choose image…* pops Explorer at
+  `%LOCALAPPDATA%\SignalRGBWallpaper\library`; orientation toggle
+  in the monitor-setup popover no longer closes itself on click;
+  section-nav rail keeps the explicit click highlight on short
+  cards (Profiles + Backup) for 700 ms; header connection status
+  no longer stuck on "verbinde…" for single-monitor setups.
+- **Builder 4-step intro** refreshed (span / orientation moved to
+  the Configurator's per-tab gear in v1.2.10, the Builder no
+  longer hosts that step).
+- **Builder span-split** — inline auto-detect on every image-load
+  path. When the user picks an image and the image is ≥1.5×
+  the target tile's pixel size AND the tile is part of a
+  multi-tile span, the Builder asks: *spread across the whole
+  span or keep it inside just this tile?* The split path crops
+  the source proportionally to each sibling tile's region within
+  the bridge-screen composite — drop a 5120×1440 panorama on one
+  half of a 2×2560×1440 span and each monitor receives its half.
+  Triggers on File picker / Library tile / drag-into-tile /
+  *Use current canvas* / drag-into-editor (editor variant adds an
+  *Open in editor* third option since there's no tile context).
+
+### Video backgrounds
+
+- **MP4 / WebM / MOV / M4V end-to-end fixes** continuing from
+  v1.2.6 — `_update_background` magic-byte-sniffs the upload so
+  videos save with the correct extension; `/image` proxy accepts
+  video extensions and serves `Range` requests as `206 Partial
+  Content` with 256 KiB chunked streaming.
+- **Library tile + hover preview render real video frames** — tile
+  embeds a `<video preload="metadata">` for entries without a
+  separate poster companion (so older video uploads work too);
+  the hover popup ships both `<img>` and `<video>` and picks one
+  based on file extension. New `/library/thumb` endpoint + a
+  client-side `extractVideoPoster()` extract a still frame on
+  upload so fresh entries get a static `.thumb.png` companion.
+- **`_clearVideoBg()` teardown overhauled** so switching from a
+  video bg back to an image actually releases the WebView2
+  decoded-frame pool (the user-reported "RAM stays full" case).
+
+### HwMon
+
+- Sensor picker dropdown now categorised — LHM tree path's host
+  segment stripped, device + category joined as the `<optgroup>`
+  label, sensor leaf as the option label. The select renderer
+  learned opt-in `<optgroup>` support that other selects ignore.
+
+### Note — MP4 transparency for "glow through video"
+
+Several users have asked whether a video wallpaper can let the
+SignalRGB glow show through transparent regions, the way a PNG
+with alpha does. **MP4 (H.264) has no alpha channel** — glow zones
+can only stack *on top of* an MP4, not show *through* it. For
+animated wallpapers with glow showing through, the working formats
+are **WebM with VP9-alpha**, **APNG**, or **animated AVIF**.
+
+## [1.2.13-beta] - 2026-05-29
+
+> Beta: Library tiles for video background uploads (MP4 / WebM /
+> MOV / M4V) now render a still-frame poster instead of a blank
+> box. CSS `background-image: url(*.mp4)` doesn't actually decode
+> video in any browser, so the Configurator's Library row showed
+> nothing for video items — even though the videos themselves
+> worked perfectly as the live wallpaper background.
+
+### Fixed — Library tile shows blank for MP4 / WebM / MOV uploads
+
+When the Configurator's *Choose image…* picker uploaded a video,
+`/library/upload` saved the file under its native extension (the
+fix in v1.2.6 that magic-byte-sniffs the format), and
+`_library_rebuild_catalogue` happily added an entry — but with
+its `thumb` field falling back to the video filename itself.
+`renderLibraryTile` then set `background-image: url(/library/foo.mp4)`,
+which CSS can't render: there is no rule in CSS or HTML to use a
+video file as a `background-image`. Tile stayed blank.
+
+Two-part fix:
+
+- **New `POST /library/thumb?name=<slug>` endpoint on the bridge**.
+  Accepts a raw PNG (magic-byte verified) and saves it as
+  `<slug>.thumb.png` in the library dir. Triggers
+  `_library_rebuild_catalogue` so the entry's `thumb` field
+  points at the new poster on the next `/library/list` poll.
+  Slug input is sanitised against `_LIBRARY_SAFE_CHARS` (same
+  whitelist `_library_slug` produces) so the endpoint can't be
+  used for path traversal.
+- **Configurator-side poster extraction**. A new
+  `extractVideoPoster(file)` helper loads the video into an
+  off-screen `<video>` (muted, `preload="metadata"`), waits for
+  `loadedmetadata`, seeks to ~0.5 s (or 10 % of duration,
+  whichever is shorter — black opening frames are a thing), then
+  on `seeked` draws to a canvas downsampled to ≤480 px wide and
+  `canvas.toBlob`s a PNG. The existing video-upload path in the
+  `bg-file` change handler now follows the main `/library/upload`
+  with a `/library/thumb` call carrying that poster. Best-effort:
+  on any failure (codec the browser can't decode, timeout, etc.)
+  the tile stays blank and the upload status line surfaces
+  `(poster skipped)`.
+
+The bridge serves the resulting `<slug>.thumb.png` through the
+existing `/library/<file>` static route, so no Configurator-side
+change to `renderLibraryTile` was needed — it already picks
+`item.thumb || item.file`, which now resolves to the poster.
+
+### Fixed — Library tile + hover-preview render real video frames
+
+The v1.2.13 first pass added a `/library/thumb` endpoint and a
+client-side `extractVideoPoster()` that uploads a still frame
+alongside the video — but that only kicks in for *new* uploads.
+Existing video entries with no companion `.thumb.png` still
+rendered the tile + the hover-preview popup via CSS
+`background-image` / an `<img>` tag, which can't decode video.
+Result: blank tile, broken-image icon in the popup.
+
+Tile + preview now branch on file extension:
+
+- **Tile**: if the catalogue has a non-video `thumb` companion,
+  the CSS-background path stays (cheapest). Otherwise the tile
+  embeds a `<video preload="metadata" muted>` whose first frame
+  the browser decodes as a static poster. No autoplay, no
+  controls, `pointer-events: none` so the parent button keeps
+  the click.
+- **Hover preview popup**: now ships both `<img>` and `<video>`
+  in the template; `showLibraryPreview()` picks one based on the
+  file extension and clears the inactive element so a
+  previously-opened video doesn't keep decoding in a hidden popup.
+
+### Added — Span-mode apply dialog (still images only)
+
+The Library Apply path used to silently overwrite the screen's
+`bgImage` with the single library file, which for a screen
+configured in `span-h` / `span-v` mode means a still image gets
+stretched across the whole composite. Usually wrong.
+
+`applyLibraryItem` now detects `monitorSetup.mode !== "single"`
+**and** the item is a still image (not a video) and pops a small
+modal:
+
+- **Im Builder öffnen…** — opens `/builder?screen=N&library=<file>`
+  in a new tab so the user can compose per tile via the Monitor
+  Wall workflow. Highlighted as the recommended default.
+- **Beide spannen** — keep the previous behaviour and stretch the
+  image across the span.
+- **Abbrechen** — close, do nothing.
+
+Videos skip the dialog entirely and fall straight through to the
+normal apply path: the Builder's per-tile workflow is image-only
+(canvas-based crop/place), so there's nothing useful it could do
+with an MP4, and span-stretching a video usually looks fine
+because the motion masks distortion. Single-mode screens also
+skip the dialog.
+
+### Security — CORS + WS Origin lockdown
+
+Pre-v1.2.13 every HTTP endpoint returned `Access-Control-Allow-Origin:
+*` and `_serve_websocket` accepted any `Origin` on the WS handshake.
+Bridge is bound to 127.0.0.1 so it isn't reachable from the network,
+but any web page the user happened to load in their browser could
+still `fetch("http://127.0.0.1:17320/library/upload?name=evil", …)`
+or `new WebSocket("ws://127.0.0.1:17320/?screen=0")` in the
+background and dispatch `setting-update` / `widget-add` /
+`system-action` against the bridge. Real one-click-attack surface.
+
+- New `_ALLOWED_HTTP_ORIGINS` whitelist (the bridge's loopback URL,
+  the `localhost:17320` alias, and `null` for any file://-style
+  WebView2 sandbox). `_acao()` helper resolves the right ACAO
+  value per response; every `*` site got migrated.
+- On top of the explicit list, the origin check also accepts any
+  host whose hostname is `127.0.0.1`, `localhost`, or a
+  `*.localhost` subdomain — both Lively and Wallpaper Engine
+  serve their WebView2 wallpaper pages from a random-hex
+  `<id>.localhost` HTTPS origin (e.g.
+  `https://bbeebe4f83f8bc83.localhost`). RFC 6761 reserves
+  `.localhost` for loopback so a remote site can't impersonate
+  it.
+- WS handshake rejects 403 when the request's `Origin` is set and
+  not whitelisted. Tools without an Origin header (curl, native
+  bridges) keep working — the check is opt-in to refusal.
+- Path-traversal check on `GET /library/<file>` now URL-decodes
+  before the `/ \ ..` check (the literal-only check missed `%2F`
+  / `%5C` / `%2E%2E`) AND anchors the resolved path under the
+  library dir via `Path.relative_to`, so a symlink under
+  `library/` can't escape either.
+
+### Added — CI smoke test (GitHub Actions)
+
+No CI existed before this release — every regression got caught
+by a maintainer or a user. New `.github/workflows/smoke.yml` runs
+on push + PR:
+
+- `python -m py_compile wallpaper_bridge/bridge.py` (syntax check)
+- `import bridge` (catches module-level errors)
+- Module-level invariant checks (the new `frameRate`,
+  `gridRenderer`, `glassQuality` defaults exist, helpers like
+  `parse_http_headers` and `_acao` are callable, `WS_HOST` is
+  still loopback).
+
+Adding more invariants is cheap once the workflow is in place.
+
+### Added — WS protocol version + config schema migration scaffold
+
+- `WS_PROTOCOL_VERSION = 2` constant. Settings push now carries
+  `wsProtocolVersion` so a wallpaper page or Configurator tab
+  loaded from an older bundle can detect a breaking change before
+  dispatching a malformed message. Bumped any time an existing
+  message type changes shape; new types alone don't need a bump.
+- `_migrate_config(cfg)` is called before the generic setdefault
+  backfill in `load_config`. Empty for now (additions so far have
+  all been backfill-friendly), but the next time a key gets
+  renamed or its inner shape changes the migration goes here +
+  the existing `CONFIG_VERSION` bumps.
+
+### Added — Persistent rotating bridge log + diagnostics inclusion
+
+`--noconsole` PyInstaller sends stdout / stderr to NUL — when a
+user reported "the bridge crashed silently" there was nothing to
+read. `_setup_persistent_logging()` redirects both into a
+`RotatingFileHandler` at
+`%LOCALAPPDATA%\SignalRGBWallpaper\logs\bridge.log` (1 MiB ring,
+3 backups, 4 MiB total disk cap). The tray's *Export diagnostics*
+already fans the bundle into a Zip on the desktop; that bundle
+now also includes `logs/bridge.log*` so a maintainer reading a
+user-submitted report has the actual log lines.
+
+### Added — Provider init validation
+
+`BridgeRuntime._serve` now prints a loud `[init] WARNING` if the
+broadcaster is missing `hwmon_provider` or `udp_provider` when
+`serve_forever` starts. Pre-v1.2.13 a typo in startup wiring fell
+through silently — picker endpoints just returned empty data.
+
+### Fixed — Video bg → image bg leaves the video buffer allocated
+
+A tester reported that switching back from an MP4 background to a
+regular image kept the wallpaper page's RAM at "video size". Cause:
+`_clearVideoBg()` did `pause()` + `removeAttribute("src")` +
+`load()`, but Chromium / WebView2's HTMLMediaElement holds the
+decoded-frame pool well past those calls (a documented quirk).
+Aggressive teardown — `src = ""` then `load()`, plus removing the
+`currentTime` attribute and resetting our own `dataset.currentSrc`
+duplicate-load guard — actually releases the buffer in WebView2.
+
+### Improved — HwMon sensor picker categorised by sensor tree
+
+The picker that powers the *hardware-sensor* widget used to be a
+flat `<select>` with every sensor LHM reports (often 100-300
+items) thrown in. Useless on multi-device machines.
+
+`_buildSensorOptions` now strips the LHM tree's host segment,
+joins device + category into a group label
+("AMD Ryzen 7 5800X / Temperatures"), and uses the sensor leaf as
+the option label. The select renderer learned to honour an
+optional `group` field on options → opt-in `<optgroup>` wrappers
+without touching any other select field in the Configurator.
+Sorted alphabetically so related sensors end up adjacent.
+
+### Fixed — Configurator + Builder UX sweep
+
+Six items from a session walkthrough, all small but each one a
+real friction point:
+
+- **Background card** loses the standalone *Image path* text input
+  — almost nobody pastes a Windows path, and the *Choose image…*
+  picker + Library tiles cover the rest. The text input stays in
+  the DOM hidden so any JS / external automation that reads
+  `#bg-image` keeps working, and a new **Open library folder**
+  button next to *Choose image…* pops Explorer at
+  `%LOCALAPPDATA%\SignalRGBWallpaper\library` via a new
+  `open-library-folder` system-action handler — drop-many-files
+  in one go instead of clicking *Choose image…* per file.
+- **Monitor-setup popover orientation toggle** no longer closes
+  itself when the user flips a tile between landscape and portrait.
+  Cause: the click bubbled to the document-level
+  *click-outside-to-close* handler **after** `renderMonitorSetupPopover()`
+  rebuilt the `rotateBox` innerHTML and detached the clicked button —
+  by the time the document handler ran, `popoverEl.contains(target)`
+  was false. `stopPropagation()` in the rotate handler keeps the click
+  contained.
+- **Section-nav rail** now keeps the explicit click highlight on
+  short cards near the bottom of the page (Profiles + Backup &
+  Restore). The IntersectionObserver uses
+  `rootMargin: -30% 0 -50% 0` — short cards never reach that
+  centre band, so the click highlight was getting clobbered by
+  the observer immediately. New `_navHighlightLockUntil` shared
+  timestamp suppresses the observer for 700 ms around an explicit
+  click; manual scrolling still works.
+- **Header connection status** ("verbinde…" / "connected · Screen N")
+  was stuck on the connecting placeholder for single-monitor
+  setups. Cause: the page-load placeholder has
+  `data-i18n="conn.connecting"` baked in; the WS `onopen` swapped
+  the textContent to the dynamic *connected* string but left the
+  attribute as-is. The first language switch from the bridge
+  settings push then re-ran `applyI18n()` and snapped the text
+  back to "verbinde…". Multi-monitor users dodged this because
+  every tab-click reconnected the WS and re-ran `onopen` after
+  the language had settled. Now `data-i18n` is re-set per WS
+  state, and `setLanguage()` calls a new `_refreshConnText()`
+  that picks the right key + parameters from `ws.readyState`.
+- **Builder 4-step intro** lost the "declare any spans" step —
+  span / orientation moved to the Configurator's per-tab gear
+  in v1.2.10, the Builder no longer hosts that workflow.
+  Wording now nudges users back to the Configurator for
+  monitor topology.
+- **Builder span-split** — inline auto-detect on file / library
+  load. When the user picks an image for a wall tile and the
+  image is significantly larger than the tile (≥1.5× in either
+  dimension) **and** the tile is part of a multi-tile span, a
+  dialog pops up: *"Image is X×Y, this tile is only x×y and is
+  part of a {n}-tile span — spread across the whole span or
+  keep it in just this tile?"*. The split path crops the source
+  proportionally to each sibling tile's region within the
+  bridge-screen composite (using each tile's `xOffset` /
+  `yOffset` / `slotW` / `slotH`) and loads the per-tile crops
+  into their `wallSlots`. Drop a 5120×1440 panorama on one half
+  of a 2×2560×1440 span and each monitor receives its correct
+  half — no per-tile right-click + menu hunt needed, no
+  pre-cropping in an image editor. Works on both the File
+  picker path and the Library tile picker; the canvas-load and
+  current-bg paths skip the dialog (they're not span-target
+  flows). A `triggerWallSplitSpanPick(idx)` programmatic entry
+  point is kept around for future callers.
+
+### Note — MP4 transparency for "glow through video"
+
+Several users have asked whether a video wallpaper can let the
+SignalRGB glow show through transparent regions, the way a PNG
+with alpha does. **MP4 (H.264) has no alpha channel** — Glow
+zones can only stack *on top of* an MP4, not show *through* it.
+For animated wallpapers with glow showing through transparent
+regions, the working formats are:
+
+- **WebM with VP9-alpha**
+  (`ffmpeg -i in.mov -c:v libvpx-vp9 -pix_fmt yuva420p out.webm`)
+  — preferred, Chromium-based Lively / WE decode it natively.
+- **APNG** — solid alpha support, but file sizes balloon vs WebM.
+- **animated AVIF** — works in recent Chromium, smallest file
+  size, but encoding tooling is still less common.
+- **GIF** — 1-bit transparency only, so cutout edges look harsh;
+  not recommended for glow effects.
+
+This is a format limitation, not a wallpaper-page bug, so it
+isn't something the bridge or page can work around.
+
 ## [1.2.12-beta] - 2026-05-28
 
 > Beta: full page-side perf pass on the Matrix ambient effect after

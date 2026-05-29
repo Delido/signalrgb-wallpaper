@@ -189,11 +189,45 @@
   }
   .btn:hover { background: #2c323d; }
   .btn:active { transform: translateY(1px); }
-  .btn.primary { background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc; }
-  .btn.primary:hover { background: var(--accent-bg-hover); }
+  .btn.primary,
+  .btn-primary { background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc; }
+  .btn.primary:hover,
+  .btn-primary:hover { background: var(--accent-bg-hover); }
   .btn.danger { color: var(--danger); border-color: #5a2a2a; background: #2a1a1c; }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
   .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* v1.2.13: shared modal styles for the inline span-split dialog (and
+     any future Builder modal). Mirror of the Configurator's modal-
+     backdrop / modal classes so JS using the same markup centres the
+     dialog instead of stacking it at the bottom of the page. */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0, 0, 0, 0.55);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-backdrop.on { display: flex; }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    max-width: 520px; width: 100%;
+  }
+  .modal header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-2);
+    border-radius: 10px 10px 0 0;
+  }
+  .modal header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .modal .body { padding: 16px; }
+  .modal .actions {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 6px;
+  }
   /* `min-width: 0` lets a button shrink below its intrinsic text width
      so long localised labels (e.g. "Alle Änderungen zurücksetzen" in
      the narrow Tools panel) wrap to a second line instead of clipping
@@ -1666,16 +1700,23 @@ const TRANSLATIONS = {
   // surfaces the brush tools + merge workflow + history panel.
   "mode.simple":   { en: "Simple",   de: "Einfach" },
   "mode.advanced": { en: "Advanced", de: "Erweitert" },
+  // v1.2.13: refreshed intro. Span / orientation setup moved to the
+  // Configurator's per-tab gear (Bildschirm-Einstellungen) in v1.2.10;
+  // the Builder no longer hosts that step. Wording now nudges the
+  // user back to the Configurator for the monitor topology and keeps
+  // the Builder focused on image composition.
   "simple.workflow_hint": {
     en: "<strong>4 steps:</strong><ol>" +
-        "<li>Set up your monitors below — declare any spans (e.g. a 5120×1440 screen that's really 2 monitors)</li>" +
-        "<li>Click an empty tile to pick / drop an image — it opens right here for editing</li>" +
+        "<li>Pick the active screen via the tabs at the top — each tab corresponds to one bridge screen. " +
+        "Spans / portrait orientation are set in the Configurator (each tab's ⚙ → Monitor setup); the Wall below mirrors that layout.</li>" +
+        "<li>Click an empty tile to pick / drop / paste an image — it opens right here for editing</li>" +
         "<li>Use Auto-Cut (star icon left) on the parts you want transparent, then Save to slot</li>" +
         "<li>\"Apply Wall to screens\" composites every tile into one image per bridge screen</li>" +
         "</ol>",
     de: "<strong>4 Schritte:</strong><ol>" +
-        "<li>Monitore unten einrichten — Spans deklarieren (z.B. einen 5120×1440-Schirm der eigentlich 2 Monitore sind)</li>" +
-        "<li>Leere Kachel anklicken um ein Bild zu wählen / ablegen — öffnet sich direkt hier zum Bearbeiten</li>" +
+        "<li>Aktiven Bildschirm über die Tabs oben wählen — pro Tab ein Bridge-Schirm. " +
+        "Spans und Hochformat werden im Konfigurator (pro Tab ⚙ → Bildschirm-Einstellungen) eingestellt; das Wall unten spiegelt das.</li>" +
+        "<li>Leere Kachel anklicken um ein Bild zu wählen / ablegen / einzufügen — öffnet sich direkt hier zum Bearbeiten</li>" +
         "<li>Auto-Cut (Sterne-Icon links) auf die Stellen die transparent werden sollen, dann „In Slot speichern“</li>" +
         "<li>„Apply Wall to screens“ kombiniert alle Kacheln zu einem Bild pro Bridge-Schirm</li>" +
         "</ol>",
@@ -1875,6 +1916,30 @@ const TRANSLATIONS = {
                              de: "Hintergrund-Datei existiert nicht mehr auf der Festplatte — die veraltete Referenz wurde gelöscht. Neues Bild wählen um einen Hintergrund zu setzen." },
   "wall.menu.edit":     { en: "Edit in main canvas", de: "Im Haupteditor öffnen" },
   "wall.menu.clear":    { en: "Clear",              de: "Leeren" },
+  "wall.split_done":    { en: "Image split across {n} tiles",
+                          de: "Bild auf {n} Kacheln aufgeteilt" },
+  // v1.2.13: inline fit-mode dialog that pops when a clearly span-sized
+  // image lands on a span tile. Replaces the v1.2.13.1 per-tile
+  // "Split across span…" menu entry.
+  "wall.fit.title":     { en: "Image is bigger than this tile",
+                          de: "Bild ist größer als diese Kachel" },
+  "wall.fit.body":      { en: "<b>{name}</b> is {srcW}×{srcH}, but this " +
+                              "tile is only {tileW}×{tileH} and is part " +
+                              "of a {n}-tile span. Spread the image " +
+                              "across the whole span (one slice per " +
+                              "monitor) or keep it inside just this " +
+                              "tile (will be cropped / letterboxed)?",
+                          de: "<b>{name}</b> ist {srcW}×{srcH}, aber " +
+                              "diese Kachel nur {tileW}×{tileH} und ist " +
+                              "Teil eines {n}-Kachel-Spans. Bild auf den " +
+                              "ganzen Span verteilen (ein Ausschnitt pro " +
+                              "Monitor) oder nur in diese Kachel laden " +
+                              "(wird zugeschnitten / mit Balken)?" },
+  "wall.fit.cancel":    { en: "Cancel",                de: "Abbrechen" },
+  "wall.fit.single":    { en: "Just this tile",        de: "Nur diese Kachel" },
+  "wall.fit.editor":    { en: "Open in editor",        de: "Im Editor öffnen" },
+  "wall.fit.split":     { en: "Split across {n} tiles",
+                          de: "Auf {n} Kacheln verteilen" },
   // v1.2.4 — per-slot in-place edit flow
   "wall.editing":        { en: "Editing slot {n} — use any tool, then click Save back to slot {n}.",
                            de: "Slot {n} wird bearbeitet — beliebiges Werkzeug nutzen, dann „Zu Slot {n} speichern“ klicken." },
@@ -2093,11 +2158,74 @@ els.canvasArea.addEventListener("drop", (e) => {
   if (file && /^image\//.test(file.type)) loadFile(file);
 });
 
-function loadFile(file) {
-  fileToImage(file).then(
-    (img) => applySourceImage(file.name, img),
-    () => { els.imgStat.textContent = "Failed to decode image."; },
+async function loadFile(file) {
+  // v1.2.13: drag-onto-editor span-split offer. The editor drop loads
+  // the image as the editing source (current behaviour); when the
+  // wall has a span screen AND the image is visibly span-sized, we
+  // first ask whether the user wants to skip the editor and split
+  // directly across the span. The dialog adds an "Open in editor"
+  // option so the editing workflow is still one click away.
+  try {
+    const img = await fileToImage(file);
+    const target = await _maybeOfferSpanSplitForEditor(img, file.name);
+    if (target === "cancel") return;
+    if (typeof target === "number") {
+      // _maybeOfferSpanSplitForEditor returns the anchor tile index
+      // for the chosen span — feed it into the existing split path.
+      await loadWallSlotsSpanSplit(target, file);
+      return;
+    }
+    // target === "editor" (or null on no-prompt path) → load as
+    // editor source the same way the pre-v1.2.13 flow did.
+    applySourceImage(file.name, img);
+  } catch (_) {
+    els.imgStat.textContent = "Failed to decode image.";
+  }
+}
+
+// v1.2.13: editor-drop counterpart to _maybeOfferSpanSplit. The wall
+// is where bridge screens live, not the editor, so the dialog has to
+// pick an anchor tile on its own. We look for the first bridge screen
+// configured as a span (any wallScreens entry with >1 siblings) and
+// offer the split for that one. Returns:
+//   "cancel" → user dismissed; loadFile should abort
+//   number   → the anchor wallScreens index of the chosen span
+//   "editor" → user picked the open-in-editor branch (default)
+async function _maybeOfferSpanSplitForEditor(img, name) {
+  // Collect distinct bridge screens that have >1 wall-tile sibling.
+  const bridgeCounts = {};
+  for (const s of wallScreens) {
+    if (!s || typeof s.bridgeIdx !== "number") continue;
+    bridgeCounts[s.bridgeIdx] = (bridgeCounts[s.bridgeIdx] || 0) + 1;
+  }
+  const spanBridge = Object.entries(bridgeCounts)
+    .filter(([, n]) => n >= 2)
+    .map(([k]) => parseInt(k, 10));
+  if (spanBridge.length === 0) return "editor";
+  // For now pick the first span screen. Multi-span setups still get
+  // the dialog but always targeting the first span — power users
+  // wanting a specific other span can drop on that span's tile
+  // directly, which routes through the tile-level _maybeOfferSpanSplit.
+  const anchorBridge = spanBridge[0];
+  const anchorIdx = wallScreens.findIndex(
+    (s) => s && s.bridgeIdx === anchorBridge
   );
+  if (anchorIdx < 0) return "editor";
+  const anchor = wallScreens[anchorIdx];
+  const sibCount = bridgeCounts[anchorBridge];
+  const srcW = img.naturalWidth  || img.width  || 0;
+  const srcH = img.naturalHeight || img.height || 0;
+  const tileW = anchor.w || 1, tileH = anchor.h || 1;
+  // Same oversize threshold the tile-level helper uses.
+  const oversize = (srcW >= tileW * 1.5) || (srcH >= tileH * 1.5);
+  if (!oversize) return "editor";
+  const choice = await askWallTileFitMode({
+    srcW, srcH, tileW, tileH, siblingCount: sibCount, name,
+    editorOption: true,
+  });
+  if (choice === "cancel") return "cancel";
+  if (choice === "split")  return anchorIdx;
+  return "editor";
 }
 
 // Adopts an HTMLImageElement or HTMLCanvasElement as the new source for
@@ -4816,6 +4944,11 @@ function _buildWallMenu() {
     '<button type="button" data-action="edit">' +
       '<span class="icon">✎</span>' +
       '<span data-i18n="wall.menu.edit"></span></button>' +
+    // v1.2.13.2: the explicit "Split across span…" menu entry was
+    // replaced by an inline auto-detect — loadWallSlotFromFile /
+    // loadWallSlotFromLibrary trigger the fit-mode dialog when the
+    // user loads a visibly span-sized image onto a span tile. Kept
+    // off the menu so the row isn't bloated with rare-use entries.
     '<button type="button" data-action="clear">' +
       '<span class="icon">✕</span>' +
       '<span data-i18n="wall.menu.clear"></span></button>';
@@ -5021,6 +5154,25 @@ async function loadWallSlotFromCurrentCanvas(idx) {
     // blob, exactly like the existing "Apply to Screen N" path did.
     const blob = await canvasToBlob();
     const img  = await fileToImage(blob);
+    // v1.2.13: same oversize span-split offer the File / Library
+    // paths use. The canvas snapshot can easily be span-sized (user
+    // dragged a 5120×1440 panorama into the editor, did Auto-Cut,
+    // and now wants to apply to a span) — without this prompt they'd
+    // have to do the split manually in an external image editor.
+    const fit = await _maybeOfferSpanSplit(idx, img,
+      (sourceName || "canvas") + ".png");
+    if (fit === "cancel") return;
+    if (fit === "split") {
+      // Reuse loadWallSlotsSpanSplit with the canvas blob as the
+      // source. Give the blob a `name` so downstream paths that
+      // reference file.name don't trip.
+      try {
+        Object.defineProperty(blob, "name",
+          { value: (sourceName || "canvas") + ".png" });
+      } catch (_) {}
+      await loadWallSlotsSpanSplit(idx, blob);
+      return;
+    }
     const dataUrl = await blobToDataUrl(blob);
     // v1.2.13: preserve the prior origImg/origBlob if the slot was
     // an Edit-flow save (so a follow-up edit re-contains from the
@@ -5246,6 +5398,179 @@ function attachFreeDrag(frame, idx) {
   }, true);
 }
 
+// v1.2.13: span split. User picks one source image; we crop it
+// proportionally to each tile's region within the bridge-screen
+// composite and load each crop into its own wallSlot. Lets the user
+// drop e.g. a 5120×1440 panorama onto a 2×2560×1440 span and have
+// each monitor receive its correct half — instead of the previous
+// flow which either letterboxed the image inside one tile or
+// required manually cropping each half before loading.
+//
+// v1.2.13.2: the explicit "Split across span…" wall-tile menu entry
+// was replaced by an inline auto-detect: when a user loads any
+// significantly-oversize image onto a span tile via the existing
+// File / Library / drop flow, _maybeOfferSpanSplit() pops a small
+// modal asking whether to split across the span or keep it inside
+// the single tile (current default). triggerWallSplitSpanPick is
+// kept as a no-arg programmatic entrypoint future callers might
+// want.
+function triggerWallSplitSpanPick(idx) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/bmp,image/gif";
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    if (f) loadWallSlotsSpanSplit(idx, f);
+  });
+  input.click();
+}
+
+// v1.2.13: fit-mode dialog. Resolves to "split" | "single" | "cancel".
+// Used by loadWallSlotFromFile / loadWallSlotFromLibrary when the
+// active tile is part of a multi-tile span AND the source image is
+// significantly larger than the tile (i.e. visibly designed to span
+// across more than one monitor).
+function askWallTileFitMode({ srcW, srcH, tileW, tileH, siblingCount, name,
+                              editorOption }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop on";
+    overlay.style.zIndex = "200";
+    const safeName = escapeHtml(name || "image");
+    // v1.2.13: dynamic action row. Editor-drop path includes an
+    // "Open in editor" button instead of "Just this tile" because
+    // the drop didn't pick a tile; tile-level path keeps the single-
+    // tile option for cropping / letterboxing into the chosen tile.
+    const altBtn = editorOption
+      ? '<button class="btn" data-choice="editor">' +
+          t("wall.fit.editor") + '</button>'
+      : '<button class="btn" data-choice="single">' +
+          t("wall.fit.single") + '</button>';
+    overlay.innerHTML =
+      '<div class="modal">' +
+        '<header><h2>' + t("wall.fit.title") + '</h2></header>' +
+        '<div class="body" style="font-size:13px; line-height:1.5;">' +
+          t("wall.fit.body", {
+            name:  safeName,
+            srcW:  srcW,  srcH:  srcH,
+            tileW: tileW, tileH: tileH,
+            n:     siblingCount,
+          }) +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="btn" data-choice="cancel">' +
+            t("wall.fit.cancel") + '</button>' +
+          altBtn +
+          '<button class="btn btn-primary" data-choice="split">' +
+            t("wall.fit.split", { n: siblingCount }) + '</button>' +
+        '</div>' +
+      '</div>';
+    function finish(c) { overlay.remove(); resolve(c); }
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) finish("cancel");
+    });
+    overlay.querySelectorAll("button[data-choice]").forEach((b) => {
+      b.addEventListener("click", () => finish(b.dataset.choice));
+    });
+    document.body.appendChild(overlay);
+    const primary = overlay.querySelector(".btn-primary");
+    if (primary) try { primary.focus(); } catch (_) {}
+  });
+}
+
+// v1.2.13: pre-load check shared by File + Library load paths.
+// Returns:
+//   "single"  → caller continues the normal single-tile load
+//   "split"   → caller should call loadWallSlotsSpanSplit and bail
+//   "cancel"  → caller should abort (user dismissed)
+// Triggered only when active tile is part of a span (siblings > 1)
+// AND the source image is significantly larger than the tile.
+async function _maybeOfferSpanSplit(idx, img, name) {
+  const here = wallScreens[idx];
+  if (!here || typeof here.bridgeIdx !== "number") return "single";
+  const siblingCount = wallScreens.filter(
+    (s) => s && s.bridgeIdx === here.bridgeIdx
+  ).length;
+  if (siblingCount < 2) return "single";
+  const srcW = img.naturalWidth  || img.width  || 0;
+  const srcH = img.naturalHeight || img.height || 0;
+  const tileW = here.w || 1, tileH = here.h || 1;
+  // "Oversize" = at least 1.5× the tile in either dimension. Anything
+  // smaller fits one tile fine (or smaller, in which case the user
+  // probably WANTS it on one tile only).
+  const oversize = (srcW >= tileW * 1.5) || (srcH >= tileH * 1.5);
+  if (!oversize) return "single";
+  return await askWallTileFitMode({
+    srcW, srcH, tileW, tileH, siblingCount, name,
+  });
+}
+
+async function loadWallSlotsSpanSplit(idx, file) {
+  const here = wallScreens[idx];
+  if (!here || typeof here.bridgeIdx !== "number") {
+    toast(t("toast.decode_failed", { name: file.name }), "bad");
+    return;
+  }
+  // Collect every sibling that belongs to the same bridge screen.
+  // For span-h there are 2 horizontally; for span-v 2 vertically.
+  const siblings = wallScreens
+    .map((s, i) => ({ s, i }))
+    .filter((p) => p.s && p.s.bridgeIdx === here.bridgeIdx);
+  if (siblings.length < 2) {
+    toast(t("toast.decode_failed", { name: file.name }), "bad");
+    return;
+  }
+  let srcImg;
+  try {
+    srcImg = await fileToImage(file);
+  } catch (_) {
+    toast(t("toast.decode_failed", { name: file.name }), "bad");
+    return;
+  }
+  const W = srcImg.naturalWidth || srcImg.width || 1;
+  const H = srcImg.naturalHeight || srcImg.height || 1;
+  for (const { s: tile, i: sibIdx } of siblings) {
+    // Source-side region scales by xOffset / yOffset / slotW / slotH
+    // — the tile's place inside the bridge-resolution composite.
+    const bW = Math.max(1, tile.bridgeW || 1);
+    const bH = Math.max(1, tile.bridgeH || 1);
+    const sx = Math.round((tile.xOffset / bW) * W);
+    const sy = Math.round((tile.yOffset / bH) * H);
+    const sw = Math.max(1, Math.round((tile.slotW / bW) * W));
+    const sh = Math.max(1, Math.round((tile.slotH / bH) * H));
+    // Edit canvas keeps the tile's user-facing w/h (already accounts
+    // for portrait swap upstream in renderWall's wallScreens build).
+    const canvas = document.createElement("canvas");
+    canvas.width  = Math.max(1, tile.w);
+    canvas.height = Math.max(1, tile.h);
+    const ctx = canvas.getContext("2d");
+    if (tile.orientation === "portrait") {
+      // Rotate 90° CW so a landscape sub-region lands portrait-up
+      // on the edit canvas. ctx.rotate origin needs the canvas centre.
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(srcImg, sx, sy, sw, sh,
+                    -canvas.height / 2, -canvas.width / 2,
+                    canvas.height, canvas.width);
+      ctx.restore();
+    } else {
+      ctx.drawImage(srcImg, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    }
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+    const dataUrl = await blobToDataUrl(blob);
+    const img = await fileToImage(blob);
+    wallSlots[sibIdx] = {
+      img,
+      name: (file.name || "split") + " · tile " + (sibIdx + 1),
+      blob, dataUrl, source: "splitspan",
+      origImg: img, origBlob: blob,
+    };
+  }
+  renderWall();
+  toast(t("wall.split_done", { n: siblings.length }), "good");
+}
+
 function triggerWallFilePick(idx) {
   // Throw-away <input type=file> so we don't have to keep one in the
   // DOM per slot. Accepts any image format the browser decodes.
@@ -5262,6 +5587,17 @@ function triggerWallFilePick(idx) {
 async function loadWallSlotFromFile(idx, file) {
   try {
     const img = await fileToImage(file);
+    // v1.2.13: inline oversize-image detection. When this tile is part
+    // of a multi-tile span and the image is visibly span-sized, ask
+    // the user whether to spread it across all sibling tiles instead
+    // of cropping/letterboxing inside this one.
+    const fit = await _maybeOfferSpanSplit(idx, img, file.name);
+    if (fit === "cancel") return;
+    if (fit === "split") {
+      await loadWallSlotsSpanSplit(idx, file);
+      return;
+    }
+    // fit === "single" → fall through to the normal single-tile load.
     // Read once into a data URL so the frame preview can render from
     // the same bytes Apply Wall will eventually upload.
     const dataUrl = await blobToDataUrl(file);
@@ -5290,6 +5626,18 @@ async function loadWallSlotFromLibrary(idx, libFile) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const blob = await r.blob();
     const img = await fileToImage(blob);
+    // v1.2.13: same span-split offer as the file picker path.
+    const fit = await _maybeOfferSpanSplit(idx, img, libFile);
+    if (fit === "cancel") return;
+    if (fit === "split") {
+      // loadWallSlotsSpanSplit expects a File/Blob with a `name`.
+      // libFile is just a string here; pass the blob with the library
+      // file name surfaced through a wrapper.
+      try { Object.defineProperty(blob, "name", { value: libFile }); }
+      catch (_) {}
+      await loadWallSlotsSpanSplit(idx, blob);
+      return;
+    }
     const dataUrl = await blobToDataUrl(blob);
     wallSlots[idx] = {
       img, name: libFile, blob, dataUrl,

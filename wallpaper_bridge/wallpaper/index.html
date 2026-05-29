@@ -1766,8 +1766,23 @@ function _clearVideoBg() {
   bgVideoEl.style.opacity = "0";
   bgVideoEl.style.display = "none";
   try { bgVideoEl.pause(); } catch (_) {}
-  bgVideoEl.removeAttribute("src");
+  // v1.2.13: aggressive teardown to release the decoded-video buffer.
+  // Chromium's HTMLMediaElement holds onto the decoded frame pool well
+  // beyond a `removeAttribute("src")` — the user's report was a video
+  // bg replaced by an image leaving ~hundreds of MB allocated.
+  // Sequence that actually frees the buffer in Chromium / WebView2:
+  //   • pause (above)
+  //   • src = ""   then load() — drops the current source
+  //   • removeAttribute("src") — clears any lingering attr-side state
+  //   • removeAttribute("currentTime") — guards against weird seeks
+  //   • dataset.currentSrc = "" — resets our own duplicate-load guard
+  // The bgVideoEl element itself is reused (replacing it would lose
+  // the CSS rules + the pause-state listeners hooked up at boot).
+  try { bgVideoEl.src = ""; } catch (_) {}
   try { bgVideoEl.load(); } catch (_) {}
+  bgVideoEl.removeAttribute("src");
+  bgVideoEl.removeAttribute("currentTime");
+  bgVideoEl.dataset.currentSrc = "";
 }
 
 function _setImageBg(src) {

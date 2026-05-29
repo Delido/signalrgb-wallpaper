@@ -1021,6 +1021,17 @@
   .lib-tile:hover {
     border-color: #3a6ba8; transform: translateY(-1px);
   }
+  /* v1.2.13: embedded <video> child fills the tile and shows the
+     first decoded frame as a static poster. pointer-events:none so
+     the parent button still owns the click. */
+  .lib-tile .lib-tile-video {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    pointer-events: none;
+    background: #0c0e13;
+  }
   .lib-tile .label {
     position: absolute; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.6);
@@ -1127,7 +1138,8 @@
     0%   { background-position:   0% 50%; }
     100% { background-position: 400% 50%; }
   }
-  .lib-preview-img {
+  .lib-preview-img,
+  .lib-preview-video {
     position: relative;
     display: block;
     width: 100%;
@@ -1388,7 +1400,14 @@
           </div>
         </div>
       </div>
-      <div class="row">
+      <!-- v1.2.13: the legacy "Image path" text input was confusing —
+           users almost never paste a Windows path, the bg image lands
+           via "Choose image…" / Library tile / Builder. Hidden by
+           default; kept in the DOM with display:none so power users
+           who DID rely on its presence can still trigger via a
+           browser extension / dev tools — and so existing JS that
+           reads bg-image keeps working. -->
+      <div class="row" style="display:none;" data-legacy="bg-path">
         <label for="bg-image" data-i18n="bg.path">Image path</label>
         <input type="text" id="bg-image" placeholder="paste a URL or absolute path">
       </div>
@@ -1398,6 +1417,12 @@
         <input type="file" id="bg-file"
                accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
                style="display:none">
+        <!-- v1.2.13: drop-many-files shortcut. Pops Explorer at the
+             library dir so the user can dump a batch of images without
+             clicking "Choose image…" once per file. -->
+        <button type="button" class="btn" id="bg-open-library"
+                style="flex:0 0 auto"
+                data-i18n="bg.open_library">Open library folder</button>
         <a class="btn" href="/builder" target="_blank" style="flex:0 0 auto"
            data-i18n="bg.open_builder">Open Builder…</a>
         <span class="val" id="bg-upload-stat" style="flex:1; text-align:left; padding-left:8px;"></span>
@@ -1957,6 +1982,7 @@ const TRANSLATIONS = {
                               de: "Als {label} dupliziert" },
   "bg.choose":              { en: "Choose image…",        de: "Bild auswählen…" },
   "bg.open_builder":        { en: "Open Builder…",        de: "Builder öffnen…" },
+  "bg.open_library":        { en: "Open library folder",  de: "Bibliotheks-Ordner öffnen" },
   "bg.fit":                 { en: "Fit",                  de: "Anpassen" },
   "bg.fit.cover":           { en: "cover (crop to fill)", de: "cover (auf Bildschirm zuschneiden)" },
   "bg.fit.contain":         { en: "contain (letterbox)",  de: "contain (mit Rand)" },
@@ -2068,6 +2094,27 @@ const TRANSLATIONS = {
   "glow.grid_renderer":     { en: "Grid renderer",        de: "Grid-Renderer" },
   "glow.glass_quality":     { en: "Glass quality",        de: "Glas-Qualität" },
   "glow.frame_rate":        { en: "Frame rate",           de: "Bildrate" },
+  // v1.2.13: Span-mode Library Apply dialog.
+  "bg.library.span.title":  { en: "Apply image to span screen",
+                              de: "Bild auf Span-Screen anwenden" },
+  "bg.library.span.body":   { en: "This screen drives multiple physical " +
+                                    "monitors. Stretching a still image " +
+                                    "across all tiles usually doesn't " +
+                                    "look great — open it in the Builder " +
+                                    "to place <b>{label}</b> on a single " +
+                                    "tile or compose it with other " +
+                                    "images.",
+                              de: "Dieser Screen treibt mehrere physische " +
+                                    "Monitore. Ein Standbild über alle " +
+                                    "Tiles zu spannen sieht meist nicht " +
+                                    "gut aus — im Builder kannst du " +
+                                    "<b>{label}</b> auf eine einzelne " +
+                                    "Kachel legen oder mit weiteren " +
+                                    "Bildern komponieren." },
+  "bg.library.span.cancel": { en: "Cancel", de: "Abbrechen" },
+  "bg.library.span.stretch":{ en: "Stretch across", de: "Beide spannen" },
+  "bg.library.span.builder":{ en: "Open in Builder…",
+                              de: "Im Builder öffnen…" },
   "glow.stripes_blur":      { en: "Stripes blur",         de: "Streifen-Unschärfe" },
 
   "effects.ambient":        { en: "Ambient preset",       de: "Umgebungseffekt" },
@@ -2182,6 +2229,34 @@ function setLanguage(lang) {
   _lang = lang;
   applyI18n();
   renderAll();   // refresh dynamic strings too
+  // v1.2.13: re-derive the WS-state header indicator (els.conn).
+  // applyI18n only touches data-i18n elements, but the connected
+  // state has a {n} placeholder we shoved into textContent directly
+  // → applyI18n would either skip it (no data-i18n) or re-render
+  // the literal "{n}" placeholder. _refreshConnText reads the live
+  // WS readyState and picks the right key + parameters.
+  try { _refreshConnText(); } catch (_) {}
+}
+
+function _refreshConnText() {
+  if (!els || !els.conn) return;
+  // readyState constants: 0 CONNECTING, 1 OPEN, 2 CLOSING, 3 CLOSED.
+  // We treat anything that isn't OPEN as "connecting" so the header
+  // doesn't whipsaw during a brief reconnect.
+  const state = (ws && typeof ws.readyState === "number") ? ws.readyState : 3;
+  if (state === 1) {
+    els.conn.removeAttribute("data-i18n");
+    els.conn.textContent = t("conn.connected", { n: activeScreen + 1 });
+    els.conn.className = "conn ok";
+  } else if (state === 3) {
+    els.conn.setAttribute("data-i18n", "conn.disconnected");
+    els.conn.textContent = t("conn.disconnected");
+    els.conn.className = "conn bad";
+  } else {
+    els.conn.setAttribute("data-i18n", "conn.connecting");
+    els.conn.textContent = t("conn.connecting");
+    els.conn.className = "conn bad";
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2745,6 +2820,7 @@ const els = {
   tabs:           $("tabs"),
   bgImage:        $("bg-image"),
   bgFile:         $("bg-file"),
+  bgOpenLibrary:  $("bg-open-library"),
   bgUploadStat:   $("bg-upload-stat"),
   bgFit:          $("bg-fit"),
   bgTileScale:    $("bg-tile-scale"),
@@ -3211,7 +3287,34 @@ function renderLibraryStrip() {
     btn.title = item.label || item.id;
     btn.dataset.file = item.file;
     btn.draggable = true;
-    btn.style.backgroundImage = "url(/library/" + encodeURIComponent(item.thumb || item.file) + ")";
+    // v1.2.13: tile rendering for video items. CSS background-image
+    // can't decode video; without a poster the tile shows up as a
+    // blank rectangle. Two fallback layers in order of preference:
+    //   1. catalogue carries a .thumb.png companion (uploaded via
+    //      the extractVideoPoster() path on the bg-file picker) →
+    //      use it as a static CSS background, same as for images.
+    //   2. no companion poster (older video uploads, or extraction
+    //      failed at upload time) → embed a <video preload="metadata">
+    //      element whose first frame the browser renders as a still
+    //      poster. Per-tile decode is cheap because the video is
+    //      never played (no autoplay, no controls).
+    // For pure-image items the original CSS background path is kept.
+    const _libVideoExt = /\.(mp4|webm|mov|m4v|mkv)$/i;
+    const itemIsVideo = _libVideoExt.test(item.file || "");
+    const hasPosterCompanion = item.thumb && item.thumb !== item.file
+      && !_libVideoExt.test(item.thumb);
+    if (itemIsVideo && !hasPosterCompanion) {
+      const v = document.createElement("video");
+      v.className = "lib-tile-video";
+      v.src = "/library/" + encodeURIComponent(item.file);
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = "metadata";
+      v.disablePictureInPicture = true;
+      btn.appendChild(v);
+    } else {
+      btn.style.backgroundImage = "url(/library/" + encodeURIComponent(item.thumb || item.file) + ")";
+    }
     const lbl = document.createElement("span");
     lbl.className = "label";
     lbl.textContent = item.label || item.id;
@@ -3304,9 +3407,15 @@ function ensureLibraryPreviewPopup() {
   if (_libPreviewEl) return _libPreviewEl;
   const el = document.createElement("div");
   el.className = "lib-preview-popup";
+  // v1.2.13: ship both an <img> and a <video> in the template; the
+  // showLibraryPreview() switch picks one based on the item's file
+  // type so the popup actually previews videos instead of falling
+  // back to a broken-image icon.
   el.innerHTML =
     '<div class="lib-preview-glow"></div>' +
     '<img class="lib-preview-img" alt="">' +
+    '<video class="lib-preview-video" muted playsinline loop autoplay ' +
+           'preload="metadata" disablepictureinpicture></video>' +
     '<div class="lib-preview-bar">' +
       '<span class="lib-preview-label"></span>' +
       '<button class="lib-preview-apply" type="button"></button>' +
@@ -3338,6 +3447,14 @@ function hideLibraryPreview() {
   if (_libPreviewEl) {
     _libPreviewEl.classList.remove("show");
     _libPreviewEl.classList.remove("pinned");
+    // v1.2.13: stop the video element if we were previewing a clip,
+    // else the popup keeps decoding in a hidden state and burns GPU.
+    const v = _libPreviewEl.querySelector(".lib-preview-video");
+    if (v) {
+      try { v.pause(); } catch (_) {}
+      v.removeAttribute("src");
+      try { v.load(); } catch (_) {}
+    }
   }
   _libPreviewItem = null;
   _libPreviewPinned = false;
@@ -3351,8 +3468,29 @@ function showLibraryPreview(item, anchorRect, pinned) {
   _libPreviewItem = item;
   _libPreviewPinned = !!pinned;
   el.classList.toggle("pinned", _libPreviewPinned);
-  el.querySelector(".lib-preview-img").src =
-    "/library/" + encodeURIComponent(item.file);
+  // v1.2.13: route videos to the <video> child so the popup can
+  // play / show a real frame; images keep using the <img>. We also
+  // pause + clear the inactive element so a previously-opened video
+  // doesn't keep decoding in the background when the user hovers
+  // an image next.
+  const imgEl = el.querySelector(".lib-preview-img");
+  const vidEl = el.querySelector(".lib-preview-video");
+  const isVideo = /\.(mp4|webm|mov|m4v|mkv)$/i.test(item.file || "");
+  if (isVideo) {
+    imgEl.style.display = "none";
+    imgEl.removeAttribute("src");
+    vidEl.style.display = "";
+    vidEl.src = "/library/" + encodeURIComponent(item.file);
+    try { vidEl.load(); } catch (_) {}
+    try { vidEl.play().catch(() => {}); } catch (_) {}
+  } else {
+    vidEl.style.display = "none";
+    try { vidEl.pause(); } catch (_) {}
+    vidEl.removeAttribute("src");
+    try { vidEl.load(); } catch (_) {}
+    imgEl.style.display = "";
+    imgEl.src = "/library/" + encodeURIComponent(item.file);
+  }
   el.querySelector(".lib-preview-label").textContent = item.label || item.id;
   el.querySelector(".lib-preview-apply").textContent = t("bg.library.apply");
 
@@ -3601,6 +3739,60 @@ if (_libUpload) {
   });
 }
 
+// v1.2.13: dialog the user gets when they hit Apply on a STILL-image
+// library item while the active screen is in a span layout (one
+// bridge screen driving two physical monitors). The naive "set
+// bgImage" path stretches the single image across the whole
+// composite, which usually isn't what the user wants. Videos skip
+// this entirely (see the call site) because the Builder's per-tile
+// composition is image-only — there's nothing useful it could do
+// with an MP4. Resolves to:
+//   "stretch" → run the normal applyLibraryItem path (set as the
+//               screen's bgImage, span-stretch follows from there)
+//   "builder" → open /builder?screen=N&library=<file> in a new tab
+//               so the user can compose per-tile via the Monitor
+//               Wall workflow that already supports library imports
+//   "cancel"  → close, do nothing
+function askSpanLibraryChoice(item) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop on";
+    overlay.style.zIndex = "200";
+    // v1.2.13: routed through TRANSLATIONS so EN locales see English.
+    const label = escapeHtml(item.label || item.id);
+    overlay.innerHTML =
+      '<div class="modal">' +
+        '<header><h2>' + t("bg.library.span.title") + '</h2></header>' +
+        '<div class="body" style="font-size:13px; line-height:1.5;">' +
+          t("bg.library.span.body", { label: label }) +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="btn" data-choice="cancel">' +
+            t("bg.library.span.cancel") + '</button>' +
+          '<button class="btn" data-choice="stretch">' +
+            t("bg.library.span.stretch") + '</button>' +
+          '<button class="btn btn-primary" data-choice="builder">' +
+            t("bg.library.span.builder") + '</button>' +
+        '</div>' +
+      '</div>';
+    function finish(choice) {
+      overlay.remove();
+      resolve(choice);
+    }
+    overlay.addEventListener("click", (e) => {
+      // Click outside the modal card = cancel
+      if (e.target === overlay) finish("cancel");
+    });
+    overlay.querySelectorAll("button[data-choice]").forEach((b) => {
+      b.addEventListener("click", () => finish(b.dataset.choice));
+    });
+    document.body.appendChild(overlay);
+    // Focus the highlighted default so Enter confirms it.
+    const primary = overlay.querySelector(".btn-primary");
+    if (primary) try { primary.focus(); } catch (_) {}
+  });
+}
+
 async function applyLibraryItem(item) {
   // Pull the full-res PNG and POST it to the bridge as the screen's
   // background. Same endpoint Builder uses; bridge then echoes the new
@@ -3611,6 +3803,33 @@ async function applyLibraryItem(item) {
   // user changes their mind. The bridge deletes the previous screen-N-*
   // file on each apply, so the snapshot must happen *before* the new
   // POST — there is no other way to recover the bytes afterwards.
+
+  // v1.2.13: span-mode UX. If this screen drives multiple physical
+  // monitors via a span, ask the user how to apply rather than
+  // silently stretching a single image across both. Skipped for:
+  //   • single-mode screens (the overwhelming majority of users)
+  //   • video items, because the Builder's per-tile composition is
+  //     a still-image-only workflow — there's nothing useful it
+  //     could do with an MP4, and span-stretching a video usually
+  //     looks fine because the motion masks distortion. Videos fall
+  //     straight through to the normal apply path.
+  const monitorMode = (settings && settings.monitorSetup
+    && settings.monitorSetup.mode) || "single";
+  const itemIsVideo = /\.(mp4|webm|mov|m4v|mkv)$/i.test(item.file || "");
+  if (monitorMode !== "single" && !itemIsVideo) {
+    const choice = await askSpanLibraryChoice(item);
+    if (choice === "cancel") return;
+    if (choice === "builder") {
+      window.open(
+        "/builder?screen=" + activeScreen
+          + "&library=" + encodeURIComponent(item.file),
+        "_blank"
+      );
+      return;
+    }
+    // "stretch" → fall through to the normal apply path.
+  }
+
   try {
     let undoBlob = null;
     const prevPath = settings.bgImage || "";
@@ -3705,6 +3924,14 @@ const SECTION_NAV_ENTRIES = [
     icon: '<path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/>' },
 ];
 
+// v1.2.13: shared timestamp (perf-clock ms). Click handler bumps it
+// to `now + 700ms`; the IntersectionObserver below skips updates
+// while we're inside that window — keeps the click's explicit active
+// section highlighted across the smooth-scroll animation, especially
+// for short cards at the bottom of the page (Profiles + Backup) that
+// otherwise never reach the centre-band the observer keys off.
+let _navHighlightLockUntil = 0;
+
 function buildSectionNav() {
   const nav = document.getElementById("section-nav");
   if (!nav) return;
@@ -3726,6 +3953,21 @@ function buildSectionNav() {
       // the section's header lands just below them.
       const y = card.getBoundingClientRect().top + window.scrollY - 100;
       window.scrollTo({ top: y, behavior: "smooth" });
+      // v1.2.13: explicit active-state lock. The IntersectionObserver
+      // below uses `rootMargin: -30% 0 -50% 0` so a card has to land
+      // in the middle ~20 % of the viewport to count as active.
+      // Short cards at the bottom of the page (Profiles + Backup with
+      // a wide-monitor / minimal content) may never reach that band —
+      // smooth-scroll bottoms out before the card's body crosses the
+      // -30 % line. Without this lock the rail highlight would
+      // drift back to whatever section was last in the centre.
+      nav.querySelectorAll(".nav-btn").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+      });
+      // Suppress the observer for 700 ms — covers the smooth-scroll
+      // animation. After that the observer takes over again so
+      // manual scrolling still works.
+      _navHighlightLockUntil = performance.now() + 700;
     });
     nav.appendChild(btn);
   }
@@ -3733,6 +3975,10 @@ function buildSectionNav() {
   // of each card (not the head) so a barely-visible header doesn't
   // mark the section "active" while the user is reading the next one.
   const observer = new IntersectionObserver((entries) => {
+    // v1.2.13: respect the click-handler's explicit active-state lock
+    // (cards near the bottom of the page never reach the centre band
+    // → observer would re-highlight the wrong section).
+    if (performance.now() < _navHighlightLockUntil) return;
     // Pick the entry with the highest intersection ratio that's
     // actually intersecting. Multiple sections can fire at once on a
     // fast scroll, so we just refresh classes from the full set.
@@ -4078,7 +4324,15 @@ function renderMonitorSetupPopover() {
       shape: isPortrait ? t("setup.orient.portrait") : t("setup.orient.landscape"),
     });
     btn.appendChild(lbl);
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (ev) => {
+      // v1.2.13: stop bubbling. The document-level click-outside-to-
+      // close handler later down checks `popoverEl.contains(e.target)`,
+      // but our renderMonitorSetupPopover() below rebuilds rotateBox's
+      // innerHTML — which DETACHES the very <button> the click landed
+      // on. By the time the document handler runs, the detached btn
+      // is no longer inside popoverEl, so the popover closes
+      // unintentionally. stopPropagation keeps the click contained.
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       const cur = (settings && settings.monitorSetup) || {};
       const ors = Array.isArray(cur.orientations) ? cur.orientations.slice() : [];
       while (ors.length < 2) ors.push("landscape");
@@ -4231,17 +4485,35 @@ function connect() {
   // doesn't pad the "connected pages" count.
   const url = "ws://" + location.hostname + ":" + (location.port || 17320) +
               "/?screen=" + activeScreen + "&role=configurator";
+  // v1.2.13: keep `data-i18n` in sync with the dynamic textContent the
+  // onopen / onclose handlers write. Before this fix the element kept
+  // its initial `data-i18n="conn.connecting"` baked into the HTML;
+  // when the bridge's settings push arrived and triggered
+  // setLanguage() → applyI18n(), the text snapped back to "verbinde…"
+  // even though the WS had already opened. Symptom: single-monitor
+  // users (no tab-click → no switchScreen → no reconnect) saw
+  // "verbinde…" forever; multi-monitor users got refreshed because
+  // each tab-click reconnect re-ran onopen *after* the language was
+  // already in place.
   els.conn.textContent = t("conn.connecting");
+  els.conn.setAttribute("data-i18n", "conn.connecting");
   els.conn.className = "conn bad";
   try { ws = new WebSocket(url); }
-  catch (e) { els.conn.textContent = "ws error"; setTimeout(connect, 1500); return; }
+  catch (e) { els.conn.textContent = "ws error"; els.conn.removeAttribute("data-i18n"); setTimeout(connect, 1500); return; }
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
+    // conn.connected has a {n} placeholder — applyI18n() would
+    // re-render the placeholder as a literal. Drop data-i18n so the
+    // dynamic textContent we set here survives the next language
+    // switch; the next disconnect / reconnect re-arms the static
+    // "conn.connecting" key.
+    els.conn.removeAttribute("data-i18n");
     els.conn.textContent = t("conn.connected", { n: activeScreen + 1 });
     els.conn.className = "conn ok";
   };
   ws.onerror = () => {};
   ws.onclose = () => {
+    els.conn.setAttribute("data-i18n", "conn.disconnected");
     els.conn.textContent = t("conn.disconnected");
     els.conn.className = "conn bad";
     setTimeout(() => { if (ws === null || ws.readyState === 3) connect(); }, 1500);
@@ -4687,6 +4959,84 @@ setInterval(() => {
 // existing /screen/N/background endpoint (same one the builder uses for
 // "Apply to screen"). Bridge writes it to disk, updates bgImage, and pushes
 // the new settings — the bgImage field re-fills automatically on the echo.
+// v1.2.13: extract a still-frame poster from a video file for the
+// Library tile. CSS `background-image: url(*.mp4)` doesn't render
+// in any browser, so without a poster a video library entry shows
+// up as a blank tile. Runs entirely client-side via <video> + canvas:
+//   1. mute + preload-metadata so the video doesn't try to play audio
+//   2. wait for loadedmetadata so videoWidth/Height are known
+//   3. seek to ~0.5 s (or 10 % of duration, whichever is smaller — for
+//      very short clips frame 0 + a tiny offset gives the visually
+//      best result; some encoders show a black opening frame)
+//   4. on `seeked` draw to a canvas downsampled to 480 px wide max
+//   5. canvas.toBlob -> PNG
+// Resolves to the PNG blob or rejects on any failure / 8 s timeout.
+async function extractVideoPoster(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    let done = false;
+    const finish = (resultOrErr) => {
+      if (done) return;
+      done = true;
+      try { URL.revokeObjectURL(url); } catch (_) {}
+      if (resultOrErr instanceof Error) reject(resultOrErr);
+      else resolve(resultOrErr);
+    };
+    const timer = setTimeout(
+      () => finish(new Error("poster extraction timed out")),
+      8000
+    );
+    video.addEventListener("error", () => {
+      clearTimeout(timer);
+      finish(new Error("video load error"));
+    });
+    video.addEventListener("loadedmetadata", () => {
+      const target = Math.min(0.5, (video.duration || 1) * 0.1);
+      try { video.currentTime = target; }
+      catch (_) {
+        clearTimeout(timer);
+        finish(new Error("seek failed"));
+      }
+    });
+    video.addEventListener("seeked", () => {
+      try {
+        const w = video.videoWidth, h = video.videoHeight;
+        if (!w || !h) throw new Error("no video dimensions");
+        const maxW = 480;
+        const scale = Math.min(1, maxW / w);
+        const canvas = document.createElement("canvas");
+        canvas.width  = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          clearTimeout(timer);
+          if (blob) finish(blob);
+          else finish(new Error("canvas.toBlob returned null"));
+        }, "image/png");
+      } catch (err) {
+        clearTimeout(timer);
+        finish(err);
+      }
+    }, { once: true });
+    video.src = url;
+  });
+}
+
+// v1.2.13: route the Open library folder button through a system-
+// action so the bridge pops Explorer at %LOCALAPPDATA%\SignalRGB
+// Wallpaper\library. Lets the user drop multiple backgrounds at
+// once instead of going through "Choose image…" one file at a time.
+if (els.bgOpenLibrary) {
+  els.bgOpenLibrary.addEventListener("click", () => {
+    sendCmd({ type: "system-action", action: "open-library-folder" });
+  });
+}
+
 els.bgFile.addEventListener("change", async (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
@@ -4726,7 +5076,43 @@ els.bgFile.addEventListener("change", async (e) => {
         }
       );
       if (libResp.ok) {
+        // v1.2.13: for video uploads, follow up with a poster
+        // thumbnail so the Library tile renders something instead of
+        // a broken `background-image: url(*.mp4)`. The extraction +
+        // upload run AFTER the main library entry exists so the
+        // bridge's _library_rebuild_catalogue links them on the next
+        // /library/list call. Best-effort — a failure here doesn't
+        // affect the video being usable; the tile just stays blank.
+        let postedThumb = false;
+        if (isVideo) {
+          try {
+            const libJson = await libResp.json();
+            const slug = libJson && libJson.id;
+            if (slug) {
+              const posterBlob = await extractVideoPoster(f);
+              const thumbResp = await fetch(
+                "/library/thumb?name=" + encodeURIComponent(slug),
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "image/png" },
+                  body: posterBlob,
+                }
+              );
+              postedThumb = thumbResp.ok;
+            }
+          } catch (thumbErr) {
+            console.warn("[library video poster]", thumbErr);
+          }
+        }
+        // Single refreshLibrary call regardless of the thumb path so
+        // the new catalogue (with or without poster) lands once.
         await refreshLibrary();
+        if (isVideo && !postedThumb) {
+          // Surface the missing-poster case in the upload status line
+          // so the user knows the tile will stay blank; doesn't fail
+          // the whole upload.
+          els.bgUploadStat.textContent += " · (poster skipped)";
+        }
       }
     } catch (libErr) {
       // Library auto-add is best-effort; if it fails the user still
@@ -5703,13 +6089,32 @@ function _buildSensorOptions(payload, currentValue) {
     options.push({ value: "", label: placeholder });
   } else {
     options.push({ value: "", label: "(no sensor — leave widget blank)" });
-    for (const it of items) {
-      const tail = it.path.split(" / ").pop();
+    // v1.2.13: group sensors by their LHM tree position so the
+    // dropdown isn't an unfilterable flat list. LHM's path shape is
+    // "<host> / <device> / <category> / <leaf>" — we strip the host
+    // (just noise on a single-machine setup), join device + category
+    // as the <optgroup> label, and use the leaf as the option label.
+    // Items get sorted by group label first, leaf second, so related
+    // sensors land next to each other regardless of the order LHM
+    // happens to enumerate them.
+    const sorted = items.slice().sort((a, b) => {
+      const pa = String(a.path || ""), pb = String(b.path || "");
+      return pa.localeCompare(pb);
+    });
+    for (const it of sorted) {
+      const segments = String(it.path || "").split(" / ");
+      const leaf = segments.pop() || it.path;
+      // Drop the leading "host" segment when there's at least 3
+      // segments left over — single-host setups want shorter labels.
+      const groupSegs = segments.length > 2
+        ? segments.slice(1)
+        : segments;
+      const group = groupSegs.length ? groupSegs.join(" / ") : "Other";
       const unit = it.unit ? " " + it.unit : "";
       const sample = (typeof it.value === "number")
         ? " · " + it.value.toFixed(1) + unit
         : "";
-      options.push({ value: it.path, label: tail + sample + " — " + it.path });
+      options.push({ value: it.path, label: leaf + sample, group });
     }
   }
   if (currentValue &&
@@ -5748,11 +6153,28 @@ function refreshHardwareSensorSchema(def, currentValue) {
       if (!sel) return;
       const prevValue = sel.value;
       sel.innerHTML = "";
+      // v1.2.13: same optgroup logic the modal renderer uses (see
+      // openOptionsModal "select" branch). Keeps the categorised
+      // tree on the late-bound refresh.
+      let curGroup = null, curGroupEl = null;
       for (const o of opts) {
         const opt = document.createElement("option");
         opt.value = String(o.value);
         opt.textContent = o.label;
-        sel.appendChild(opt);
+        const g = o.group || null;
+        if (g) {
+          if (g !== curGroup) {
+            curGroupEl = document.createElement("optgroup");
+            curGroupEl.label = g;
+            sel.appendChild(curGroupEl);
+            curGroup = g;
+          }
+          curGroupEl.appendChild(opt);
+        } else {
+          sel.appendChild(opt);
+          curGroup = null;
+          curGroupEl = null;
+        }
       }
       // Preserve the dropdown's currently-shown selection across the
       // refresh. If the saved value re-appears in the new options
@@ -5920,11 +6342,35 @@ function openOptionsModal(widget) {
       let input;
       if (field.type === "select") {
         input = document.createElement("select");
+        // v1.2.13: opt-in <optgroup> support. If a field option carries
+        // a `group` property we batch consecutive same-group options
+        // into one <optgroup>. Options without `group` go straight onto
+        // the <select> root. Used by the hardware-sensor picker so a
+        // 300-item flat dropdown becomes a categorised tree.
+        let currentGroup = null;
+        let currentGroupEl = null;
         for (const opt of field.options) {
           const o = document.createElement("option");
-          if (typeof opt === "string") { o.value = opt; o.textContent = opt; }
-          else { o.value = String(opt.value); o.textContent = opt.label; }
-          input.appendChild(o);
+          let group = null;
+          if (typeof opt === "string") {
+            o.value = opt; o.textContent = opt;
+          } else {
+            o.value = String(opt.value); o.textContent = opt.label;
+            group = opt.group || null;
+          }
+          if (group) {
+            if (group !== currentGroup) {
+              currentGroupEl = document.createElement("optgroup");
+              currentGroupEl.label = group;
+              input.appendChild(currentGroupEl);
+              currentGroup = group;
+            }
+            currentGroupEl.appendChild(o);
+          } else {
+            input.appendChild(o);
+            currentGroup = null;
+            currentGroupEl = null;
+          }
         }
         input.value = String(modalState.options[field.key] ?? "");
         input.addEventListener("change", () => {

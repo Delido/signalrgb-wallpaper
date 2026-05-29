@@ -75,6 +75,68 @@ except ImportError:
     _HAS_PSUTIL = False
 
 
+def _setup_persistent_logging() -> None:
+    """v1.2.13: route `print()` to a rotating log file in
+    %LOCALAPPDATA%\\SignalRGBWallpaper\\logs so a `--noconsole`
+    bundled bridge has a paper trail. Previously stdout/stderr were
+    discarded by PyInstaller's `--noconsole` and the diagnostic
+    export only captured snapshot state — when a user reported "the
+    bridge died silently" there was nothing to read. Now every
+    print() (and stderr write) lands in `bridge.log` with a single
+    1 MiB ringbuffer + 3 backups (4 MiB total disk cap), and the
+    diagnostics export folds it in.
+
+    Best-effort: if the dir can't be created or the file can't be
+    opened (permissions, disk full) we just keep the original
+    sys.stdout / sys.stderr so the rest of the bridge still runs."""
+    try:
+        log_dir = Path(os.environ.get("LOCALAPPDATA",
+                                      str(Path.home() / "AppData" / "Local"))) \
+                  / "SignalRGBWallpaper" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "bridge.log"
+        from logging.handlers import RotatingFileHandler
+        handler = RotatingFileHandler(
+            log_path, maxBytes=1 * 1024 * 1024, backupCount=3,
+            encoding="utf-8", delay=True,
+        )
+        # Stream-like adapter so we can hand it to sys.stdout /
+        # sys.stderr in place. Each print() lands as one record;
+        # the handler does the rollover.
+        class _LogStream:
+            def __init__(self, h, level_tag):
+                self._h = h
+                self._tag = level_tag
+                self._buf = ""
+            def write(self, s):
+                if not s: return 0
+                self._buf += s
+                while "\n" in self._buf:
+                    line, self._buf = self._buf.split("\n", 1)
+                    if line.strip():
+                        import logging as _lg
+                        rec = _lg.LogRecord(
+                            name="bridge", level=_lg.INFO, pathname="",
+                            lineno=0, msg=f"[{self._tag}] {line}",
+                            args=None, exc_info=None,
+                        )
+                        try: self._h.emit(rec)
+                        except Exception: pass
+                return len(s)
+            def flush(self):
+                try: self._h.flush()
+                except Exception: pass
+            def isatty(self): return False
+        sys.stdout = _LogStream(handler, "out")
+        sys.stderr = _LogStream(handler, "err")
+    except Exception:
+        # Logging is a nice-to-have; if it fails we don't want to
+        # take the bridge down with it.
+        pass
+
+_setup_persistent_logging()
+
+
 def _resource_path(rel: str) -> Path:
     """Resolve a path that works both in dev runs and PyInstaller --onefile
     bundles. PyInstaller extracts bundled --add-data files into a temp dir
@@ -568,7 +630,24 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.2.12-beta"
+APP_VERSION = "1.3.0"
+
+# v1.2.13: WS protocol version. Sent on every settings push so a
+# wallpaper page (or Configurator tab) loaded from an older bundle
+# can detect a breaking change before it dispatches a malformed
+# `widgets-set` / `quick-look-apply` etc. Bump when an existing
+# message TYPE changes shape; new messages alone don't need a bump
+# (the bridge drops unknown types silently). The version-mismatch
+# banner v1.2.12 added is the user-visible companion.
+WS_PROTOCOL_VERSION = 2
+
+# v1.2.13: bumped CONFIG_VERSION (still defined below at module
+# scope, where the persistence code lives) is the canonical
+# config-schema marker — see _migrate_config() near load_config()
+# for the actual migration steps. This comment-only constant is
+# kept as documentation: any rename / shape change to an existing
+# key requires bumping CONFIG_VERSION and adding a migration
+# branch, not just a new setdefault().
 
 # Diagnostic kill-switch retained from v1.2.9. When False the entire
 # NowPlayingPoller / SMTC code path is removed at startup (no winrt
@@ -589,6 +668,55 @@ UDP_HOST = "127.0.0.1"
 UDP_PORT = 17320
 WS_HOST  = "127.0.0.1"
 WS_PORT  = 17320
+
+# v1.2.13: lock CORS / WS-Origin to the bridge's own loopback origins.
+# Pre-v1.2.13 every endpoint returned `Access-Control-Allow-Origin: *`
+# and the WS handshake accepted any Origin. That meant any web page
+# the user happened to visit could `fetch("http://127.0.0.1:17320/...")`
+# from the background and mutate the wallpaper / settings / library —
+# a real one-click-attack surface even though the bridge itself only
+# binds to 127.0.0.1. Trust is now per-origin: the Configurator
+# served by the bridge (port-bound), the Builder served by the bridge,
+# the live-preview iframe (same origin), the Lively / WE WebView2
+# `null` origin (file:// pages have an opaque null Origin), and
+# explicitly nothing else.
+_ALLOWED_HTTP_ORIGINS = frozenset({
+    f"http://{WS_HOST}:{WS_PORT}",
+    f"http://127.0.0.1:{WS_PORT}",
+    f"http://localhost:{WS_PORT}",
+    "null",   # file:// + the WebView2 sandbox
+})
+def _cors_origin_value(origin: bytes | str | None) -> str:
+    """Echo back the request's Origin header if it's whitelisted, else
+    an empty string (browsers treat that as 'no Allow-Origin', and the
+    request is blocked). We deliberately do NOT default to '*' on
+    unknown origins.
+
+    The explicit allowlist (_ALLOWED_HTTP_ORIGINS) covers the bridge's
+    own loopback URL + `null` for file://-style WebView2 pages. On top
+    of that we also accept any host whose name is `127.0.0.1`,
+    `localhost`, or a `*.localhost` subdomain — both **Lively** and
+    **Wallpaper Engine** serve their WebView2 wallpaper pages from
+    a random-hex `<id>.localhost` HTTPS origin
+    (e.g. `https://bbeebe4f83f8bc83.localhost`). RFC 6761 reserves
+    `.localhost` for loopback, so a remote site can't impersonate
+    it — browsers resolve `.localhost` to 127.0.0.1 directly."""
+    if not origin:
+        return ""
+    if isinstance(origin, bytes):
+        try: origin = origin.decode("latin-1")
+        except Exception: return ""
+    origin = origin.strip()
+    if origin in _ALLOWED_HTTP_ORIGINS:
+        return origin
+    try:
+        parsed = urllib.parse.urlparse(origin)
+        host = (parsed.hostname or "").lower()
+        if host == "127.0.0.1" or host == "localhost" or host.endswith(".localhost"):
+            return origin
+    except Exception:
+        pass
+    return ""
 
 # Max payload size accepted on POST /screen/<N>/background. Generous (50 MB)
 # but bounded — the builder caps output well below this in practice.
@@ -1389,6 +1517,30 @@ def tr(key: str, **kwargs) -> str:
     return text
 
 
+def _migrate_config(cfg: dict) -> dict:
+    """Apply structural migrations to a loaded config.json before the
+    generic `setdefault` backfill runs in load_config(). One branch per
+    `from_version → to_version`; each branch should be idempotent so
+    re-running on an already-migrated config is a no-op.
+
+    v1.2.13 — initial scaffold. Empty for now (every shape change so
+    far has been additive enough that the `setdefault` backfill +
+    DEFAULT_SCREEN_SETTINGS merge in load_config() covered it). Add a
+    branch the next time a key gets renamed or its inner shape
+    changes — bump CONFIG_VERSION at the same time."""
+    try:
+        cur = int(cfg.get("version") or 0)
+    except (TypeError, ValueError):
+        cur = 0
+    if cur >= CONFIG_VERSION:
+        return cfg
+    # Stamp the running version so a subsequent save_config records
+    # the migrated state. Branches below would update `cur` as they
+    # apply each step.
+    cfg["version"] = CONFIG_VERSION
+    return cfg
+
+
 def load_config() -> dict:
     p = config_path()
     if not p.exists():
@@ -1403,6 +1555,9 @@ def load_config() -> dict:
         cfg = default_config()
         save_config(cfg)
         return cfg
+    # v1.2.13: run targeted migrations BEFORE the generic setdefault
+    # backfill below. Backfill assumes shape; migrations fix shape.
+    cfg = _migrate_config(cfg)
     # Migrate / backfill so older configs gain new fields without erroring.
     cfg.setdefault("version", CONFIG_VERSION)
     cfg.setdefault("screenCount", 1)
@@ -1477,6 +1632,24 @@ def parse_http_headers(raw: bytes) -> dict:
             k, _, v = line.partition(b":")
             headers[k.strip().lower()] = v.strip()
     return headers
+
+
+def _acao(headers=None) -> str:
+    """Resolve the Access-Control-Allow-Origin header value for an
+    outgoing response. v1.2.13 hardening: the previous `*` default
+    let any random web page the user visited probe / mutate the
+    bridge in the background. We now only echo back an Origin that
+    appears in `_ALLOWED_HTTP_ORIGINS`; the bridge's own loopback
+    URL is the safe default when the caller has no headers in hand
+    (background pushes, internally-generated responses)."""
+    if headers is not None:
+        try:
+            allowed = _cors_origin_value(headers.get(b"origin"))
+            if allowed:
+                return allowed
+        except Exception:
+            pass
+    return f"http://{WS_HOST}:{WS_PORT}"
 
 
 def make_handshake(request: bytes) -> bytes | None:
@@ -1572,7 +1745,7 @@ async def read_client_text_frame(reader) -> str | None:
 # HTTP image proxy
 # ============================================================================
 
-def http_error(writer, code: int, message: str):
+def http_error(writer, code: int, message: str, *, request_headers=None):
     body = message.encode("utf-8")
     status = {400: "Bad Request", 403: "Forbidden", 404: "Not Found",
               415: "Unsupported Media Type", 500: "Server Error"}.get(code, "Error")
@@ -1580,13 +1753,13 @@ def http_error(writer, code: int, message: str):
         f"HTTP/1.1 {code} {status}\r\n"
         f"Content-Type: text/plain; charset=utf-8\r\n"
         f"Content-Length: {len(body)}\r\n"
-        f"Access-Control-Allow-Origin: *\r\n"
+        f"Access-Control-Allow-Origin: {_acao(request_headers)}\r\n"
         f"Connection: close\r\n\r\n"
     ).encode()
     writer.write(head + body)
 
 
-async def http_serve_image(writer, query: str, range_hdr: str = ""):
+async def http_serve_image(writer, query: str, range_hdr: str = "", *, request_headers=None):
     """Serve an image or video file by absolute path.
 
     v1.2.6 rewrite:
@@ -1640,7 +1813,7 @@ async def http_serve_image(writer, query: str, range_hdr: str = ""):
                 head = (
                     f"HTTP/1.1 416 Range Not Satisfiable\r\n"
                     f"Content-Range: bytes */{size}\r\n"
-                    f"Access-Control-Allow-Origin: *\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(request_headers)}\r\n"
                     f"Connection: close\r\n\r\n"
                 ).encode()
                 writer.write(head)
@@ -1661,7 +1834,7 @@ async def http_serve_image(writer, query: str, range_hdr: str = ""):
         f"Content-Length: {length}",
         "Accept-Ranges: bytes",
         f"Cache-Control: {cache}",
-        "Access-Control-Allow-Origin: *",
+        f"Access-Control-Allow-Origin: {_acao(request_headers)}",
         "Connection: close",
     ]
     if partial:
@@ -1819,6 +1992,7 @@ class Broadcaster:
                 "screenCount": int(self.get_screen_count()),
                 "profiles": self._get_profiles_for_push(),
                 "bridge": self.get_bridge_state(),
+                "wsProtocolVersion": WS_PROTOCOL_VERSION,
             })))
         except Exception as e:
             print(f"[ws] initial settings push failed: {e}")
@@ -1996,7 +2170,8 @@ class Broadcaster:
                           "data": settings, "language": _CURRENT_LANG,
                           "screenCount": int(self.get_screen_count()),
                           "profiles": self._get_profiles_for_push(),
-                          "bridge": self.get_bridge_state()})
+                          "bridge": self.get_bridge_state(),
+                          "wsProtocolVersion": WS_PROTOCOL_VERSION})
         frame = encode_text_frame(msg)
         dead = []
         for w in clients:
@@ -2083,7 +2258,7 @@ class Broadcaster:
             query = target.split("?", 1)[1] if "?" in target else ""
             range_hdr = headers.get(b"range", b"").decode("latin-1")
             try:
-                await http_serve_image(writer, query, range_hdr)
+                await http_serve_image(writer, query, range_hdr, request_headers=headers)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
             try: await writer.drain()
@@ -2159,7 +2334,7 @@ class Broadcaster:
                     "Content-Type: application/json\r\n"
                     f"Content-Length: {len(payload)}\r\n"
                     "Cache-Control: no-store\r\n"
-                    "Access-Control-Allow-Origin: *\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
                     "Connection: close\r\n\r\n"
                 ).encode()
                 writer.write(head + payload)
@@ -2354,7 +2529,7 @@ class Broadcaster:
                     "Content-Type: application/json\r\n"
                     f"Content-Length: {len(payload)}\r\n"
                     "Cache-Control: no-store\r\n"
-                    "Access-Control-Allow-Origin: *\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
                     "Connection: close\r\n\r\n"
                 ).encode()
                 writer.write(head + payload)
@@ -2379,7 +2554,7 @@ class Broadcaster:
                     "Content-Type: application/json\r\n"
                     f"Content-Length: {len(payload)}\r\n"
                     "Cache-Control: no-store\r\n"
-                    "Access-Control-Allow-Origin: *\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
                     "Connection: close\r\n\r\n"
                 ).encode()
                 writer.write(head + payload)
@@ -2391,15 +2566,44 @@ class Broadcaster:
             except Exception: pass
             return
         if method == "GET" and target.split("?", 1)[0].startswith("/library/"):
-            name = target.split("?", 1)[0][len("/library/"):]
-            if not name or "/" in name or "\\" in name or ".." in name:
-                http_error(writer, 400, "bad library filename")
+            # v1.2.13: defence in depth. The pre-v1.2.13 check rejected
+            # literal `/ \ ..` but missed the URL-encoded equivalents
+            # (`%2F` `%5C` `%2E%2E`). Path.resolve() below already
+            # contains the escape because we re-anchor against
+            # library_dir() and refuse anything outside, but failing
+            # the request before any filesystem access reduces noise
+            # and is a less attractive target. Unquote first, then
+            # apply the original literal check, then anchor.
+            raw = target.split("?", 1)[0][len("/library/"):]
+            try:
+                name = urllib.parse.unquote(raw)
+            except Exception:
+                name = raw
+            if (not name
+                    or "/" in name or "\\" in name or ".." in name
+                    or name.startswith(".")):
+                http_error(writer, 400, "bad library filename",
+                           request_headers=headers)
                 try: await writer.drain()
                 except Exception: pass
                 try: writer.close()
                 except Exception: pass
                 return
             try:
+                # Anchor under library_dir() and reject anything whose
+                # resolved path escapes it (symlink shenanigans).
+                lib = library_dir().resolve()
+                fp = (lib / name).resolve()
+                try:
+                    fp.relative_to(lib)
+                except ValueError:
+                    http_error(writer, 400, "library path escapes root",
+                               request_headers=headers)
+                    try: await writer.drain()
+                    except Exception: pass
+                    try: writer.close()
+                    except Exception: pass
+                    return
                 fp = library_dir() / name
                 if not fp.exists() or not fp.is_file():
                     http_error(writer, 404, "library item not found")
@@ -2412,12 +2616,80 @@ class Broadcaster:
                         f"Content-Type: {ct}\r\n"
                         f"Content-Length: {len(body)}\r\n"
                         "Cache-Control: public, max-age=86400\r\n"
-                        "Access-Control-Allow-Origin: *\r\n"
+                        f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
                         "Connection: close\r\n\r\n"
                     ).encode()
                     writer.write(head + body)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # POST /library/thumb — attach a poster thumbnail to an existing
+        # library entry. Body is the raw PNG, query string carries
+        # ?name=<slug> matching the catalogue id. Saved as <slug>.thumb.png
+        # so the existing _library_rebuild_catalogue logic picks it up
+        # as the entry's thumb on the next /library/list call. Used by
+        # the Configurator to give video-format library items a still-
+        # frame poster so the Library tile renders something instead of
+        # the broken CSS `background-image: url(*.mp4)` placeholder.
+        if method == "POST" and target.split("?", 1)[0] == "/library/thumb":
+            qs = target.split("?", 1)[1] if "?" in target else ""
+            params = dict(p.split("=", 1) for p in qs.split("&") if "=" in p)
+            slug = urllib.parse.unquote(params.get("name", "")).strip()
+            # The slug must look like one _library_slug() would have
+            # produced — lowercase ascii / digits / `_-`. Anything else
+            # is path-traversal-shaped and rejected.
+            if (not slug
+                    or len(slug) > 96
+                    or not all(c in _LIBRARY_SAFE_CHARS for c in slug)):
+                http_error(writer, 400, "missing or bad 'name' parameter")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            # Thumbs are tiny — cap at 4 MiB so a buggy client can't
+            # tie up the upload path with a giant blob.
+            if not (0 < content_length <= 4 * 1024 * 1024):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                if body[:8] != b"\x89PNG\r\n\x1a\n":
+                    http_error(writer, 400, "thumb body must be PNG")
+                    try: await writer.drain()
+                    except Exception: pass
+                    try: writer.close()
+                    except Exception: pass
+                    return
+                fp = library_dir() / (slug + ".thumb.png")
+                fp.write_bytes(body)
+                _library_rebuild_catalogue(library_dir())
+                payload = json.dumps({"ok": True, "file": fp.name}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 500, f"thumb upload failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -2898,6 +3170,43 @@ class Broadcaster:
             print(f"[ws] version-mismatch push failed: {e}")
 
     async def _serve_websocket(self, reader, writer, request, target):
+        # v1.2.13: WS Origin check. Browsers send the page's Origin on
+        # the WS handshake; we reject anything not in the allowlist.
+        # Without this, a malicious local script the user accidentally
+        # loaded (browser tab, mail-client preview, etc.) could open
+        # ws://127.0.0.1:17320/?screen=0 and start dispatching
+        # `setting-update` / `widget-add` / `system-action` messages
+        # against the bridge. Lively / WE WebView2 pages send
+        # `Origin: null` (file://-style), which is whitelisted.
+        # Tools that connect without an Origin at all (curl, custom
+        # plugins, the SignalRGB plugin itself if it ever grows a WS
+        # client) keep working — the check is opt-in to refusal.
+        try:
+            req_headers = parse_http_headers(request)
+            origin = req_headers.get(b"origin")
+            # v1.2.13.X: route through _cors_origin_value so the same
+            # pattern fallback (any `*.localhost` host, covers
+            # Wallpaper Engine's random-hex WebView2 origin) applies
+            # to the WS handshake as well as the HTTP CORS header.
+            if origin and not _cors_origin_value(origin):
+                try: origin_str = origin.decode("latin-1", "replace").strip()
+                except Exception: origin_str = "<binary>"
+                print(f"[ws] rejecting WS handshake from disallowed Origin: {origin_str!r}")
+                try:
+                    writer.write(
+                        b"HTTP/1.1 403 Forbidden\r\n"
+                        b"Content-Length: 0\r\n"
+                        b"Connection: close\r\n\r\n"
+                    )
+                    await writer.drain()
+                except Exception: pass
+                writer.close()
+                return
+        except Exception:
+            # If anything fails parsing the Origin we fall through to
+            # the existing handshake — better to break gracelessly
+            # than to lock out a legit client we didn't anticipate.
+            pass
         response = make_handshake(request)
         if not response:
             writer.close()
@@ -5247,6 +5556,12 @@ class BridgeRuntime:
                         "reimport-bundles":  self.tray._reimport_bundles,
                         "check-updates-now": self.tray._check_updates_now,
                         "open-releases":     self.tray._open_update_page,
+                        # v1.2.13: opens %LOCALAPPDATA%\SignalRGBWallpaper\library
+                        # in Explorer so the user can drop several images at
+                        # once / cleanup / inspect — same handler the tray
+                        # menu uses but routed through the WS so a button
+                        # in the Configurator can trigger it.
+                        "open-library-folder": self.tray._open_library_folder,
                     }.get(action)
                     if handler is None:
                         print(f"[system-action] unknown action: {action!r}")
@@ -5436,6 +5751,18 @@ class BridgeRuntime:
         # Keep a ref to the UdpReceiver so the heartbeat below can
         # read its partials count for diagnostics.
         self._udp_protocol = udp_protocol
+        # v1.2.13: validate that every provider attribute the broadcaster
+        # advertises is actually wired. These get attached one-by-one
+        # from various startup paths (hwmon_provider from HwMonPoller
+        # init, udp_provider above, …); a missed wiring used to fall
+        # through silently — the picker just showed an empty list. Now
+        # the bridge prints a loud `[init]` warning so a maintainer
+        # spots the regression while developing.
+        _expected_providers = ("hwmon_provider", "udp_provider")
+        for attr in _expected_providers:
+            if not getattr(self.broadcaster, attr, None):
+                print(f"[init] WARNING broadcaster.{attr} is not wired — "
+                      f"the dependent endpoint will return empty data")
         print("SignalRGB Wallpaper bridge — multi-screen + tray")
         print(f"  UDP listener: udp://{UDP_HOST}:{UDP_PORT}  (plugin -> bridge)")
         print(f"  WS server:    ws://{WS_HOST}:{WS_PORT}/?screen=N")
@@ -6343,6 +6670,20 @@ class TrayApp:
                         zf.writestr("reimport.log", reimport_log.read_text(encoding="utf-8", errors="replace"))
                 except Exception as e:
                     zf.writestr("reimport.log.error", str(e))
+                # v1.2.13: persistent bridge log + its rotated siblings.
+                try:
+                    log_dir = Path(os.environ.get("LOCALAPPDATA",
+                        str(Path.home() / "AppData" / "Local"))) \
+                        / "SignalRGBWallpaper" / "logs"
+                    for entry in sorted(log_dir.glob("bridge.log*")):
+                        try:
+                            zf.writestr(f"logs/{entry.name}",
+                                        entry.read_text(encoding="utf-8",
+                                                        errors="replace"))
+                        except Exception as e:
+                            zf.writestr(f"logs/{entry.name}.error", str(e))
+                except Exception as e:
+                    zf.writestr("logs.error", str(e))
             print(f"[diagnostics] exported {out}")
             # Pop Explorer with the file pre-selected so the user can't
             # miss where the bundle landed.
@@ -6422,6 +6763,32 @@ class TrayApp:
         url = avail[1] if avail else UPDATE_RELEASES_HTML
         try: webbrowser.open(url, new=2)
         except Exception as e: print(f"[tray] open release page failed: {e}")
+
+    def _open_library_folder(self, icon, item):
+        """v1.2.13: pop an Explorer window at the library folder so
+        the user can drop several backgrounds in / clean up old ones
+        without going through the Configurator's `Choose image…`
+        picker one at a time. Triggered from the new Configurator
+        button via a `system-action`.
+
+        v1.2.13.1: switched the spawn from
+        `subprocess.Popen(["explorer.exe", path], CREATE_NO_WINDOW)`
+        to `os.startfile(path)` — the Popen path silently no-op'd for
+        at least one user, likely because explorer.exe with
+        CREATE_NO_WINDOW + no parent console on some Windows
+        configurations exits immediately. `os.startfile` is the
+        canonical "open this in the default shell handler" call and
+        always lands Explorer for a directory path."""
+        try:
+            lib = library_dir()
+            lib.mkdir(parents=True, exist_ok=True)
+            try:
+                os.startfile(str(lib))   # type: ignore[attr-defined]
+            except AttributeError:
+                # Non-Windows fallback — covers dev runs on Linux/macOS.
+                subprocess.Popen(["xdg-open", str(lib)])
+        except Exception as e:
+            print(f"[tray] open library folder failed: {e}")
 
     def _download_and_install_update(self, icon, item):
         """Tray entry: download the pending update's installer to %TEMP%
