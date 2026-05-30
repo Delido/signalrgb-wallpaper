@@ -1372,6 +1372,16 @@ def default_config() -> dict:
             "host":         "127.0.0.1",
             "port":         6742,
             "sourceScreen": 0,
+            # v1.5.0-beta hotfix6 / spatial-mapping: per-device
+            # normalised (x, y) position on the source-screen's
+            # colour grid. Default is the centre (0.5, 0.5), which
+            # matches the v1.4 "averaged colour" behaviour on
+            # uniform effects. User drags each device's marker on
+            # a live-preview canvas in the Configurator to tell
+            # the bridge where in the wallpaper to sample the
+            # device's colour from. Keyed by stringified OpenRGB
+            # device id (the index assigned by the SDK enum).
+            "deviceMapping": {},
         },
         # v1.5.0-beta: per-screen colour-source picker. Default keeps
         # every screen on the historical SignalRGB UDP path so existing
@@ -1670,6 +1680,10 @@ def load_config() -> dict:
     cfg["openrgbOutput"].setdefault("host", "127.0.0.1")
     cfg["openrgbOutput"].setdefault("port", 6742)
     cfg["openrgbOutput"].setdefault("sourceScreen", 0)
+    # v1.5.0-beta spatial-mapping backfill. Shape: {id_str: {x, y}}.
+    cfg["openrgbOutput"].setdefault("deviceMapping", {})
+    if not isinstance(cfg["openrgbOutput"].get("deviceMapping"), dict):
+        cfg["openrgbOutput"]["deviceMapping"] = {}
     # v1.5.0-beta: per-screen source picker. Default every screen to
     # "signalrgb" so existing installs see no behavioural change.
     cfg.setdefault("sources", {})
@@ -4706,8 +4720,15 @@ class OpenRgbOutputManager:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._client = None        # OpenRGBClient | None
-        # screen index -> last averaged (r, g, b) triple
-        self._latest_color: dict[int, tuple] = {}
+        # v1.5.0-beta spatial-mapping: store the FULL latest RGB grid
+        # per screen (w, h, raw_bytes) instead of just an averaged
+        # colour. The worker thread samples per device at its
+        # configured (x, y) — see _sample_color. CPython dict
+        # assignment is atomic so no lock is needed between the
+        # frame-tap (loop thread) and the worker (daemon thread).
+        # Total memory bounded by N_SCREENS × max_grid × 3, which
+        # for SignalRGB's typical 32×32 grid is ~12 KiB.
+        self._latest_grid: dict[int, tuple] = {}
         # Status surfaced to /openrgb/status (configurator polls it).
         self._connected = False
         self._last_error: str = ""
@@ -4733,8 +4754,10 @@ class OpenRgbOutputManager:
     def on_frame(self, screen: int, payload: bytes) -> None:
         """Frame-tap entry point. Called sync on the asyncio loop
         thread for every UDP frame that passes Broadcaster's rate cap.
-        Computes the average RGB so the worker thread can push it
-        without rewalking the payload. Skipped entirely when disabled."""
+        v1.5.0-beta spatial-mapping: stores the FULL grid so the
+        worker can sample per device at its configured (x, y). The
+        Configurator's preview canvas also reads this via the WS
+        broadcast — same source-of-truth, no second tap needed."""
         if not self._is_enabled():
             return
         # SignalRGB wire format: [S][R][screen][wH][wL][hH][hL][rgb…]
@@ -4745,20 +4768,28 @@ class OpenRgbOutputManager:
         total = w * h
         if total <= 0:
             return
-        data = payload[7:]
+        data = payload[7:7 + total * 3]
         if len(data) < total * 3:
             return
-        # Sum the RGB channels (Python int math is cheap at this scale —
-        # 32×32 = 1024 iterations × 30 Hz × N screens).
-        r_sum = g_sum = b_sum = 0
-        off = 0
-        for _ in range(total):
-            r_sum += data[off]
-            g_sum += data[off + 1]
-            b_sum += data[off + 2]
-            off += 3
-        self._latest_color[screen] = (
-            r_sum // total, g_sum // total, b_sum // total)
+        # Tuple-assignment is atomic in CPython — worker thread either
+        # sees the old (w, h, data) triple or the new one, never a
+        # partial mix.
+        self._latest_grid[screen] = (w, h, bytes(data))
+
+    def _sample_color(self, screen: int,
+                      x_norm: float, y_norm: float) -> tuple:
+        """Nearest-neighbour sample at the given normalised position
+        on `screen`'s latest grid. Returns black when no frame has
+        arrived yet (matches the "page is loading" colour the
+        wallpaper itself shows)."""
+        grid = self._latest_grid.get(screen)
+        if grid is None:
+            return (0, 0, 0)
+        w, h, data = grid
+        sx = max(0, min(w - 1, int(x_norm * w)))
+        sy = max(0, min(h - 1, int(y_norm * h)))
+        off = (sy * w + sx) * 3
+        return (data[off], data[off + 1], data[off + 2])
 
     def get_status(self) -> dict:
         """Snapshot for the Configurator's status polling. Includes
@@ -4771,13 +4802,27 @@ class OpenRgbOutputManager:
         per-device parseErrors so a misaligned struct surfaces in
         the UI instead of just an empty `devices` list."""
         client = self._client
+        # v1.5.0-beta spatial-mapping: re-merge the live deviceMapping
+        # into each device entry so a drag in the Configurator shows
+        # up on the next poll without waiting for the next connect.
+        live_map = self._cfg().get("deviceMapping") or {}
+        devices_out = []
+        for d in self._device_summary:
+            entry = dict(d)
+            m = live_map.get(str(entry.get("id")))
+            entry["mapping"] = (
+                m if isinstance(m, dict) else entry.get("mapping")
+                or {"x": 0.5, "y": 0.5}
+            )
+            devices_out.append(entry)
         return {
             "available":     _OpenRGBClient is not None,
             "enabled":       self._is_enabled(),
             "connected":     self._connected,
             "lastError":     self._last_error,
             "lastConnectTs": self._last_connect_ts,
-            "devices":       list(self._device_summary),
+            "devices":       devices_out,
+            "sourceScreen":  self._source_screen(),
             "bridgeVersion": APP_VERSION,
             "protocolUsed":  getattr(client, "protocol_version", 0)
                               if client else 0,
@@ -4835,24 +4880,49 @@ class OpenRgbOutputManager:
                 self._connected = True
                 self._last_error = ""
                 self._last_connect_ts = time.time()
+                # v1.5.0-beta spatial-mapping: surface each device's
+                # current (x, y) position so the Configurator can
+                # render markers at the right spot on first paint
+                # without an extra round trip.
+                _map_now = self._cfg().get("deviceMapping") or {}
                 self._device_summary = [
-                    {"id": d["id"], "name": d["name"], "ledCount": d["led_count"]}
+                    {
+                        "id": d["id"],
+                        "name": d["name"],
+                        "ledCount": d["led_count"],
+                        "mapping": (
+                            _map_now.get(str(d["id"]))
+                            if isinstance(_map_now.get(str(d["id"])), dict)
+                            else {"x": 0.5, "y": 0.5}
+                        ),
+                    }
                     for d in self._client.devices
                 ]
                 backoff = 2.0
                 print(f"[openrgb] connected to {host}:{port}, "
                       f"{len(self._client.devices)} device(s)")
-            # Push current state to every device. v1.5.0-beta-hotfix5:
-            # skip 0-LED devices (E1.31 plugin, virtual SDK controllers,
-            # devices in a mode that exposes no LEDs) — `push_color`
-            # returning False on those is informational, not a
-            # connection problem. Only an OSError from the socket
-            # (caught below) triggers the reconnect cycle.
-            color = self._latest_color.get(self._source_screen(), (0, 0, 0))
+            # Push current state to every device. v1.5.0-beta
+            # spatial-mapping: each device samples the source-screen's
+            # grid at its configured (x, y); a device without an
+            # entry in deviceMapping falls back to (0.5, 0.5) which
+            # gives the same one-colour-for-everything behaviour as
+            # v1.4. Push order is enumerate order; failures cascade
+            # the same way as before.
+            src_screen = self._source_screen()
+            mapping = self._cfg().get("deviceMapping") or {}
             socket_err: str = ""
             for d in self._client.devices:
                 if int(d.get("led_count") or 0) <= 0:
                     continue
+                pos = mapping.get(str(d["id"]))
+                if not isinstance(pos, dict):
+                    pos = {"x": 0.5, "y": 0.5}
+                try:
+                    x_n = float(pos.get("x", 0.5))
+                    y_n = float(pos.get("y", 0.5))
+                except (TypeError, ValueError):
+                    x_n = y_n = 0.5
+                color = self._sample_color(src_screen, x_n, y_n)
                 try:
                     self._client.push_color(d["id"], color)
                 except (OSError, _OpenRGBError) as e:
@@ -6566,12 +6636,33 @@ class BridgeRuntime:
                 print(f"[settings] openrgbOutput value not a dict: {type(value).__name__}")
                 return
             try:
+                # v1.5.0-beta spatial mapping: each device's normalised
+                # (x, y) is validated + clamped here so a typo from
+                # the Configurator can't push out-of-range floats into
+                # the sampler.
+                raw_mapping = value.get("deviceMapping") or {}
+                if not isinstance(raw_mapping, dict):
+                    raw_mapping = {}
+                cleaned_mapping: dict[str, dict] = {}
+                for dk, dv in raw_mapping.items():
+                    try:
+                        did = int(dk)
+                        if not isinstance(dv, dict):
+                            continue
+                        x = max(0.0, min(1.0, float(dv.get("x", 0.5))))
+                        y = max(0.0, min(1.0, float(dv.get("y", 0.5))))
+                        cleaned_mapping[str(did)] = {
+                            "x": round(x, 4), "y": round(y, 4),
+                        }
+                    except (TypeError, ValueError):
+                        continue
                 cleaned = {
-                    "enabled":      bool(value.get("enabled", False)),
-                    "host":         str(value.get("host") or "127.0.0.1")[:128],
-                    "port":         max(1, min(65535, int(value.get("port") or 6742))),
-                    "sourceScreen": max(0, min(N_SCREENS - 1,
-                                       int(value.get("sourceScreen") or 0))),
+                    "enabled":       bool(value.get("enabled", False)),
+                    "host":          str(value.get("host") or "127.0.0.1")[:128],
+                    "port":          max(1, min(65535, int(value.get("port") or 6742))),
+                    "sourceScreen":  max(0, min(N_SCREENS - 1,
+                                        int(value.get("sourceScreen") or 0))),
+                    "deviceMapping": cleaned_mapping,
                 }
             except (TypeError, ValueError) as e:
                 print(f"[settings] openrgbOutput malformed: {e}")

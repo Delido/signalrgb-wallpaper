@@ -1824,6 +1824,30 @@
       </div>
       <div id="openrgb-devices" class="hint" style="margin-top: 8px;"></div>
 
+      <!-- v1.5.0-beta spatial-mapping: live preview canvas + draggable
+           markers per OpenRGB device. Each marker sits on the device's
+           (x, y) position; dragging it updates the position the bridge
+           samples from, in real time. Background = live wallpaper-glow
+           grid streamed via a dedicated WS subscription to the source
+           screen (same frames the wallpaper page sees). Hidden when
+           the output is disabled or no devices have been enumerated. -->
+      <div id="openrgb-mapping-wrap" style="display:none; margin-top: 12px;">
+        <h4 data-i18n="openrgb.mapping.header"
+            style="margin: 4px 0; font-size:0.95em;">Device positions on live preview</h4>
+        <div class="hint" data-i18n="openrgb.mapping.hint"
+             style="margin-bottom:6px;">
+          Drag each marker onto the spot on the wallpaper whose
+          colour that device should follow. Default: centre.
+        </div>
+        <canvas id="openrgb-mapping-canvas" width="480" height="270"
+                style="display:block; width:100%; max-width:480px;
+                       border:1px solid var(--border,#333); border-radius:6px;
+                       background:#000; cursor:crosshair;
+                       touch-action:none;"></canvas>
+        <div id="openrgb-mapping-legend" class="hint"
+             style="margin-top:6px; font-size:0.85em; opacity:0.7;"></div>
+      </div>
+
       <!-- v1.5.0-beta: per-screen colour source picker. Each screen
            can independently take its glow colour from SignalRGB UDP
            (default), an OpenRGB device, or an incoming sACN/E1.31
@@ -1995,6 +2019,15 @@ const TRANSLATIONS = {
   "openrgb.status.disabled":    { en: "disabled",           de: "deaktiviert" },
   "openrgb.devices.empty":      { en: "(no devices enumerated yet)",
                                   de: "(noch keine Geräte erkannt)" },
+  // v1.5.0-beta spatial-mapping editor.
+  "openrgb.mapping.header":     { en: "Device positions on live preview",
+                                  de: "Geräte-Positionen auf Live-Vorschau" },
+  "openrgb.mapping.hint":       { en: "Drag each marker onto the spot on the wallpaper whose colour that device should follow. Default: centre.",
+                                  de: "Ziehe jeden Marker auf die Stelle des Wallpapers, deren Farbe das Gerät spiegeln soll. Standard: Mitte." },
+  "openrgb.mapping.waiting":    { en: "Waiting for live wallpaper frames…",
+                                  de: "Warte auf Live-Wallpaper-Frames…" },
+  "openrgb.mapping.no_source":  { en: "Source screen has no connected wallpaper — start the wallpaper to see the preview.",
+                                  de: "Quell-Bildschirm hat kein verbundenes Wallpaper — Wallpaper starten, um Vorschau zu sehen." },
 
   // v1.5.0-beta: per-screen colour-source picker labels.
   "sources.header":             { en: "Colour source per screen (beta)",
@@ -4490,11 +4523,290 @@ function renderSystemSection() {
         .replace("{err}", String(e.message || e));
       devs.textContent = "";
     }
+    // v1.5.0-beta spatial-mapping: cache the device list (with live
+    // mappings injected by the bridge) for the editor's hit-test +
+    // marker rendering. Drive the mini WS lifecycle off the same
+    // signal: open when output is enabled AND there are devices to
+    // place, close otherwise.
+    try {
+      const cur = (bridgeState && bridgeState.openrgbOutput) || {};
+      const enabled = !!cur.enabled;
+      const devices = (s && Array.isArray(s.devices)) ? s.devices : [];
+      window._openrgbLastDevices = devices.map(d => ({
+        id: d.id,
+        name: d.name,
+        ledCount: d.ledCount,
+        mapping: (d.mapping && typeof d.mapping === "object")
+          ? { x: +d.mapping.x || 0.5, y: +d.mapping.y || 0.5 }
+          : { x: 0.5, y: 0.5 },
+      }));
+      const placeable = window._openrgbLastDevices.filter(
+        d => (d.ledCount | 0) > 0);
+      if (_mappingWrap) {
+        _mappingWrap.style.display = (enabled && placeable.length) ? "" : "none";
+      }
+      if (_mappingLegend) {
+        if (enabled && placeable.length) {
+          const src = (typeof s.sourceScreen === "number")
+            ? s.sourceScreen : (cur.sourceScreen || 0);
+          _mappingLegend.textContent =
+            "Sampling from screen " + (src + 1) + " · " +
+            placeable.length + " placeable device(s)";
+        } else {
+          _mappingLegend.textContent = "";
+        }
+      }
+      if (enabled && placeable.length) {
+        const src = (typeof s.sourceScreen === "number")
+          ? s.sourceScreen : (cur.sourceScreen || 0);
+        _ensurePreviewWs(src);
+      } else {
+        _closePreviewWs();
+      }
+      _drawMappingEditor();
+    } catch (_) { /* defensive */ }
+  }
+  function _pushOpenRgbMapping(patch) {
+    // patch is {deviceId: {x, y}} merged into the existing mapping
+    // on the openrgbOutput sub-dict — same shape the bridge validator
+    // expects. The bridge's settings handler always rewrites the whole
+    // sub-dict, so we send the merged copy.
+    const cur = (bridgeState && bridgeState.openrgbOutput) || {};
+    const curMap = (cur.deviceMapping && typeof cur.deviceMapping === "object")
+      ? cur.deviceMapping : {};
+    const nextMap = Object.assign({}, curMap, patch);
+    _pushOpenRgb({ deviceMapping: nextMap });
   }
   function _restartOpenRgbPoll() {
     if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
     _pollOpenRgbStatus();
     _ogPollTimer = setInterval(_pollOpenRgbStatus, 2000);
+  }
+
+  // ── v1.5.0-beta spatial-mapping live-preview editor ────────────────
+  //
+  // A dedicated WS subscribes to the source screen's broadcast (same
+  // binary frame stream the wallpaper page renders). On every frame
+  // we parse the RGB grid out of the SignalRGB-wire payload, paint
+  // it scaled onto the editor canvas, and overlay one draggable
+  // marker per OpenRGB device at its configured (x, y). Drag commits
+  // the new normalised position to bridgeState.openrgbOutput
+  // .deviceMapping and pushes via bridge-setting-update. Lifecycle is
+  // bound to the System card being open AND the output being
+  // enabled AND at least one device having been enumerated — outside
+  // that envelope the WS is closed so we don't burn bandwidth.
+
+  const _mappingCanvas = document.getElementById("openrgb-mapping-canvas");
+  const _mappingWrap   = document.getElementById("openrgb-mapping-wrap");
+  const _mappingLegend = document.getElementById("openrgb-mapping-legend");
+  let _previewWs = null;
+  let _previewWsScreen = -1;
+  let _latestGrid = null;     // {w, h, rgb: Uint8Array} or null
+  let _dragDeviceId = null;
+  let _dragOffsetX = 0;
+  let _dragOffsetY = 0;
+  const _MARKER_R = 8;        // radius in px on the editor canvas
+
+  function _ensurePreviewWs(screen) {
+    if (_previewWs && _previewWsScreen === screen
+        && _previewWs.readyState <= 1) return;
+    _closePreviewWs();
+    try {
+      const url = "ws://" + location.host + "/?screen=" + screen;
+      const ws = new WebSocket(url);
+      ws.binaryType = "arraybuffer";
+      ws.onmessage = (ev) => {
+        if (typeof ev.data === "string") return;
+        _ingestPreviewFrame(new Uint8Array(ev.data));
+      };
+      ws.onclose = () => {
+        if (_previewWs === ws) _previewWs = null;
+      };
+      ws.onerror = () => { try { ws.close(); } catch (_) {} };
+      _previewWs = ws;
+      _previewWsScreen = screen;
+    } catch (e) {
+      console.warn("[openrgb-mapping] preview WS init failed:", e);
+    }
+  }
+  function _closePreviewWs() {
+    if (_previewWs) {
+      try { _previewWs.close(); } catch (_) {}
+      _previewWs = null;
+      _previewWsScreen = -1;
+    }
+    _latestGrid = null;
+  }
+  function _ingestPreviewFrame(buf) {
+    if (buf.length < 7) return;
+    if (buf[0] !== 0x53 || buf[1] !== 0x52) return;   // not an SR frame
+    const w = (buf[3] << 8) | buf[4];
+    const h = (buf[5] << 8) | buf[6];
+    if (!w || !h) return;
+    const need = 7 + w * h * 3;
+    if (buf.length < need) return;
+    _latestGrid = { w, h, rgb: buf.subarray(7, need) };
+    _drawMappingEditor();
+  }
+
+  function _currentDevices() {
+    return (window._openrgbLastDevices || []);
+  }
+
+  function _drawMappingEditor() {
+    if (!_mappingCanvas) return;
+    const ctx = _mappingCanvas.getContext("2d");
+    if (!ctx) return;
+    const cw = _mappingCanvas.width;
+    const ch = _mappingCanvas.height;
+    // Background frame (if we have one)
+    if (_latestGrid) {
+      const { w, h, rgb } = _latestGrid;
+      // Build an ImageData at native grid size then upscale via
+      // drawImage with smoothing. Cheap (16×9 = 144 pixels) and the
+      // browser handles the bilinear upsample.
+      const off = document.createElement("canvas");
+      off.width = w; off.height = h;
+      const offCtx = off.getContext("2d");
+      const img = offCtx.createImageData(w, h);
+      let p = 0, q = 0;
+      for (let i = 0; i < w * h; i++) {
+        img.data[q++] = rgb[p++];
+        img.data[q++] = rgb[p++];
+        img.data[q++] = rgb[p++];
+        img.data[q++] = 255;
+      }
+      offCtx.putImageData(img, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(off, 0, 0, w, h, 0, 0, cw, ch);
+    } else {
+      ctx.fillStyle = "#111";
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.fillStyle = "#888";
+      ctx.font = "14px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        t("openrgb.mapping.waiting") || "Waiting for live wallpaper frames…",
+        cw / 2, ch / 2);
+    }
+    // Markers
+    const devices = _currentDevices();
+    for (const d of devices) {
+      if (!d || (d.ledCount | 0) <= 0) continue;
+      const m = d.mapping || { x: 0.5, y: 0.5 };
+      const px = m.x * cw;
+      const py = m.y * ch;
+      // Outline ring (1.5 px ring of contrasting colour for visibility
+      // even on a bright-coloured background)
+      ctx.beginPath();
+      ctx.arc(px, py, _MARKER_R + 2, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px, py, _MARKER_R, 0, Math.PI * 2);
+      // Sample colour at the position so the marker visually reflects
+      // what the bridge will push.
+      let mc = "#fff";
+      if (_latestGrid) {
+        const sx = Math.max(0, Math.min(_latestGrid.w - 1,
+          Math.floor(m.x * _latestGrid.w)));
+        const sy = Math.max(0, Math.min(_latestGrid.h - 1,
+          Math.floor(m.y * _latestGrid.h)));
+        const o = (sy * _latestGrid.w + sx) * 3;
+        mc = `rgb(${_latestGrid.rgb[o]},${_latestGrid.rgb[o+1]},${_latestGrid.rgb[o+2]})`;
+      }
+      ctx.fillStyle = mc;
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Label
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      const label = (d.name || ("#" + d.id)) + " (" + d.ledCount + ")";
+      const tw = ctx.measureText(label).width;
+      const ly = py + _MARKER_R + 14;
+      ctx.fillRect(px - tw / 2 - 4, ly - 9, tw + 8, 14);
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.fillText(label, px, ly - 2);
+    }
+  }
+
+  function _hitTestMarker(x, y) {
+    const cw = _mappingCanvas.width;
+    const ch = _mappingCanvas.height;
+    const devices = _currentDevices();
+    // Walk in reverse so the visually-on-top marker (last drawn) wins.
+    for (let i = devices.length - 1; i >= 0; i--) {
+      const d = devices[i];
+      if (!d || (d.ledCount | 0) <= 0) continue;
+      const m = d.mapping || { x: 0.5, y: 0.5 };
+      const dx = m.x * cw - x;
+      const dy = m.y * ch - y;
+      if (dx * dx + dy * dy <= (_MARKER_R + 4) * (_MARKER_R + 4)) {
+        return { device: d, offsetX: m.x * cw - x, offsetY: m.y * ch - y };
+      }
+    }
+    return null;
+  }
+
+  function _canvasCoordsFromEvent(ev) {
+    const rect = _mappingCanvas.getBoundingClientRect();
+    // Canvas may be CSS-scaled (max-width:480px). Translate client to
+    // intrinsic coordinates so the hit-test stays accurate.
+    const x = ((ev.clientX - rect.left) / rect.width)  * _mappingCanvas.width;
+    const y = ((ev.clientY - rect.top)  / rect.height) * _mappingCanvas.height;
+    return { x, y };
+  }
+
+  if (_mappingCanvas) {
+    _mappingCanvas.addEventListener("pointerdown", (ev) => {
+      const c = _canvasCoordsFromEvent(ev);
+      const hit = _hitTestMarker(c.x, c.y);
+      if (!hit) return;
+      _dragDeviceId = hit.device.id;
+      _dragOffsetX = hit.offsetX;
+      _dragOffsetY = hit.offsetY;
+      _mappingCanvas.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    _mappingCanvas.addEventListener("pointermove", (ev) => {
+      if (_dragDeviceId == null) return;
+      const c = _canvasCoordsFromEvent(ev);
+      const cw = _mappingCanvas.width;
+      const ch = _mappingCanvas.height;
+      const px = Math.max(0, Math.min(cw, c.x + _dragOffsetX));
+      const py = Math.max(0, Math.min(ch, c.y + _dragOffsetY));
+      const xn = px / cw;
+      const yn = py / ch;
+      // Update local UI immediately, push to bridge on release.
+      const devices = _currentDevices();
+      const d = devices.find(x => x.id === _dragDeviceId);
+      if (d) d.mapping = { x: xn, y: yn };
+      _drawMappingEditor();
+    });
+    function _releaseDrag(ev) {
+      if (_dragDeviceId == null) return;
+      const devices = _currentDevices();
+      const d = devices.find(x => x.id === _dragDeviceId);
+      if (d && d.mapping) {
+        _pushOpenRgbMapping({
+          [String(d.id)]: {
+            x: +d.mapping.x.toFixed(4),
+            y: +d.mapping.y.toFixed(4),
+          },
+        });
+      }
+      _dragDeviceId = null;
+      try { _mappingCanvas.releasePointerCapture(ev.pointerId); }
+      catch (_) {}
+    }
+    _mappingCanvas.addEventListener("pointerup", _releaseDrag);
+    _mappingCanvas.addEventListener("pointercancel", _releaseDrag);
   }
 
   // ── v1.5.0-beta: per-screen sources + sACN output ────────────────
@@ -4750,6 +5062,10 @@ function renderSystemSection() {
       } else {
         if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
         if (_sacnPollTimer) { clearInterval(_sacnPollTimer); _sacnPollTimer = null; }
+        // v1.5.0-beta spatial-mapping: stop the dedicated preview WS
+        // when the System card is collapsed — no canvas visible
+        // means no need to drain frames.
+        _closePreviewWs();
       }
     };
     new MutationObserver(_sync).observe(sysCard, { attributes: true, attributeFilter: ["class"] });
