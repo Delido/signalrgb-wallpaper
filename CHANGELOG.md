@@ -11,7 +11,10 @@ channel from the bridge to OpenRGB; v1.5.0-beta turns the bridge into
 a small switchboard: pick *per screen* whether the wallpaper takes
 its colour from SignalRGB, an OpenRGB device, or an incoming sACN
 universe, and stream the resulting glow back out to both OpenRGB and
-sACN simultaneously.
+sACN simultaneously. The OpenRGB output also moved from "one
+averaged colour per screen" to per-device spatial sampling —
+each device follows the colour at *its* position on the wallpaper,
+configured via a draggable live preview.
 
 ### Added — sources
 
@@ -22,7 +25,11 @@ sACN simultaneously.
   - **OpenRGB** — bridge polls a chosen device's current LED colours
     via the OpenRGB SDK at 30 Hz and averages them into the
     wallpaper glow. Useful when SignalRGB isn't running but
-    OpenRGB-native effects are.
+    OpenRGB-native effects are. Caveat documented in the
+    Configurator: hardware-effect modes (firmware-driven Rainbow
+    Wave etc.) don't expose the live frame over the SDK; OpenRGB
+    must be in Direct mode with some software effect engine pushing
+    frames the bridge can then read.
   - **sACN / E1.31** — bridge subscribes to a chosen multicast
     universe on port 5568 and uses the first three DMX channels
     (R, G, B) as the source colour. Lets xLights, QLC+, Hyperion,
@@ -39,6 +46,16 @@ sACN simultaneously.
   universe per screen at 30 Hz with configurable priority,
   multicast destination (standard E1.31, default) or unicast
   destination (specific receiver IP).
+- **Spatial mapping for the OpenRGB output channel** — each
+  enumerated device has a normalised `(x, y)` position; the
+  bridge samples the live wallpaper grid at that point instead of
+  averaging the whole screen. Configurator's *System → OpenRGB
+  output* sub-section grew a 480×270 live-preview canvas with a
+  draggable marker per device — marker fill reflects the live
+  sampled colour, drag commits the new position via WS. The
+  preview WS is opened only while the System card is visible AND
+  the output is enabled AND devices have been enumerated, so it
+  costs nothing off-screen.
 - Both outputs run from the same averaged colour stream, so a single
   effect drives wallpaper + OpenRGB hardware + DMX lighting in
   perfect sync.
@@ -54,24 +71,75 @@ sACN simultaneously.
   parser past the LED descriptors.
 - **HTTP status endpoints** `/sacn/status`, `/sacn-input/status`,
   `/openrgb-input/status`, `/sources/status` for the Configurator's
-  live state pills.
+  live state pills. `/openrgb/status` now also includes
+  `bridgeVersion`, `protocolUsed` and `parseErrors[]` so a forgotten
+  installer step (stale exe) or a stuck enumerate is obvious from
+  the UI without needing console logs.
+- **`WALLPAPER_VERSION` constant**, independent of `APP_VERSION`.
+  The wallpaper-bundle "out of date" handshake compares against
+  this, not the bridge version. Bridge-only releases (v1.4 OpenRGB
+  output, v1.5 sources / sACN — neither touched `wallpaper/`)
+  therefore no longer raise the banner on every install with
+  bundles still stamped at the last wallpaper-touching release
+  (1.3.0 today). `installer/build.ps1` reads the constant from
+  `bridge.py` and stamps the Lively / WE bundles with it.
 
 ### Fixed
 
-- `_get_bridge_state` now echoes the nested config blocks
+- **`_get_bridge_state`** now echoes the nested config blocks
   (`openrgbOutput`, `sources`, `sacnOutput`) so the Configurator's
   System sub-sections actually reflect persisted values across tab
   refreshes. Regression from v1.4.0-beta where the OpenRGB
   host/port/source-screen fields appeared at their defaults even
   after the user saved a custom config.
 
+#### OpenRGB SDK parser — five hotfix iterations on real hardware
+
+Validated against OpenRGB 1.0rc2 + an ASUS ROG STRIX GeForce RTX
+4070 Ti + the bundled E1.31 plugin. Every iteration was caught by
+the diagnostic-log surface added in the second pass:
+
+- **Mode-struct size** 44 → 48 bytes for protocol 3+. I had 11
+  uint32s where proto 3+ actually carries 12 — the `brightness`
+  field was missing. Every device's mode block fell out of
+  alignment, num_zones overflowed past end-of-buffer, parser
+  raised, enumerate returned an empty list.
+- **Protocol negotiation**: the spec says the client must take
+  `min(client_claim, server_reply)` after the handshake. My
+  client was blindly using the server's reply, so against a
+  proto-5 server it tried to parse proto-5-format data with our
+  proto-4 walker.
+- **String wire format**: `controller_data` uses uint16-LE
+  length-prefixed strings, not null-terminated. My parser used
+  null-termination logic which works for SET_CLIENT_NAME but
+  desynced everything inside controller_data.
+- **Vendor string** field added in proto 1+ — slot between
+  `name` and `description`. Skipping it shifted every subsequent
+  field by one, eventually landing the length-prefix read
+  mid-mode-block on bytes that parsed as gigantic bogus string
+  lengths (~14-20k).
+- **Socket-broken vs no-LEDs split** on both `push_color`
+  (output) and `get_colors` (input). Previously both paths
+  returned False on either condition, so a 0-LED device (E1.31
+  plugin, virtual SDK controllers) made the manager loop endlessly
+  in connect → enumerate → push → "treat False as failure" →
+  disconnect → backoff → repeat.
+- **Configurator JS scope bug** that hid the spatial-mapping
+  editor: `s` (the `/openrgb/status` response) was declared
+  `const` inside a `try` block; the visibility-flip code outside
+  the block referenced it, raising `ReferenceError` that the
+  defensive catch-all swallowed silently, so the editor never
+  unhid even when conditions held.
+
 ### Notes
 
 Still touches the bridge + Configurator only — no Lively / Wallpaper
 Engine / SignalRGB-plugin changes. Default behaviour is unchanged:
 every screen starts on `signalrgb`, OpenRGB output stays off, sACN
-output stays off. The new channels light up only when the user
-opens the System card and enables them.
+output stays off, every device's spatial mapping defaults to
+(0.5, 0.5) which matches v1.4's averaged behaviour on uniform
+effects. The new channels light up only when the user opens the
+System card and enables them.
 
 ## [1.4.0-beta] - 2026-05-30
 

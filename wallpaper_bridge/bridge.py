@@ -4791,6 +4791,36 @@ class OpenRgbOutputManager:
         off = (sy * w + sx) * 3
         return (data[off], data[off + 1], data[off + 2])
 
+    def _sample_strip(self, screen: int,
+                      x1: float, y1: float,
+                      x2: float, y2: float,
+                      led_count: int) -> list:
+        """v1.5.0-beta strip mode: sample `led_count` evenly spaced
+        points along the (x1,y1)→(x2,y2) line on `screen`'s latest
+        grid. Returns a list of (r,g,b) triples ready for
+        `OpenRGBClient.push_strip`. Lets a multi-LED device (RAM,
+        light strip, keyboard row) show a gradient that follows
+        the wallpaper underneath instead of one averaged colour.
+
+        Endpoints inclusive: LED 0 sits at (x1,y1), LED N-1 at
+        (x2,y2). Single-LED devices collapse to the start point —
+        equivalent to point mode anchored at (x1,y1)."""
+        grid = self._latest_grid.get(screen)
+        if grid is None or led_count <= 0:
+            return [(0, 0, 0)] * max(0, led_count)
+        w, h, data = grid
+        out: list = []
+        denom = max(1, led_count - 1)
+        for i in range(led_count):
+            t = i / denom
+            xt = x1 + (x2 - x1) * t
+            yt = y1 + (y2 - y1) * t
+            sx = max(0, min(w - 1, int(xt * w)))
+            sy = max(0, min(h - 1, int(yt * h)))
+            off = (sy * w + sx) * 3
+            out.append((data[off], data[off + 1], data[off + 2]))
+        return out
+
     def get_status(self) -> dict:
         """Snapshot for the Configurator's status polling. Includes
         the connect state, last error, and enumerated device list.
@@ -4912,7 +4942,8 @@ class OpenRgbOutputManager:
             mapping = self._cfg().get("deviceMapping") or {}
             socket_err: str = ""
             for d in self._client.devices:
-                if int(d.get("led_count") or 0) <= 0:
+                led_count = int(d.get("led_count") or 0)
+                if led_count <= 0:
                     continue
                 pos = mapping.get(str(d["id"]))
                 if not isinstance(pos, dict):
@@ -4922,9 +4953,24 @@ class OpenRgbOutputManager:
                     y_n = float(pos.get("y", 0.5))
                 except (TypeError, ValueError):
                     x_n = y_n = 0.5
-                color = self._sample_color(src_screen, x_n, y_n)
+                # v1.5.0-beta strip mode: when the mapping declares a
+                # line (mode=="line" + x2/y2), sample N=led_count
+                # points along (x,y)→(x2,y2) and push as a strip so
+                # multi-LED devices show a gradient instead of one
+                # averaged colour. Otherwise the v1.4-compatible
+                # point path runs.
                 try:
-                    self._client.push_color(d["id"], color)
+                    is_line = (pos.get("mode") == "line"
+                               and "x2" in pos and "y2" in pos)
+                    if is_line:
+                        x2_n = float(pos.get("x2", x_n))
+                        y2_n = float(pos.get("y2", y_n))
+                        colors = self._sample_strip(
+                            src_screen, x_n, y_n, x2_n, y2_n, led_count)
+                        self._client.push_strip(d["id"], colors)
+                    else:
+                        color = self._sample_color(src_screen, x_n, y_n)
+                        self._client.push_color(d["id"], color)
                 except (OSError, _OpenRGBError) as e:
                     socket_err = f"{d.get('name', d['id'])}: {e}"
                     break
@@ -6668,9 +6714,25 @@ class BridgeRuntime:
                             continue
                         x = max(0.0, min(1.0, float(dv.get("x", 0.5))))
                         y = max(0.0, min(1.0, float(dv.get("y", 0.5))))
-                        cleaned_mapping[str(did)] = {
+                        entry: dict = {
                             "x": round(x, 4), "y": round(y, 4),
                         }
+                        # v1.5.0-beta strip mode: optional line mapping.
+                        # Recognised when `mode == "line"` AND both x2,
+                        # y2 are present. Anything else collapses back to
+                        # the v1.4-compatible point mode (single sample
+                        # replicated across all LEDs).
+                        mode = dv.get("mode")
+                        if mode == "line" and "x2" in dv and "y2" in dv:
+                            try:
+                                x2 = max(0.0, min(1.0, float(dv["x2"])))
+                                y2 = max(0.0, min(1.0, float(dv["y2"])))
+                                entry["mode"] = "line"
+                                entry["x2"] = round(x2, 4)
+                                entry["y2"] = round(y2, 4)
+                            except (TypeError, ValueError):
+                                pass
+                        cleaned_mapping[str(did)] = entry
                     except (TypeError, ValueError):
                         continue
                 cleaned = {

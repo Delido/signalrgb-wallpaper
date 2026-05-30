@@ -275,7 +275,12 @@ class OpenRGBClient:
     def push_strip(self, device_id: int, colors) -> bool:
         """Paint per-LED from `colors` (iterable of (r,g,b) triples).
         Extra LEDs beyond `len(colors)` are filled with the last
-        colour; extra `colors` beyond LED count are discarded."""
+        colour; extra `colors` beyond LED count are discarded.
+
+        v1.5.0-beta strip mode: socket errors re-raise so the
+        OpenRgbOutputManager triggers a reconnect; False means
+        "legitimate skip" (device unknown / 0 LEDs / empty colour
+        list). Same contract as `push_color`."""
         dev = next((d for d in self.devices if d["id"] == device_id), None)
         if dev is None or dev["led_count"] <= 0:
             return False
@@ -289,13 +294,9 @@ class OpenRGBClient:
         body += b"".join(bytes((int(r) & 0xff, int(g) & 0xff, int(b) & 0xff, 0))
                          for (r, g, b) in seq)
         payload = struct.pack("<I", len(body) + 4) + body
-        try:
-            with self._lock:
-                self._send(device_id, RGBCONTROLLER_UPDATELEDS, payload)
-            return True
-        except (OSError, OpenRGBError) as e:
-            print(f"[openrgb] strip push to device {device_id} failed: {e}")
-            return False
+        with self._lock:
+            self._send(device_id, RGBCONTROLLER_UPDATELEDS, payload)
+        return True
 
 
 # ─── controller-data parser ───────────────────────────────────────────

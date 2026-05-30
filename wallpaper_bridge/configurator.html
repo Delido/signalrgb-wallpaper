@@ -4546,14 +4546,26 @@ function renderSystemSection() {
       const cur = (bridgeState && bridgeState.openrgbOutput) || {};
       const enabled = !!cur.enabled;
       const devices = (s && Array.isArray(s.devices)) ? s.devices : [];
-      window._openrgbLastDevices = devices.map(d => ({
-        id: d.id,
-        name: d.name,
-        ledCount: d.ledCount,
-        mapping: (d.mapping && typeof d.mapping === "object")
-          ? { x: +d.mapping.x || 0.5, y: +d.mapping.y || 0.5 }
-          : { x: 0.5, y: 0.5 },
-      }));
+      window._openrgbLastDevices = devices.map(d => {
+        const m = (d.mapping && typeof d.mapping === "object") ? d.mapping : {};
+        // v1.5.0-beta strip mode: preserve optional mode/x2/y2 fields
+        // through the cache so the marker renderer + drag handlers
+        // see them. Falls back to point-mode defaults for legacy
+        // entries without these fields.
+        const out = {
+          id: d.id,
+          name: d.name,
+          ledCount: d.ledCount,
+          mapping: { x: +m.x || 0.5, y: +m.y || 0.5 },
+        };
+        if (m.mode === "line"
+            && typeof m.x2 === "number" && typeof m.y2 === "number") {
+          out.mapping.mode = "line";
+          out.mapping.x2 = +m.x2;
+          out.mapping.y2 = +m.y2;
+        }
+        return out;
+      });
       const placeable = window._openrgbLastDevices.filter(
         d => (d.ledCount | 0) > 0);
       if (_mappingWrap) {
@@ -4563,11 +4575,10 @@ function renderSystemSection() {
         if (enabled && placeable.length) {
           const src = (typeof s.sourceScreen === "number")
             ? s.sourceScreen : (cur.sourceScreen || 0);
-          _mappingLegend.textContent =
-            "Sampling from screen " + (src + 1) + " · " +
-            placeable.length + " placeable device(s)";
+          _renderDeviceModeList(window._openrgbLastDevices,
+                                placeable.length, src);
         } else {
-          _mappingLegend.textContent = "";
+          _mappingLegend.innerHTML = "";
         }
       }
       if (enabled && placeable.length) {
@@ -4617,6 +4628,7 @@ function renderSystemSection() {
   let _previewWsScreen = -1;
   let _latestGrid = null;     // {w, h, rgb: Uint8Array} or null
   let _dragDeviceId = null;
+  let _dragHandle = "a";      // "a" (start / point) or "b" (line end)
   let _dragOffsetX = 0;
   let _dragOffsetY = 0;
   const _MARKER_R = 8;        // radius in px on the editor canvas
@@ -4707,46 +4719,75 @@ function renderSystemSection() {
     }
     // Markers
     const devices = _currentDevices();
-    for (const d of devices) {
-      if (!d || (d.ledCount | 0) <= 0) continue;
-      const m = d.mapping || { x: 0.5, y: 0.5 };
-      const px = m.x * cw;
-      const py = m.y * ch;
-      // Outline ring (1.5 px ring of contrasting colour for visibility
-      // even on a bright-coloured background)
+    function _sampleAt(xn, yn) {
+      if (!_latestGrid) return "#fff";
+      const sx = Math.max(0, Math.min(_latestGrid.w - 1,
+        Math.floor(xn * _latestGrid.w)));
+      const sy = Math.max(0, Math.min(_latestGrid.h - 1,
+        Math.floor(yn * _latestGrid.h)));
+      const o = (sy * _latestGrid.w + sx) * 3;
+      return `rgb(${_latestGrid.rgb[o]},${_latestGrid.rgb[o+1]},${_latestGrid.rgb[o+2]})`;
+    }
+    function _drawMarker(px, py, fillCss, ringColour) {
       ctx.beginPath();
       ctx.arc(px, py, _MARKER_R + 2, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(0,0,0,0.6)";
       ctx.fill();
       ctx.beginPath();
       ctx.arc(px, py, _MARKER_R, 0, Math.PI * 2);
-      // Sample colour at the position so the marker visually reflects
-      // what the bridge will push.
-      let mc = "#fff";
-      if (_latestGrid) {
-        const sx = Math.max(0, Math.min(_latestGrid.w - 1,
-          Math.floor(m.x * _latestGrid.w)));
-        const sy = Math.max(0, Math.min(_latestGrid.h - 1,
-          Math.floor(m.y * _latestGrid.h)));
-        const o = (sy * _latestGrid.w + sx) * 3;
-        mc = `rgb(${_latestGrid.rgb[o]},${_latestGrid.rgb[o+1]},${_latestGrid.rgb[o+2]})`;
-      }
-      ctx.fillStyle = mc;
+      ctx.fillStyle = fillCss;
       ctx.fill();
-      ctx.strokeStyle = "#fff";
+      ctx.strokeStyle = ringColour || "#fff";
       ctx.lineWidth = 2;
       ctx.stroke();
-      // Label
+    }
+    function _drawLabel(px, py, text) {
+      ctx.font = "11px system-ui, sans-serif";
       ctx.fillStyle = "rgba(0,0,0,0.7)";
-      const label = (d.name || ("#" + d.id)) + " (" + d.ledCount + ")";
-      const tw = ctx.measureText(label).width;
+      const tw = ctx.measureText(text).width;
       const ly = py + _MARKER_R + 14;
       ctx.fillRect(px - tw / 2 - 4, ly - 9, tw + 8, 14);
       ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "11px system-ui, sans-serif";
-      ctx.fillText(label, px, ly - 2);
+      ctx.fillText(text, px, ly - 2);
+    }
+    for (const d of devices) {
+      if (!d || (d.ledCount | 0) <= 0) continue;
+      const m = d.mapping || { x: 0.5, y: 0.5 };
+      const isLine = (m.mode === "line"
+                      && typeof m.x2 === "number"
+                      && typeof m.y2 === "number");
+      const px = m.x * cw, py = m.y * ch;
+      const label = (d.name || ("#" + d.id)) + " (" + d.ledCount + ")";
+      if (isLine) {
+        const px2 = m.x2 * cw, py2 = m.y2 * ch;
+        // v1.5.0-beta strip mode: gradient line between endpoints.
+        // ctx.createLinearGradient with start + end colours sampled
+        // from the live grid gives a faithful preview of what the
+        // bridge will push to the device's N LEDs.
+        const g = ctx.createLinearGradient(px, py, px2, py2);
+        g.addColorStop(0, _sampleAt(m.x, m.y));
+        g.addColorStop(1, _sampleAt(m.x2, m.y2));
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 6;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px2, py2);
+        ctx.stroke();
+        // Endpoint A (start) — square-ish ring for distinction
+        _drawMarker(px, py, _sampleAt(m.x, m.y), "#fff");
+        // Endpoint B (end) — yellow ring so the user can tell
+        // which end is which without clicking.
+        _drawMarker(px2, py2, _sampleAt(m.x2, m.y2), "#fc0");
+        // Label sits under the midpoint of the line so it follows
+        // both endpoints when either is dragged.
+        _drawLabel((px + px2) / 2, (py + py2) / 2, label);
+      } else {
+        _drawMarker(px, py, _sampleAt(m.x, m.y), "#fff");
+        _drawLabel(px, py, label);
+      }
     }
   }
 
@@ -4754,15 +4795,29 @@ function renderSystemSection() {
     const cw = _mappingCanvas.width;
     const ch = _mappingCanvas.height;
     const devices = _currentDevices();
+    const r2 = (_MARKER_R + 4) * (_MARKER_R + 4);
     // Walk in reverse so the visually-on-top marker (last drawn) wins.
+    // For line-mode devices test BOTH endpoints; "b" wins ties if the
+    // user clicks exactly between (rare) since endpoint B is drawn
+    // second and is the more recently-edited end most of the time.
     for (let i = devices.length - 1; i >= 0; i--) {
       const d = devices[i];
       if (!d || (d.ledCount | 0) <= 0) continue;
       const m = d.mapping || { x: 0.5, y: 0.5 };
-      const dx = m.x * cw - x;
-      const dy = m.y * ch - y;
-      if (dx * dx + dy * dy <= (_MARKER_R + 4) * (_MARKER_R + 4)) {
-        return { device: d, offsetX: m.x * cw - x, offsetY: m.y * ch - y };
+      const isLine = (m.mode === "line"
+                      && typeof m.x2 === "number"
+                      && typeof m.y2 === "number");
+      if (isLine) {
+        const dx2 = m.x2 * cw - x, dy2 = m.y2 * ch - y;
+        if (dx2 * dx2 + dy2 * dy2 <= r2) {
+          return { device: d, handle: "b",
+                   offsetX: m.x2 * cw - x, offsetY: m.y2 * ch - y };
+        }
+      }
+      const dx = m.x * cw - x, dy = m.y * ch - y;
+      if (dx * dx + dy * dy <= r2) {
+        return { device: d, handle: "a",
+                 offsetX: m.x * cw - x, offsetY: m.y * ch - y };
       }
     }
     return null;
@@ -4783,6 +4838,7 @@ function renderSystemSection() {
       const hit = _hitTestMarker(c.x, c.y);
       if (!hit) return;
       _dragDeviceId = hit.device.id;
+      _dragHandle   = hit.handle || "a";
       _dragOffsetX = hit.offsetX;
       _dragOffsetY = hit.offsetY;
       _mappingCanvas.setPointerCapture(ev.pointerId);
@@ -4797,10 +4853,17 @@ function renderSystemSection() {
       const py = Math.max(0, Math.min(ch, c.y + _dragOffsetY));
       const xn = px / cw;
       const yn = py / ch;
-      // Update local UI immediately, push to bridge on release.
       const devices = _currentDevices();
       const d = devices.find(x => x.id === _dragDeviceId);
-      if (d) d.mapping = { x: xn, y: yn };
+      if (d) {
+        const cur = d.mapping || { x: 0.5, y: 0.5 };
+        if (_dragHandle === "b") {
+          d.mapping = Object.assign({}, cur, { x2: xn, y2: yn,
+                                                mode: "line" });
+        } else {
+          d.mapping = Object.assign({}, cur, { x: xn, y: yn });
+        }
+      }
       _drawMappingEditor();
     });
     function _releaseDrag(ev) {
@@ -4808,12 +4871,18 @@ function renderSystemSection() {
       const devices = _currentDevices();
       const d = devices.find(x => x.id === _dragDeviceId);
       if (d && d.mapping) {
-        _pushOpenRgbMapping({
-          [String(d.id)]: {
-            x: +d.mapping.x.toFixed(4),
-            y: +d.mapping.y.toFixed(4),
-          },
-        });
+        const m = d.mapping;
+        const block = {
+          x: +m.x.toFixed(4),
+          y: +m.y.toFixed(4),
+        };
+        if (m.mode === "line"
+            && typeof m.x2 === "number" && typeof m.y2 === "number") {
+          block.mode = "line";
+          block.x2 = +m.x2.toFixed(4);
+          block.y2 = +m.y2.toFixed(4);
+        }
+        _pushOpenRgbMapping({ [String(d.id)]: block });
       }
       _dragDeviceId = null;
       try { _mappingCanvas.releasePointerCapture(ev.pointerId); }
@@ -4821,6 +4890,74 @@ function renderSystemSection() {
     }
     _mappingCanvas.addEventListener("pointerup", _releaseDrag);
     _mappingCanvas.addEventListener("pointercancel", _releaseDrag);
+  }
+
+  // v1.5.0-beta strip mode: per-device legend with a Point/Line
+  // toggle. Renders into the legend area below the canvas (the
+  // text "Sampling from screen N · M placeable device(s)" gets
+  // replaced by per-device rows). Toggling Line on initialises
+  // (x2, y2) at +0.2 to the right of the start point so the user
+  // immediately sees a line they can drag; toggling Point off
+  // strips the mode/x2/y2 fields back to a single sample.
+  function _renderDeviceModeList(devices, placeableCount, sourceScreen) {
+    if (!_mappingLegend) return;
+    _mappingLegend.innerHTML = "";
+    if (!placeableCount) {
+      _mappingLegend.textContent = "";
+      return;
+    }
+    const head = document.createElement("div");
+    head.style.cssText = "margin-bottom:4px;";
+    head.textContent = "Sampling from screen " + (sourceScreen + 1)
+      + " · " + placeableCount + " placeable device(s)";
+    _mappingLegend.appendChild(head);
+    for (const d of devices) {
+      if (!d || (d.ledCount | 0) <= 0) continue;
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex; gap:8px; align-items:center; padding:2px 0;";
+      const name = document.createElement("span");
+      name.style.cssText = "flex:1; opacity:0.85;";
+      name.textContent = (d.name || ("#" + d.id))
+        + " · " + d.ledCount + " LEDs";
+      row.appendChild(name);
+      const m = d.mapping || { x: 0.5, y: 0.5 };
+      const isLine = (m.mode === "line");
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.type = "button";
+      btn.style.cssText = "font-size:11px; padding:2px 8px;";
+      btn.textContent = isLine ? "Line ↔" : "Point ●";
+      btn.title = isLine
+        ? "Switch to point mode (single sample replicated across all LEDs)"
+        : "Switch to line/strip mode (sample N points along a line)";
+      btn.addEventListener("click", () => {
+        if (isLine) {
+          // Point mode: drop mode/x2/y2.
+          _pushOpenRgbMapping({
+            [String(d.id)]: {
+              x: +m.x.toFixed(4),
+              y: +m.y.toFixed(4),
+            },
+          });
+        } else {
+          // Line mode: seed endpoint B at +0.2 to the right
+          // (clamped to canvas), so the line is immediately
+          // visible + grabbable.
+          const x2 = Math.min(1, +m.x + 0.2);
+          _pushOpenRgbMapping({
+            [String(d.id)]: {
+              x: +m.x.toFixed(4),
+              y: +m.y.toFixed(4),
+              mode: "line",
+              x2: +x2.toFixed(4),
+              y2: +m.y.toFixed(4),
+            },
+          });
+        }
+      });
+      row.appendChild(btn);
+      _mappingLegend.appendChild(row);
+    }
   }
 
   // ── v1.5.0-beta: per-screen sources + sACN output ────────────────
