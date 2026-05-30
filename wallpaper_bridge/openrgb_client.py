@@ -337,6 +337,13 @@ def _parse_controller_data(data: bytes, version: int,
     pos += 8
 
     name, pos        = _read_string(data, pos)
+    # v1.5.0-beta-hotfix4: protocol 1+ added a `vendor` string
+    # between name and description. Without consuming it the
+    # whole subsequent walk slid one field forward — symptom:
+    # huge bogus string lengths (~14k-20k) on the 4th/5th read
+    # because we'd be parsing mid-mode-block as a length prefix.
+    if version >= 1:
+        _vendor, pos = _read_string(data, pos)
     description, pos = _read_string(data, pos)
     _version, pos    = _read_string(data, pos)
     _serial, pos     = _read_string(data, pos)
