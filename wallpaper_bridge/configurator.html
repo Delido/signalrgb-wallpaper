@@ -4451,7 +4451,7 @@ function renderSystemSection() {
         pill.textContent = (t("openrgb.status.connected") || "connected · {n} device(s)")
           .replace("{n}", String(s.devices ? s.devices.length : 0));
         if (s.devices && s.devices.length) {
-          devs.textContent = s.devices.map(d => `${d.name} (${d.leds} LEDs)`).join(" · ");
+          devs.textContent = s.devices.map(d => `${d.name} (${d.ledCount} LEDs)`).join(" · ");
         } else if (s.parseErrors && s.parseErrors.length) {
           // v1.5.0-beta-hotfix2: surface the per-device parse failures
           // straight into the status row so the user (and any future
@@ -4477,7 +4477,7 @@ function renderSystemSection() {
         // "we never saw a device" without reading bridge logs.
         if (s.devices && s.devices.length) {
           devs.innerHTML = "<i>Last seen:</i> " +
-            s.devices.map(d => `${d.name} (${d.leds} LEDs)`).join(" · ");
+            s.devices.map(d => `${d.name} (${d.ledCount} LEDs)`).join(" · ");
         } else {
           devs.textContent = "";
         }
