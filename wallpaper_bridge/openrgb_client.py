@@ -294,9 +294,20 @@ def _parse_controller_data(data: bytes, version: int,
 
     # Each mode: name + a chain of uint32s + a colour array.
     # Mode struct size after the name string:
-    #   Protocol 0-2:  9 × uint32 = 36 bytes + uint16 num_colors + 4*num_colors
-    #   Protocol 3+:  11 × uint32 = 44 bytes + uint16 num_colors + 4*num_colors
-    mode_uint_block = 44 if version >= 3 else 36
+    #   Protocol 0-2:   9 × uint32 = 36 bytes + uint16 num_colors + 4*num_colors
+    #     fields: value, flags, speed_min, speed_max, colors_min,
+    #             colors_max, speed, direction, color_mode
+    #   Protocol 3+:  12 × uint32 = 48 bytes + uint16 num_colors + 4*num_colors
+    #     fields: value, flags, speed_min, speed_max, brightness_min,
+    #             brightness_max, colors_min, colors_max, speed,
+    #             brightness, direction, color_mode
+    # v1.5.0-beta hotfix: was 44 (11 × uint32) — off-by-one missed the
+    # `brightness` field added in proto 3, so every device's mode block
+    # fell out of alignment, num_zones overflowed past end-of-buffer,
+    # _parse_controller_data raised ValueError, and enumerate() returned
+    # an empty device list. Symptom in the Configurator: "verbunden · 0
+    # Geräte" against a connected OpenRGB SDK with real devices.
+    mode_uint_block = 48 if version >= 3 else 36
     for _ in range(num_modes):
         _mode_name, pos = _read_string(data, pos)
         pos += mode_uint_block
