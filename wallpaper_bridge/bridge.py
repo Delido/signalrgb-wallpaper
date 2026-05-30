@@ -653,6 +653,29 @@ class UpdateChecker:
 APP_NAME    = "SignalRGB Wallpaper Bridge"
 APP_VERSION = "1.5.0-beta"
 
+# v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
+# adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
+# bundle's "out of date" banner check uses this constant, NOT
+# APP_VERSION — so a bridge-only release (like v1.4 / v1.5, both of
+# which touched bridge.py + Configurator only) doesn't make every
+# installed Lively / WE wallpaper bundle suddenly appear stale.
+#
+# When to bump WALLPAPER_VERSION:
+#   • Any change to wallpaper/index.html, its JS, or its data shape
+#   • Any change that requires re-uploading the WE Workshop item /
+#     re-importing the Lively bundles
+# When NOT to bump:
+#   • Bridge-only features (new endpoints, new outputs, config
+#     refactors, sources/sACN/OpenRGB plumbing, …)
+#   • Configurator-only changes (configurator.html lives outside
+#     the wallpaper bundle and ships only inside the bridge exe)
+#
+# Today: 1.3.0 is the last release that actually changed wallpaper
+# code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
+# fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
+# are bridge-only.
+WALLPAPER_VERSION = "1.3.0"
+
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
 # can detect a breaking change before it dispatches a malformed
@@ -3343,13 +3366,19 @@ class Broadcaster:
         """v1.2.12: respond to the wallpaper page's hello handshake.
         The page reports the version baked into its bundle (the
         installer stamps `__WALLPAPER_VERSION__` into the index.html
-        meta tag at build time). We compare against APP_VERSION using
-        the same _parse_version helper the update checker already
-        uses; if the wallpaper is strictly older we push back a
-        version-mismatch JSON so the page can show its banner. The
-        "dev" sentinel from an un-stamped page short-circuits the
-        check — no banner — because the local dev tree is allowed to
-        drift from APP_VERSION."""
+        meta tag at build time).
+
+        v1.5.0-beta: compare against WALLPAPER_VERSION (the wallpaper-
+        bundle code's version), NOT APP_VERSION (the bridge's version).
+        A bridge-only release like v1.4 / v1.5 doesn't change wallpaper
+        code, so a Lively / WE bundle still stamped with the last
+        wallpaper-touching release (1.3.0 today) is correct and must
+        not raise the "out of date" banner. Only when WALLPAPER_VERSION
+        actually bumps — which implies a Workshop re-upload + Lively
+        re-import — should older bundles light up the banner.
+
+        The "dev" sentinel from an un-stamped page short-circuits the
+        check entirely — local dev trees are allowed to drift."""
         try:
             wv = str(msg.get("wallpaperVersion") or "").strip()
         except Exception:
@@ -3357,23 +3386,26 @@ class Broadcaster:
         if not wv or wv == "dev":
             return
         try:
-            bridge_t = _parse_version(APP_VERSION)
+            target_t = _parse_version(WALLPAPER_VERSION)
             wp_t = _parse_version(wv)
         except Exception:
             return
-        if wp_t >= bridge_t:
+        if wp_t >= target_t:
             return
         # Older bundle → push the mismatch on the same writer.
         payload = {
             "type":      "version-mismatch",
-            "bridge":    APP_VERSION,
+            # "bridge" key kept for back-compat with v1.2.12+ wallpaper
+            # pages that already render this banner; carries the
+            # WALLPAPER_VERSION the page should be at, not APP_VERSION.
+            "bridge":    WALLPAPER_VERSION,
             "wallpaper": wv,
         }
         try:
             frame = encode_text_frame(json.dumps(payload))
             writer.write(frame)
-            print(f"[ws] version mismatch on screen={screen}: "
-                  f"bridge={APP_VERSION}  wallpaper={wv}")
+            print(f"[ws] wallpaper version mismatch on screen={screen}: "
+                  f"expected={WALLPAPER_VERSION}  bundle={wv}")
         except Exception as e:
             print(f"[ws] version-mismatch push failed: {e}")
 
@@ -4728,7 +4760,15 @@ class OpenRgbOutputManager:
 
     def get_status(self) -> dict:
         """Snapshot for the Configurator's status polling. Includes
-        the connect state, last error, and enumerated device list."""
+        the connect state, last error, and enumerated device list.
+
+        v1.5.0-beta-hotfix2: also includes the bridge's APP_VERSION
+        so the Configurator can detect a stale installer (an Inno
+        run that didn't replace a locked exe leaves the running
+        process on the previous build), plus the OpenRGB client's
+        per-device parseErrors so a misaligned struct surfaces in
+        the UI instead of just an empty `devices` list."""
+        client = self._client
         return {
             "available":     _OpenRGBClient is not None,
             "enabled":       self._is_enabled(),
@@ -4736,6 +4776,11 @@ class OpenRgbOutputManager:
             "lastError":     self._last_error,
             "lastConnectTs": self._last_connect_ts,
             "devices":       list(self._device_summary),
+            "bridgeVersion": APP_VERSION,
+            "protocolUsed":  getattr(client, "protocol_version", 0)
+                              if client else 0,
+            "parseErrors":   list(getattr(client, "last_parse_errors", []) or [])
+                              if client else [],
         }
 
     # ── config helpers ─────────────────────────────────────────────────

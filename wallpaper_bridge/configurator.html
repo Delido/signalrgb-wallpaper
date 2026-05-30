@@ -4452,8 +4452,20 @@ function renderSystemSection() {
           .replace("{n}", String(s.devices ? s.devices.length : 0));
         if (s.devices && s.devices.length) {
           devs.textContent = s.devices.map(d => `${d.name} (${d.leds} LEDs)`).join(" · ");
+        } else if (s.parseErrors && s.parseErrors.length) {
+          // v1.5.0-beta-hotfix2: surface the per-device parse failures
+          // straight into the status row so the user (and any future
+          // maintainer) can tell a stuck enumerate from a real
+          // empty-device situation. `bridgeVersion` + `protocolUsed`
+          // come along for the ride so a forgotten installer step
+          // (stale exe) is obvious from the UI.
+          const ver = s.bridgeVersion ? ` · bridge ${s.bridgeVersion}` : "";
+          const proto = s.protocolUsed ? ` · proto ${s.protocolUsed}` : "";
+          devs.innerHTML = "<b>Parse errors</b>" + ver + proto + ":<br>" +
+            s.parseErrors.map(e => `• ${String(e).replace(/&/g,"&amp;").replace(/</g,"&lt;")}`).join("<br>");
         } else {
-          devs.textContent = t("openrgb.devices.empty") || "(no devices enumerated yet)";
+          const ver = s.bridgeVersion ? ` · bridge ${s.bridgeVersion}` : "";
+          devs.textContent = (t("openrgb.devices.empty") || "(no devices enumerated yet)") + ver;
         }
       } else if (s.lastError) {
         pill.textContent = (t("openrgb.status.disconnected") || "disconnected ({err})")

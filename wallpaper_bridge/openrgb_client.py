@@ -157,8 +157,18 @@ class OpenRGBClient:
             self._send(0, REQUEST_CONTROLLER_COUNT)
             _, _, resp = self._recv_packet()
         count = struct.unpack("<I", resp[:4])[0] if len(resp) >= 4 else 0
+        # v1.5.0-beta-hotfix2: capture per-device parse failures with a
+        # short hex prefix so a maintainer can diagnose a stuck enumerate
+        # ("verbunden · 0 Geräte") without having to attach a debugger
+        # to a windowless PyInstaller build. Surfaced via /openrgb/status
+        # → `parseErrors`.
+        self.last_parse_errors: list[str] = []
+        self.last_protocol_used: int = self.protocol_version
+        print(f"[openrgb] enumerate: count={count} "
+              f"proto={self.protocol_version}")
         devices: list[dict] = []
         for i in range(count):
+            data = b""
             try:
                 with self._lock:
                     self._send(i, REQUEST_CONTROLLER_DATA,
@@ -171,9 +181,20 @@ class OpenRGBClient:
                     "type":      info["type"],
                     "led_count": info["led_count"],
                 })
+                print(f"[openrgb] device {i}: {info['name']!r} "
+                      f"({info['led_count']} LEDs, {len(data)} B)")
             except (OpenRGBError, struct.error, UnicodeDecodeError, ValueError) as e:
-                print(f"[openrgb] device {i} parse failed: {e}")
+                # Keep a short hex prefix (max 64 B) so the wire format
+                # can be reconstructed for diagnosis without dumping the
+                # whole 1-3 KB payload into the log.
+                head = data[:64].hex() if data else "(no data)"
+                msg = (f"device {i} parse failed at proto "
+                       f"{self.protocol_version}: {e} — first 64B={head}")
+                self.last_parse_errors.append(msg)
+                print(f"[openrgb] {msg}")
         self.devices = devices
+        print(f"[openrgb] enumerate done: "
+              f"{len(devices)}/{count} device(s) parsed")
 
     # ── output ─────────────────────────────────────────────────────────
 

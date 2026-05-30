@@ -21,17 +21,32 @@ $bridgeDir  = Join-Path $repoRoot "wallpaper_bridge"
 $installer  = Join-Path $repoRoot "installer"
 $outDir     = Join-Path $repoRoot "installer_out"
 
+$pyContent = Get-Content (Join-Path $bridgeDir "bridge.py") -Raw
 if (-not $Version) {
     # Extract APP_VERSION = "X.Y.Z" from bridge.py so the installer
     # filename always matches the binary.
-    $pyContent = Get-Content (Join-Path $bridgeDir "bridge.py") -Raw
     if ($pyContent -match 'APP_VERSION\s*=\s*"([^"]+)"') {
         $Version = $Matches[1]
     } else {
         throw "Cannot find APP_VERSION in bridge.py — pass -Version explicitly"
     }
 }
-Write-Host "Building installer for v$Version" -ForegroundColor Cyan
+# v1.5.0-beta: WALLPAPER_VERSION stamps the Lively / WE bundles
+# (index.html `__WALLPAPER_VERSION__` placeholder + project.json
+# version field). Independent of the bridge version so a bridge-only
+# release doesn't make every installed wallpaper appear out-of-date.
+# Bump in bridge.py when wallpaper code actually changes; build.ps1
+# reads it from there.
+if ($pyContent -match 'WALLPAPER_VERSION\s*=\s*"([^"]+)"') {
+    $WallpaperVersion = $Matches[1]
+} else {
+    # Pre-v1.5 trees didn't have this constant — fall back to the
+    # bridge version so old branches still produce valid bundles.
+    $WallpaperVersion = $Version
+    Write-Host "  (no WALLPAPER_VERSION in bridge.py — falling back to $Version)" `
+        -ForegroundColor DarkGray
+}
+Write-Host "Building installer for bridge v$Version, wallpaper v$WallpaperVersion" -ForegroundColor Cyan
 
 # --- 1. Generate icon + thumbnail + README banner + Workshop preview ---------
 Write-Host "[1/5] Generating icon.ico + thumbnail.png + banner.png + workshop_preview.png" -ForegroundColor Yellow
@@ -134,7 +149,7 @@ foreach ($n in 0, 1, 2, 3) {
     # "re-import bundles" hint.
     $idxContent = Get-Content $idx -Raw
     $idxContent = $idxContent -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', ('${1}' + $n + '${2}')
-    $idxContent = $idxContent -replace '__WALLPAPER_VERSION__', $Version
+    $idxContent = $idxContent -replace '__WALLPAPER_VERSION__', $WallpaperVersion
     Set-Content $idx -NoNewline -Value $idxContent
     (Get-Content $info -Raw) -replace '__SCREEN_LABEL__', $label | Set-Content $info -NoNewline
     # Lively bundles use thumbnail.png as the tile preview — the
@@ -165,7 +180,7 @@ $idx = Join-Path $weSingle "index.html"
 # reset to 0 (WE will override via property) + WALLPAPER_VERSION stamp.
 $weIdxContent = Get-Content $idx -Raw
 $weIdxContent = $weIdxContent -replace '(<meta name="signalrgb-screen-index" content=")\d+(">)', '${1}0${2}'
-$weIdxContent = $weIdxContent -replace '__WALLPAPER_VERSION__', $Version
+$weIdxContent = $weIdxContent -replace '__WALLPAPER_VERSION__', $WallpaperVersion
 Set-Content $idx -NoNewline -Value $weIdxContent
 $singleDesc = @"
 [b]Live SignalRGB-driven glow on your desktop wallpaper.[/b]
