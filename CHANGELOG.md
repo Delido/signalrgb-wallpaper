@@ -4,6 +4,40 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0-beta] - 2026-05-30
+
+First beta of the **LED ecosystem expansion** line. v1.3.0 stayed
+self-contained (wallpaper page + per-screen SignalRGB device); v1.4.x
+opens up a one-way output channel from the bridge to other lighting
+ecosystems so the same glow colour that paints the wallpaper can also
+drive the rest of the user's RGB hardware.
+
+### Added
+
+- **OpenRGB output channel** — opt-in network-SDK client that
+  connects to a running OpenRGB instance (default
+  `127.0.0.1:6742`) and mirrors a chosen source screen's averaged
+  glow colour onto every enumerated OpenRGB device at 30 Hz.
+  Pure-Python custom client (no openrgb-python dependency, so the
+  bridge keeps its MIT licence). Configurator surfaces a new
+  *OpenRGB output (beta)* row in **System → Settings** with
+  enable / host / port / source-screen + a live status line that
+  shows the connection state and device count. Disabled by
+  default — users who don't run OpenRGB pay nothing.
+- **Broadcaster frame-tap hook** — internal extension point that
+  lets per-frame subscribers (OpenRGB output manager today,
+  sACN/E1.31 emitter in a future beta) receive the same averaged
+  colour the wallpaper page sees, without forking the broadcast
+  path or paying the WS encoding cost twice.
+
+### Notes
+
+This beta touches the bridge + Configurator only — no changes to the
+Lively, Wallpaper Engine or SignalRGB-plugin code paths. Existing
+wallpaper installs continue to work unchanged; the OpenRGB row is
+purely additive and stays dark unless the user opens the System card
+and flips it on.
+
 ## [1.3.0] - 2026-05-29
 
 Cuts the v1.2.7 – v1.2.13 beta line into a single stable release.

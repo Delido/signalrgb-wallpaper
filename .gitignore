@@ -1,6 +1,10 @@
 # PyInstaller scratch / output — release artifacts are published via gh release
 wallpaper_bridge/build_bridge/
 wallpaper_bridge/dist_bridge/
+# PyInstaller's default --onedir layout (the spec writes here when no
+# --workpath / --distpath overrides are passed).
+wallpaper_bridge/build/
+wallpaper_bridge/dist/
 wallpaper_bridge/__pycache__/
 *.spec
 

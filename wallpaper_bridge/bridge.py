@@ -49,6 +49,16 @@ import os
 import random
 import re
 import struct
+
+# v1.4.0: OpenRGB output channel — talks to OpenRGB's network SDK
+# (default localhost:6742) so the live wallpaper-glow colour stream
+# also drives the user's OpenRGB-controlled hardware (RAM, fans,
+# keyboard, …). See openrgb_client.py for the wire-protocol details.
+try:
+    from openrgb_client import OpenRGBClient as _OpenRGBClient
+except Exception as _e:
+    _OpenRGBClient = None
+    print(f"[openrgb] client module load failed: {_e}")
 import sys
 import threading
 import time
@@ -630,7 +640,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -1316,6 +1326,17 @@ def default_config() -> dict:
         # target screen's preset and revert when the foreground
         # changes away. List of dicts (see ProfileWatcher).
         "profiles": [],
+        # v1.4.0-beta: OpenRGB output channel. When enabled, the bridge
+        # connects to OpenRGB's network SDK (default 127.0.0.1:6742)
+        # and pushes the source-screen's averaged glow colour to every
+        # enumerated OpenRGB device at 30 Hz. Disabled by default so
+        # users who don't run OpenRGB pay nothing.
+        "openrgbOutput": {
+            "enabled":      False,
+            "host":         "127.0.0.1",
+            "port":         6742,
+            "sourceScreen": 0,
+        },
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -1574,6 +1595,17 @@ def load_config() -> dict:
     cfg.setdefault("language", "auto")
     if cfg.get("language") not in ("auto", "en", "de"):
         cfg["language"] = "auto"
+    # v1.4.0-beta: OpenRGB output config block. Backfill the whole
+    # sub-dict for pre-v1.4 configs; setdefault each leaf inside it so
+    # a partial override (user manually edited just `enabled`) keeps
+    # the other defaults.
+    cfg.setdefault("openrgbOutput", {})
+    if not isinstance(cfg.get("openrgbOutput"), dict):
+        cfg["openrgbOutput"] = {}
+    cfg["openrgbOutput"].setdefault("enabled", False)
+    cfg["openrgbOutput"].setdefault("host", "127.0.0.1")
+    cfg["openrgbOutput"].setdefault("port", 6742)
+    cfg["openrgbOutput"].setdefault("sourceScreen", 0)
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -1932,9 +1964,31 @@ class Broadcaster:
         # gates its renderFrame at the same value so the bridge
         # never wastes a WS frame the page would just drop.
         self._last_broadcast_per_screen: dict[int, float] = {}
+        # v1.4.0: per-frame tap callbacks. `add_frame_tap(cb)` registers
+        # one; `cb(screen, rgb_payload)` is called sync on the loop
+        # thread for every frame that passes the rate cap above. Used
+        # by the OpenRGB output manager + reserved for sACN/E1.31.
+        self._frame_taps: list = []
         # Fallback default if a screen's settings haven't been
         # surfaced yet (race with first frame after startup).
         self._BROADCAST_INTERVAL_S = 1.0 / 30.0
+
+    def add_frame_tap(self, callback) -> None:
+        """v1.4.0: register a `callback(screen: int, rgb_payload: bytes)`
+        that fires for every UDP frame after the rate cap. Used by the
+        OpenRGB output manager (and reserved for the sACN/E1.31 emitter
+        on the roadmap) to mirror the wallpaper's live colour stream
+        out to external consumers without coupling them to the WS
+        broadcast path. Listeners must be cheap — they run sync on the
+        asyncio loop thread."""
+        if callable(callback) and callback not in self._frame_taps:
+            self._frame_taps.append(callback)
+
+    def remove_frame_tap(self, callback) -> None:
+        try:
+            self._frame_taps.remove(callback)
+        except ValueError:
+            pass
 
     def _broadcast_interval_for(self, screen: int) -> float:
         """Look up the broadcast interval (seconds) for a given
@@ -2081,6 +2135,16 @@ class Broadcaster:
         if now - last < self._broadcast_interval_for(screen):
             return
         self._last_broadcast_per_screen[screen] = now
+        # v1.4.0: frame taps. Any registered listener (currently the
+        # OpenRGB output manager, future sACN/E1.31 emitter etc.) sees
+        # the raw RGB payload before we wrap it for WS. Tap runs sync
+        # on the loop thread — listeners must be cheap; anything that
+        # does I/O should hand off to a worker.
+        for tap in self._frame_taps:
+            try:
+                tap(screen, payload)
+            except Exception as e:
+                print(f"[broadcast] frame tap failed: {e}")
         async with self._lock:
             clients = list(self.clients_by_screen.get(screen, ()))
         if not clients:
@@ -2535,6 +2599,42 @@ class Broadcaster:
                 writer.write(head + payload)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v1.4.0-beta: status snapshot for the OpenRGB output channel.
+        # Configurator polls this every few seconds while its OpenRGB
+        # card is visible to render the connection state + device list
+        # without taking a WS round-trip per refresh.
+        if method == "GET" and target.split("?", 1)[0] == "/openrgb/status":
+            try:
+                provider = getattr(self, "openrgb_provider", None)
+                if provider is None:
+                    snap = {
+                        "available": False,
+                        "enabled":   False,
+                        "connected": False,
+                        "lastError": "manager not wired",
+                        "devices":   [],
+                    }
+                else:
+                    snap = provider.get_status()
+                payload = json.dumps(snap).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}",
+                           request_headers=headers)
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -4309,6 +4409,184 @@ class UdpReceiver(asyncio.DatagramProtocol):
 # Bridge thread — owns the asyncio loop
 # ============================================================================
 
+class OpenRgbOutputManager:
+    """v1.4.0-beta MVP: a daemon thread that owns the OpenRGB SDK
+    connection and pushes the wallpaper's live glow colour stream out
+    to OpenRGB-controlled hardware.
+
+    Pipeline:
+      Broadcaster.broadcast_frame
+        → frame_tap(screen, payload) [sync, on loop thread]
+          → updates self._latest_color[screen] with that frame's
+            averaged RGB
+      worker thread (this class)
+        → at ~30 Hz, pushes self._latest_color[<source_screen>] to
+          every OpenRGB device via OpenRGBClient.push_color
+
+    The on-loop tap is intentionally cheap (just averages the RGB
+    bytes) so it doesn't slow the WS broadcast path; the worker
+    thread owns the network I/O.
+
+    Per-screen routing (which screen drives which device) + per-device
+    mode (average vs strip vs custom) are roadmap items — this MVP
+    just averages the source-screen colour into every connected
+    OpenRGB device.
+
+    Reconnect strategy: on any push failure or initial connect
+    failure, sleep with exponential backoff (capped at 30 s) before
+    retrying. Disabled-state config check runs every second so the
+    user can toggle the feature off without restarting the bridge."""
+
+    PUSH_INTERVAL_S = 1.0 / 30.0   # 30 Hz max output rate to OpenRGB
+
+    def __init__(self, bridge_runtime):
+        self.bridge = bridge_runtime
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._client = None        # OpenRGBClient | None
+        # screen index -> last averaged (r, g, b) triple
+        self._latest_color: dict[int, tuple] = {}
+        # Status surfaced to /openrgb/status (configurator polls it).
+        self._connected = False
+        self._last_error: str = ""
+        self._last_connect_ts: float = 0.0
+        self._device_summary: list = []
+
+    # ── public API ─────────────────────────────────────────────────────
+
+    def start(self) -> None:
+        if _OpenRGBClient is None:
+            print("[openrgb] client module unavailable — output disabled")
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="openrgb-output")
+        self._thread.start()
+        print("[openrgb] output manager started (will connect on demand)")
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def on_frame(self, screen: int, payload: bytes) -> None:
+        """Frame-tap entry point. Called sync on the asyncio loop
+        thread for every UDP frame that passes Broadcaster's rate cap.
+        Computes the average RGB so the worker thread can push it
+        without rewalking the payload. Skipped entirely when disabled."""
+        if not self._is_enabled():
+            return
+        # SignalRGB wire format: [S][R][screen][wH][wL][hH][hL][rgb…]
+        if len(payload) < 7:
+            return
+        w = (payload[3] << 8) | payload[4]
+        h = (payload[5] << 8) | payload[6]
+        total = w * h
+        if total <= 0:
+            return
+        data = payload[7:]
+        if len(data) < total * 3:
+            return
+        # Sum the RGB channels (Python int math is cheap at this scale —
+        # 32×32 = 1024 iterations × 30 Hz × N screens).
+        r_sum = g_sum = b_sum = 0
+        off = 0
+        for _ in range(total):
+            r_sum += data[off]
+            g_sum += data[off + 1]
+            b_sum += data[off + 2]
+            off += 3
+        self._latest_color[screen] = (
+            r_sum // total, g_sum // total, b_sum // total)
+
+    def get_status(self) -> dict:
+        """Snapshot for the Configurator's status polling. Includes
+        the connect state, last error, and enumerated device list."""
+        return {
+            "available":     _OpenRGBClient is not None,
+            "enabled":       self._is_enabled(),
+            "connected":     self._connected,
+            "lastError":     self._last_error,
+            "lastConnectTs": self._last_connect_ts,
+            "devices":       list(self._device_summary),
+        }
+
+    # ── config helpers ─────────────────────────────────────────────────
+
+    def _cfg(self) -> dict:
+        try:
+            with self.bridge.config_lock:
+                return dict(self.bridge.config.get("openrgbOutput") or {})
+        except Exception:
+            return {}
+
+    def _is_enabled(self) -> bool:
+        return bool(self._cfg().get("enabled", False))
+
+    def _source_screen(self) -> int:
+        try:
+            return max(0, int(self._cfg().get("sourceScreen", 0)))
+        except Exception:
+            return 0
+
+    # ── worker loop ────────────────────────────────────────────────────
+
+    def _run(self) -> None:
+        backoff = 2.0
+        while not self._stop.is_set():
+            if not self._is_enabled():
+                # Disabled — close any open connection, idle-wait.
+                if self._client and self._client.connected:
+                    try: self._client.disconnect()
+                    except Exception: pass
+                self._connected = False
+                if self._stop.wait(1.0):
+                    return
+                backoff = 2.0
+                continue
+            cfg = self._cfg()
+            host = str(cfg.get("host") or "127.0.0.1")
+            port = int(cfg.get("port") or 6742)
+            # (Re)connect if needed.
+            if self._client is None or not self._client.connected:
+                self._client = _OpenRGBClient(host, port)
+                if not self._client.connect():
+                    self._connected = False
+                    self._last_error = "connect failed"
+                    self._device_summary = []
+                    if self._stop.wait(backoff):
+                        return
+                    backoff = min(30.0, backoff * 1.5)
+                    continue
+                self._connected = True
+                self._last_error = ""
+                self._last_connect_ts = time.time()
+                self._device_summary = [
+                    {"id": d["id"], "name": d["name"], "ledCount": d["led_count"]}
+                    for d in self._client.devices
+                ]
+                backoff = 2.0
+                print(f"[openrgb] connected to {host}:{port}, "
+                      f"{len(self._client.devices)} device(s)")
+            # Push current state to every device.
+            color = self._latest_color.get(self._source_screen(), (0, 0, 0))
+            push_failed = False
+            for d in self._client.devices:
+                if not self._client.push_color(d["id"], color):
+                    push_failed = True
+            if push_failed:
+                # Likely connection went bad — trigger reconnect on next
+                # iteration.
+                self._last_error = "push failed"
+                try: self._client.disconnect()
+                except Exception: pass
+                self._connected = False
+                if self._stop.wait(1.0):
+                    return
+                continue
+            if self._stop.wait(self.PUSH_INTERVAL_S):
+                return
+
+
 class BridgeRuntime:
     """Lives in a daemon thread, owns the asyncio loop and the broadcaster."""
 
@@ -5401,6 +5679,11 @@ class BridgeRuntime:
         # System section. Same persisted keys the tray was already
         # writing — no new defaults / migration needed.
         "fullscreenPause", "updateCheckEnabled", "allowBetas",
+        # v1.4.0-beta: whole OpenRGB-output sub-dict travels as a
+        # single key. The handler below unpacks + validates the inner
+        # leaves so a malformed Configurator push can't poison the
+        # config.
+        "openrgbOutput",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -5479,6 +5762,39 @@ class BridgeRuntime:
             # The tray menu's checkbox state is re-read lazily on next
             # menu render so it stays in sync too.
             print(f"[settings] {key} -> {enabled}")
+        elif key == "openrgbOutput":
+            # v1.4.0-beta: validate + persist the OpenRGB output sub-
+            # dict. The Configurator sends the whole block on every
+            # toggle; we sanitise each leaf before commit so a typo'd
+            # port can't disable the worker via TypeError later.
+            if not isinstance(value, dict):
+                print(f"[settings] openrgbOutput value not a dict: {type(value).__name__}")
+                return
+            try:
+                cleaned = {
+                    "enabled":      bool(value.get("enabled", False)),
+                    "host":         str(value.get("host") or "127.0.0.1")[:128],
+                    "port":         max(1, min(65535, int(value.get("port") or 6742))),
+                    "sourceScreen": max(0, min(N_SCREENS - 1,
+                                       int(value.get("sourceScreen") or 0))),
+                }
+            except (TypeError, ValueError) as e:
+                print(f"[settings] openrgbOutput malformed: {e}")
+                return
+            with self.config_lock:
+                prev = self.config.get("openrgbOutput") or {}
+                if dict(prev) == cleaned:
+                    return
+                self.config["openrgbOutput"] = cleaned
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            # OpenRgbOutputManager re-reads its config each loop
+            # iteration — no explicit kick needed; an enabled flip
+            # is picked up within one second.
+            print(f"[settings] openrgbOutput -> {cleaned}")
 
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
@@ -5731,6 +6047,18 @@ class BridgeRuntime:
                                            "cpu-meter", "ram-meter",
                                            "hardware-sensor", "now-playing"))
         self.sysstats.start()
+        # v1.4.0-beta: OpenRGB output channel. Default disabled; the
+        # manager idles when its config flag is off, so wiring it up
+        # unconditionally has zero cost for users who never opt in.
+        # When enabled, the broadcaster's frame tap feeds averaged
+        # RGB into the worker thread which pushes via the SDK.
+        self.openrgb = OpenRgbOutputManager(self)
+        self.broadcaster.add_frame_tap(self.openrgb.on_frame)
+        # /openrgb/status reaches the manager through the broadcaster
+        # attribute the HTTP handler already has in scope. Mirrors the
+        # hwmon_provider / udp_provider attachment pattern.
+        self.broadcaster.openrgb_provider = self.openrgb
+        self.openrgb.start()
         try:
             loop.run_until_complete(self._serve())
         except Exception as e:

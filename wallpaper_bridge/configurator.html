@@ -1789,6 +1789,40 @@
         <button class="btn" id="sys-reimport-bundles" type="button"
                 data-i18n="system.reimport_bundles">Re-import wallpaper bundles…</button>
       </div>
+
+      <!-- v1.4.0-beta: OpenRGB output channel. Optional; disabled by
+           default. When enabled, the bridge connects to OpenRGB's
+           network SDK (Settings → SDK Server in OpenRGB must be
+           switched on) and pushes the source-screen's averaged glow
+           colour to every enumerated device at 30 Hz. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="openrgb.header" style="margin: 0; flex: 1 1 100%;">
+          OpenRGB output (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="openrgb.hint">
+        Mirror the wallpaper's live glow colour onto your OpenRGB-
+        controlled hardware (RAM, fans, keyboards, …). Requires
+        OpenRGB running with its SDK Server enabled (Settings → SDK
+        Server in OpenRGB).
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <label for="openrgb-enabled" data-i18n="openrgb.enabled">Enabled</label>
+        <input type="checkbox" id="openrgb-enabled">
+        <span class="val" id="openrgb-status-pill" style="margin-left:8px;">—</span>
+      </div>
+      <div class="row">
+        <label for="openrgb-host" data-i18n="openrgb.host">Host</label>
+        <input type="text" id="openrgb-host" placeholder="127.0.0.1" style="max-width:160px;">
+        <label for="openrgb-port" data-i18n="openrgb.port" style="margin-left:12px;">Port</label>
+        <input type="number" id="openrgb-port" min="1" max="65535" step="1"
+               style="max-width:90px;">
+      </div>
+      <div class="row">
+        <label for="openrgb-source-screen" data-i18n="openrgb.source">Source screen</label>
+        <select id="openrgb-source-screen"></select>
+      </div>
+      <div id="openrgb-devices" class="hint" style="margin-top: 8px;"></div>
     </div>
   </section>
 
@@ -1885,6 +1919,25 @@ const TRANSLATIONS = {
                               de: "Globale Preset-Hotkeys" },
   "system.preset_hotkeys_hint": { en: "Ctrl+Shift+1…0 applies preset slot 1…10 on the focused screen (or screen 1 when nothing is focused).",
                               de: "Strg+Umschalt+1…0 wendet Preset-Slot 1…10 auf den fokussierten Bildschirm an (oder Bildschirm 1, wenn nichts fokussiert ist)." },
+  // v1.4.0-beta: OpenRGB output channel labels (System card).
+  "openrgb.header":         { en: "OpenRGB output (beta)",
+                              de: "OpenRGB-Ausgabe (Beta)" },
+  "openrgb.hint":           { en: "Mirror the wallpaper's live glow colour onto your OpenRGB-controlled hardware (RAM, fans, keyboards, …). Requires OpenRGB running with its SDK Server enabled (Settings → SDK Server in OpenRGB).",
+                              de: "Spiegelt die Glow-Farbe deines Wallpapers auf deine OpenRGB-Hardware (RAM, Lüfter, Tastaturen, …). OpenRGB muss mit aktiviertem SDK-Server laufen (Einstellungen → SDK-Server in OpenRGB)." },
+  "openrgb.enabled":        { en: "Enabled",                de: "Aktiviert" },
+  "openrgb.host":           { en: "Host",                   de: "Host" },
+  "openrgb.port":           { en: "Port",                   de: "Port" },
+  "openrgb.source":         { en: "Source screen",          de: "Quell-Bildschirm" },
+  "openrgb.status.idle":    { en: "—",                      de: "—" },
+  "openrgb.status.connected":   { en: "connected · {n} device(s)",
+                                  de: "verbunden · {n} Gerät(e)" },
+  "openrgb.status.connecting":  { en: "connecting…",        de: "verbinde…" },
+  "openrgb.status.disconnected":{ en: "disconnected ({err})",
+                                  de: "getrennt ({err})" },
+  "openrgb.status.disabled":    { en: "disabled",           de: "deaktiviert" },
+  "openrgb.devices.empty":      { en: "(no devices enumerated yet)",
+                                  de: "(noch keine Geräte erkannt)" },
+
   "system.reload_config":   { en: "Reload config from disk",
                               de: "Config von Festplatte neu laden" },
   "system.reload_wallpapers": { en: "Reload wallpaper pages",
@@ -4199,6 +4252,30 @@ function renderSystemSection() {
     if (!el) continue;
     el.checked = !!bridgeState[key];
   }
+  // v1.4.0-beta: OpenRGB output sub-section. bridgeState.openrgbOutput is
+  // shipped by the bridge as { enabled, host, port, sourceScreen }.
+  const og = (bridgeState && bridgeState.openrgbOutput) || {};
+  const ogEn = document.getElementById("openrgb-enabled");
+  const ogHost = document.getElementById("openrgb-host");
+  const ogPort = document.getElementById("openrgb-port");
+  const ogSrc  = document.getElementById("openrgb-source-screen");
+  if (ogEn)   ogEn.checked = !!og.enabled;
+  if (ogHost) ogHost.value = og.host || "127.0.0.1";
+  if (ogPort) ogPort.value = (og.port != null) ? og.port : 6742;
+  if (ogSrc) {
+    const sc = Math.max(1, (settings && settings.screenCount) || 1);
+    const want = (og.sourceScreen != null) ? og.sourceScreen : 0;
+    if (ogSrc.options.length !== sc) {
+      ogSrc.innerHTML = "";
+      for (let i = 0; i < sc; i++) {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = "Screen " + (i + 1);
+        ogSrc.appendChild(opt);
+      }
+    }
+    ogSrc.value = String(Math.min(want, sc - 1));
+  }
 }
 
 (function wireSystemSection() {
@@ -4231,6 +4308,87 @@ function renderSystemSection() {
       toast(t(action === "reimport-bundles"
         ? "system.reimport_bundles" : ("system." + action.replace(/-/g, "_"))), "good");
     });
+  }
+  // v1.4.0-beta: OpenRGB output controls. Each field pushes the whole
+  // openrgbOutput block back so the bridge's nested-key handler doesn't
+  // have to special-case partial updates.
+  function _pushOpenRgb(patch) {
+    const cur = (bridgeState && bridgeState.openrgbOutput) || {};
+    const next = Object.assign(
+      { enabled: false, host: "127.0.0.1", port: 6742, sourceScreen: 0 },
+      cur, patch);
+    bridgeState.openrgbOutput = next;
+    sendCmd({ type: "bridge-setting-update", key: "openrgbOutput", value: next });
+  }
+  const ogEn = document.getElementById("openrgb-enabled");
+  if (ogEn) ogEn.addEventListener("change", () => _pushOpenRgb({ enabled: ogEn.checked }));
+  const ogHost = document.getElementById("openrgb-host");
+  if (ogHost) ogHost.addEventListener("change", () => _pushOpenRgb({ host: ogHost.value.trim() || "127.0.0.1" }));
+  const ogPort = document.getElementById("openrgb-port");
+  if (ogPort) ogPort.addEventListener("change", () => {
+    const n = parseInt(ogPort.value, 10);
+    if (!isFinite(n) || n < 1 || n > 65535) { ogPort.value = 6742; }
+    _pushOpenRgb({ port: parseInt(ogPort.value, 10) });
+  });
+  const ogSrc = document.getElementById("openrgb-source-screen");
+  if (ogSrc) ogSrc.addEventListener("change", () => _pushOpenRgb({ sourceScreen: parseInt(ogSrc.value, 10) || 0 }));
+
+  // Status poller — only runs while the System card is expanded AND
+  // OpenRGB is enabled, to avoid background HTTP traffic when the user
+  // isn't looking at it.
+  let _ogPollTimer = null;
+  async function _pollOpenRgbStatus() {
+    const pill = document.getElementById("openrgb-status-pill");
+    const devs = document.getElementById("openrgb-devices");
+    if (!pill || !devs) return;
+    const og = (bridgeState && bridgeState.openrgbOutput) || {};
+    if (!og.enabled) {
+      pill.textContent = t("openrgb.status.disabled") || "disabled";
+      devs.textContent = "";
+      return;
+    }
+    try {
+      const r = await fetch("/openrgb/status", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const s = await r.json();
+      if (s.connected) {
+        pill.textContent = (t("openrgb.status.connected") || "connected · {n} device(s)")
+          .replace("{n}", String(s.devices ? s.devices.length : 0));
+        if (s.devices && s.devices.length) {
+          devs.textContent = s.devices.map(d => `${d.name} (${d.leds} LEDs)`).join(" · ");
+        } else {
+          devs.textContent = t("openrgb.devices.empty") || "(no devices enumerated yet)";
+        }
+      } else if (s.lastError) {
+        pill.textContent = (t("openrgb.status.disconnected") || "disconnected ({err})")
+          .replace("{err}", s.lastError);
+        devs.textContent = "";
+      } else {
+        pill.textContent = t("openrgb.status.connecting") || "connecting…";
+        devs.textContent = "";
+      }
+    } catch (e) {
+      pill.textContent = (t("openrgb.status.disconnected") || "disconnected ({err})")
+        .replace("{err}", String(e.message || e));
+      devs.textContent = "";
+    }
+  }
+  function _restartOpenRgbPoll() {
+    if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
+    _pollOpenRgbStatus();
+    _ogPollTimer = setInterval(_pollOpenRgbStatus, 2000);
+  }
+  // Poll while the System card is open. The card uses the standard
+  // `collapsed` class toggle — when it's removed we start, when it's
+  // re-added we stop.
+  const sysCard = document.getElementById("card-system");
+  if (sysCard) {
+    const _sync = () => {
+      if (!sysCard.classList.contains("collapsed")) _restartOpenRgbPoll();
+      else if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
+    };
+    new MutationObserver(_sync).observe(sysCard, { attributes: true, attributeFilter: ["class"] });
+    _sync();
   }
 })();
 
