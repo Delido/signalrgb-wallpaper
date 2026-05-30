@@ -4474,12 +4474,26 @@ function renderSystemSection() {
     if (!og.enabled) {
       pill.textContent = t("openrgb.status.disabled") || "disabled";
       devs.textContent = "";
+      // v1.5.0-beta spatial-mapping: also tear down the editor + its
+      // preview WS while disabled. Without this branch the editor
+      // would linger from the moment the user un-ticks Enabled until
+      // the next status poll wired the visibility update.
+      if (_mappingWrap) _mappingWrap.style.display = "none";
+      _closePreviewWs();
       return;
     }
+    // v1.5.0-beta-hotfix7: hoist `s` out of the try block so the
+    // visibility update below can read it. Previously declared as
+    // `const s = await r.json()` inside the try; the spatial-mapping
+    // code referenced it from the outer scope which silently threw a
+    // ReferenceError that the defensive catch-all swallowed → the
+    // editor visibility was never flipped on even when conditions
+    // (enabled + 1 device with 29 LEDs) clearly held.
+    let s = null;
     try {
       const r = await fetch("/openrgb/status", { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
-      const s = await r.json();
+      s = await r.json();
       if (s.connected) {
         pill.textContent = (t("openrgb.status.connected") || "connected · {n} device(s)")
           .replace("{n}", String(s.devices ? s.devices.length : 0));
