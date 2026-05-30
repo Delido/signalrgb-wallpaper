@@ -253,17 +253,23 @@ class OpenRGBClient:
         tail of REQUEST_CONTROLLER_DATA, so we re-request the whole
         descriptor and parse forward. That's ~1-3 KB per poll — fine
         at the 30 Hz cap we run."""
+        # v1.5.0-beta hotfix7: distinguish socket-broken (re-raise so
+        # OpenRgbInputManager triggers a reconnect) from parse-failed
+        # / empty-colors (return [] so the manager keeps polling
+        # without burning backoff cycles). Hardware-effect-mode
+        # devices legitimately report 0 colours, which used to look
+        # identical to a dropped TCP — see the "no LEDs vs socket
+        # broke" split applied to push_color in earlier hotfix.
+        with self._lock:
+            self._send(device_id, REQUEST_CONTROLLER_DATA,
+                       struct.pack("<I", self.protocol_version))
+            _, _, data = self._recv_packet()
         try:
-            with self._lock:
-                self._send(device_id, REQUEST_CONTROLLER_DATA,
-                           struct.pack("<I", self.protocol_version))
-                _, _, data = self._recv_packet()
             info = _parse_controller_data(
                 data, self.protocol_version, with_colors=True)
             return info.get("colors", []) or []
-        except (OSError, OpenRGBError, struct.error,
-                UnicodeDecodeError, ValueError) as e:
-            print(f"[openrgb] get_colors({device_id}) failed: {e}")
+        except (struct.error, UnicodeDecodeError, ValueError) as e:
+            print(f"[openrgb] get_colors({device_id}) parse failed: {e}")
             return []
 
     def push_strip(self, device_id: int, colors) -> bool:

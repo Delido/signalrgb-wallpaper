@@ -5062,9 +5062,26 @@ class OpenRgbInputManager:
                 if client is None:
                     any_failure = True
                     continue
-                colors = client.get_colors(device_index)
-                if not colors:
+                # v1.5.0-beta hotfix7: split socket-broken from
+                # empty-colours. get_colors() now re-raises OSError /
+                # OpenRGBError on real wire problems so we trigger
+                # reconnect; a returned empty list is a legitimate
+                # "device reports no colours" (hardware-effect mode,
+                # mid-mode-switch, …) — keep polling at full rate
+                # without burning backoff cycles.
+                try:
+                    colors = client.get_colors(device_index)
+                except (OSError, _OpenRGBError) as e:
+                    self._last_error = f"{host}:{port} dev{device_index}: {e}"
                     any_failure = True
+                    continue
+                if not colors:
+                    # Push black so the wallpaper visibly reflects the
+                    # "OpenRGB device is in a mode we can't read" state
+                    # instead of freezing on the last-known colour. No
+                    # backoff escalation — the connection is healthy.
+                    frame = flat_color_to_sr_frame(screen, (0, 0, 0))
+                    self.source_mgr.emit_threadsafe(screen, frame, "openrgb")
                     continue
                 # Average all LEDs of the device so per-LED variations
                 # don't dominate the wallpaper glow. The user picked the
