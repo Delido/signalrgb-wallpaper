@@ -681,16 +681,100 @@ unless a community / power-user request comes in. Deferred past
 v1.0 — the v0.7 → v1.0 arc was about getting the single-user
 experience rock-solid; integration is the next layer up.
 
-### 🔲 sACN / E1.31 broadcast output — **recommended first Tier 4 item**
+### ✅ LED ecosystem hub — shipped v1.4.0-beta + v1.5.0-beta
 
-The bridge today is already a colour router (SignalRGB plugin →
-UDP → bridge → WebSocket → wallpaper page). Adding a second
-output path that emits the same colour stream as **sACN (streaming
-ACN, ANSI E1.31-2018)** multicast packets would bridge SignalRGB
-into the entire DIY-LED ecosystem — WLED, xLights, FPP, Hyperion,
-OLA-driven fixtures, anything that consumes sACN. Massively
-higher audience-expansion potential than the other Tier 4 items
-because the DIY-LED community dwarfs the SignalRGB user base.
+The single-source / single-output colour pipeline got opened up
+into a full switchboard. Three input strategies feed the
+broadcaster, two output strategies fan out from it, all running
+off the same averaged colour stream so a single SignalRGB
+effect can drive wallpaper + OpenRGB hardware + DMX lighting in
+sync. Closes the long-standing "sACN/E1.31 outbound" Tier 4
+item below — kept here for the architectural notes; the
+**original 🔲 entry was the seed for what eventually shipped as
+the multi-source bridge architecture, not just an emitter**.
+
+**v1.4.0-beta — OpenRGB output channel:**
+
+- Custom MIT-safe OpenRGB SDK client
+  (`wallpaper_bridge/openrgb_client.py`, pure stdlib — no
+  openrgb-python GPL bundling)
+- `OpenRgbOutputManager` daemon thread, reconnect-with-backoff,
+  30 Hz push loop
+- Broadcaster frame-tap registry — reusable hook reserved for
+  the sACN emitter below (and any future output)
+- Configurator: enable + host/port + source-screen, live status
+  pill with device list
+
+**v1.5.0-beta — sources hub + sACN output + spatial mapping:**
+
+- **SourceManager** routing layer: per-screen colour source
+  picker (SignalRGB UDP / OpenRGB poll / sACN multicast).
+  Default unchanged — every screen starts on SignalRGB. Polled
+  sources synthesise SR-format frames via
+  `flat_color_to_sr_frame()` so downstream code (broadcaster,
+  wallpaper page) doesn't need to care that the frame didn't
+  originate from UDP.
+- **OpenRGB input**: `OpenRgbInputManager` polls a chosen device's
+  LEDs via the same SDK client (`get_colors()` was added as a
+  companion to `push_color()`), averages, emits.
+- **sACN/E1.31 input**: `SacnInputManager` joins the multicast
+  groups for configured universes, parses DMX, picks (R, G, B)
+  from the first 3 channels of each universe.
+- **sACN/E1.31 output emitter**: parallel to OpenRGB output,
+  registered as a frame-tap. 30 Hz, configurable multicast /
+  unicast, priority 0–200, per-screen universe assignment.
+- **`sacn_codec.py`**: stdlib-only ANSI E1.31 pack/parse,
+  round-trip tested. Shared by input + output managers.
+- **Spatial mapping for OpenRGB output**: each device has a
+  normalised (x, y) position; bridge samples the live grid at
+  that point instead of averaging. Configurator has a draggable
+  live-preview canvas (480×270, WS-subscribed to the source
+  screen) — drag a marker to move where the device samples
+  from. Backward-compat: any device without a mapping defaults
+  to (0.5, 0.5) which matches v1.4's averaged behaviour on
+  uniform effects.
+
+OpenRGB SDK parser took five iterations to stabilise on real
+hardware (OpenRGB 1.0rc2 + ASUS GPU + E1.31 plugin) — see
+the v1.5.0-beta hotfix commits:
+
+1. `5b0b924` — mode-struct size 44 → 48 bytes for protocol 3+
+2. `f1ce581` — `min(client, server)` handshake; length-prefixed
+   strings, not null-terminated
+3. `3c4ee2e` — vendor string field added in protocol 1+
+4. `23a9f2e` / `a350da1` — split socket-broken from 0-LED on
+   both push (output) and get_colors (input) paths
+5. `289bc8d` — Configurator JS scope fix on the spatial-mapping
+   visibility flip
+
+**Caveat (worth documenting for users):** OpenRGB devices in a
+hardware-effect mode (firmware-driven Rainbow / Static / etc.)
+do NOT expose their live frame over the SDK. The colours
+returned by `REQUEST_CONTROLLER_DATA` only reflect the last
+SDK-set state. For OpenRGB-as-source to actually mirror what
+the GPU shows, the device must be in **Direct mode** with some
+software-side effect engine (e.g. the OpenRGB Effect Engine
+plugin) pushing frames the bridge can then read. This is an
+architectural property of the OpenRGB SDK, not a bridge bug.
+
+#### Follow-ups (not yet started)
+
+- **Strip mapping** (Phase C from the v1.5 plan, ~3-4 h):
+  multi-LED devices (RAM, strips, keyboard rows) get a *line*
+  on the preview from (x1, y1) to (x2, y2) instead of a single
+  point — each LED samples its position along the line. Lets a
+  RAM stick show a horizontal gradient matching the wallpaper.
+- **Multi-source mDNS/SSDP discovery** for sACN receivers — the
+  current setup is "type the universe number in" which is fine
+  for power users but high friction for first-timers.
+
+### 🔁 Historical: sACN / E1.31 outbound — original Tier-4 planning notes
+
+Kept below for the architectural commentary; the feature itself
+shipped above. The original scope was "outbound emitter only";
+the v1.5 implementation went broader (full sources/outputs hub)
+because once SourceManager existed, adding the inbound path was
+cheap and parallel.
 
 #### What gets added
 

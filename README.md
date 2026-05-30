@@ -29,8 +29,28 @@ Runs on top of [Lively Wallpaper](https://www.rocksdanister.com/lively/)
 Steam). The one-click installer sets everything up — no Python, no
 manual file copies, no terminal.
 
-> 🎯 **v1.2.x is the current stable.** Big UX overhaul on top of
-> v1.1's tile-shell foundation:
+> 🎯 **v1.3.0 is the current stable.** v1.4 + v1.5 betas open the
+> bridge up to other lighting ecosystems — your wallpaper, your
+> OpenRGB hardware, and your DMX/sACN gear can now all run off the
+> same SignalRGB effect.
+>
+> - **OpenRGB output** (v1.4-beta) — bridge talks to OpenRGB's
+>   network SDK and mirrors the wallpaper's averaged glow colour
+>   onto every OpenRGB-controlled device (RAM, fans, keyboards, …).
+>   Custom MIT-safe SDK client, opt-in, disabled by default.
+> - **Per-screen colour source** (v1.5-beta) — each screen can take
+>   its glow colour from SignalRGB (default), an OpenRGB device, or
+>   an incoming sACN/E1.31 universe. Lets a wallpaper follow
+>   whichever effect engine you actually run.
+> - **sACN / E1.31 output** (v1.5-beta) — streams the per-screen
+>   glow as DMX-over-IP on the standard multicast group. Receivers:
+>   xLights, QLC+, Hyperion, any hardware DMX / sACN controller.
+> - **Spatial mapping** (v1.5-beta) — drag each OpenRGB device's
+>   marker on a live wallpaper preview to tell the bridge where in
+>   the wallpaper to sample its colour from. Each device gets the
+>   colour at its own position, not a mushed global average.
+>
+> Earlier highlights from the v1.2.x → v1.3.0 line (current stable):
 >
 > - **Monitor-Setup workflow** in the Builder — declare ultrawide-as-
 >   2-monitors or landscape+portrait span layouts, edit each sub-tile
@@ -84,6 +104,12 @@ manual file copies, no terminal.
   during games
 - 🩺 **Diagnostics export** — one-click ZIP with config, library,
   and summary metadata for bug reports
+- 🔌 **LED ecosystem hub** *(v1.4 / v1.5 beta)* — per-screen colour
+  source picker (SignalRGB / OpenRGB / sACN-E1.31), parallel
+  outputs to OpenRGB hardware + DMX/sACN receivers (xLights /
+  QLC+ / Hyperion / hardware DMX nodes), and a drag-to-position
+  live-preview editor so each OpenRGB device follows the colour at
+  its own spot on the wallpaper. All opt-in, disabled by default.
 
 ## See it in action
 
@@ -247,6 +273,33 @@ about it.
 
 ## What's new
 
+**v1.4 → v1.5 beta line: LED ecosystem hub.** The bridge stops
+being SignalRGB-only on both ends — each screen picks its colour
+source independently, and the same averaged glow streams out to
+OpenRGB + sACN/E1.31 receivers in parallel.
+
+- 🔌 **OpenRGB output channel** *(v1.4.0-beta)* — pure-Python
+  MIT-safe SDK client connects to OpenRGB's network server on
+  `127.0.0.1:6742` and pushes the wallpaper glow onto every
+  enumerated device at 30 Hz. Off by default; opt in from the
+  Configurator's System card.
+- 🎛 **Per-screen colour source picker** *(v1.5.0-beta)* — each
+  screen can take its glow from SignalRGB UDP (default), an
+  OpenRGB device (bridge polls its LEDs), or an incoming
+  sACN/E1.31 multicast universe (first three DMX channels =
+  R/G/B).
+- 📡 **sACN / E1.31 output** *(v1.5.0-beta)* — streams the
+  per-screen glow as DMX over IP. Multicast (standard) or
+  unicast (specific receiver), per-screen universe assignment,
+  priority 0–200. Receivers: xLights, QLC+, Hyperion, any
+  hardware DMX / sACN controller.
+- 🎯 **Spatial mapping for OpenRGB output** *(v1.5.0-beta)* —
+  drag each device's marker on a 480×270 live wallpaper preview
+  to tell the bridge where in the wallpaper to sample its
+  colour from. Lets RAM on the left of the screen match the
+  left half of the wallpaper, fans on the right match the
+  right, etc. — instead of one averaged colour for everything.
+
 **v0.9.x** is the current beta cycle and rolls up the bigger
 post-v0.8 features — automation, more effects, and a much-improved
 multi-monitor Builder workflow. Highlights since v0.8.0:
@@ -328,26 +381,36 @@ Open ideas grouped by impact-to-effort ratio. Pull requests welcome.
 For the long-form version with per-item implementation notes +
 licence-compatibility guidance, see [docs/roadmap.md](docs/roadmap.md).
 
-> ✅ **Tiers 1 + 2 + 3 are all shipped** as part of the v0.8 → v1.0
-> arc. Setup health-check, backup/restore, Ctrl+Z undo, first-run
-> tour, wallpaper auto-cycle, preset hotkeys, per-app profiles,
-> Now-playing widget, Builder Auto-cut tool, auto-update,
-> twelve ambient effects, multi-monitor wall workflow, Winget
-> submission — all done.
+> ✅ **Tiers 1 + 2 + 3 + the first slice of Tier 4 are shipped.**
+> Setup health-check, backup/restore, Ctrl+Z undo, first-run tour,
+> wallpaper auto-cycle, preset hotkeys, per-app profiles,
+> Now-playing widget, Builder Auto-cut tool, auto-update, twelve
+> ambient effects, multi-monitor wall workflow, Winget submission
+> — all done. **Tier 4 LED-ecosystem work** (OpenRGB output,
+> sources hub, sACN/E1.31 output, spatial mapping) shipped across
+> the v1.4 + v1.5 betas.
 >
-> The open work below is **Tier 4 (ecosystem / integration)**.
-> Lower priority because none of it is a single-user need; pull
-> requests very welcome if any of these matter to your setup.
+> The open work below is the remaining Tier 4 (integration / API
+> surface). Lower priority because none of it is a single-user
+> need; pull requests very welcome if any of these matter to your
+> setup.
 
 ### 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
 
+- **Strip-mode spatial mapping** *(~3–4 h)* — multi-LED devices
+  (RAM, strips, keyboard rows) get a *line* on the wallpaper
+  preview instead of a single point. Each LED samples its
+  position along the line, so a stick of RAM can show a
+  horizontal gradient that matches the wallpaper. Follow-up
+  to the v1.5 single-point mapping.
 - **Home Assistant / MQTT bridge** — publish wallpaper state +
   sensor values via MQTT so users can write HA automations
   ("dim wallpaper when 'movie night' scene is active").
 - **REST API** — already partially possible (`/library`, `/config`,
-  `/hwmon/sensors`); formalise the full WS-equivalent surface with
-  an OpenAPI spec + token auth so Stream Deck / scripts / external
-  tools can drive the wallpaper without poking the WebSocket.
+  `/hwmon/sensors`, `/openrgb/status`, `/sacn/status`, …);
+  formalise the full WS-equivalent surface with an OpenAPI spec
+  plus token auth so Stream Deck / scripts / external tools can
+  drive the wallpaper without poking the WebSocket.
 - **Plugin API for third-party widgets** — `%LOCALAPPDATA%\
   SignalRGBWallpaper\plugins\<name>\widget.js` with a defined
   contract. Long road to a community widget library; depends on
