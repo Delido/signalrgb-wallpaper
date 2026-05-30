@@ -202,6 +202,33 @@ class OpenRGBClient:
             print(f"[openrgb] push to device {device_id} failed: {e}")
             return False
 
+    # ── input (OpenRGB-as-source path) ────────────────────────────────
+
+    def get_colors(self, device_id: int) -> list[tuple[int, int, int]]:
+        """v1.5: pull the current per-LED colour array for `device_id`.
+        Used by `OpenRgbInputManager` to mirror whichever effect engine
+        (SignalRGB plugin, OpenRGB-native effect, …) is driving that
+        device. Empty list on any failure — caller polls again next
+        tick.
+
+        Implementation note: OpenRGB doesn't expose a dedicated
+        \"read current colours\" packet. The colours travel as the
+        tail of REQUEST_CONTROLLER_DATA, so we re-request the whole
+        descriptor and parse forward. That's ~1-3 KB per poll — fine
+        at the 30 Hz cap we run."""
+        try:
+            with self._lock:
+                self._send(device_id, REQUEST_CONTROLLER_DATA,
+                           struct.pack("<I", self.protocol_version))
+                _, _, data = self._recv_packet()
+            info = _parse_controller_data(
+                data, self.protocol_version, with_colors=True)
+            return info.get("colors", []) or []
+        except (OSError, OpenRGBError, struct.error,
+                UnicodeDecodeError, ValueError) as e:
+            print(f"[openrgb] get_colors({device_id}) failed: {e}")
+            return []
+
     def push_strip(self, device_id: int, colors) -> bool:
         """Paint per-LED from `colors` (iterable of (r,g,b) triples).
         Extra LEDs beyond `len(colors)` are filled with the last
@@ -238,15 +265,16 @@ def _read_string(data: bytes, pos: int) -> tuple[str, int]:
     return data[pos:end].decode("utf-8", "replace"), end + 1
 
 
-def _parse_controller_data(data: bytes, version: int) -> dict:
-    """Parse just enough of REQUEST_CONTROLLER_DATA's response to
-    extract device name + LED count. Skips past mode + zone sections
-    by walking their declared structure — OpenRGB's protocol changed
-    a couple of times across the 0.6 → 0.9 line, so we branch on
-    `version`.
+def _parse_controller_data(data: bytes, version: int,
+                            with_colors: bool = False) -> dict:
+    """Parse REQUEST_CONTROLLER_DATA. Always returns name + LED count;
+    with `with_colors=True` also returns the current per-LED colour
+    array. Skips past mode + zone sections by walking their declared
+    structure — OpenRGB's protocol changed a couple of times across
+    the 0.6 → 0.9 line, so we branch on `version`.
 
-    Returns {name, type, led_count}. Raises ValueError on malformed
-    data."""
+    Returns {name, type, led_count, [colors: list[(r,g,b)]]}. Raises
+    ValueError on malformed data."""
     pos = 0
     # uint32 data_size + uint32 device_type
     if len(data) < 8:
@@ -311,8 +339,28 @@ def _parse_controller_data(data: bytes, version: int) -> dict:
     if pos + 2 > len(data):
         raise ValueError("truncated before LED count")
     num_leds = struct.unpack_from("<H", data, pos)[0]; pos += 2
-    # We don't actually need to parse the per-LED structs to know
-    # num_leds — but consuming them validates the stream + leaves pos
-    # aligned for any future fields (num_colors at the end). Bail on
-    # truncation gracefully instead of erroring the whole enum.
-    return {"name": name, "type": int(device_type), "led_count": int(num_leds)}
+    result = {"name": name, "type": int(device_type),
+              "led_count": int(num_leds)}
+    if not with_colors:
+        return result
+    # v1.5: walk past the per-LED descriptors (string + uint32) so we
+    # land on the colour array at the end. Used by OpenRGB-as-source
+    # input — see OpenRGBClient.get_colors.
+    try:
+        for _ in range(num_leds):
+            _led_name, pos = _read_string(data, pos)
+            pos += 4   # uint32 LED value (raw register, we don't need it)
+        if pos + 2 > len(data):
+            raise ValueError("truncated before colors")
+        n_colors = struct.unpack_from("<H", data, pos)[0]; pos += 2
+        colors: list[tuple[int, int, int]] = []
+        for _ in range(n_colors):
+            if pos + 4 > len(data):
+                break
+            r, g, b, _ = data[pos], data[pos + 1], data[pos + 2], data[pos + 3]
+            colors.append((r, g, b))
+            pos += 4
+        result["colors"] = colors
+    except (struct.error, ValueError):
+        result["colors"] = []
+    return result

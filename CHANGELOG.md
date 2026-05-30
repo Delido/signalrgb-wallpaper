@@ -4,6 +4,75 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0-beta] - 2026-05-30
+
+The **LED ecosystem hub** beta. v1.4.0-beta opened a single one-way
+channel from the bridge to OpenRGB; v1.5.0-beta turns the bridge into
+a small switchboard: pick *per screen* whether the wallpaper takes
+its colour from SignalRGB, an OpenRGB device, or an incoming sACN
+universe, and stream the resulting glow back out to both OpenRGB and
+sACN simultaneously.
+
+### Added — sources
+
+- **Per-screen colour-source picker** in *System → Settings*. Each
+  screen can independently take its glow colour from:
+  - **SignalRGB** (existing UDP plugin path — default, no behaviour
+    change for current installs)
+  - **OpenRGB** — bridge polls a chosen device's current LED colours
+    via the OpenRGB SDK at 30 Hz and averages them into the
+    wallpaper glow. Useful when SignalRGB isn't running but
+    OpenRGB-native effects are.
+  - **sACN / E1.31** — bridge subscribes to a chosen multicast
+    universe on port 5568 and uses the first three DMX channels
+    (R, G, B) as the source colour. Lets xLights, QLC+, Hyperion,
+    Razer-Chroma adapters or any sACN sender drive the wallpaper.
+- **`SourceManager`** internal routing layer. Validates every
+  incoming frame against the per-screen source config so a still-
+  running SignalRGB plugin can't fight a screen the user just
+  switched onto OpenRGB.
+
+### Added — outputs
+
+- **sACN / E1.31 output emitter** — parallel to the v1.4 OpenRGB
+  output channel. Hooks the broadcaster's frame-tap; emits one
+  universe per screen at 30 Hz with configurable priority,
+  multicast destination (standard E1.31, default) or unicast
+  destination (specific receiver IP).
+- Both outputs run from the same averaged colour stream, so a single
+  effect drives wallpaper + OpenRGB hardware + DMX lighting in
+  perfect sync.
+
+### Added — internals
+
+- **`sacn_codec.py`** — minimal ANSI E1.31 packet pack/parse,
+  stdlib-only. Shared by the input + output managers; round-trip
+  tested.
+- **`openrgb_client.get_colors()`** — read the current LED array
+  from an OpenRGB controller (companion to the v1.4 `push_color`).
+  Implemented via `REQUEST_CONTROLLER_DATA` with a forward-walking
+  parser past the LED descriptors.
+- **HTTP status endpoints** `/sacn/status`, `/sacn-input/status`,
+  `/openrgb-input/status`, `/sources/status` for the Configurator's
+  live state pills.
+
+### Fixed
+
+- `_get_bridge_state` now echoes the nested config blocks
+  (`openrgbOutput`, `sources`, `sacnOutput`) so the Configurator's
+  System sub-sections actually reflect persisted values across tab
+  refreshes. Regression from v1.4.0-beta where the OpenRGB
+  host/port/source-screen fields appeared at their defaults even
+  after the user saved a custom config.
+
+### Notes
+
+Still touches the bridge + Configurator only — no Lively / Wallpaper
+Engine / SignalRGB-plugin changes. Default behaviour is unchanged:
+every screen starts on `signalrgb`, OpenRGB output stays off, sACN
+output stays off. The new channels light up only when the user
+opens the System card and enables them.
+
 ## [1.4.0-beta] - 2026-05-30
 
 First beta of the **LED ecosystem expansion** line. v1.3.0 stayed

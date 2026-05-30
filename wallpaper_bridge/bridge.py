@@ -59,6 +59,17 @@ try:
 except Exception as _e:
     _OpenRGBClient = None
     print(f"[openrgb] client module load failed: {_e}")
+
+# v1.5.0: sACN/E1.31 codec — used both by the outbound emitter (parallel
+# to OpenRGB-output) and the inbound source manager (lets users drive
+# the wallpaper glow from any sACN sender on their network). Wrapped
+# in a try/except mirror of openrgb_client above so a missing module
+# downgrades the feature gracefully instead of crashing the bridge.
+try:
+    import sacn_codec as _sacn
+except Exception as _e:
+    _sacn = None
+    print(f"[sacn] codec module load failed: {_e}")
 import sys
 import threading
 import time
@@ -640,7 +651,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.4.0-beta"
+APP_VERSION = "1.5.0-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -1337,6 +1348,34 @@ def default_config() -> dict:
             "port":         6742,
             "sourceScreen": 0,
         },
+        # v1.5.0-beta: per-screen colour-source picker. Default keeps
+        # every screen on the historical SignalRGB UDP path so existing
+        # installs keep working unchanged. Other recognised types:
+        #   "openrgb"  → poll an OpenRGB device's current LEDs at 30 Hz
+        #   "sacn"     → subscribe to an E1.31 multicast universe
+        # The SourceManager validates incoming frames against this map;
+        # frames from the wrong source for a given screen are dropped.
+        "sources": {
+            str(n): {"type": "signalrgb"} for n in range(N_SCREENS)
+        },
+        # v1.5.0-beta: sACN/E1.31 outbound emitter — parallel to the
+        # OpenRGB-output channel above, hooks the broadcaster's frame
+        # tap. When enabled, broadcasts the per-screen averaged glow
+        # to one configured universe per screen on the standard E1.31
+        # multicast group (239.255.X.Y, port 5568). Receivers: xLights,
+        # QLC+, Hyperion, any hardware ArtNet/sACN node, etc.
+        "sacnOutput": {
+            "enabled":   False,
+            # "multicast" (default, conformant) or "unicast" (point at
+            # a specific receiver — useful when traversing a router
+            # that drops 239.255/16 traffic).
+            "destination": "multicast",
+            "unicastHost": "",
+            "priority":  100,
+            # Per-screen universe assignment. screen index → universe.
+            # Defaults: screen 0 → universe 1, screen 1 → 2, …
+            "universes": {str(n): n + 1 for n in range(N_SCREENS)},
+        },
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -1606,6 +1645,41 @@ def load_config() -> dict:
     cfg["openrgbOutput"].setdefault("host", "127.0.0.1")
     cfg["openrgbOutput"].setdefault("port", 6742)
     cfg["openrgbOutput"].setdefault("sourceScreen", 0)
+    # v1.5.0-beta: per-screen source picker. Default every screen to
+    # "signalrgb" so existing installs see no behavioural change.
+    cfg.setdefault("sources", {})
+    if not isinstance(cfg.get("sources"), dict):
+        cfg["sources"] = {}
+    for n in range(N_SCREENS):
+        src = cfg["sources"].setdefault(str(n), {})
+        if not isinstance(src, dict):
+            cfg["sources"][str(n)] = src = {}
+        src.setdefault("type", "signalrgb")
+        if src["type"] not in ("signalrgb", "openrgb", "sacn"):
+            src["type"] = "signalrgb"
+        # Per-type defaults — kept in the same dict so the Configurator
+        # can read every field whether the source is currently active
+        # or not (UI keeps last-used values when switching).
+        if src["type"] == "openrgb":
+            src.setdefault("host", "127.0.0.1")
+            src.setdefault("port", 6742)
+            src.setdefault("deviceIndex", 0)
+        elif src["type"] == "sacn":
+            src.setdefault("universe", n + 1)
+    # v1.5.0-beta: sACN output block. Same shape-tolerant backfill as
+    # openrgbOutput above.
+    cfg.setdefault("sacnOutput", {})
+    if not isinstance(cfg.get("sacnOutput"), dict):
+        cfg["sacnOutput"] = {}
+    cfg["sacnOutput"].setdefault("enabled", False)
+    cfg["sacnOutput"].setdefault("destination", "multicast")
+    cfg["sacnOutput"].setdefault("unicastHost", "")
+    cfg["sacnOutput"].setdefault("priority", 100)
+    cfg["sacnOutput"].setdefault("universes", {})
+    if not isinstance(cfg["sacnOutput"]["universes"], dict):
+        cfg["sacnOutput"]["universes"] = {}
+    for n in range(N_SCREENS):
+        cfg["sacnOutput"]["universes"].setdefault(str(n), n + 1)
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -2622,6 +2696,40 @@ class Broadcaster:
                     }
                 else:
                     snap = provider.get_status()
+                payload = json.dumps(snap).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}",
+                           request_headers=headers)
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v1.5.0-beta: status endpoints for the three new channels.
+        # Same single-shot polling pattern as /openrgb/status — Configurator
+        # tickles them every 2 s while their sub-panel is visible.
+        _v15_status_routes = {
+            "/openrgb-input/status": "openrgb_input_provider",
+            "/sacn/status":          "sacn_output_provider",
+            "/sacn-input/status":    "sacn_input_provider",
+            "/sources/status":       "source_provider",
+        }
+        if method == "GET" and target.split("?", 1)[0] in _v15_status_routes:
+            attr = _v15_status_routes[target.split("?", 1)[0]]
+            try:
+                provider = getattr(self, attr, None)
+                snap = (provider.get_status() if provider
+                        else {"available": False, "lastError": "manager not wired"})
                 payload = json.dumps(snap).encode("utf-8")
                 head = (
                     "HTTP/1.1 200 OK\r\n"
@@ -4244,8 +4352,17 @@ class UdpReceiver(asyncio.DatagramProtocol):
     # bitmap so we know when reassembly is complete.
     _STALE_AFTER_S = 0.2
 
-    def __init__(self, broadcaster: Broadcaster, loop: asyncio.AbstractEventLoop):
+    def __init__(self, broadcaster: Broadcaster,
+                 source_mgr: "SourceManager",
+                 loop: asyncio.AbstractEventLoop):
         self.broadcaster = broadcaster
+        # v1.5.0-beta: every dispatch funnels through SourceManager so
+        # the user's per-screen source pick (SignalRGB vs OpenRGB vs
+        # sACN) gates whether the frame actually reaches the wallpaper.
+        # Pause / has_clients gates stay on the broadcaster — they're
+        # cheaper than re-checking config on every datagram and the
+        # SourceManager is a no-op for screens still on SignalRGB.
+        self.source_mgr = source_mgr
         self.loop = loop
         self.count = 0
         self.warned_bad = 0
@@ -4314,7 +4431,7 @@ class UdpReceiver(asyncio.DatagramProtocol):
             if self.count == 1 or self.count % 600 == 0:
                 print(f"[udp] {self.count} single-packet frames "
                       f"(last: screen={screen}, {len(data)} bytes)")
-            self.loop.create_task(self.broadcaster.broadcast_frame(screen, data))
+            self.source_mgr.emit(screen, data, "signalrgb")
             return
         if magic1 == 0x43:           # 'C' — chunked frame
             # _bump_fps fires once per assembled frame inside
@@ -4395,7 +4512,7 @@ class UdpReceiver(asyncio.DatagramProtocol):
             if self.count == 1 or self.count % 600 == 0:
                 print(f"[udp] {self.count} chunked frames assembled "
                       f"(last: screen={screen}, {w}x{h}, {chunk_count} chunks)")
-            self.loop.create_task(self.broadcaster.broadcast_frame(screen, bytes(frame)))
+            self.source_mgr.emit(screen, bytes(frame), "signalrgb")
 
     def _evict_stale(self, now: float, exclude: tuple[int, int] | None = None):
         for k, p in list(self.partials.items()):
@@ -4407,6 +4524,117 @@ class UdpReceiver(asyncio.DatagramProtocol):
 
 # ============================================================================
 # Bridge thread — owns the asyncio loop
+# ============================================================================
+
+class SourceManager:
+    """v1.5.0-beta: routes incoming colour frames from multiple sources
+    (SignalRGB UDP plugin, OpenRGB polled device, sACN/E1.31 universe)
+    to the broadcaster, gated by per-screen source config.
+
+    Every input — `UdpReceiver` for SignalRGB, `OpenRgbInputManager`
+    for OpenRGB polling, `SacnInputManager` for sACN — funnels through
+    `emit()` (loop thread) or `emit_threadsafe()` (worker thread).
+    The manager looks up the configured source type for that screen
+    and drops the frame if it doesn't match, so a still-running
+    SignalRGB plugin can't fight an OpenRGB-as-source screen.
+
+    Polled sources (OpenRGB / sACN) build short SR-format frames (a
+    4×4 grid of the picked colour) via `flat_color_to_sr_frame()` so
+    downstream Broadcaster / frame-tap code doesn't need to care that
+    the data didn't originate from a SignalRGB UDP datagram."""
+
+    def __init__(self, bridge_runtime, broadcaster):
+        self.bridge = bridge_runtime
+        self.broadcaster = broadcaster
+
+    # ── config lookup ──────────────────────────────────────────────────
+
+    def configured_source(self, screen: int) -> str:
+        """Returns the source type currently selected for `screen`,
+        falling back to "signalrgb" on any config oddity. Cheap +
+        lock-free: the config dict is set up by the loader and only
+        rewritten as a whole on settings updates, so a stale read
+        just costs one wasted dispatch."""
+        try:
+            sources = self.bridge.config.get("sources") or {}
+            src = sources.get(str(screen)) or {}
+            t = src.get("type")
+            if t in ("signalrgb", "openrgb", "sacn"):
+                return t
+        except Exception:
+            pass
+        return "signalrgb"
+
+    def source_config(self, screen: int) -> dict:
+        try:
+            sources = self.bridge.config.get("sources") or {}
+            src = sources.get(str(screen))
+            return dict(src) if isinstance(src, dict) else {}
+        except Exception:
+            return {}
+
+    # ── emit (called by the various sources) ───────────────────────────
+
+    def emit(self, screen: int, payload: bytes, source: str) -> None:
+        """Loop-thread variant. Caller is on the asyncio thread (used
+        by UdpReceiver from datagram_received)."""
+        if self.configured_source(screen) != source:
+            return
+        loop = self.broadcaster.loop
+        loop.create_task(self.broadcaster.broadcast_frame(screen, payload))
+
+    def emit_threadsafe(self, screen: int, payload: bytes,
+                         source: str) -> None:
+        """Worker-thread variant. Hops to the asyncio loop via
+        `run_coroutine_threadsafe`. Used by OpenRgbInputManager /
+        SacnInputManager — both run in their own daemon threads."""
+        if self.configured_source(screen) != source:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.broadcaster.broadcast_frame(screen, payload),
+                self.broadcaster.loop)
+        except Exception as e:
+            print(f"[source] emit_threadsafe failed: {e}")
+
+    # ── status (for /sources/status HTTP endpoint) ─────────────────────
+
+    def get_status(self) -> dict:
+        """Snapshot of per-screen source types for the Configurator."""
+        try:
+            sc = max(1, int(self.bridge.config.get("screenCount") or 1))
+        except Exception:
+            sc = 1
+        return {
+            "screenCount": sc,
+            "sources": {
+                str(n): {
+                    "type":   self.configured_source(n),
+                    "config": self.source_config(n),
+                }
+                for n in range(N_SCREENS)
+            },
+        }
+
+
+def flat_color_to_sr_frame(screen: int,
+                            rgb: tuple[int, int, int],
+                            grid_size: int = 4) -> bytes:
+    """v1.5.0-beta: synthesise a SignalRGB-format wire frame from a
+    single colour. Used by the polled / inbound sources so the rest of
+    the pipeline (Broadcaster, wallpaper page) doesn't need a separate
+    code path. A 4×4 grid is plenty for the wallpaper's blur kernel
+    and keeps the WS payload at 55 bytes."""
+    w = h = max(1, int(grid_size))
+    r = int(rgb[0]) & 0xff
+    g = int(rgb[1]) & 0xff
+    b = int(rgb[2]) & 0xff
+    header = struct.pack(">BBBHH", 0x53, 0x52, screen & 0xff, w, h)
+    return header + bytes((r, g, b)) * (w * h)
+
+
+# ============================================================================
+# OpenRGB output manager (v1.4.0-beta)
 # ============================================================================
 
 class OpenRgbOutputManager:
@@ -4587,6 +4815,498 @@ class OpenRgbOutputManager:
                 return
 
 
+# ============================================================================
+# OpenRGB input manager — drives the wallpaper from an OpenRGB device
+# ============================================================================
+
+class OpenRgbInputManager:
+    """v1.5.0-beta: poll OpenRGB devices and feed their current LED
+    colours into the wallpaper as a colour source. Mirror image of
+    `OpenRgbOutputManager` — same client class, but `get_colors()`
+    instead of `push_color()`.
+
+    Per-screen device selection lives in `config.sources[screen]`:
+        {type: "openrgb", host, port, deviceIndex}
+
+    Multiple screens can target the same (host, port) — we de-dup
+    the connection. Connection failures fall back to the standard
+    exponential-backoff retry; the worker idles whenever no screens
+    are using the OpenRGB source type."""
+
+    POLL_INTERVAL_S = 1.0 / 30.0
+
+    def __init__(self, bridge_runtime, source_mgr):
+        self.bridge = bridge_runtime
+        self.source_mgr = source_mgr
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        # (host, port) -> OpenRGBClient. One TCP connection per
+        # unique endpoint, regardless of how many screens point at it.
+        self._clients: dict[tuple[str, int], object] = {}
+        self._last_error: str = ""
+
+    def start(self) -> None:
+        if _OpenRGBClient is None:
+            print("[openrgb-in] client module unavailable — input disabled")
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="openrgb-input")
+        self._thread.start()
+        print("[openrgb-in] input manager started")
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def get_status(self) -> dict:
+        return {
+            "available":  _OpenRGBClient is not None,
+            "endpoints":  [
+                {"host": h, "port": p,
+                 "connected": bool(getattr(c, "connected", False))}
+                for (h, p), c in self._clients.items()
+            ],
+            "lastError":  self._last_error,
+        }
+
+    # ── worker loop ────────────────────────────────────────────────────
+
+    def _openrgb_screens(self) -> list[tuple[int, dict]]:
+        """Returns [(screen_idx, src_cfg), …] for screens that the
+        user has switched onto the OpenRGB source. Snapshot read; the
+        SourceManager handles the actual per-frame gate."""
+        out: list[tuple[int, dict]] = []
+        try:
+            sources = self.bridge.config.get("sources") or {}
+            sc = max(1, int(self.bridge.config.get("screenCount") or 1))
+            for n in range(sc):
+                src = sources.get(str(n)) or {}
+                if isinstance(src, dict) and src.get("type") == "openrgb":
+                    out.append((n, dict(src)))
+        except Exception:
+            pass
+        return out
+
+    def _client_for(self, host: str, port: int):
+        """Get-or-create a connected client for the given endpoint.
+        Returns None on connect failure (worker keeps idling)."""
+        key = (host, port)
+        client = self._clients.get(key)
+        if client is not None and client.connected:
+            return client
+        client = _OpenRGBClient(host, port)
+        if not client.connect():
+            self._last_error = f"connect failed: {host}:{port}"
+            return None
+        self._clients[key] = client
+        self._last_error = ""
+        print(f"[openrgb-in] connected to {host}:{port}, "
+              f"{len(client.devices)} device(s)")
+        return client
+
+    def _run(self) -> None:
+        backoff = 2.0
+        while not self._stop.is_set():
+            screens = self._openrgb_screens()
+            if not screens:
+                # No OpenRGB-sourced screens — drop any open connections
+                # so the user doesn't see lingering sockets to OpenRGB
+                # after switching the screens back to SignalRGB.
+                if self._clients:
+                    for c in self._clients.values():
+                        try: c.disconnect()
+                        except Exception: pass
+                    self._clients.clear()
+                if self._stop.wait(1.0):
+                    return
+                backoff = 2.0
+                continue
+            any_failure = False
+            for screen, cfg in screens:
+                host = str(cfg.get("host") or "127.0.0.1")
+                port = int(cfg.get("port") or 6742)
+                device_index = max(0, int(cfg.get("deviceIndex") or 0))
+                client = self._client_for(host, port)
+                if client is None:
+                    any_failure = True
+                    continue
+                colors = client.get_colors(device_index)
+                if not colors:
+                    any_failure = True
+                    continue
+                # Average all LEDs of the device so per-LED variations
+                # don't dominate the wallpaper glow. The user picked the
+                # device, not the specific LED — averaging is the
+                # least-surprising default. (A future enhancement could
+                # add a "specific LED" mode in source_config.)
+                n = len(colors)
+                r_sum = sum(c[0] for c in colors)
+                g_sum = sum(c[1] for c in colors)
+                b_sum = sum(c[2] for c in colors)
+                avg = (r_sum // n, g_sum // n, b_sum // n)
+                frame = flat_color_to_sr_frame(screen, avg)
+                self.source_mgr.emit_threadsafe(screen, frame, "openrgb")
+            if any_failure:
+                # Close clients that lost their connections so the next
+                # tick can rebuild.
+                for key, c in list(self._clients.items()):
+                    if not getattr(c, "connected", False):
+                        del self._clients[key]
+                if self._stop.wait(backoff):
+                    return
+                backoff = min(30.0, backoff * 1.5)
+                continue
+            backoff = 2.0
+            if self._stop.wait(self.POLL_INTERVAL_S):
+                return
+
+
+# ============================================================================
+# sACN/E1.31 input manager — drives the wallpaper from a multicast universe
+# ============================================================================
+
+class SacnInputManager:
+    """v1.5.0-beta: listen on the E1.31 multicast group(s) for every
+    screen the user has switched onto the sACN source, and feed the
+    first three DMX channels of each universe (R, G, B) into the
+    wallpaper. Joins one multicast group per unique universe; bind
+    once on UDP port 5568 with SO_REUSEADDR so other sACN tools on
+    the same host (testers, monitors) keep working alongside us."""
+
+    def __init__(self, bridge_runtime, source_mgr):
+        self.bridge = bridge_runtime
+        self.source_mgr = source_mgr
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._sock = None
+        self._joined_groups: set[int] = set()
+        self._last_seq_by_universe: dict[int, int] = {}
+        self._last_error: str = ""
+        self._last_rx_ts: float = 0.0
+        self._rx_count: int = 0
+
+    def start(self) -> None:
+        if _sacn is None:
+            print("[sacn-in] codec unavailable — input disabled")
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="sacn-input")
+        self._thread.start()
+        print("[sacn-in] input manager started")
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._sock is not None:
+            try: self._sock.close()
+            except Exception: pass
+
+    def get_status(self) -> dict:
+        return {
+            "available":   _sacn is not None,
+            "lastError":   self._last_error,
+            "lastRxTs":    self._last_rx_ts,
+            "rxCount":     self._rx_count,
+            "joined":      sorted(self._joined_groups),
+        }
+
+    def _wanted_universes(self) -> dict[int, int]:
+        """{universe -> screen} for every sACN-typed screen. If two
+        screens point at the same universe the later wins (Configurator
+        prevents this in normal use)."""
+        out: dict[int, int] = {}
+        try:
+            sources = self.bridge.config.get("sources") or {}
+            sc = max(1, int(self.bridge.config.get("screenCount") or 1))
+            for n in range(sc):
+                src = sources.get(str(n)) or {}
+                if isinstance(src, dict) and src.get("type") == "sacn":
+                    try:
+                        u = int(src.get("universe") or 0)
+                    except (TypeError, ValueError):
+                        u = 0
+                    if 1 <= u <= 63999:
+                        out[u] = n
+        except Exception:
+            pass
+        return out
+
+    def _ensure_socket(self) -> bool:
+        if self._sock is not None:
+            return True
+        try:
+            import socket as _sock
+            s = _sock.socket(_sock.AF_INET, _sock.SOCK_DGRAM)
+            s.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+            # SO_REUSEPORT isn't available on Windows < some recent
+            # build; SO_REUSEADDR is enough for the multicast-share
+            # case we care about.
+            s.bind(("", _sacn.E131_PORT))
+            s.settimeout(0.5)
+            self._sock = s
+            return True
+        except OSError as e:
+            self._last_error = f"bind failed: {e}"
+            return False
+
+    def _sync_memberships(self, wanted: dict[int, int]) -> None:
+        if self._sock is None:
+            return
+        want_groups = set(wanted.keys())
+        # Join new groups.
+        for u in want_groups - self._joined_groups:
+            try:
+                group = _sacn.multicast_group_for(u)
+                _sacn.join_multicast_group(self._sock, group)
+                self._joined_groups.add(u)
+                print(f"[sacn-in] joined universe {u} ({group})")
+            except (OSError, ValueError) as e:
+                self._last_error = f"join {u}: {e}"
+        # Drop groups we no longer want.
+        for u in self._joined_groups - want_groups:
+            try:
+                import socket as _sock
+                group = _sacn.multicast_group_for(u)
+                mreq = _sock.inet_aton(group) + _sock.inet_aton("0.0.0.0")
+                self._sock.setsockopt(_sock.IPPROTO_IP,
+                                       _sock.IP_DROP_MEMBERSHIP, mreq)
+                print(f"[sacn-in] left universe {u}")
+            except (OSError, ValueError):
+                pass
+        self._joined_groups &= want_groups
+
+    def _run(self) -> None:
+        last_sync = 0.0
+        while not self._stop.is_set():
+            wanted = self._wanted_universes()
+            if not wanted:
+                # No sACN-sourced screens — shut the socket so the
+                # bridge isn't bound to port 5568 unnecessarily.
+                if self._sock is not None:
+                    try: self._sock.close()
+                    except Exception: pass
+                    self._sock = None
+                    self._joined_groups.clear()
+                if self._stop.wait(1.0):
+                    return
+                continue
+            if not self._ensure_socket():
+                if self._stop.wait(2.0):
+                    return
+                continue
+            # Re-sync memberships ~every second; cheap.
+            now = time.monotonic()
+            if now - last_sync > 1.0:
+                self._sync_memberships(wanted)
+                last_sync = now
+            try:
+                data, _addr = self._sock.recvfrom(1500)
+            except (TimeoutError, OSError):
+                continue
+            pkt = _sacn.parse_e131(data)
+            if pkt is None:
+                continue
+            u = pkt["universe"]
+            screen = wanted.get(u)
+            if screen is None:
+                continue
+            # Sequence-number jitter: drop packets that arrive
+            # older than the last seen one. E1.31 senders are
+            # SHOULD-compliant about monotonic sequences but
+            # networks reorder; the wallpaper page would jitter
+            # if we accepted stale frames.
+            prev = self._last_seq_by_universe.get(u, -1)
+            seq = pkt["sequence"]
+            if prev != -1 and ((seq - prev) % 256) > 128:
+                # treat as out-of-order, drop
+                continue
+            self._last_seq_by_universe[u] = seq
+            dmx = pkt["dmx"]
+            if len(dmx) < 3:
+                continue
+            rgb = (dmx[0], dmx[1], dmx[2])
+            frame = flat_color_to_sr_frame(screen, rgb)
+            self.source_mgr.emit_threadsafe(screen, frame, "sacn")
+            self._rx_count += 1
+            self._last_rx_ts = time.time()
+
+
+# ============================================================================
+# sACN/E1.31 output emitter — parallel to OpenRgbOutputManager
+# ============================================================================
+
+class SacnOutputManager:
+    """v1.5.0-beta: emit E1.31 DATA packets carrying the per-screen
+    averaged glow colour to one universe per screen. Registered as a
+    broadcaster frame-tap (same hook as OpenRgbOutputManager) so we
+    pick up exactly the same colour stream the wallpaper page sees.
+
+    The actual UDP TX runs on its own worker thread at 30 Hz so a
+    chatty multicast destination can never stall the asyncio loop."""
+
+    PUSH_INTERVAL_S = 1.0 / 30.0
+
+    def __init__(self, bridge_runtime):
+        self.bridge = bridge_runtime
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._sock = None
+        # screen → averaged (r, g, b) updated by on_frame
+        self._latest_color: dict[int, tuple] = {}
+        # universe → sequence counter (rolls mod 256)
+        self._seq: dict[int, int] = {}
+        self._last_error: str = ""
+        self._tx_count: int = 0
+
+    def start(self) -> None:
+        if _sacn is None:
+            print("[sacn-out] codec unavailable — output disabled")
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="sacn-output")
+        self._thread.start()
+        print("[sacn-out] output manager started (will emit on demand)")
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def get_status(self) -> dict:
+        return {
+            "available":  _sacn is not None,
+            "enabled":    self._is_enabled(),
+            "lastError":  self._last_error,
+            "txCount":    self._tx_count,
+            "universes":  dict(self._cfg().get("universes") or {}),
+        }
+
+    def on_frame(self, screen: int, payload: bytes) -> None:
+        """Frame-tap. Same averaging as OpenRgbOutputManager.on_frame —
+        we deliberately don't share state because a future enhancement
+        could let each output have its own source-screen selection."""
+        if not self._is_enabled():
+            return
+        if len(payload) < 7:
+            return
+        w = (payload[3] << 8) | payload[4]
+        h = (payload[5] << 8) | payload[6]
+        total = w * h
+        if total <= 0:
+            return
+        data = payload[7:]
+        if len(data) < total * 3:
+            return
+        r_sum = g_sum = b_sum = 0
+        off = 0
+        for _ in range(total):
+            r_sum += data[off]
+            g_sum += data[off + 1]
+            b_sum += data[off + 2]
+            off += 3
+        self._latest_color[screen] = (
+            r_sum // total, g_sum // total, b_sum // total)
+
+    # ── config helpers ─────────────────────────────────────────────────
+
+    def _cfg(self) -> dict:
+        try:
+            with self.bridge.config_lock:
+                return dict(self.bridge.config.get("sacnOutput") or {})
+        except Exception:
+            return {}
+
+    def _is_enabled(self) -> bool:
+        return bool(self._cfg().get("enabled", False))
+
+    # ── worker loop ────────────────────────────────────────────────────
+
+    def _ensure_socket(self) -> bool:
+        if self._sock is not None:
+            return True
+        try:
+            self._sock = _sacn.make_multicast_sender_socket()
+            return True
+        except OSError as e:
+            self._last_error = f"socket: {e}"
+            return False
+
+    def _run(self) -> None:
+        backoff = 2.0
+        while not self._stop.is_set():
+            if not self._is_enabled():
+                if self._sock is not None:
+                    try: self._sock.close()
+                    except Exception: pass
+                    self._sock = None
+                if self._stop.wait(1.0):
+                    return
+                backoff = 2.0
+                continue
+            if not self._ensure_socket():
+                if self._stop.wait(backoff):
+                    return
+                backoff = min(30.0, backoff * 1.5)
+                continue
+            backoff = 2.0
+            cfg = self._cfg()
+            destination = str(cfg.get("destination") or "multicast")
+            unicast_host = str(cfg.get("unicastHost") or "")
+            try:
+                priority = max(0, min(200, int(cfg.get("priority") or 100)))
+            except (TypeError, ValueError):
+                priority = 100
+            universes = cfg.get("universes") or {}
+            try:
+                screen_count = max(1, int(self.bridge.config.get("screenCount") or 1))
+            except Exception:
+                screen_count = 1
+            tx_failed = False
+            for n in range(screen_count):
+                try:
+                    universe = int(universes.get(str(n)) or 0)
+                except (TypeError, ValueError):
+                    universe = 0
+                if not 1 <= universe <= 63999:
+                    continue
+                color = self._latest_color.get(n, (0, 0, 0))
+                # First three DMX slots = R, G, B. Pad to 6 slots so
+                # receivers that expect at least one full RGB triplet
+                # plus zeros (some hardware quirks) stay happy.
+                dmx = bytes((color[0], color[1], color[2], 0, 0, 0))
+                seq = self._seq.get(universe, 0)
+                try:
+                    pkt = _sacn.pack_e131(
+                        universe, dmx, sequence=seq, priority=priority)
+                except (ValueError, OSError) as e:
+                    self._last_error = f"pack {universe}: {e}"
+                    continue
+                try:
+                    if destination == "unicast" and unicast_host:
+                        target = (unicast_host, _sacn.E131_PORT)
+                    else:
+                        target = (
+                            _sacn.multicast_group_for(universe),
+                            _sacn.E131_PORT)
+                    self._sock.sendto(pkt, target)
+                    self._tx_count += 1
+                except (OSError, ValueError) as e:
+                    self._last_error = f"send {universe}: {e}"
+                    tx_failed = True
+                self._seq[universe] = (seq + 1) & 0xff
+            if tx_failed:
+                try: self._sock.close()
+                except Exception: pass
+                self._sock = None
+                if self._stop.wait(1.0):
+                    return
+                continue
+            if self._stop.wait(self.PUSH_INTERVAL_S):
+                return
+
+
 class BridgeRuntime:
     """Lives in a daemon thread, owns the asyncio loop and the broadcaster."""
 
@@ -4686,13 +5406,23 @@ class BridgeRuntime:
     def _get_bridge_state(self) -> dict:
         """Snapshot of bridge-scoped (non-per-screen) toggles the
         Configurator's System section binds to. Cheap — just a few
-        dict lookups under the config lock."""
+        dict lookups under the config lock.
+
+        v1.5.0-beta: also echoes the nested config blocks the new
+        per-screen sources + sACN output UI bind to. Deep-copied so
+        the Configurator can mutate its local copy freely. (Caught
+        as a v1.4.0-beta regression — the OpenRGB sub-section never
+        reflected the persisted host/port because this method only
+        returned the four flat toggles.)"""
         with self.config_lock:
             return {
                 "fullscreenPause":      bool(self.config.get("fullscreenPause", True)),
                 "updateCheckEnabled":   bool(self.config.get("updateCheckEnabled", True)),
                 "allowBetas":           bool(self.config.get("allowBetas", False)),
                 "presetHotkeysEnabled": bool(self.config.get("presetHotkeysEnabled", False)),
+                "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
+                "sources":       copy.deepcopy(self.config.get("sources") or {}),
+                "sacnOutput":    copy.deepcopy(self.config.get("sacnOutput") or {}),
             }
 
     def _on_fullscreen_state(self, paused: bool):
@@ -5684,6 +6414,10 @@ class BridgeRuntime:
         # leaves so a malformed Configurator push can't poison the
         # config.
         "openrgbOutput",
+        # v1.5.0-beta: per-screen source picker + sACN output channel.
+        # Both travel as their full sub-dict — same validation pattern
+        # as openrgbOutput.
+        "sources", "sacnOutput",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -5795,6 +6529,92 @@ class BridgeRuntime:
             # iteration — no explicit kick needed; an enabled flip
             # is picked up within one second.
             print(f"[settings] openrgbOutput -> {cleaned}")
+        elif key == "sources":
+            # v1.5.0-beta: per-screen source picker. The Configurator
+            # sends the whole `{screen_idx: {type, …}}` block on every
+            # change; we validate per leaf so a typo can't poison the
+            # routing table. Recognised types: signalrgb (default),
+            # openrgb, sacn. Unknown types fall back to signalrgb.
+            if not isinstance(value, dict):
+                print(f"[settings] sources value not a dict: {type(value).__name__}")
+                return
+            cleaned: dict = {}
+            for n in range(N_SCREENS):
+                raw = value.get(str(n)) or value.get(n) or {}
+                if not isinstance(raw, dict):
+                    raw = {}
+                t = raw.get("type") or "signalrgb"
+                if t not in ("signalrgb", "openrgb", "sacn"):
+                    t = "signalrgb"
+                entry = {"type": t}
+                if t == "openrgb":
+                    try:
+                        entry["host"] = str(raw.get("host") or "127.0.0.1")[:128]
+                        entry["port"] = max(1, min(65535, int(raw.get("port") or 6742)))
+                        entry["deviceIndex"] = max(0, int(raw.get("deviceIndex") or 0))
+                    except (TypeError, ValueError):
+                        entry = {"type": "signalrgb"}
+                elif t == "sacn":
+                    try:
+                        u = int(raw.get("universe") or 1)
+                    except (TypeError, ValueError):
+                        u = 1
+                    entry["universe"] = max(1, min(63999, u))
+                cleaned[str(n)] = entry
+            with self.config_lock:
+                prev = self.config.get("sources") or {}
+                if dict(prev) == cleaned:
+                    return
+                self.config["sources"] = cleaned
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            print(f"[settings] sources -> {cleaned}")
+        elif key == "sacnOutput":
+            # v1.5.0-beta: sACN output config block. Same shape-tolerant
+            # pattern as openrgbOutput.
+            if not isinstance(value, dict):
+                print(f"[settings] sacnOutput value not a dict: {type(value).__name__}")
+                return
+            try:
+                dest = str(value.get("destination") or "multicast")
+                if dest not in ("multicast", "unicast"):
+                    dest = "multicast"
+                universes_in = value.get("universes") or {}
+                if not isinstance(universes_in, dict):
+                    universes_in = {}
+                universes: dict[str, int] = {}
+                for n in range(N_SCREENS):
+                    try:
+                        u = int(universes_in.get(str(n))
+                                or universes_in.get(n)
+                                or (n + 1))
+                    except (TypeError, ValueError):
+                        u = n + 1
+                    universes[str(n)] = max(1, min(63999, u))
+                cleaned = {
+                    "enabled":     bool(value.get("enabled", False)),
+                    "destination": dest,
+                    "unicastHost": str(value.get("unicastHost") or "")[:128],
+                    "priority":    max(0, min(200, int(value.get("priority") or 100))),
+                    "universes":   universes,
+                }
+            except (TypeError, ValueError) as e:
+                print(f"[settings] sacnOutput malformed: {e}")
+                return
+            with self.config_lock:
+                prev = self.config.get("sacnOutput") or {}
+                if dict(prev) == cleaned:
+                    return
+                self.config["sacnOutput"] = cleaned
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            print(f"[settings] sacnOutput -> {cleaned}")
 
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
@@ -6059,6 +6879,24 @@ class BridgeRuntime:
         # hwmon_provider / udp_provider attachment pattern.
         self.broadcaster.openrgb_provider = self.openrgb
         self.openrgb.start()
+        # v1.5.0-beta: per-screen source routing + the three new
+        # input/output channels. SourceManager is constructed first
+        # because the UdpReceiver inside _serve() needs it. The input
+        # managers + sACN output emitter pull config from the bridge
+        # directly so a runtime config change is picked up within one
+        # poll interval — no explicit reload kick needed.
+        self.source_mgr = SourceManager(self, self.broadcaster)
+        self.broadcaster.source_provider = self.source_mgr
+        self.openrgb_in = OpenRgbInputManager(self, self.source_mgr)
+        self.broadcaster.openrgb_input_provider = self.openrgb_in
+        self.openrgb_in.start()
+        self.sacn_in = SacnInputManager(self, self.source_mgr)
+        self.broadcaster.sacn_input_provider = self.sacn_in
+        self.sacn_in.start()
+        self.sacn_out = SacnOutputManager(self)
+        self.broadcaster.add_frame_tap(self.sacn_out.on_frame)
+        self.broadcaster.sacn_output_provider = self.sacn_out
+        self.sacn_out.start()
         try:
             loop.run_until_complete(self._serve())
         except Exception as e:
@@ -6069,7 +6907,7 @@ class BridgeRuntime:
     async def _serve(self):
         ws_server = await asyncio.start_server(self.broadcaster.handle_client, WS_HOST, WS_PORT)
         udp_transport, udp_protocol = await self.loop.create_datagram_endpoint(
-            lambda: UdpReceiver(self.broadcaster, self.loop),
+            lambda: UdpReceiver(self.broadcaster, self.source_mgr, self.loop),
             local_addr=(UDP_HOST, UDP_PORT),
         )
         # v1.2.12: hand the UdpReceiver to the broadcaster so /config

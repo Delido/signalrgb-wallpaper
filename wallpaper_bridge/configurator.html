@@ -1823,6 +1823,64 @@
         <select id="openrgb-source-screen"></select>
       </div>
       <div id="openrgb-devices" class="hint" style="margin-top: 8px;"></div>
+
+      <!-- v1.5.0-beta: per-screen colour source picker. Each screen
+           can independently take its glow colour from SignalRGB UDP
+           (default), an OpenRGB device, or an incoming sACN/E1.31
+           universe. The bridge enforces the routing — only frames
+           from the configured source for a given screen are forwarded
+           to the wallpaper page. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="sources.header" style="margin: 0; flex: 1 1 100%;">
+          Colour source per screen (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="sources.hint">
+        Picks where each screen's live glow colour comes from.
+        SignalRGB is the default — the wallpaper follows whatever
+        effect SignalRGB is running. Switch a screen to OpenRGB to
+        mirror the current LEDs of an OpenRGB device, or to sACN to
+        listen for an incoming E1.31 universe.
+      </div>
+      <div id="sources-list" style="margin-top: 10px;"></div>
+
+      <!-- v1.5.0-beta: sACN/E1.31 output. Hooks the broadcaster's
+           frame-tap and emits one universe per screen on the standard
+           multicast group (port 5568). Receivers: xLights, QLC+,
+           Hyperion, any hardware ArtNet/sACN node, etc. Disabled by
+           default — costs nothing for users who don't need it. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="sacn.header" style="margin: 0; flex: 1 1 100%;">
+          sACN / E1.31 output (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="sacn.hint">
+        Streams the per-screen averaged glow colour as DMX over IP
+        (E1.31 / sACN) on the standard multicast group. Pick this
+        up with xLights, QLC+, Hyperion, or any hardware DMX / sACN
+        controller. First three DMX channels of each universe carry
+        R / G / B.
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <label for="sacn-enabled" data-i18n="sacn.enabled">Enabled</label>
+        <input type="checkbox" id="sacn-enabled">
+        <span class="val" id="sacn-status-pill" style="margin-left:8px;">—</span>
+      </div>
+      <div class="row">
+        <label for="sacn-destination" data-i18n="sacn.destination">Destination</label>
+        <select id="sacn-destination">
+          <option value="multicast" data-i18n="sacn.dest.multicast">Multicast (default)</option>
+          <option value="unicast"   data-i18n="sacn.dest.unicast">Unicast (specific IP)</option>
+        </select>
+        <input type="text" id="sacn-unicast-host" placeholder="192.168.1.50"
+               style="max-width:160px; margin-left:8px; display:none;">
+      </div>
+      <div class="row">
+        <label for="sacn-priority" data-i18n="sacn.priority">Priority</label>
+        <input type="number" id="sacn-priority" min="0" max="200" step="1"
+               style="max-width:90px;">
+      </div>
+      <div id="sacn-universes" style="margin-top: 8px;"></div>
     </div>
   </section>
 
@@ -1937,6 +1995,44 @@ const TRANSLATIONS = {
   "openrgb.status.disabled":    { en: "disabled",           de: "deaktiviert" },
   "openrgb.devices.empty":      { en: "(no devices enumerated yet)",
                                   de: "(noch keine Geräte erkannt)" },
+
+  // v1.5.0-beta: per-screen colour-source picker labels.
+  "sources.header":             { en: "Colour source per screen (beta)",
+                                  de: "Farbquelle pro Bildschirm (Beta)" },
+  "sources.hint":               { en: "Picks where each screen's live glow colour comes from. SignalRGB is the default — the wallpaper follows whatever effect SignalRGB is running. Switch a screen to OpenRGB to mirror the current LEDs of an OpenRGB device, or to sACN to listen for an incoming E1.31 universe.",
+                                  de: "Wählt für jeden Bildschirm, woher die Glow-Farbe kommt. SignalRGB ist Standard — das Wallpaper folgt dem laufenden SignalRGB-Effekt. Auf OpenRGB stellen, um die aktuellen LEDs eines OpenRGB-Geräts zu spiegeln, oder auf sACN, um ein eingehendes E1.31-Universe zu empfangen." },
+  "sources.type.signalrgb":     { en: "SignalRGB",         de: "SignalRGB" },
+  "sources.type.openrgb":       { en: "OpenRGB",           de: "OpenRGB" },
+  "sources.type.sacn":          { en: "sACN / E1.31",      de: "sACN / E1.31" },
+  "sources.host":               { en: "Host",              de: "Host" },
+  "sources.port":               { en: "Port",              de: "Port" },
+  "sources.device":             { en: "Device #",          de: "Gerät-Nr." },
+  "sources.universe":           { en: "Universe",          de: "Universe" },
+  "sources.screen":             { en: "Screen {n}",        de: "Bildschirm {n}" },
+  "sources.status.openrgb_in":  { en: "OpenRGB input: {state}",
+                                  de: "OpenRGB-Eingang: {state}" },
+  "sources.status.sacn_in":     { en: "sACN input: {state}",
+                                  de: "sACN-Eingang: {state}" },
+
+  // v1.5.0-beta: sACN/E1.31 output labels.
+  "sacn.header":                { en: "sACN / E1.31 output (beta)",
+                                  de: "sACN / E1.31-Ausgabe (Beta)" },
+  "sacn.hint":                  { en: "Streams the per-screen averaged glow colour as DMX over IP (E1.31 / sACN) on the standard multicast group. Pick this up with xLights, QLC+, Hyperion, or any hardware DMX / sACN controller. First three DMX channels of each universe carry R / G / B.",
+                                  de: "Sendet die gemittelte Glow-Farbe pro Bildschirm als DMX-über-IP (E1.31 / sACN) auf die Standard-Multicast-Gruppe. Empfänger: xLights, QLC+, Hyperion oder beliebige DMX/sACN-Hardware. Die ersten drei DMX-Kanäle pro Universe sind R / G / B." },
+  "sacn.enabled":               { en: "Enabled",           de: "Aktiviert" },
+  "sacn.destination":           { en: "Destination",       de: "Ziel" },
+  "sacn.dest.multicast":        { en: "Multicast (default)",
+                                  de: "Multicast (Standard)" },
+  "sacn.dest.unicast":          { en: "Unicast (specific IP)",
+                                  de: "Unicast (feste IP)" },
+  "sacn.priority":              { en: "Priority (0-200)",  de: "Priorität (0-200)" },
+  "sacn.universe_for":          { en: "Universe for Screen {n}",
+                                  de: "Universe für Bildschirm {n}" },
+  "sacn.status.idle":           { en: "—",                 de: "—" },
+  "sacn.status.streaming":      { en: "streaming · {n} packet(s) sent",
+                                  de: "sendet · {n} Paket(e) ausgegeben" },
+  "sacn.status.disabled":       { en: "disabled",          de: "deaktiviert" },
+  "sacn.status.error":          { en: "error: {err}",      de: "Fehler: {err}" },
 
   "system.reload_config":   { en: "Reload config from disk",
                               de: "Config von Festplatte neu laden" },
@@ -4378,14 +4474,261 @@ function renderSystemSection() {
     _pollOpenRgbStatus();
     _ogPollTimer = setInterval(_pollOpenRgbStatus, 2000);
   }
+
+  // ── v1.5.0-beta: per-screen sources + sACN output ────────────────
+
+  function _pushSources(patch) {
+    // patch is { screenIdx: {type, …} } merged into the existing map.
+    const cur = (bridgeState && bridgeState.sources) || {};
+    const next = Object.assign({}, cur);
+    for (const [k, v] of Object.entries(patch)) next[k] = v;
+    bridgeState.sources = next;
+    sendCmd({ type: "bridge-setting-update", key: "sources", value: next });
+  }
+
+  function _renderSourcesList() {
+    const wrap = document.getElementById("sources-list");
+    if (!wrap) return;
+    const sc = Math.max(1, (settings && settings.screenCount) || 1);
+    const sources = (bridgeState && bridgeState.sources) || {};
+    wrap.innerHTML = "";
+    for (let n = 0; n < sc; n++) {
+      const cur = sources[String(n)] || { type: "signalrgb" };
+      const row = document.createElement("div");
+      row.className = "row";
+      row.style.cssText = "flex-wrap:wrap; gap:6px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border,#333);";
+      const label = document.createElement("label");
+      label.textContent = (t("sources.screen") || "Screen {n}").replace("{n}", n + 1);
+      label.style.cssText = "min-width:90px; font-weight:500;";
+      row.appendChild(label);
+      const sel = document.createElement("select");
+      sel.id = "src-type-" + n;
+      for (const opt of [
+        ["signalrgb", t("sources.type.signalrgb") || "SignalRGB"],
+        ["openrgb",   t("sources.type.openrgb")   || "OpenRGB"],
+        ["sacn",      t("sources.type.sacn")      || "sACN / E1.31"],
+      ]) {
+        const o = document.createElement("option");
+        o.value = opt[0]; o.textContent = opt[1];
+        sel.appendChild(o);
+      }
+      sel.value = cur.type || "signalrgb";
+      row.appendChild(sel);
+
+      // Per-type sub-controls in their own inline container.
+      const sub = document.createElement("span");
+      sub.style.cssText = "display:flex; gap:6px; flex-wrap:wrap; align-items:center;";
+      row.appendChild(sub);
+
+      function _renderSub(type) {
+        sub.innerHTML = "";
+        if (type === "openrgb") {
+          const host = document.createElement("input");
+          host.type = "text"; host.placeholder = "127.0.0.1";
+          host.style.maxWidth = "140px";
+          host.value = cur.host || "127.0.0.1";
+          sub.appendChild(_labelled(t("sources.host") || "Host", host));
+          const port = document.createElement("input");
+          port.type = "number"; port.min = "1"; port.max = "65535";
+          port.style.maxWidth = "90px";
+          port.value = (cur.port != null) ? cur.port : 6742;
+          sub.appendChild(_labelled(t("sources.port") || "Port", port));
+          const dev = document.createElement("input");
+          dev.type = "number"; dev.min = "0"; dev.max = "63"; dev.step = "1";
+          dev.style.maxWidth = "70px";
+          dev.value = (cur.deviceIndex != null) ? cur.deviceIndex : 0;
+          sub.appendChild(_labelled(t("sources.device") || "Device #", dev));
+          const _commit = () => _pushSources({
+            [String(n)]: {
+              type: "openrgb",
+              host: host.value.trim() || "127.0.0.1",
+              port: Math.max(1, Math.min(65535, parseInt(port.value, 10) || 6742)),
+              deviceIndex: Math.max(0, parseInt(dev.value, 10) || 0),
+            }
+          });
+          host.addEventListener("change", _commit);
+          port.addEventListener("change", _commit);
+          dev.addEventListener("change", _commit);
+        } else if (type === "sacn") {
+          const uni = document.createElement("input");
+          uni.type = "number"; uni.min = "1"; uni.max = "63999";
+          uni.style.maxWidth = "100px";
+          uni.value = (cur.universe != null) ? cur.universe : (n + 1);
+          sub.appendChild(_labelled(t("sources.universe") || "Universe", uni));
+          uni.addEventListener("change", () => _pushSources({
+            [String(n)]: {
+              type: "sacn",
+              universe: Math.max(1, Math.min(63999, parseInt(uni.value, 10) || (n + 1))),
+            }
+          }));
+        }
+      }
+      _renderSub(sel.value);
+      sel.addEventListener("change", () => {
+        const newType = sel.value;
+        // When switching, send a minimal block; the backend will fill defaults.
+        const block = { type: newType };
+        if (newType === "openrgb") {
+          Object.assign(block, {
+            host: cur.host || "127.0.0.1",
+            port: cur.port || 6742,
+            deviceIndex: cur.deviceIndex || 0,
+          });
+        } else if (newType === "sacn") {
+          block.universe = cur.universe || (n + 1);
+        }
+        _pushSources({ [String(n)]: block });
+        _renderSub(newType);
+      });
+      wrap.appendChild(row);
+    }
+  }
+
+  function _labelled(text, el) {
+    const lbl = document.createElement("label");
+    lbl.style.cssText = "font-size:0.85em; opacity:0.7; display:flex; gap:4px; align-items:center;";
+    lbl.appendChild(document.createTextNode(text + ":"));
+    lbl.appendChild(el);
+    return lbl;
+  }
+
+  // sACN output controls.
+  function _pushSacn(patch) {
+    const cur = (bridgeState && bridgeState.sacnOutput) || {};
+    const baseUniverses = {};
+    const sc = Math.max(1, (settings && settings.screenCount) || 1);
+    for (let i = 0; i < sc; i++) baseUniverses[String(i)] = i + 1;
+    const next = Object.assign(
+      { enabled: false, destination: "multicast", unicastHost: "", priority: 100,
+        universes: baseUniverses },
+      cur, patch);
+    if (patch.universes) {
+      next.universes = Object.assign({}, cur.universes || baseUniverses, patch.universes);
+    }
+    bridgeState.sacnOutput = next;
+    sendCmd({ type: "bridge-setting-update", key: "sacnOutput", value: next });
+  }
+
+  function _renderSacnControls() {
+    const cur = (bridgeState && bridgeState.sacnOutput) || {};
+    const en = document.getElementById("sacn-enabled");
+    if (en) en.checked = !!cur.enabled;
+    const dest = document.getElementById("sacn-destination");
+    if (dest) dest.value = cur.destination || "multicast";
+    const uniH = document.getElementById("sacn-unicast-host");
+    if (uniH) {
+      uniH.value = cur.unicastHost || "";
+      uniH.style.display = (dest && dest.value === "unicast") ? "" : "none";
+    }
+    const prio = document.getElementById("sacn-priority");
+    if (prio) prio.value = (cur.priority != null) ? cur.priority : 100;
+    // Per-screen universe inputs.
+    const wrap = document.getElementById("sacn-universes");
+    if (wrap) {
+      wrap.innerHTML = "";
+      const sc = Math.max(1, (settings && settings.screenCount) || 1);
+      const universes = cur.universes || {};
+      for (let n = 0; n < sc; n++) {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.style.cssText = "padding:4px 0;";
+        const lbl = document.createElement("label");
+        lbl.textContent = (t("sacn.universe_for") || "Universe for Screen {n}")
+          .replace("{n}", n + 1);
+        lbl.style.cssText = "min-width:200px;";
+        row.appendChild(lbl);
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.min = "1"; inp.max = "63999";
+        inp.style.maxWidth = "100px";
+        inp.value = (universes[String(n)] != null) ? universes[String(n)] : (n + 1);
+        inp.addEventListener("change", () => _pushSacn({
+          universes: { [String(n)]: Math.max(1, Math.min(63999,
+            parseInt(inp.value, 10) || (n + 1))) },
+        }));
+        row.appendChild(inp);
+        wrap.appendChild(row);
+      }
+    }
+  }
+
+  // Wire static sACN controls (enabled/destination/priority/unicast-host).
+  const _sacnEn = document.getElementById("sacn-enabled");
+  if (_sacnEn) _sacnEn.addEventListener("change", () => _pushSacn({ enabled: _sacnEn.checked }));
+  const _sacnDest = document.getElementById("sacn-destination");
+  if (_sacnDest) _sacnDest.addEventListener("change", () => {
+    const uniH = document.getElementById("sacn-unicast-host");
+    if (uniH) uniH.style.display = (_sacnDest.value === "unicast") ? "" : "none";
+    _pushSacn({ destination: _sacnDest.value });
+  });
+  const _sacnUH = document.getElementById("sacn-unicast-host");
+  if (_sacnUH) _sacnUH.addEventListener("change",
+    () => _pushSacn({ unicastHost: _sacnUH.value.trim() }));
+  const _sacnPrio = document.getElementById("sacn-priority");
+  if (_sacnPrio) _sacnPrio.addEventListener("change", () => {
+    let v = parseInt(_sacnPrio.value, 10);
+    if (!isFinite(v) || v < 0) v = 0;
+    if (v > 200) v = 200;
+    _sacnPrio.value = v;
+    _pushSacn({ priority: v });
+  });
+
+  // Hook the existing settings-update callback so the lists re-render
+  // when bridgeState changes (screenCount change, source switched in
+  // another tab, …).
+  const _origRenderSystem = renderSystemSection;
+  window.renderSystemSection = renderSystemSection = function() {
+    _origRenderSystem();
+    _renderSourcesList();
+    _renderSacnControls();
+  };
+
+  // ── status pollers for the three new channels ────────────────────
+
+  let _sacnPollTimer = null;
+  async function _pollSacnStatus() {
+    const pill = document.getElementById("sacn-status-pill");
+    if (!pill) return;
+    const cur = (bridgeState && bridgeState.sacnOutput) || {};
+    if (!cur.enabled) {
+      pill.textContent = t("sacn.status.disabled") || "disabled";
+      return;
+    }
+    try {
+      const r = await fetch("/sacn/status", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const s = await r.json();
+      if (s.lastError) {
+        pill.textContent = (t("sacn.status.error") || "error: {err}")
+          .replace("{err}", s.lastError);
+      } else {
+        pill.textContent = (t("sacn.status.streaming")
+          || "streaming · {n} packet(s) sent")
+          .replace("{n}", String(s.txCount || 0));
+      }
+    } catch (e) {
+      pill.textContent = (t("sacn.status.error") || "error: {err}")
+        .replace("{err}", String(e.message || e));
+    }
+  }
+  function _restartSacnPoll() {
+    if (_sacnPollTimer) { clearInterval(_sacnPollTimer); _sacnPollTimer = null; }
+    _pollSacnStatus();
+    _sacnPollTimer = setInterval(_pollSacnStatus, 2000);
+  }
+
   // Poll while the System card is open. The card uses the standard
   // `collapsed` class toggle — when it's removed we start, when it's
   // re-added we stop.
   const sysCard = document.getElementById("card-system");
   if (sysCard) {
     const _sync = () => {
-      if (!sysCard.classList.contains("collapsed")) _restartOpenRgbPoll();
-      else if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
+      if (!sysCard.classList.contains("collapsed")) {
+        _restartOpenRgbPoll();
+        _restartSacnPoll();
+      } else {
+        if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
+        if (_sacnPollTimer) { clearInterval(_sacnPollTimer); _sacnPollTimer = null; }
+      }
     };
     new MutationObserver(_sync).observe(sysCard, { attributes: true, attributeFilter: ["class"] });
     _sync();
