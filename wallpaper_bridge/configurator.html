@@ -4470,7 +4470,17 @@ function renderSystemSection() {
       } else if (s.lastError) {
         pill.textContent = (t("openrgb.status.disconnected") || "disconnected ({err})")
           .replace("{err}", s.lastError);
-        devs.textContent = "";
+        // v1.5.0-beta-hotfix5: keep the last-known device list visible
+        // even when disconnected, so a flapping push-fail / reconnect
+        // cycle still shows what was successfully enumerated. Helps a
+        // user (or future-me) tell "parse worked, push broke" from
+        // "we never saw a device" without reading bridge logs.
+        if (s.devices && s.devices.length) {
+          devs.innerHTML = "<i>Last seen:</i> " +
+            s.devices.map(d => `${d.name} (${d.leds} LEDs)`).join(" · ");
+        } else {
+          devs.textContent = "";
+        }
       } else {
         pill.textContent = t("openrgb.status.connecting") || "connecting…";
         devs.textContent = "";

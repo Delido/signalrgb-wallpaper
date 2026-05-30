@@ -56,8 +56,10 @@ import struct
 # keyboard, …). See openrgb_client.py for the wire-protocol details.
 try:
     from openrgb_client import OpenRGBClient as _OpenRGBClient
+    from openrgb_client import OpenRGBError as _OpenRGBError
 except Exception as _e:
     _OpenRGBClient = None
+    _OpenRGBError = Exception   # so except clauses don't NameError
     print(f"[openrgb] client module load failed: {_e}")
 
 # v1.5.0: sACN/E1.31 codec — used both by the outbound emitter (parallel
@@ -4840,16 +4842,30 @@ class OpenRgbOutputManager:
                 backoff = 2.0
                 print(f"[openrgb] connected to {host}:{port}, "
                       f"{len(self._client.devices)} device(s)")
-            # Push current state to every device.
+            # Push current state to every device. v1.5.0-beta-hotfix5:
+            # skip 0-LED devices (E1.31 plugin, virtual SDK controllers,
+            # devices in a mode that exposes no LEDs) — `push_color`
+            # returning False on those is informational, not a
+            # connection problem. Only an OSError from the socket
+            # (caught below) triggers the reconnect cycle.
             color = self._latest_color.get(self._source_screen(), (0, 0, 0))
-            push_failed = False
+            socket_err: str = ""
             for d in self._client.devices:
-                if not self._client.push_color(d["id"], color):
-                    push_failed = True
-            if push_failed:
-                # Likely connection went bad — trigger reconnect on next
-                # iteration.
-                self._last_error = "push failed"
+                if int(d.get("led_count") or 0) <= 0:
+                    continue
+                try:
+                    self._client.push_color(d["id"], color)
+                except (OSError, _OpenRGBError) as e:
+                    socket_err = f"{d.get('name', d['id'])}: {e}"
+                    break
+                except Exception as e:
+                    # Anything else is a programmer bug — log + tear
+                    # down the connection so we re-enumerate from
+                    # scratch on the next loop pass.
+                    socket_err = f"unexpected: {e}"
+                    break
+            if socket_err:
+                self._last_error = f"push failed ({socket_err})"
                 try: self._client.disconnect()
                 except Exception: pass
                 self._connected = False

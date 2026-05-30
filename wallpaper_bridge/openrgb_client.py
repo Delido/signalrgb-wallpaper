@@ -213,8 +213,15 @@ class OpenRGBClient:
 
     def push_color(self, device_id: int, rgb: tuple[int, int, int]) -> bool:
         """Paint every LED of `device_id` with the same RGB triple.
-        Returns False if the device isn't known or the write fails;
-        does NOT raise so the caller can keep going."""
+        Returns True on success, False on a legitimate skip (device
+        not known / no LEDs). v1.5.0-beta-hotfix5: socket errors now
+        re-raise as OSError so the caller can distinguish "this
+        device just has nothing to push to" (E1.31 plugin device,
+        custom OpenRGB virtual devices) from "the connection broke
+        — we need to reconnect". Previous behaviour conflated both
+        as `False` so the OpenRgbOutputManager looped through
+        connect → enumerate → push (0-LED device returns False) →
+        treat as connection failure → disconnect → repeat."""
         dev = next((d for d in self.devices if d["id"] == device_id), None)
         if dev is None or dev["led_count"] <= 0:
             return False
@@ -228,13 +235,9 @@ class OpenRGBClient:
         # wire that LE-uint32 happens to be the byte sequence R G B 0.
         body = struct.pack("<H", n) + bytes((r, g, b, 0)) * n
         payload = struct.pack("<I", len(body) + 4) + body
-        try:
-            with self._lock:
-                self._send(device_id, RGBCONTROLLER_UPDATELEDS, payload)
-            return True
-        except (OSError, OpenRGBError) as e:
-            print(f"[openrgb] push to device {device_id} failed: {e}")
-            return False
+        with self._lock:
+            self._send(device_id, RGBCONTROLLER_UPDATELEDS, payload)
+        return True
 
     # ── input (OpenRGB-as-source path) ────────────────────────────────
 
