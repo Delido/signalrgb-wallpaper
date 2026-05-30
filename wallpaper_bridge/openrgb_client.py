@@ -149,8 +149,21 @@ class OpenRGBClient:
             self._send(0, REQUEST_PROTOCOL_VERSION,
                        struct.pack("<I", PROTOCOL_VERSION_CLIENT))
             _, _, resp = self._recv_packet()
+        # v1.5.0-beta-hotfix3: the server replies with ITS max
+        # supported protocol, NOT the negotiated value. The client
+        # must take min(client_claim, server_reply) and use that
+        # version for all subsequent requests. Caught against
+        # OpenRGB 1.0rc2 (server claimed proto 5 → previous code
+        # blindly used 5 → tried to walk proto-5 controller data
+        # with our proto-4 parser → "subsection not found").
+        server_proto = 0
         if len(resp) >= 4:
-            self.protocol_version = struct.unpack("<I", resp[:4])[0]
+            server_proto = struct.unpack("<I", resp[:4])[0]
+        self.protocol_version = min(PROTOCOL_VERSION_CLIENT,
+                                     server_proto if server_proto > 0
+                                     else PROTOCOL_VERSION_CLIENT)
+        print(f"[openrgb] handshake: server proto={server_proto}, "
+              f"negotiated={self.protocol_version}")
 
     def _enumerate(self) -> None:
         with self._lock:
@@ -280,10 +293,30 @@ class OpenRGBClient:
 
 
 def _read_string(data: bytes, pos: int) -> tuple[str, int]:
-    """Read a null-terminated UTF-8 string starting at `pos`.
-    Returns (string, position-after-the-null)."""
-    end = data.index(b"\x00", pos)
-    return data[pos:end].decode("utf-8", "replace"), end + 1
+    """Read a length-prefixed UTF-8 string.
+
+    OpenRGB's controller-data string format is `uint16-LE length` +
+    `length` bytes of UTF-8 (length INCLUDES the trailing null byte
+    that the C++ side writes). We strip the trailing null when
+    decoding but advance `pos` by the full declared length so
+    subsequent fields stay aligned even if the string body is
+    malformed.
+
+    v1.5.0-beta-hotfix3: previous implementation searched for
+    `\\x00` as the terminator. That's the SET_CLIENT_NAME wire
+    format (null-terminated), but controller_data uses length
+    prefixes — so we'd land in mid-string territory, consume the
+    length bytes as part of the string, then over-shoot every
+    subsequent string. Symptom: parser exception "subsection not
+    found" on every device, enumerate returned 0 devices."""
+    if pos + 2 > len(data):
+        raise ValueError(f"string length prefix past end at {pos}")
+    n = struct.unpack_from("<H", data, pos)[0]
+    pos += 2
+    if pos + n > len(data):
+        raise ValueError(f"string body past end at {pos} (want {n})")
+    s = data[pos:pos + n].rstrip(b"\x00").decode("utf-8", "replace")
+    return s, pos + n
 
 
 def _parse_controller_data(data: bytes, version: int,
