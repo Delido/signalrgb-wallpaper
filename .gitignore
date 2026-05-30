@@ -52,3 +52,9 @@ wallpaper_python.log
 
 # Demo recordings / scratch (not for the repo)
 temp/
+
+# wingetcreate working dir — installer\winget-publish.ps1 generates a
+# fresh manifest tree under ./manifests/d/Delido/SignalRGBWallpaper/<ver>
+# on every release. The submitted copy lives in microsoft/winget-pkgs,
+# not in this repo.
+manifests/

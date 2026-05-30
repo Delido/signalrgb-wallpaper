@@ -70,16 +70,29 @@ try {
     if ($resp.StatusCode -ne 200) {
         throw "HEAD $assetUrl returned $($resp.StatusCode)"
     }
-    Write-Host "Asset reachable (HEAD 200, $([math]::Round($resp.Headers['Content-Length'] / 1MB, 2)) MB)" -ForegroundColor Green
+    # PowerShell 7 returns headers as string arrays even for single-value
+    # headers like Content-Length; coerce + cast before the MB divide so
+    # the friendly print doesn't blow up. Best-effort — if the header
+    # isn't present we just skip the size line.
+    $clRaw = $resp.Headers['Content-Length']
+    if ($clRaw -is [array]) { $clRaw = $clRaw[0] }
+    $clBytes = 0L
+    if ([long]::TryParse([string]$clRaw, [ref]$clBytes) -and $clBytes -gt 0) {
+        Write-Host ("Asset reachable (HEAD 200, {0:N2} MB)" -f ($clBytes / 1MB)) -ForegroundColor Green
+    } else {
+        Write-Host "Asset reachable (HEAD 200)" -ForegroundColor Green
+    }
 } catch {
     throw "Asset not reachable yet at $assetUrl — wait for the GitHub release to finish uploading, then re-run. ($_)"
 }
 
 # ── 4. Token resolution ──────────────────────────────────────────────────────
+# v1.3.0: wingetcreate has its own cached-auth flow (`wingetcreate token
+# --store` / interactive browser OAuth on first --submit), so a token
+# here is now OPTIONAL — if neither -Token nor $env:WINGETCREATE_GITHUB_TOKEN
+# is set we let wingetcreate fall back to its cache. The check is kept
+# in -DryRun to make the planned-flow output explicit.
 if (-not $Token) { $Token = $env:WINGETCREATE_GITHUB_TOKEN }
-if (-not $Token -and -not $DryRun) {
-    throw "No GitHub token. Set WINGETCREATE_GITHUB_TOKEN env var (PAT with public_repo scope) or pass -Token, or use -DryRun."
-}
 
 # ── 5. wingetcreate availability ─────────────────────────────────────────────
 $wgc = Get-Command wingetcreate -ErrorAction SilentlyContinue
@@ -88,20 +101,34 @@ if (-not $wgc) {
 }
 
 # ── 6. Invoke ────────────────────────────────────────────────────────────────
-$args = @(
+# v1.3.0: the existing manifest declares Architecture: x64 with one
+# installer entry, but wingetcreate auto-detects the Inno wrapper exe
+# as x86 (Inno's bootloader is 32-bit even when the payload is 64-bit,
+# which our PyInstaller --onedir Python build is). Force-match by
+# appending `|x64` so wingetcreate maps the new installer onto the
+# existing x64 row. Future bumps with multiple arch entries can use
+# `-Token` + `|x64` etc. as appropriate.
+$urlSpec = $assetUrl + "|x64"
+# Renamed from $args to $wgcArgs — $args is a PowerShell automatic
+# variable (the unbound-positional-args collection inside a function /
+# script block); reassigning it triggers a PSScriptAnalyzer warning
+# and can interact weirdly with nested scopes.
+$wgcArgs = @(
     "update", $pkgId,
     "--version", $Version,
-    "--urls", $assetUrl
+    "--urls", $urlSpec
 )
 if ($DryRun) {
-    Write-Host "[DryRun] Would run: wingetcreate $($args -join ' ')" -ForegroundColor Yellow
-    Write-Host "[DryRun] Would submit PR to microsoft/winget-pkgs with token: $($Token ? '<set>' : '<missing>')" -ForegroundColor Yellow
+    Write-Host "[DryRun] Would run: wingetcreate $($wgcArgs -join ' ') --submit" -ForegroundColor Yellow
+    $tokenState = if ($Token) { '<set>' } else { '<wingetcreate cache>' }
+    Write-Host "[DryRun] Token state: $tokenState" -ForegroundColor Yellow
     return
 }
 
-$args += @("--submit", "--token", $Token)
+$wgcArgs += "--submit"
+if ($Token) { $wgcArgs += @("--token", $Token) }
 Write-Host "Running wingetcreate update $pkgId --version $Version --submit …" -ForegroundColor Yellow
-& wingetcreate @args
+& wingetcreate @wgcArgs
 if ($LASTEXITCODE -ne 0) { throw "wingetcreate exited $LASTEXITCODE — check output above" }
 
 Write-Host ""
