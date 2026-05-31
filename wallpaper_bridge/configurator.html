@@ -1975,10 +1975,16 @@
       </div>
       <div class="row" style="margin-top: 10px;">
         <label for="api-token-field" data-i18n="api.token">Token</label>
-        <input type="text" id="api-token-field" readonly
-               style="font-family:monospace; flex:1; min-width:240px;">
+        <input type="password" id="api-token-field" readonly
+               style="font-family:monospace; flex:1; min-width:240px;"
+               value="•••••••••••••••••">
+        <button class="btn" id="api-token-show" type="button"
+                data-i18n="api.show"
+                title="Hold to reveal · click to copy then auto-hide">Show</button>
         <button class="btn" id="api-token-copy" type="button"
-                data-i18n="api.copy">Copy</button>
+                data-i18n="api.copy"
+                title="Copy to clipboard + clear input + auto-clear clipboard in 30 s"
+                style="margin-left:6px;">Copy &amp; forget</button>
         <button class="btn" id="api-token-regen" type="button"
                 data-i18n="api.regenerate"
                 style="margin-left:6px;">Regenerate…</button>
@@ -2202,8 +2208,12 @@ const TRANSLATIONS = {
   "api.hint":                   { en: "Auto-generated per install. Loopback requests bypass auth so the Configurator + same-host integrations work without configuration. External clients send it as <code>Authorization: Bearer &lt;token&gt;</code>. OpenAPI spec at <code>/api/openapi.json</code>.",
                                   de: "Pro Installation automatisch generiert. Loopback-Anfragen umgehen die Authentifizierung, damit Configurator + Integrationen auf demselben Host ohne Konfiguration laufen. Externe Clients senden ihn als <code>Authorization: Bearer &lt;token&gt;</code>. OpenAPI-Spec unter <code>/api/openapi.json</code>." },
   "api.token":                  { en: "Token",              de: "Token" },
-  "api.copy":                   { en: "Copy",               de: "Kopieren" },
+  "api.copy":                   { en: "Copy & forget",      de: "Kopieren & vergessen" },
+  "api.show":                   { en: "Show",               de: "Anzeigen" },
+  "api.hide":                   { en: "Hide",               de: "Verbergen" },
   "api.regenerate":             { en: "Regenerate…",        de: "Neu erzeugen…" },
+  "api.copied_forget":          { en: "Token copied · clipboard auto-clears in 30 s",
+                                  de: "Token kopiert · Zwischenablage löscht sich in 30 s" },
   "api.spec_link":              { en: "View OpenAPI spec",
                                   de: "OpenAPI-Spec ansehen" },
   "api.regen_confirm":          { en: "Regenerate the API token? Any external client currently using it will need the new value.",
@@ -5518,26 +5528,92 @@ function renderSystemSection() {
   }
 
   // ── v1.5.0-beta API token controls ───────────────────────────────
+  //
+  // Token is held by the bridge in bridgeState.apiToken but never
+  // shown by default — the field is a <input type="password"> with a
+  // bullet-string placeholder. The user can:
+  //   • Hold "Show" to reveal it while pressed (auto-hides on release)
+  //   • Click "Copy & forget" to push it to the clipboard, then
+  //     auto-clear the clipboard ~30 s later (matches Bitwarden's UX)
+  //
+  // The "value" attribute stays at the bullet placeholder regardless
+  // of what bridgeState.apiToken contains, so a screenshot of the
+  // Configurator can't leak the secret even when password-managers /
+  // accessibility tools enumerate the DOM.
   function _renderApiToken() {
     const inp = document.getElementById("api-token-field");
     if (!inp) return;
-    inp.value = (bridgeState && bridgeState.apiToken) || "";
+    // Bullet placeholder visible regardless of length; the real
+    // value is read on-demand from bridgeState.apiToken below.
+    inp.value = "•••••••••••••••••";
+    inp.type = "password";
+  }
+  let _apiTokenClipTimer = null;
+  function _hideApiToken() {
+    const inp = document.getElementById("api-token-field");
+    if (!inp) return;
+    inp.type = "password";
+    inp.value = "•••••••••••••••••";
+    const showBtn = document.getElementById("api-token-show");
+    if (showBtn) showBtn.textContent = t("api.show") || "Show";
+  }
+  // Press-to-show: hold the button while you read, release auto-hides.
+  const _apiShow = document.getElementById("api-token-show");
+  if (_apiShow) {
+    const _reveal = () => {
+      const inp = document.getElementById("api-token-field");
+      const tok = (bridgeState && bridgeState.apiToken) || "";
+      if (inp && tok) { inp.type = "text"; inp.value = tok; }
+      _apiShow.textContent = t("api.hide") || "Hide";
+    };
+    _apiShow.addEventListener("pointerdown", _reveal);
+    _apiShow.addEventListener("pointerup",   _hideApiToken);
+    _apiShow.addEventListener("pointerleave", _hideApiToken);
+    _apiShow.addEventListener("pointercancel", _hideApiToken);
   }
   const _apiCopy = document.getElementById("api-token-copy");
   if (_apiCopy) _apiCopy.addEventListener("click", () => {
     const tok = (bridgeState && bridgeState.apiToken) || "";
     if (!tok) return;
-    try {
-      navigator.clipboard.writeText(tok);
-      toast(t("api.copied") || "Token copied to clipboard", "good");
-    } catch (_) {
-      // Older browsers: select + execCommand fallback.
-      const inp = document.getElementById("api-token-field");
-      if (inp) {
-        inp.select(); inp.setSelectionRange(0, tok.length);
-        try { document.execCommand("copy"); } catch (__) {}
+    const _doCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(tok);
+      } catch (_) {
+        // Older / sandboxed browsers fall back to execCommand. We
+        // need to briefly reveal the field for the selection to be
+        // valid — set, copy, hide, all in one synchronous frame so
+        // the bullet placeholder snaps back before the next paint.
+        const inp = document.getElementById("api-token-field");
+        if (inp) {
+          const wasType = inp.type;
+          inp.type = "text"; inp.value = tok;
+          inp.select(); inp.setSelectionRange(0, tok.length);
+          try { document.execCommand("copy"); } catch (__) {}
+          inp.type = wasType; inp.value = "•••••••••••••••••";
+        }
       }
-    }
+      toast(t("api.copied_forget")
+        || "Token copied · clipboard auto-clears in 30 s", "good");
+      // Auto-clear the clipboard after 30 s. Best-effort: if the
+      // user has copied something else in the meantime, leave it
+      // alone (read back + compare). The clipboard read API needs
+      // explicit permission in some browsers; we silently fail in
+      // that case + just overwrite blindly.
+      if (_apiTokenClipTimer) clearTimeout(_apiTokenClipTimer);
+      _apiTokenClipTimer = setTimeout(async () => {
+        _apiTokenClipTimer = null;
+        try {
+          let current = "";
+          try { current = await navigator.clipboard.readText(); }
+          catch (_) { current = tok; }   // assume still ours
+          if (current === tok) {
+            await navigator.clipboard.writeText("");
+            console.log("[api-token] clipboard auto-cleared");
+          }
+        } catch (_) { /* permission denied — leave it */ }
+      }, 30000);
+    };
+    _doCopy();
   });
   const _apiRegen = document.getElementById("api-token-regen");
   if (_apiRegen) _apiRegen.addEventListener("click", () => {
