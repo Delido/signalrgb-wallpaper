@@ -513,52 +513,90 @@
     --theme-fg-muted:  rgba(28, 31, 36, 0.6);
     --theme-accent:    #0066cc;
   }
-  /* Apply theme variables to every widget. Hooked via `color` and
-     `font-family` at the .widget level so child elements inherit
-     naturally without each widget knowing about the palette. */
-  .widget {
-    color:       var(--theme-fg) !important;
-    font-family: var(--theme-font);
+  /* v1.6.1-beta: theme palette applies WIDGET-LEVEL ONLY. No
+     wallpaper-wide tints, no body overlays — themes are about
+     giving widgets variety. Each theme overrides:
+        --theme-bg, --theme-border, --theme-fg, --theme-fg-muted,
+        --theme-accent, --theme-font, --theme-radius, --theme-shadow
+     (all consumed below by both the `body[class*="theme-"] .widget`
+     base rule AND the existing tile-style overrides).
+
+     When tile-style is "off" the theme still applies — widgets
+     get the themed background + border so the theme is visible
+     even without an explicit tile shell. */
+  body[class*="theme-"] .widget {
+    color:        var(--theme-fg) !important;
+    font-family:  var(--theme-font);
+    background:   var(--theme-bg, transparent);
+    border:       1px solid var(--theme-border, transparent);
+    border-radius: var(--theme-radius, 8px);
+    box-shadow:   var(--theme-shadow, none);
+    padding:      var(--widget-tile-padding);
+    transition:   background 0.3s, border-color 0.3s, color 0.3s;
   }
-  .widget.tinted {
+  body[class*="theme-"] .widget.tinted {
     color: var(--w-tint, var(--theme-accent)) !important;
   }
-  /* v1.6.1-beta: ensure the theme is visible even when tile-style
-     is "off" (= no widget background). Each non-default theme adds
-     a subtle full-screen overlay tinted in the theme's accent
-     colour so the user gets immediate feedback that the theme is
-     active. Pointer-events: none keeps the desktop interactive. */
-  body.theme-dracula::after,
-  body.theme-nord::after,
-  body.theme-tokyo-night::after,
-  body.theme-catppuccin::after,
-  body.theme-solarized::after,
-  body.theme-vintage-crt::after,
-  body.theme-light::after {
+  /* Per-theme character: shape, decoration, shadow on widgets
+     specifically — never on the wallpaper. */
+  body.theme-dracula {
+    --theme-bg:      rgba(40, 42, 54, 0.78);
+    --theme-radius:  10px;
+    --theme-shadow:  0 2px 14px rgba(189, 147, 249, 0.18);
+  }
+  body.theme-nord {
+    --theme-bg:      rgba(46, 52, 64, 0.78);
+    --theme-radius:  4px;
+    --theme-shadow:  0 1px 0 rgba(136, 192, 208, 0.22) inset;
+  }
+  body.theme-tokyo-night {
+    --theme-bg:      rgba(26, 27, 38, 0.85);
+    --theme-radius:  6px;
+    --theme-shadow:  0 0 18px rgba(125, 207, 255, 0.18);
+  }
+  body.theme-catppuccin {
+    --theme-bg:      rgba(30, 30, 46, 0.78);
+    --theme-radius:  16px;
+    --theme-shadow:  0 4px 18px rgba(245, 194, 231, 0.15);
+  }
+  body.theme-solarized {
+    --theme-bg:      rgba(0, 43, 54, 0.85);
+    --theme-radius:  2px;
+    --theme-shadow:  0 1px 0 rgba(147, 161, 161, 0.25);
+  }
+  body.theme-vintage-crt {
+    --theme-bg:      rgba(8, 18, 8, 0.88);
+    --theme-radius:  2px;
+    --theme-shadow:  0 0 12px rgba(0, 255, 70, 0.4),
+                     inset 0 0 24px rgba(0, 255, 70, 0.12);
+  }
+  /* CRT scanlines on widgets only (not the wallpaper background). */
+  body.theme-vintage-crt .widget::before {
     content: "";
-    position: fixed; inset: 0;
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg,
+      transparent 0, transparent 2px,
+      rgba(0, 255, 70, 0.10) 2px, rgba(0, 255, 70, 0.10) 3px);
     pointer-events: none;
-    mix-blend-mode: overlay;
-    z-index: 5;
-    opacity: 0.12;
-  }
-  body.theme-dracula::after     { background: #6272a4; }
-  body.theme-nord::after        { background: #5e81ac; }
-  body.theme-tokyo-night::after { background: #1a1b26; }
-  body.theme-catppuccin::after  { background: #45475a; }
-  body.theme-solarized::after   { background: #073642; }
-  body.theme-vintage-crt::after {
-    background:
-      repeating-linear-gradient(0deg,
-        transparent 0, transparent 2px,
-        rgba(0, 255, 70, 0.18) 2px, rgba(0, 255, 70, 0.18) 3px);
+    border-radius: inherit;
     mix-blend-mode: screen;
-    opacity: 0.35;
   }
-  body.theme-light::after {
-    background: #ffffff;
-    mix-blend-mode: screen;
-    opacity: 0.18;
+  body.theme-vintage-crt .widget { position: relative; overflow: hidden; }
+  body.theme-light {
+    --theme-bg:      rgba(250, 250, 252, 0.92);
+    --theme-radius:  8px;
+    --theme-shadow:  0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+  /* v1.6.1-beta: widget-only pulse on theme change. Confirms the
+     theme landed without ever touching the wallpaper background.
+     Runs once and self-clears via the body class removal in JS. */
+  @keyframes theme-pulse {
+    0%   { transform: scale(1);     box-shadow: var(--theme-shadow, none); }
+    35%  { transform: scale(1.025); box-shadow: 0 0 24px var(--theme-accent); }
+    100% { transform: scale(1);     box-shadow: var(--theme-shadow, none); }
+  }
+  body.theme-just-changed .widget {
+    animation: theme-pulse 0.9s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* v1.6.0-beta Mouse FX support styles. Each rule guarded behind a
@@ -3075,21 +3113,20 @@ function applyWidgetTheme(theme) {
     if (t === "default") continue;
     document.body.classList.toggle("theme-" + t, t === safe);
   }
-  // v1.6.1-beta diagnostic: log the resulting class state so a
-  // user inspecting Lively DevTools can confirm the theme actually
-  // landed. Also flash a 1-second visible border in the active
-  // theme's accent colour so the change is unmistakable even if
-  // CSS variables don't propagate to the widgets (e.g. tile-style
-  // off).
-  const accent = getComputedStyle(document.body)
-    .getPropertyValue("--theme-accent").trim() || "#6ab0ff";
+  // Diagnostic for Lively DevTools sessions.
   console.log("[wallpaper] theme:", safe, "body class:",
-              document.body.className, "accent:", accent);
-  document.body.style.boxShadow = `inset 0 0 0 4px ${accent}`;
+              document.body.className);
+  // Pulse every WIDGET (not the wallpaper) so the change is
+  // unmistakable. Add + remove a class to retrigger the CSS
+  // animation defined in the theme-pulse keyframes.
+  document.body.classList.remove("theme-just-changed");
+  // Force a layout flush so the next add re-runs the animation.
+  void document.body.offsetWidth;
+  document.body.classList.add("theme-just-changed");
   clearTimeout(applyWidgetTheme._flashTimer);
   applyWidgetTheme._flashTimer = setTimeout(() => {
-    document.body.style.boxShadow = "";
-  }, 1500);
+    document.body.classList.remove("theme-just-changed");
+  }, 1200);
 }
 
 // ── v1.6.0-beta mouse-driven distortion effects ─────────────────────────────
