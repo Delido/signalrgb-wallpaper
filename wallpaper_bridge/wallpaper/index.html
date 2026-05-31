@@ -5057,25 +5057,33 @@ const AMBIENT_PRESETS = {
   // + a streak from previous position so each particle is
   // always visible regardless of speed.
   wormhole: {
-    targetCount: (d, w, h) => Math.round(220 * (d / 60)),
+    // v1.6.1-beta hotfix7: scale particle count with screen area
+    // like every other ambient preset does. Previously fixed at
+    // 220 at density-60 — that's invisible-density on a
+    // 5120×1440 desktop. Now it produces ~400 at density-60 on
+    // 1080p, ~820 on 5120×1440. Plus a wider spawn ring scaled
+    // to the longer screen edge so particles cover the whole
+    // viewport instead of clumping around a small central disc.
+    targetCount: (d, w, h) => Math.round((w * h) / 9000 * (d / 60)),
     spawn: (w, h) => {
       const angle = Math.random() * Math.PI * 2;
-      // Tighter ring — keep particles inside the viewport so
-      // every spawn is immediately visible. Sized to the
-      // shorter screen edge so ultrawide doesn't stretch the
-      // ring off the top/bottom.
-      const ringMin = 120;
-      const ringMax = Math.min(w, h) * 0.45;
-      const dist = ringMin + Math.random() * (ringMax - ringMin);
+      // Ring covers most of the viewport now — from 150 px out
+      // to ~55 % of the longer screen edge. Particles spawn
+      // across the entire screen instead of a tiny disc.
+      const ringMin = 150;
+      const ringMax = Math.max(w, h) * 0.55;
+      // Slight bias toward outer ring so the periphery stays
+      // populated. sqrt distribution gives uniform area density
+      // (otherwise centre would dominate by sheer ring math).
+      const t = Math.sqrt(Math.random());
+      const dist = ringMin + t * (ringMax - ringMin);
       const cx = _cursorX || w / 2;
       const cy = _cursorY || h / 2;
       const ca = Math.cos(angle), sa = Math.sin(angle);
-      // Initial velocity has an inward component plus a
-      // tangential (perpendicular) one — particles spiral
-      // from frame zero instead of waiting for the gravity
-      // accumulator to kick in.
-      const inSpeed    = 90 + Math.random() * 60;
-      const swirlSpeed = 220 + Math.random() * 140;
+      // Bigger initial velocities so particles cover ground
+      // before gravity does its work.
+      const inSpeed    = 70 + Math.random() * 80;
+      const swirlSpeed = 280 + Math.random() * 180;
       return {
         x: cx + ca * dist,
         y: cy + sa * dist,
@@ -5098,15 +5106,18 @@ const AMBIENT_PRESETS = {
       const distSq = dx * dx + dy * dy;
       const dist = Math.sqrt(distSq) + 1;
       if (dist < 16) return false;                       // consumed
-      if (dist > Math.max(w, h) * 1.4) return false;     // escaped
-      // Velocity-based integration. Gravity adds inward
-      // acceleration; light velocity damping keeps speeds
-      // bounded near the centre.
-      const accel = 90000 / distSq;
+      if (dist > Math.max(w, h) * 1.6) return false;     // escaped
+      // Velocity-based integration. Lighter gravity than the
+      // previous attempt — particles take longer to spiral in
+      // so the visible orbital field around the cursor stays
+      // populated instead of getting vacuumed instantly.
+      const accel = 50000 / distSq;
       p.vx += (dx / dist) * accel * dt;
       p.vy += (dy / dist) * accel * dt;
-      p.vx *= 0.985;
-      p.vy *= 0.985;
+      // Lighter damping so particles keep momentum + cover more
+      // screen real estate before being consumed.
+      p.vx *= 0.992;
+      p.vy *= 0.992;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       return true;
@@ -5115,13 +5126,17 @@ const AMBIENT_PRESETS = {
       const dx = _cursorX - p.x;
       const dy = _cursorY - p.y;
       const dist = Math.hypot(dx, dy);
-      // Brighten + thicken as we approach the singularity.
-      const intensity = Math.min(1, 1.6 - dist / 400);
-      const a = p.alpha * Math.max(0.35, intensity);
+      // Brighten + thicken as we approach the singularity. The
+      // 1200 px reference scales the intensity so far-away
+      // particles on a 5120-wide screen are still visible
+      // (previously 400 px = anything past 640 dropped to
+      // floor alpha and looked like nothing).
+      const intensity = Math.min(1, 1.6 - dist / 1200);
+      const a = p.alpha * Math.max(0.5, intensity);
       const color = tint
         ? rgbToRgba(tint, a)
         : "hsla(" + p.hue + ", 95%, " +
-            (55 + intensity * 35) + "%, " + a + ")";
+            (60 + intensity * 30) + "%, " + a + ")";
       // Always draw the particle as a dot so it's visible even
       // before it accumulates velocity.
       ctx.fillStyle = color;
