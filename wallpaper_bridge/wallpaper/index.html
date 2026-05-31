@@ -587,25 +587,49 @@
     --theme-radius:  8px;
     --theme-shadow:  0 4px 14px rgba(0, 0, 0, 0.08);
   }
-  /* v1.6.1-beta: widget-only pulse on theme change. Confirms the
-     theme landed without ever touching the wallpaper background.
-     Runs once and self-clears via the body class removal in JS. */
+  /* v1.6.1-beta: widget-only pulse on theme change. Animates
+     --pulse-scale (registered above via @property so keyframes
+     can interpolate it) — composed into the .widget transform
+     pipeline so the widget's position is preserved through the
+     animation. Previously a plain `transform: scale(1)` keyframe
+     overwrote the inline `transform: translate(x,y)` and every
+     widget snapped to the top-left corner for the duration. */
   @keyframes theme-pulse {
-    0%   { transform: scale(1);     box-shadow: var(--theme-shadow, none); }
-    35%  { transform: scale(1.025); box-shadow: 0 0 24px var(--theme-accent); }
-    100% { transform: scale(1);     box-shadow: var(--theme-shadow, none); }
+    0%   { --pulse-scale: 1;     box-shadow: var(--theme-shadow, none); }
+    35%  { --pulse-scale: 1.025; box-shadow: 0 0 24px var(--theme-accent); }
+    100% { --pulse-scale: 1;     box-shadow: var(--theme-shadow, none); }
   }
   body.theme-just-changed .widget {
     animation: theme-pulse 0.9s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* v1.6.0-beta Mouse FX support styles. Each rule guarded behind a
-     body class set by mouseFx.{enable,disable}, so users not opted-in
-     pay nothing — even the transform composite layer the repulsion
-     effect needs only gets promoted when fx-repulsion is on. */
+  /* v1.6.1-beta widget transform pipeline.
+     Widget position lives in --widget-x / --widget-y; mouse-fx
+     repulsion adds --repel-x / --repel-y; theme-pulse animates
+     --pulse-scale via @property below. The .widget rule composes
+     them all so no single transition or keyframe ever clobbers
+     position again. */
+  @property --pulse-scale {
+    syntax: '<number>';
+    initial-value: 1;
+    inherits: false;
+  }
+  .widget {
+    --repel-x: 0px;
+    --repel-y: 0px;
+    --pulse-scale: 1;
+    transform:
+      translate(
+        calc(var(--widget-x, 0px) + var(--repel-x)),
+        calc(var(--widget-y, 0px) + var(--repel-y))
+      )
+      scale(var(--pulse-scale));
+  }
+  /* Repulsion effect now just animates the offset vars — composed
+     into the unified transform above. */
   body.fx-repulsion .widget {
-    transform: translate(var(--repel-x, 0), var(--repel-y, 0));
-    transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+    transition: --repel-x 0.18s cubic-bezier(0.2, 0.7, 0.3, 1),
+                --repel-y 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
     will-change: transform;
   }
   body.fx-ripple #bg,
@@ -3468,7 +3492,16 @@ function applyWidgetPosition(rec, w) {
   const next = { x: w.x | 0, y: w.y | 0, w: w.w | 0, h: w.h | 0 };
   if (next.x === rec.last.x && next.y === rec.last.y &&
       next.w === rec.last.w && next.h === rec.last.h) return;
-  rec.el.style.transform = "translate(" + next.x + "px, " + next.y + "px)";
+  // v1.6.1-beta hotfix: widget position now lives in CSS custom
+  // properties (--widget-x / --widget-y) instead of inline
+  // `transform: translate()`. The CSS rule on `.widget` composes
+  // the position WITH any active effect transform (theme-pulse
+  // scale, repulsion offset) so neither one clobbers the other —
+  // previously a theme change or mouse-fx pulse rewrote
+  // style.transform = "scale(1)" and every widget snapped to
+  // (0, 0) for the duration of the animation.
+  rec.el.style.setProperty("--widget-x", next.x + "px");
+  rec.el.style.setProperty("--widget-y", next.y + "px");
   rec.el.style.width  = next.w + "px";
   rec.el.style.height = next.h + "px";
   // interact.js convention — keep the x/y on the dataset so its move handler
@@ -3574,7 +3607,13 @@ function bindInteract(rec) {
         move(event) {
           const x = (parseFloat(event.target.dataset.x) || 0) + event.dx;
           const y = (parseFloat(event.target.dataset.y) || 0) + event.dy;
-          event.target.style.transform = "translate(" + x + "px, " + y + "px)";
+          // v1.6.1-beta hotfix: drive position through the same
+          // --widget-x / --widget-y custom properties applyWidgetPosition
+          // uses, so the composed CSS transform on .widget keeps
+          // the position even while a theme-pulse / repulsion /
+          // resize is active mid-drag.
+          event.target.style.setProperty("--widget-x", x + "px");
+          event.target.style.setProperty("--widget-y", y + "px");
           event.target.dataset.x = x;
           event.target.dataset.y = y;
         },
