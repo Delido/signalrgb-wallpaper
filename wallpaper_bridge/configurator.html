@@ -1949,6 +1949,13 @@
         <input type="text" id="mqtt-prefix" placeholder="signalrgb-wallpaper"
                style="max-width:200px;">
       </div>
+      <div class="row">
+        <label for="mqtt-discovery-prefix" data-i18n="mqtt.discovery_prefix">HA discovery prefix</label>
+        <input type="text" id="mqtt-discovery-prefix" placeholder="homeassistant"
+               style="max-width:200px;">
+        <span class="val" style="margin-left:8px; opacity:0.7; font-size:0.85em;"
+              data-i18n="mqtt.discovery_hint">(blank to disable)</span>
+      </div>
       <div id="mqtt-topics-hint" class="hint sub" style="margin-top:6px;"></div>
 
       <!-- v1.5.0-beta: REST API token (auto-generated). Loopback
@@ -2179,6 +2186,10 @@ const TRANSLATIONS = {
   "mqtt.password":              { en: "Password",           de: "Passwort" },
   "mqtt.clientid":              { en: "Client ID",          de: "Client-ID" },
   "mqtt.prefix":                { en: "Topic prefix",       de: "Topic-Präfix" },
+  "mqtt.discovery_prefix":      { en: "HA discovery prefix",
+                                  de: "HA-Discovery-Präfix" },
+  "mqtt.discovery_hint":        { en: "(blank to disable)",
+                                  de: "(leer = aus)" },
   "mqtt.status.disabled":       { en: "disabled",           de: "deaktiviert" },
   "mqtt.status.connected":      { en: "connected · {n} publish(es)",
                                   de: "verbunden · {n} Veröffentlichung(en)" },
@@ -5374,7 +5385,8 @@ function renderSystemSection() {
     const next = Object.assign(
       { enabled: false, host: "localhost", port: 1883, username: "",
         password: "", clientId: "signalrgb-wallpaper",
-        topicPrefix: "signalrgb-wallpaper" },
+        topicPrefix: "signalrgb-wallpaper",
+        discoveryPrefix: "homeassistant" },
       cur, patch);
     bridgeState.mqttBridge = next;
     sendCmd({ type: "bridge-setting-update", key: "mqttBridge", value: next });
@@ -5393,6 +5405,8 @@ function renderSystemSection() {
     set("mqtt-password", cur.password || "");
     set("mqtt-clientid", cur.clientId || "");
     set("mqtt-prefix",   cur.topicPrefix || "");
+    set("mqtt-discovery-prefix",
+        cur.discoveryPrefix != null ? cur.discoveryPrefix : "homeassistant");
     const hint = document.getElementById("mqtt-topics-hint");
     if (hint) {
       const p = (cur.topicPrefix || "signalrgb-wallpaper");
@@ -5420,6 +5434,7 @@ function renderSystemSection() {
   _wireMqttField("mqtt-password", "password");
   _wireMqttField("mqtt-clientid", "clientId");
   _wireMqttField("mqtt-prefix", "topicPrefix");
+  _wireMqttField("mqtt-discovery-prefix", "discoveryPrefix");
 
   let _mqttPollTimer = null;
   async function _pollMqttStatus() {

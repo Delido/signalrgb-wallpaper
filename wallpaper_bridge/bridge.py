@@ -1471,6 +1471,13 @@ def default_config() -> dict:
             "password":    "",
             "clientId":    "signalrgb-wallpaper",
             "topicPrefix": "signalrgb-wallpaper",
+            # HA MQTT Discovery: bridge publishes `<discoveryPrefix>
+            # /<component>/<bridge>/<entity>/config` payloads on
+            # connect so Home Assistant auto-creates entities under
+            # one device card. Default "homeassistant" matches
+            # HA's out-of-the-box discovery topic. Set blank to
+            # suppress discovery entirely (raw topics still publish).
+            "discoveryPrefix": "homeassistant",
         },
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
@@ -1797,6 +1804,7 @@ def load_config() -> dict:
     cfg["mqttBridge"].setdefault("password", "")
     cfg["mqttBridge"].setdefault("clientId", "signalrgb-wallpaper")
     cfg["mqttBridge"].setdefault("topicPrefix", "signalrgb-wallpaper")
+    cfg["mqttBridge"].setdefault("discoveryPrefix", "homeassistant")
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -6350,7 +6358,108 @@ class MqttBridge:
         self._last_error = ""
         self._last_connect_ts = time.time()
         print(f"[mqtt] connected to {host}:{port} as {client_id}")
+        # v1.5.0-beta HA Discovery: publish entity-config payloads so
+        # Home Assistant auto-creates one device with N×4 entities
+        # (preset select, pause switch, glow + background sensors).
+        # Re-published on every reconnect — retained, so HA picks
+        # them up even if it boots after the bridge.
+        try:
+            self._publish_discovery(c, cfg, prefix, client_id)
+        except Exception as e:
+            print(f"[mqtt] discovery publish failed: {e}")
         return True
+
+    def _publish_discovery(self, client, cfg: dict,
+                            prefix: str, client_id: str) -> None:
+        """Publish HA MQTT-Discovery config payloads. Blank
+        discoveryPrefix suppresses (some users prefer manual YAML
+        configuration of sensors)."""
+        discovery_prefix = str(cfg.get("discoveryPrefix") or "")
+        if not discovery_prefix:
+            print("[mqtt] discoveryPrefix blank — skipping HA discovery")
+            return
+        try:
+            with self.bridge.config_lock:
+                screen_count = int(self.bridge.config.get("screenCount") or 1)
+        except Exception:
+            screen_count = 1
+        # One device card in HA groups every screen's entities.
+        # `identifiers` is what makes HA recognise repeat configs as
+        # the same device on reconnect.
+        device = {
+            "identifiers":  [client_id],
+            "name":         "SignalRGB Wallpaper Bridge",
+            "manufacturer": "Delido",
+            "model":        "Bridge",
+            "sw_version":   APP_VERSION,
+        }
+        availability = {
+            "availability_topic":    prefix + "/bridge/online",
+            "payload_available":     "online",
+            "payload_not_available": "offline",
+        }
+        # Per-screen entities. HA reads everything under one device.
+        for n in range(screen_count):
+            base_uid = f"{client_id}_screen{n}"
+            # Preset select — slot 0..N-1 + "-" placeholder for "no preset".
+            preset_cfg = {
+                "name":          f"Screen {n + 1} Preset",
+                "unique_id":     f"{base_uid}_preset",
+                "object_id":     f"{base_uid}_preset",
+                "state_topic":   f"{prefix}/screen/{n}/preset",
+                "command_topic": f"{prefix}/screen/{n}/preset/set",
+                "options":       ["-"] + [str(i) for i in range(PRESET_SLOTS)],
+                "icon":          "mdi:format-list-numbered",
+                "device":        device,
+                **availability,
+            }
+            client.publish(
+                f"{discovery_prefix}/select/{client_id}/screen{n}_preset/config",
+                json.dumps(preset_cfg), retain=True)
+            # Pause switch.
+            pause_cfg = {
+                "name":          f"Screen {n + 1} Pause",
+                "unique_id":     f"{base_uid}_pause",
+                "object_id":     f"{base_uid}_pause",
+                "state_topic":   f"{prefix}/screen/{n}/pause",
+                "command_topic": f"{prefix}/screen/{n}/pause/set",
+                "payload_on":    "on",
+                "payload_off":   "off",
+                "icon":          "mdi:pause",
+                "device":        device,
+                **availability,
+            }
+            client.publish(
+                f"{discovery_prefix}/switch/{client_id}/screen{n}_pause/config",
+                json.dumps(pause_cfg), retain=True)
+            # Glow colour sensor (#rrggbb hex string).
+            glow_cfg = {
+                "name":        f"Screen {n + 1} Glow",
+                "unique_id":   f"{base_uid}_glow",
+                "object_id":   f"{base_uid}_glow",
+                "state_topic": f"{prefix}/screen/{n}/glow",
+                "icon":        "mdi:palette",
+                "device":      device,
+                **availability,
+            }
+            client.publish(
+                f"{discovery_prefix}/sensor/{client_id}/screen{n}_glow/config",
+                json.dumps(glow_cfg), retain=True)
+            # Background path sensor.
+            bg_cfg = {
+                "name":        f"Screen {n + 1} Background",
+                "unique_id":   f"{base_uid}_bg",
+                "object_id":   f"{base_uid}_bg",
+                "state_topic": f"{prefix}/screen/{n}/background",
+                "icon":        "mdi:image",
+                "device":      device,
+                **availability,
+            }
+            client.publish(
+                f"{discovery_prefix}/sensor/{client_id}/screen{n}_background/config",
+                json.dumps(bg_cfg), retain=True)
+        print(f"[mqtt] published HA discovery for {screen_count} screen(s) "
+              f"under {discovery_prefix}/.../{client_id}/")
 
     def _run(self) -> None:
         backoff = self.RECONNECT_MIN_S
@@ -7899,13 +8008,16 @@ class BridgeRuntime:
                 if incoming_pwd in ("***", ""):
                     incoming_pwd = prev_pwd
                 cleaned = {
-                    "enabled":     bool(value.get("enabled", False)),
-                    "host":        str(value.get("host") or "localhost")[:128],
-                    "port":        max(1, min(65535, int(value.get("port") or 1883))),
-                    "username":    str(value.get("username") or "")[:128],
-                    "password":    incoming_pwd[:256],
-                    "clientId":    str(value.get("clientId") or "signalrgb-wallpaper")[:64],
-                    "topicPrefix": str(value.get("topicPrefix") or "signalrgb-wallpaper")[:64],
+                    "enabled":         bool(value.get("enabled", False)),
+                    "host":            str(value.get("host") or "localhost")[:128],
+                    "port":            max(1, min(65535, int(value.get("port") or 1883))),
+                    "username":        str(value.get("username") or "")[:128],
+                    "password":        incoming_pwd[:256],
+                    "clientId":        str(value.get("clientId") or "signalrgb-wallpaper")[:64],
+                    "topicPrefix":     str(value.get("topicPrefix") or "signalrgb-wallpaper")[:64],
+                    "discoveryPrefix": str(value.get("discoveryPrefix")
+                                            if value.get("discoveryPrefix") is not None
+                                            else "homeassistant")[:64],
                 }
             except (TypeError, ValueError) as e:
                 print(f"[settings] mqttBridge malformed: {e}")
