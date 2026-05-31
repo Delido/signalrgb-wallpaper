@@ -807,15 +807,17 @@ DEFAULT_SCREEN_SETTINGS = {
     "glowStrength": 100,
     "gridBlur":     30,
     # v1.2.12: which grid-layout renderer the wallpaper page should
-    # use — "dom" (default, one solid-colour <div> per zone) or
-    # "canvas" (single <canvas> + putImageData). DOM is cheaper on
-    # GPU (Chromium has a fast-path for solid rectangles) but
-    # writes up to N×M style attributes per frame; canvas is cheaper
-    # on CPU but shifts the cost to GPU (bilinear upsample + blur on
-    # a single 4K-ish texture). On dGPU-rich setups (RTX et al.)
-    # DOM is the better default; users with strong CPU + thirsty
-    # SignalRGB effects can flip to canvas in the Configurator.
-    "gridRenderer": "dom",
+    # use — "dom" (one solid-colour <div> per zone) or "canvas"
+    # (single <canvas> + putImageData). v1.5.0-beta switches the
+    # default to "canvas" after a real-hardware perf trace from a
+    # 5120×1440 user showed the DOM path producing 1.3 M Paint
+    # events in 7.8 s (~115 k paints/sec — 3,800+ DIV zones at the
+    # broadcast rate). Canvas is one putImageData per frame
+    # regardless of grid size, so it scales cleanly with the
+    # SignalRGB grid resolution. Users on tiny grids or specific
+    # dGPU setups where DOM was cheaper can still flip back in
+    # the Configurator's per-screen Glow card.
+    "gridRenderer": "canvas",
     # v1.2.12: render-rate cap shared by the bridge's outgoing
     # broadcast and the wallpaper page's renderFrame gate. SignalRGB
     # sends UDP at whatever rate it can compute (often 100-200 fps

@@ -7180,12 +7180,18 @@ setTimeout(() => {
     });
   }
   if (els.livePreviewToggle) {
-    // Remember the user's choice across reloads. Default ON (true)
-    // because the live preview is the headline UX win of the v1.2-dev
-    // cycle — first-time users should see it work without having to
-    // discover the toggle.
+    // v1.5.0-beta hotfix: default OFF instead of ON. Real-hardware
+    // perf trace showed the live-preview iframe is the single
+    // largest CPU contributor on the Configurator tab — it renders
+    // the entire wallpaper page again (ambient effects, glow zones,
+    // audio glow, widgets) in parallel to the real wallpaper inside
+    // Lively / WE. At higher SignalRGB grid resolutions the DOM
+    // grid renderer alone produces tens of thousands of paint
+    // events per second. Existing users who liked it ON have their
+    // localStorage value preserved; only new installs / new
+    // browsers see the safer default.
     const stored = localStorage.getItem("cfg.livePreview");
-    const startOn = stored === null ? true : stored === "1";
+    const startOn = stored === "1";
     els.livePreviewToggle.checked = startOn;
     setLivePreviewVisible(startOn);
     els.livePreviewToggle.addEventListener("change",
