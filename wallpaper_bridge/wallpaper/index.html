@@ -5067,33 +5067,37 @@ const AMBIENT_PRESETS = {
   // + a streak from previous position so each particle is
   // always visible regardless of speed.
   wormhole: {
-    // v1.6.1-beta hotfix7: scale particle count with screen area
-    // like every other ambient preset does. Previously fixed at
-    // 220 at density-60 — that's invisible-density on a
-    // 5120×1440 desktop. Now it produces ~400 at density-60 on
-    // 1080p, ~820 on 5120×1440. Plus a wider spawn ring scaled
-    // to the longer screen edge so particles cover the whole
-    // viewport instead of clumping around a small central disc.
-    targetCount: (d, w, h) => Math.round((w * h) / 9000 * (d / 60)),
+    // v1.6.1-beta hotfix9: density-per-area cranked 3× — on a
+    // 5120×1440 desktop the previous (w*h)/9000 = 819 particles
+    // visually amounted to ~1 per 170×170 area, which the user
+    // correctly described as "too few". Now (w*h)/3000 = ~2450
+    // at density-60. Spawn-rejection at edges (retry if spawn
+    // pos is off-screen, fall back if all retries fail) keeps
+    // density consistent when the cursor is near a corner.
+    targetCount: (d, w, h) => Math.round((w * h) / 3000 * (d / 60)),
     spawn: (w, h) => {
-      const angle = Math.random() * Math.PI * 2;
-      const ringMin = 150;
-      const ringMax = Math.max(w, h) * 0.55;
-      const t = Math.sqrt(Math.random());
-      const dist = ringMin + t * (ringMax - ringMin);
-      // v1.6.1-beta hotfix8: BOTH spawn AND step use the same
-      // anchor. If the cursor isn't being tracked (_cursorX = 0,
-      // typical Lively click-through state where
-      // livelyCurrentCursorPos never fires), fall back to screen
-      // centre. Previously spawn fell back to centre but step
-      // pulled to (0,0) — particles spawned at centre, drifted
-      // toward the corner, and the user perceived "only in
-      // middle" because the spawn point was the dominant visual.
       const ax = _wormholeAnchorX(w);
       const ay = _wormholeAnchorY(h);
+      const ringMin = 150;
+      const ringMax = Math.max(w, h) * 0.55;
+      // Up to 6 attempts to land on-screen so cursor-at-edge
+      // still produces a visible swirl.
+      let x = 0, y = 0, angle = 0, dist = 0;
+      for (let i = 0; i < 6; i++) {
+        angle = Math.random() * Math.PI * 2;
+        const t = Math.sqrt(Math.random());
+        dist = ringMin + t * (ringMax - ringMin);
+        x = ax + Math.cos(angle) * dist;
+        y = ay + Math.sin(angle) * dist;
+        if (x > 0 && x < w && y > 0 && y < h) break;
+      }
       const ca = Math.cos(angle), sa = Math.sin(angle);
-      const inSpeed    = 70 + Math.random() * 80;
-      const swirlSpeed = 280 + Math.random() * 180;
+      // v1.6.1-beta hotfix9: initial velocities 3-4× the previous
+      // values. User reported "way too weakly pulled in" — at 70
+      // inward + 280 swirl, particles took ~10 s to traverse the
+      // visible orbital field. Now ~3 s to spiral in.
+      const inSpeed    = 250 + Math.random() * 200;
+      const swirlSpeed = 500 + Math.random() * 300;
       // Periodic diagnostic so Lively-DevTools sessions can see
       // whether cursor tracking is alive. Throttled to one log
       // per 3 s.
@@ -5108,16 +5112,15 @@ const AMBIENT_PRESETS = {
                     "the cursor-pos callback.");
       }
       return {
-        x: ax + ca * dist,
-        y: ay + sa * dist,
+        x: x, y: y,
         px: 0, py: 0,
         vx: -ca * inSpeed - sa * swirlSpeed,
         vy: -sa * inSpeed + ca * swirlSpeed,
-        r: 1.2 + Math.random() * 2.2,
+        r: 1.5 + Math.random() * 2.5,
         hue: Math.random() < 0.5
           ? 210 + Math.random() * 50    // blues
           : 290 + Math.random() * 50,   // magenta / purples
-        alpha: 0.7 + Math.random() * 0.3,
+        alpha: 0.75 + Math.random() * 0.25,
         life: 0,
       };
     },
@@ -5130,48 +5133,50 @@ const AMBIENT_PRESETS = {
       const dy = ay - p.y;
       const distSq = dx * dx + dy * dy;
       const dist = Math.sqrt(distSq) + 1;
-      if (dist < 16) return false;                       // consumed
+      if (dist < 18) return false;                       // consumed
       if (dist > Math.max(w, h) * 1.6) return false;     // escaped
-      // v1.6.1-beta hotfix8: gravity 50000 → 250000 (5×) — user
-      // reported "way too weakly pulled in". Even at distance
-      // 1000 px, accel was 0.05 px/s²; now 0.25 px/s². Plus
-      // lighter damping (0.992 → 0.995) so particles keep
-      // momentum across more of the screen.
-      const accel = 250000 / distSq;
+      // v1.6.1-beta hotfix9: hybrid pull. Inverse-square at the
+      // close range for the classic black-hole feel, plus a
+      // constant component that scales linearly outward so
+      // far-out particles still get yanked hard. Previously
+      // pure inverse-square meant a particle at 2000 px from
+      // cursor felt 0.06 px/s² — slower than tectonic drift.
+      const accel = 1500000 / distSq + 600;
       p.vx += (dx / dist) * accel * dt;
       p.vy += (dy / dist) * accel * dt;
-      p.vx *= 0.995;
-      p.vy *= 0.995;
+      p.vx *= 0.997;
+      p.vy *= 0.997;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       return true;
     },
     render: (ctx, p, tint) => {
-      // Same anchor as spawn + step so brightness ramps relative
-      // to the actual singularity, not the (0,0) fallback.
       const ax = _wormholeAnchorX(window.innerWidth  || 1920);
       const ay = _wormholeAnchorY(window.innerHeight || 1080);
       const dx = ax - p.x;
       const dy = ay - p.y;
       const dist = Math.hypot(dx, dy);
-      // Brighten + thicken as we approach the singularity. The
-      // 1200 px reference scales the intensity so far-away
-      // particles on a 5120-wide screen are still visible.
-      const intensity = Math.min(1, 1.6 - dist / 1200);
-      const a = p.alpha * Math.max(0.5, intensity);
+      // Clamp intensity to [0, 1] — far particles fade smoothly,
+      // close particles cap at full brightness. Reference 1200 px
+      // keeps the far-out field visible on ultrawide displays.
+      const intensity = Math.max(0,
+        Math.min(1, 1.6 - dist / 1200));
+      const a = p.alpha * Math.max(0.55, intensity);
       const color = tint
         ? rgbToRgba(tint, a)
         : "hsla(" + p.hue + ", 95%, " +
             (60 + intensity * 30) + "%, " + a + ")";
-      // Always draw the particle as a dot so it's visible even
-      // before it accumulates velocity.
+      // v1.6.1-beta hotfix9: each particle gets a soft glow halo
+      // via canvas shadowBlur. Roughly doubles perceived size +
+      // makes the swarm feel denser without renderering more
+      // particles. shadowBlur is GPU-accelerated on Chromium so
+      // 2400 particles × 8 px blur is still cheap.
+      ctx.shadowColor = color;
+      ctx.shadowBlur  = 6 + intensity * 6;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r * (1 + intensity * 0.8), 0, Math.PI * 2);
       ctx.fill();
-      // Plus a streak from the previous frame's position so
-      // fast-moving particles trail. Skipped when motion is
-      // sub-pixel to avoid zero-length lines.
       const trailLen = Math.abs(p.x - p.px) + Math.abs(p.y - p.py);
       if (p.px && trailLen > 1.5) {
         ctx.strokeStyle = color;
@@ -5182,6 +5187,9 @@ const AMBIENT_PRESETS = {
         ctx.lineTo(p.x, p.y);
         ctx.stroke();
       }
+      // Drop the shadow before the next particle so other ambient
+      // renderers / wallpaper layers aren't affected.
+      ctx.shadowBlur = 0;
     },
   },
 };
