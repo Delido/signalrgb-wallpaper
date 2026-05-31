@@ -1377,6 +1377,26 @@ function _resetZoneColorCache(total) {
 let RENDER_INTERVAL_MS = 33;
 let _lastRenderTs = 0;
 
+// v1.5.0-beta hotfix: preview mode. The Configurator's live-
+// preview iframe loads /wallpaper?preview=1 so it can render the
+// scene at-scale, but it doesn't need to be a fully-fidelity
+// render — at the preview's size + downscale + browser tab
+// context, 10 Hz is visually indistinguishable from 30 Hz and
+// halves the render work. Capping here AND skipping audio glow
+// / ambient effects (added below) is what makes the preview
+// not peg user CPU at 90 °C on a 5120×1440 SignalRGB rig.
+const IS_PREVIEW = (function () {
+  try {
+    return new URLSearchParams(location.search).get("preview") === "1";
+  } catch (_) { return false; }
+})();
+if (IS_PREVIEW) {
+  // 10 Hz instead of 30 Hz default — the preview is a small
+  // downscaled iframe that the user only glances at.
+  RENDER_INTERVAL_MS = 100;
+  document.documentElement.classList.add("is-preview");
+}
+
 function renderFrame(buf) {
   // Honor Lively's pause-wallpapers / page-hidden state: drop frames so
   // the glow layer freezes on the last rendered colours. We still consume
@@ -1925,6 +1945,21 @@ function flashDebug(text) {
 }
 
 function applyProperty(name, val) {
+  // v1.5.0-beta hotfix: preview-mode short-circuit. The Configurator's
+  // live-preview iframe doesn't need rAF-driven effects to render at
+  // full fidelity — they're the dominant CPU cost (per the user's
+  // trace: tens of thousands of paint events per second from
+  // ambient + audio-glow + pixelfx rAF chains, on top of the glow
+  // grid). Hard-disable them at the property-application layer so
+  // the rest of the page renders normally (background, glow,
+  // widgets, tile chrome) without any user-visible difference at
+  // preview size.
+  if (IS_PREVIEW && (name === "ambientEffect" || name === "pixelfx"
+                      || name === "audioGlow" || name === "audioGlowMode"
+                      || name === "bgParallax")) {
+    val = (name === "ambientEffect" || name === "pixelfx"
+            || name === "audioGlowMode") ? "off" : false;
+  }
   console.log("[wallpaper] property:", name, "=", JSON.stringify(val));
   // flashDebug is a no-op when showStatusEnabled is false.
   flashDebug("set " + name + " = " + JSON.stringify(val));
