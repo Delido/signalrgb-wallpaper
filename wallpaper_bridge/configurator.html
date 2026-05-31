@@ -7276,6 +7276,66 @@ const TILE_PRESETS = {
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
     },
   },
+  // v1.6.1-beta hotfix6: wormhole preview tile. The full wallpaper
+  // wormhole uses _cursorX/_cursorY; the preview tile has no
+  // cursor so we anchor the singularity at the tile centre. Same
+  // spawn-on-ring + inward+swirl velocity + gravity-on-step shape
+  // as the wallpaper version, just sized for a ~160×100 tile.
+  wormhole: {
+    targetCount: (w, h) => Math.round(w * h / 350),
+    spawn: (w, h) => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist  = Math.min(w, h) * (0.25 + Math.random() * 0.25);
+      const cx = w / 2, cy = h / 2;
+      const ca = Math.cos(angle), sa = Math.sin(angle);
+      const inSpeed    = 12 + Math.random() * 10;
+      const swirlSpeed = 32 + Math.random() * 20;
+      return {
+        x: cx + ca * dist, y: cy + sa * dist,
+        px: 0, py: 0,
+        vx: -ca * inSpeed - sa * swirlSpeed,
+        vy: -sa * inSpeed + ca * swirlSpeed,
+        r: 0.7 + Math.random() * 1.0,
+        hue: Math.random() < 0.5 ? 215 + Math.random() * 45
+                                  : 290 + Math.random() * 40,
+        a: 0.7 + Math.random() * 0.3,
+      };
+    },
+    step: (p, dt, w, h) => {
+      p.px = p.x; p.py = p.y;
+      const dx = w / 2 - p.x, dy = h / 2 - p.y;
+      const dsq = dx * dx + dy * dy;
+      const d = Math.sqrt(dsq) + 1;
+      if (d < 4) return false;
+      if (d > Math.max(w, h)) return false;
+      const accel = 2200 / dsq;
+      p.vx += (dx / d) * accel * dt * 40;
+      p.vy += (dy / d) * accel * dt * 40;
+      p.vx *= 0.97; p.vy *= 0.97;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      return true;
+    },
+    render: (ctx, p) => {
+      const dx = (160 / 2) - p.x, dy = (100 / 2) - p.y;
+      const intensity = Math.min(1, 1.6 - Math.hypot(dx, dy) / 60);
+      const a = p.a * Math.max(0.4, intensity);
+      const color = "hsla(" + p.hue + ", 95%, " +
+        (55 + intensity * 35) + "%, " + a + ")";
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (1 + intensity * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+      const tlen = Math.abs(p.x - p.px) + Math.abs(p.y - p.py);
+      if (p.px && tlen > 0.5) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = p.r * 0.8;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+    },
+  },
 };
 
 els.ambientTint.addEventListener("change", () => setSetting("ambientTint", els.ambientTint.checked));

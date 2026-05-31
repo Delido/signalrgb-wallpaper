@@ -5047,35 +5047,46 @@ const AMBIENT_PRESETS = {
     },
   },
 
-  // v1.6.1-beta hotfix4: Wormhole — cursor-aware ambient. Particles
-  // spawn on a ring some distance away from the cursor and get
-  // pulled inward by an inverse-square gravity field with a
-  // tangential swirl term so they spiral rather than fall straight
-  // in. When they reach the event horizon (~12 px) they're
-  // consumed. Reads _cursorX / _cursorY directly so the effect
-  // tracks the actual cursor as it moves across the desktop
-  // (Lively's livelyCurrentCursorPos / WebView2 mousemove already
-  // updates them).
+  // v1.6.1-beta hotfix6: Wormhole — cursor-aware ambient.
+  // Particles get proper velocity vectors (inward + tangential
+  // swirl) at spawn so they're visibly moving from the first
+  // frame, plus a gravitational accelerator that compounds as
+  // they get closer. Spawn ring is much tighter than the
+  // previous attempt so most particles fit on screen instead
+  // of bunching out in the corners. Renders as a glowing dot
+  // + a streak from previous position so each particle is
+  // always visible regardless of speed.
   wormhole: {
-    targetCount: (d, w, h) => Math.round(160 * (d / 60)),
+    targetCount: (d, w, h) => Math.round(220 * (d / 60)),
     spawn: (w, h) => {
-      // Spawn anywhere in an annulus around the cursor — far enough
-      // out that the spiral is visible before consumption.
       const angle = Math.random() * Math.PI * 2;
-      const dist = 200 + Math.random() * (Math.max(w, h) * 0.6);
+      // Tighter ring — keep particles inside the viewport so
+      // every spawn is immediately visible. Sized to the
+      // shorter screen edge so ultrawide doesn't stretch the
+      // ring off the top/bottom.
+      const ringMin = 120;
+      const ringMax = Math.min(w, h) * 0.45;
+      const dist = ringMin + Math.random() * (ringMax - ringMin);
       const cx = _cursorX || w / 2;
       const cy = _cursorY || h / 2;
+      const ca = Math.cos(angle), sa = Math.sin(angle);
+      // Initial velocity has an inward component plus a
+      // tangential (perpendicular) one — particles spiral
+      // from frame zero instead of waiting for the gravity
+      // accumulator to kick in.
+      const inSpeed    = 90 + Math.random() * 60;
+      const swirlSpeed = 220 + Math.random() * 140;
       return {
-        x: cx + Math.cos(angle) * dist,
-        y: cy + Math.sin(angle) * dist,
+        x: cx + ca * dist,
+        y: cy + sa * dist,
         px: 0, py: 0,
-        r: 0.7 + Math.random() * 1.4,
-        // Half blue, half magenta-purple — classic accretion-disc
-        // colour split.
+        vx: -ca * inSpeed - sa * swirlSpeed,
+        vy: -sa * inSpeed + ca * swirlSpeed,
+        r: 1.2 + Math.random() * 2.2,
         hue: Math.random() < 0.5
           ? 210 + Math.random() * 50    // blues
-          : 290 + Math.random() * 50,   // purples / magenta
-        alpha: 0.55 + Math.random() * 0.4,
+          : 290 + Math.random() * 50,   // magenta / purples
+        alpha: 0.7 + Math.random() * 0.3,
         life: 0,
       };
     },
@@ -5085,48 +5096,51 @@ const AMBIENT_PRESETS = {
       const dx = _cursorX - p.x;
       const dy = _cursorY - p.y;
       const distSq = dx * dx + dy * dy;
-      const dist = Math.sqrt(distSq);
-      // Event horizon — consume.
-      if (dist < 14) return false;
-      // Long-distance escape — outside an absurd radius drop the
-      // particle so the pool can respawn closer to a moved cursor.
-      if (dist > Math.max(w, h) * 1.5) return false;
-      // Inverse-square pull, clamped so it doesn't blow up near 0.
-      const pull = 9000 / (distSq + 250);
-      const nx = dx / dist, ny = dy / dist;
-      // Tangential swirl: rotate the pull direction by ~80° so
-      // particles arc instead of falling straight in.
-      const swirl = 0.95;
-      p.x += (nx + (-ny) * swirl) * pull * dt;
-      p.y += (ny + ( nx) * swirl) * pull * dt;
+      const dist = Math.sqrt(distSq) + 1;
+      if (dist < 16) return false;                       // consumed
+      if (dist > Math.max(w, h) * 1.4) return false;     // escaped
+      // Velocity-based integration. Gravity adds inward
+      // acceleration; light velocity damping keeps speeds
+      // bounded near the centre.
+      const accel = 90000 / distSq;
+      p.vx += (dx / dist) * accel * dt;
+      p.vy += (dy / dist) * accel * dt;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
       return true;
     },
     render: (ctx, p, tint) => {
       const dx = _cursorX - p.x;
       const dy = _cursorY - p.y;
       const dist = Math.hypot(dx, dy);
-      // Brighten as it gets closer to the singularity, white-hot
-      // right before consumption.
+      // Brighten + thicken as we approach the singularity.
       const intensity = Math.min(1, 1.6 - dist / 400);
-      const a = p.alpha * Math.max(0.2, intensity);
-      let color;
-      if (tint) {
-        color = rgbToRgba(tint, a);
-      } else {
-        // Hot-white core when close, hue-coloured when far.
-        const L = 60 + intensity * 30;
-        color = "hsla(" + p.hue + ", 95%, " + L + "%, " + a + ")";
-      }
-      // Streak from previous to current position — fast particles
-      // near the centre leave longer trails.
-      ctx.strokeStyle = color;
-      ctx.lineWidth = p.r * (1 + intensity * 1.5);
-      ctx.lineCap = "round";
+      const a = p.alpha * Math.max(0.35, intensity);
+      const color = tint
+        ? rgbToRgba(tint, a)
+        : "hsla(" + p.hue + ", 95%, " +
+            (55 + intensity * 35) + "%, " + a + ")";
+      // Always draw the particle as a dot so it's visible even
+      // before it accumulates velocity.
+      ctx.fillStyle = color;
       ctx.beginPath();
-      if (p.px) ctx.moveTo(p.px, p.py);
-      else      ctx.moveTo(p.x,  p.y);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
+      ctx.arc(p.x, p.y, p.r * (1 + intensity * 0.8), 0, Math.PI * 2);
+      ctx.fill();
+      // Plus a streak from the previous frame's position so
+      // fast-moving particles trail. Skipped when motion is
+      // sub-pixel to avoid zero-length lines.
+      const trailLen = Math.abs(p.x - p.px) + Math.abs(p.y - p.py);
+      if (p.px && trailLen > 1.5) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = p.r * 0.9;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(p.px, p.py);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
     },
   },
 };
