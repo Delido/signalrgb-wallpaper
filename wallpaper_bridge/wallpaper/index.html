@@ -5067,14 +5067,15 @@ const AMBIENT_PRESETS = {
   // + a streak from previous position so each particle is
   // always visible regardless of speed.
   wormhole: {
-    // v1.6.1-beta hotfix9: density-per-area cranked 3× — on a
-    // 5120×1440 desktop the previous (w*h)/9000 = 819 particles
-    // visually amounted to ~1 per 170×170 area, which the user
-    // correctly described as "too few". Now (w*h)/3000 = ~2450
-    // at density-60. Spawn-rejection at edges (retry if spawn
-    // pos is off-screen, fall back if all retries fail) keeps
-    // density consistent when the cursor is near a corner.
-    targetCount: (d, w, h) => Math.round((w * h) / 3000 * (d / 60)),
+    // v1.6.1-beta hotfix10: density tuned down from
+    // (w*h)/3000 = 2450 on 5120×1440 to (w*h)/6000 = 1225 — the
+    // user said "feels like too many, keeps growing". The
+    // "growing" sensation was the initial fill ramp (empty →
+    // target over ~2 s); halving the steady-state count makes
+    // the ramp shorter too. Density slider still scales linearly
+    // so users on smaller screens or who want a denser swirl
+    // can crank it back up.
+    targetCount: (d, w, h) => Math.round((w * h) / 6000 * (d / 60)),
     spawn: (w, h) => {
       const ax = _wormholeAnchorX(w);
       const ay = _wormholeAnchorY(h);
@@ -5133,7 +5134,13 @@ const AMBIENT_PRESETS = {
       const dy = ay - p.y;
       const distSq = dx * dx + dy * dy;
       const dist = Math.sqrt(distSq) + 1;
-      if (dist < 18) return false;                       // consumed
+      // v1.6.1-beta hotfix10: bigger consumption radius (18 → 32).
+      // Particles with high tangential velocity were grazing past
+      // the 18-px event horizon + going back out before being
+      // captured. A larger funnel clears the centre faster + the
+      // overall ratio of "in the swirl" vs "respawning" feels
+      // more balanced.
+      if (dist < 32) return false;                       // consumed
       if (dist > Math.max(w, h) * 1.6) return false;     // escaped
       // v1.6.1-beta hotfix9: hybrid pull. Inverse-square at the
       // close range for the classic black-hole feel, plus a
