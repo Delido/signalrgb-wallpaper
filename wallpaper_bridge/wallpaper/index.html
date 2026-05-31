@@ -3311,7 +3311,11 @@ const MouseFx = (function () {
       overlay = document.createElement("div");
       overlay.id = "fx-chromatic-overlay";
       overlay.style.cssText =
-        "position: fixed; inset: 0; pointer-events: none; z-index: 1.5;" +
+        // v1.6.1-beta hotfix3: z-index 1.5 was BELOW #bg (z-index 2)
+        // so the entire Chromatic effect was hidden behind the
+        // wallpaper image. Raised to 4 so it sits over #bg + #dim
+        // but below widgets (z-index 5+).
+        "position: fixed; inset: 0; pointer-events: none; z-index: 4;" +
         " mix-blend-mode: screen; opacity: 0;" +
         " transition: opacity 200ms;";
       overlay.innerHTML =
@@ -3349,7 +3353,8 @@ const MouseFx = (function () {
       overlay = document.createElement("div");
       overlay.id = "fx-spotlight-overlay";
       overlay.style.cssText =
-        "position: fixed; inset: 0; pointer-events: none; z-index: 2.5;" +
+        // v1.6.1-beta hotfix3: same z-index fix as Chromatic above.
+        "position: fixed; inset: 0; pointer-events: none; z-index: 4;" +
         " opacity: 0; transition: opacity 200ms;";
       document.body.appendChild(overlay);
       return overlay;
@@ -3443,7 +3448,78 @@ const MouseFx = (function () {
     };
   })();
 
-  const _EFFECTS = { repulsion, chromatic, spotlight, ripple };
+  // ── Effect 5: Wormhole (cursor vortex) ───────────────────────────────
+  // Conic-gradient spinning disc anchored to the cursor + a radial
+  // mask that fades it to transparent outside the disc. Looks like
+  // a swirling vortex (or black hole accretion disc) pulled around
+  // with the cursor. Pure CSS animation for the spin — no per-frame
+  // canvas work, just one rAF for the position update.
+  const wormhole = (function () {
+    let raf = null;
+    let overlay = null;
+    let disc = null;
+    function ensureOverlay() {
+      if (overlay) return overlay;
+      overlay = document.createElement("div");
+      overlay.id = "fx-wormhole-overlay";
+      overlay.style.cssText =
+        "position: fixed; inset: 0; pointer-events: none; z-index: 4;" +
+        " opacity: 0; transition: opacity 250ms;";
+      disc = document.createElement("div");
+      disc.style.cssText =
+        "position: absolute; width: 480px; height: 480px;" +
+        " margin-left: -240px; margin-top: -240px;" +
+        " background: conic-gradient(from 0deg," +
+          " transparent 0deg," +
+          " rgba(80, 160, 255, 0.55) 60deg," +
+          " transparent 120deg," +
+          " rgba(255, 100, 200, 0.55) 200deg," +
+          " transparent 260deg," +
+          " rgba(150, 100, 255, 0.45) 320deg," +
+          " transparent 360deg);" +
+        " -webkit-mask: radial-gradient(circle," +
+          " black 0%, black 28%, transparent 68%);" +
+        " mask: radial-gradient(circle," +
+          " black 0%, black 28%, transparent 68%);" +
+        " filter: blur(14px);" +
+        " mix-blend-mode: screen;" +
+        " animation: fx-wormhole-spin 3.5s linear infinite;";
+      overlay.appendChild(disc);
+      // Inject the keyframes once.
+      if (!document.getElementById("fx-wormhole-style")) {
+        const s = document.createElement("style");
+        s.id = "fx-wormhole-style";
+        s.textContent =
+          "@keyframes fx-wormhole-spin {" +
+          " from { transform: rotate(0deg) }" +
+          " to   { transform: rotate(360deg) } }";
+        document.head.appendChild(s);
+      }
+      document.body.appendChild(overlay);
+      return overlay;
+    }
+    function tick() {
+      const o = ensureOverlay();
+      if (disc) {
+        disc.style.left = mouseX + "px";
+        disc.style.top  = mouseY + "px";
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    return {
+      enable() {
+        const o = ensureOverlay();
+        o.style.opacity = "1";
+        if (!raf) raf = requestAnimationFrame(tick);
+      },
+      disable() {
+        if (overlay) overlay.style.opacity = "0";
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+      },
+    };
+  })();
+
+  const _EFFECTS = { repulsion, chromatic, spotlight, ripple, wormhole };
 
   return {
     setActive(names) {
@@ -3456,11 +3532,18 @@ const MouseFx = (function () {
       }
       _attachListeners();
       const want = new Set((names || []).filter(n => _EFFECTS[n]));
+      console.log("[wallpaper] mouse-fx: setActive(" + Array.from(want).join(",") + ")");
       for (const n of active) {
-        if (!want.has(n) && _EFFECTS[n]) _EFFECTS[n].disable();
+        if (!want.has(n) && _EFFECTS[n]) {
+          console.log("[wallpaper] mouse-fx: disabling", n);
+          _EFFECTS[n].disable();
+        }
       }
       for (const n of want) {
-        if (!active.has(n)) _EFFECTS[n].enable();
+        if (!active.has(n)) {
+          console.log("[wallpaper] mouse-fx: enabling", n);
+          _EFFECTS[n].enable();
+        }
       }
       active = want;
     },
