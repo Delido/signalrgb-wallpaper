@@ -381,44 +381,35 @@ Open ideas grouped by impact-to-effort ratio. Pull requests welcome.
 For the long-form version with per-item implementation notes +
 licence-compatibility guidance, see [docs/roadmap.md](docs/roadmap.md).
 
-> ✅ **Tiers 1 + 2 + 3 + the first slice of Tier 4 are shipped.**
-> Setup health-check, backup/restore, Ctrl+Z undo, first-run tour,
-> wallpaper auto-cycle, preset hotkeys, per-app profiles,
-> Now-playing widget, Builder Auto-cut tool, auto-update, twelve
-> ambient effects, multi-monitor wall workflow, Winget submission
-> — all done. **Tier 4 LED-ecosystem work** (OpenRGB output,
-> sources hub, sACN/E1.31 output, spatial mapping) shipped across
-> the v1.4 + v1.5 betas.
->
-> The open work below is the remaining Tier 4 (integration / API
-> surface). Lower priority because none of it is a single-user
-> need; pull requests very welcome if any of these matter to your
-> setup.
+> ✅ **All tiers shipped.** Setup health-check, backup/restore,
+> Ctrl+Z undo, first-run tour, wallpaper auto-cycle, preset
+> hotkeys, per-app profiles, Now-playing widget, Builder Auto-cut
+> tool, auto-update, twelve ambient effects, multi-monitor wall
+> workflow, Winget submission — Tiers 1+2+3 done across the v0.8
+> → v1.3 line. **Tier 4 (LED-ecosystem + integration)** shipped
+> in v1.4 + v1.5: OpenRGB output, per-screen colour-source picker
+> (SignalRGB / OpenRGB / sACN), sACN/E1.31 input + output, sACN
+> universe discovery, spatial mapping for OpenRGB output (point
+> and strip mode), HA / MQTT bridge with Discovery, REST API
+> with OpenAPI + bearer-token auth, generic HTTP widget, plugin
+> API for 3rd-party widgets.
 
-### 🔌 Tier 4 — Ecosystem / integration (post-v1.0)
+### What might come next
 
-- **Strip-mode spatial mapping** *(~3–4 h)* — multi-LED devices
-  (RAM, strips, keyboard rows) get a *line* on the wallpaper
-  preview instead of a single point. Each LED samples its
-  position along the line, so a stick of RAM can show a
-  horizontal gradient that matches the wallpaper. Follow-up
-  to the v1.5 single-point mapping.
-- **Home Assistant / MQTT bridge** — publish wallpaper state +
-  sensor values via MQTT so users can write HA automations
-  ("dim wallpaper when 'movie night' scene is active").
-- **REST API** — already partially possible (`/library`, `/config`,
-  `/hwmon/sensors`, `/openrgb/status`, `/sacn/status`, …);
-  formalise the full WS-equivalent surface with an OpenAPI spec
-  plus token auth so Stream Deck / scripts / external tools can
-  drive the wallpaper without poking the WebSocket.
-- **Plugin API for third-party widgets** — `%LOCALAPPDATA%\
-  SignalRGBWallpaper\plugins\<name>\widget.js` with a defined
-  contract. Long road to a community widget library; depends on
-  the REST-API formalisation above.
-- **Generic HTTP widget** — polls any URL on a schedule and
-  renders a configurable Mustache template. Covers Discord unread /
-  stocks / RSS / crypto / arbitrary REST APIs with one widget
-  type instead of one per service. ~5-6 h.
+Honest answer: the roadmap is done. The bridge does a lot.
+Realistic follow-ups are user-driven from here:
+
+- **Cosmetic polish + Configurator UX iteration** — the v1.4 / v1.5
+  features all have basic UI; some of them deserve nicer cards,
+  better discoverability, and inline docs.
+- **More plugin examples + a contrib library** — the plugin API is
+  in place, plugins themselves are out-of-tree. A small starter
+  set (`weather-pro`, `home-assistant-monitor`, …) in a separate
+  repo would lower the on-ramp.
+- **Per-LED freeform mapping** (post-line follow-up) — let the user
+  individually place every LED of a device on the wallpaper
+  instead of point/line presets. Niche, only matters for
+  irregular hardware layouts.
 
 Got a wish that isn't here?
 [Open an issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)

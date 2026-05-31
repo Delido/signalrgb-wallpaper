@@ -830,45 +830,68 @@ that doesn't currently know SignalRGB exists. The work is also
 better-scoped (single protocol, well-documented spec) than the
 REST API formalisation that the other Tier 4 items depend on.
 
-### 🔲 Home Assistant / MQTT bridge
+### ✅ Home Assistant / MQTT bridge — shipped v1.5.0-beta
 
-Bridge publishes wallpaper state (current preset, current
-background, glow strength, sysstats, hwmon sensors) on MQTT topics
-`signalrgb-wallpaper/<screen>/...`. Subscribes to control topics
-so HA can apply presets / change backgrounds via automations.
+`wallpaper_bridge/mqtt_client.py` is a ~400-LOC custom MQTT 3.1.1
+client (no paho-mqtt dep so the bridge keeps its MIT distribution
+clean). `MqttBridge` in `bridge.py` publishes per-screen state
+under a configurable topic prefix (default `signalrgb-wallpaper`)
+and subscribes to `*/set` topics for control. Frame-tap-driven
+glow colour publish. Will-message on `<prefix>/bridge/online` so
+HA shows the bridge as unavailable when offline.
 
-### 🔲 REST API (formalised)
+Also publishes **MQTT Discovery** payloads under
+`<discoveryPrefix>/.../config` (default `homeassistant`) so HA's
+MQTT integration auto-creates one device card with N × 4
+entities per screen: preset select, pause switch, glow + bg
+sensors. Configurable via the new Configurator System sub-section.
 
-Already partially possible (`/library/list`, `/config`,
-`/hwmon/sensors`, `/screen/N/background`). Formalise the rest:
-list/apply presets, update settings, list/add/remove widgets.
-OpenAPI spec at `/api/openapi.json`. Token auth (loopback-friendly
-secret in `config.json`) so external clients can act on user's
-behalf without exposing localhost-only ops to anything that hits
-17320.
+### ✅ REST API (formalised) — shipped v1.5.0-beta
 
-### 🔲 Plugin API for third-party widgets
+`/api/v1/*` surface: info, screens, settings, preset/apply,
+pause, profiles, plugins, sacn/discovered, mqtt/status,
+auth/verify. Hand-written OpenAPI 3.1 spec at
+`/api/openapi.json`. Human-readable companion in
+[docs/api.md](api.md) with curl examples, Stream Deck recipe,
+HA `rest_command` snippet.
 
-Drop a folder under `%LOCALAPPDATA%\SignalRGBWallpaper\plugins\
-<name>\` with `widget.js` + `widget.html` + `manifest.json`. The
-bridge enumerates plugin folders on startup, the wallpaper page
-loads each plugin in a sandboxed iframe-like context, the
-Configurator picks them up in the widget catalogue.
+Auth: per-install `apiToken` auto-generated in `config.json`,
+shown + regenerable in the Configurator's System card. Loopback
+requests bypass (Configurator + same-host integrations work
+without configuration); remote requests need
+`Authorization: Bearer <apiToken>`. Token UI: hidden by default
+(`<input type="password">` with bullet placeholder), press-to-show
+button, and a Bitwarden-style **Copy & forget** that auto-clears
+the clipboard ~30 s later.
 
-Long road. Would need a documented stable contract (events,
-properties schema, allowed APIs, no arbitrary `fetch()` to
-non-allowlisted hosts, etc.).
+### ✅ Plugin API for third-party widgets — shipped v1.5.0-beta
 
-### 🔲 Generic HTTP widget — ~5-6 h
+`PluginRegistry` scans `%LOCALAPPDATA%\SignalRGBWallpaper\plugins\
+<name>\` on startup + on demand for `manifest.json` files. Each
+discovered plugin becomes a `plugin/<name>` widget type, served
+via `/plugins/<name>/<asset>` with sandboxed path resolution
+(refuses traversal) and a strict CSP header. Wallpaper page
+renders instances into `sandbox="allow-scripts"` iframes; the
+postMessage protocol (`{init, tint, opts}` outbound,
+`{log}` inbound) is the only IPC channel.
 
-Polls any URL on a schedule, renders a configurable template.
-Covers Discord-unread / stock-ticker / RSS-headline /
-crypto-price / arbitrary REST API with one widget type instead
-of one widget per service. Template format: simple Mustache /
-{{}} placeholders against the JSON response.
+Full author contract documented in
+[docs/plugin-api.md](plugin-api.md) with a hello-world example
+that a maintainer can drop into the plugins folder + see live
+in <10 lines.
 
-Risk: drives arbitrary requests from the wallpaper page; need
-to think about cookie / credential isolation.
+### ✅ Generic HTTP widget — shipped v1.5.0-beta
+
+New `http` widget type. URL + refresh interval + mustache-
+flavoured template (`{{path.to.field}}` substitutions). JSON
+auto-parsed, falls back to text. Tint-from-glow option. Custom
+50-LOC mustache reader, no JS library bundled.
+
+Fetch runs from the wallpaper page (same path as the existing
+RSS widget) — no bridge proxy, so the target's CORS + cache
+headers apply directly. Covers Discord-unread / stock-ticker /
+crypto-price / RSS-headline / arbitrary REST APIs with ONE
+widget instead of one per service.
 
 ---
 
