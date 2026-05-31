@@ -3242,23 +3242,12 @@ function applyWidgetTheme(theme) {
 // All four run skipped when IS_PREVIEW is true (Configurator's live preview
 // would amplify the cost without the user benefit).
 
-// v1.6.1-beta hotfix4: cursor position is now module-scope so it can
-// feed BOTH the MouseFx overlay effects AND any ambient preset that
-// wants cursor-aware behaviour (Wormhole below). One listener; the
-// Lively + WE adapters chain through their own livelyCurrentCursorPos
-// path. Updated unconditionally so ambient code never has to gate on
-// whether MouseFx happens to be initialised.
+// v1.6.1-beta hotfix5: cursor position at module scope so the
+// ambient Wormhole preset + MouseFx overlay effects can both read
+// it. Updated by the canonical livelyCurrentCursorPos +
+// document.mousemove handlers further down in this file — kept
+// just the declaration here.
 let _cursorX = 0, _cursorY = 0;
-(function _initCursorTracker() {
-  window.addEventListener("mousemove", (ev) => {
-    _cursorX = ev.clientX; _cursorY = ev.clientY;
-  }, { passive: true });
-  const prev = window.livelyCurrentCursorPos;
-  window.livelyCurrentCursorPos = (x, y) => {
-    _cursorX = x; _cursorY = y;
-    if (typeof prev === "function") try { prev(x, y); } catch (_) {}
-  };
-})();
 
 const MouseFx = (function () {
   let active = new Set();
@@ -5451,6 +5440,15 @@ const pixelfx = (function () {
 window.livelyCurrentCursorPos = function (x, y) {
   pixelfx.setCursor(x, y);
   parallax.setCursor(x, y);
+  // v1.6.1-beta hotfix5: feed the module-level cursor vars so
+  // ambient effects (Wormhole) + MouseFx (Spotlight / Chromatic
+  // / Ripple) all see the live position. Previously my separate
+  // _initCursorTracker IIFE registered ITS own
+  // livelyCurrentCursorPos earlier in the file, but THIS
+  // assignment overwrites it — so _cursorX / _cursorY stayed at
+  // 0,0 forever and Wormhole particles spiralled into the
+  // top-left corner instead of the cursor.
+  _cursorX = x; _cursorY = y;
 };
 
 // DOM mousemove fallback — fires when Lively's "Wallpaper interaction"
@@ -5461,6 +5459,9 @@ window.livelyCurrentCursorPos = function (x, y) {
 document.addEventListener("mousemove", (e) => {
   pixelfx.setCursor(e.clientX, e.clientY);
   parallax.setCursor(e.clientX, e.clientY);
+  // Same reason as above — keep the ambient + MouseFx cursor in
+  // sync regardless of which input path delivered the event.
+  _cursorX = e.clientX; _cursorY = e.clientY;
 }, { passive: true });
 
 // ─────────────────────────────────────────────────────────────────────────────
