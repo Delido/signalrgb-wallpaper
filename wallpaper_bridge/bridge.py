@@ -672,7 +672,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.6.0-beta"
+APP_VERSION = "1.6.1-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -695,7 +695,7 @@ APP_VERSION = "1.6.0-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "1.6.0-beta"
+WALLPAPER_VERSION = "1.6.1-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -7560,6 +7560,11 @@ class BridgeRuntime:
         "pixelfx", "parallax3d",
         "audioGlow", "audioGlowIntensity", "audioGlowTint",
         "widgetsLocked", "widgetTileStyle",
+        # v1.6.0-beta: theme palette + stackable mouse-distortion
+        # effects. Need to be on this whitelist or the Configurator's
+        # setting-update messages get silently dropped by
+        # update_screen_setting → nothing happens on the wallpaper.
+        "widgetTheme", "mouseEffects",
         # Mirror toggle — special-cased in update_screen_setting below
         # because activation copies the source's state onto self.
         "mirrorOf",
