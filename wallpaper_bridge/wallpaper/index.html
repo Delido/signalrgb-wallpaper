@@ -4183,6 +4183,17 @@ const ambient = (function () {
     const def = AMBIENT_PRESETS[preset];
     if (!def) return;
     const target = def.targetCount(density, viewW, viewH);
+    // v1.6.1-beta hotfix11: trim excess when density drops.
+    // Previously turning density DOWN had a delayed effect —
+    // existing particles only attrited via natural step
+    // consumption, taking many seconds at low respawn rates.
+    // Now we pop from the end on every frame until we're at the
+    // new target. Popping from the end is O(1) per particle and
+    // doesn't disturb the swap-and-pop indices below.
+    while (particles.length > target) {
+      const dead = particles.pop();
+      if (def.respawn && dead) recyclePool.push(dead);
+    }
     // Spawn — prefer recycled corpses if the preset can respawn them
     // in place, else allocate fresh.
     while (particles.length < target) {
@@ -5134,14 +5145,28 @@ const AMBIENT_PRESETS = {
       const dy = ay - p.y;
       const distSq = dx * dx + dy * dy;
       const dist = Math.sqrt(distSq) + 1;
-      // v1.6.1-beta hotfix10: bigger consumption radius (18 → 32).
-      // Particles with high tangential velocity were grazing past
-      // the 18-px event horizon + going back out before being
-      // captured. A larger funnel clears the centre faster + the
-      // overall ratio of "in the swirl" vs "respawning" feels
-      // more balanced.
-      if (dist < 32) return false;                       // consumed
-      if (dist > Math.max(w, h) * 1.6) return false;     // escaped
+      // v1.6.1-beta hotfix12: three independent kill paths so the
+      // pool stays fresh when the cursor moves. Without these,
+      // particles orbiting the OLD cursor location kept their
+      // momentum after the user dragged the mouse, then slowly
+      // spiralled toward the new anchor while NEW particles
+      // spawned on top — visible as "old dots don't dissolve,
+      // more keep coming".
+      //   1) Inner event horizon — particles that reach the
+      //      singularity get consumed. Tightened 32 → 24 so the
+      //      central glow doesn't pile up.
+      //   2) Outer escape — particles past this radius from the
+      //      *current* anchor die. Was max(w,h)*1.6 = 8200 px on
+      //      a 5120×1440 desktop (basically infinite); now
+      //      diag(w,h)*0.5 = ~2660 px. Old-position orbiters get
+      //      culled the moment cursor jumps.
+      //   3) Hard lifespan — every particle dies after 3 s no
+      //      matter what. Bounds the worst case if both above
+      //      fail to trigger (e.g. cursor parked in centre +
+      //      stable orbit at exactly the right radius).
+      if (dist < 24) return false;                       // consumed
+      if (dist > Math.hypot(w, h) * 0.5) return false;   // escaped
+      if (p.life > 3.0) return false;                    // expired
       // v1.6.1-beta hotfix9: hybrid pull. Inverse-square at the
       // close range for the classic black-hole feel, plus a
       // constant component that scales linearly outward so
