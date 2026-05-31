@@ -2352,6 +2352,19 @@ class Broadcaster:
                 print(f"[broadcast] frame tap failed: {e}")
         async with self._lock:
             clients = list(self.clients_by_screen.get(screen, ()))
+            # v1.5.0-beta hotfix: exclude `role=configurator` clients
+            # from per-frame glow broadcasts. The Configurator's main
+            # WS drops binary frames in its onmessage handler anyway,
+            # but the browser still allocates an ArrayBuffer per
+            # arrival. At 60-200 Hz × 4 screens that's 6 MB/s heap
+            # churn on the user's tab (visible in DevTools as the
+            # sawtooth heap growth that pegs Animation work to
+            # ~100 %). Skipping them server-side cuts the wallpaper-
+            # page render pipeline's overhead too: encode_binary_frame
+            # runs once but isn't fanned to no-op receivers.
+            roles = getattr(self, "client_roles", {}) or {}
+            clients = [w for w in clients
+                       if roles.get(w, "wallpaper") != "configurator"]
         if not clients:
             return
         frame = encode_binary_frame(payload)
