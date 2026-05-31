@@ -1671,22 +1671,30 @@
         Off keeps the v1.0 transparent-overlay look every existing user is already running.
       </div>
 
-      <!-- v1.6.0-beta theme palette. Stacks on top of the tile style:
-           tile style picks the shell (glass / solid / clear); theme
-           picks the colour palette + typography underneath. -->
+      <!-- v1.6.1-beta theme palette. Visual swatch grid — each tile
+           shows the theme's background + border + accent dot as a
+           live preview. Click to apply; active theme has a ring.
+           The hidden <select> mirrors the active choice for screen-
+           reader / keyboard accessibility + persistence. -->
       <div class="row" style="margin-top: 12px;">
-        <label for="widget-theme" data-i18n="widgets.theme.label">Theme</label>
-        <select id="widget-theme">
-          <option value="default"     data-i18n="widgets.theme.default">Default — glow-tinted (v1.5)</option>
-          <option value="dracula"     data-i18n="widgets.theme.dracula">Dracula</option>
-          <option value="nord"        data-i18n="widgets.theme.nord">Nord</option>
-          <option value="tokyo-night" data-i18n="widgets.theme.tokyo">Tokyo Night</option>
-          <option value="catppuccin"  data-i18n="widgets.theme.catppuccin">Catppuccin Mocha</option>
-          <option value="solarized"   data-i18n="widgets.theme.solarized">Solarized Dark</option>
-          <option value="vintage-crt" data-i18n="widgets.theme.crt">Vintage CRT</option>
-          <option value="light"       data-i18n="widgets.theme.light">Light Mode</option>
-        </select>
+        <label data-i18n="widgets.theme.label" style="font-weight:500;">Theme</label>
       </div>
+      <div id="widget-theme-grid"
+           style="display:grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap:8px; margin-top:6px;">
+      </div>
+      <select id="widget-theme" style="display:none;">
+        <option value="default"     data-i18n="widgets.theme.default">Default — glow-tinted (v1.5)</option>
+        <option value="dracula"     data-i18n="widgets.theme.dracula">Dracula</option>
+        <option value="nord"        data-i18n="widgets.theme.nord">Nord</option>
+        <option value="tokyo-night" data-i18n="widgets.theme.tokyo">Tokyo Night</option>
+        <option value="catppuccin"  data-i18n="widgets.theme.catppuccin">Catppuccin Mocha</option>
+        <option value="solarized"   data-i18n="widgets.theme.solarized">Solarized Dark</option>
+        <option value="vintage-crt" data-i18n="widgets.theme.crt">Vintage CRT</option>
+        <option value="light"       data-i18n="widgets.theme.light">Light Mode</option>
+        <option value="gruvbox"     data-i18n="widgets.theme.gruvbox">Gruvbox Dark</option>
+        <option value="rose-pine"   data-i18n="widgets.theme.rose">Rose Pine</option>
+        <option value="cyberpunk"   data-i18n="widgets.theme.cyberpunk">Cyberpunk Neon ⚡</option>
+      </select>
       <div class="hint" data-i18n="widgets.theme.hint" style="margin-top: 6px;">
         Repaints every widget at once with a coordinated colour
         palette + font stack. Independent of <em>Tile style</em> above
@@ -2250,6 +2258,9 @@ const TRANSLATIONS = {
   "widgets.theme.solarized":    { en: "Solarized Dark",     de: "Solarized Dark" },
   "widgets.theme.crt":          { en: "Vintage CRT",        de: "Vintage CRT" },
   "widgets.theme.light":        { en: "Light Mode",         de: "Heller Modus" },
+  "widgets.theme.gruvbox":      { en: "Gruvbox Dark",       de: "Gruvbox Dark" },
+  "widgets.theme.rose":         { en: "Rose Pine",          de: "Rose Pine" },
+  "widgets.theme.cyberpunk":    { en: "Cyberpunk Neon ⚡",   de: "Cyberpunk Neon ⚡" },
   "widgets.theme.hint":         { en: "Repaints every widget at once with a coordinated colour palette + font stack. Independent of <em>Tile style</em> above — pick a shell variant for chrome and a theme for colours.",
                                   de: "Färbt alle Widgets gleichzeitig mit einer abgestimmten Farb-Palette + Font-Stack neu. Unabhängig vom <em>Tile-Style</em> oben — wähle eine Shell-Variante für die Hülle und ein Theme für die Farben." },
   "mousefx.label":              { en: "Cursor effects on the wallpaper (stackable)",
@@ -6409,6 +6420,86 @@ if (els.widgetTheme) {
   els.widgetTheme.addEventListener("change",
     () => setSetting("widgetTheme", els.widgetTheme.value));
 }
+// v1.6.1-beta: build the visual swatch grid that mirrors the hidden
+// <select>. Each tile previews the theme via inline CSS that mimics
+// the wallpaper-side body.theme-<name> .widget rule. Click → set
+// the hidden select's value + dispatch its change event so the
+// existing setSetting path handles persistence.
+(function buildThemeGrid() {
+  const grid = document.getElementById("widget-theme-grid");
+  const sel  = els.widgetTheme;
+  if (!grid || !sel) return;
+  // Inline preview swatches — minimal CSS so we don't need a
+  // theme-CSS round-trip. Matches the wallpaper-side palette
+  // chosen in wallpaper/index.html's body.theme-* rules.
+  const PREVIEWS = {
+    "default":     { bg: "rgba(15,22,36,0.7)",   border: "rgba(255,255,255,0.18)", accent: "#6ab0ff", fg: "#f5f7fb",
+                     label: "Default" },
+    "dracula":     { bg: "rgba(40,42,54,0.85)",  border: "rgba(189,147,249,0.4)",  accent: "#ff79c6", fg: "#f8f8f2",
+                     label: "Dracula" },
+    "nord":        { bg: "rgba(46,52,64,0.85)",  border: "rgba(136,192,208,0.4)",  accent: "#88c0d0", fg: "#eceff4",
+                     label: "Nord" },
+    "tokyo-night": { bg: "rgba(26,27,38,0.9)",   border: "rgba(125,207,255,0.4)",  accent: "#7dcfff", fg: "#c0caf5",
+                     label: "Tokyo Night" },
+    "catppuccin":  { bg: "rgba(30,30,46,0.85)",  border: "rgba(245,194,231,0.4)",  accent: "#f5c2e7", fg: "#cdd6f4",
+                     label: "Catppuccin" },
+    "solarized":   { bg: "rgba(0,43,54,0.9)",    border: "rgba(147,161,161,0.4)",  accent: "#b58900", fg: "#93a1a1",
+                     label: "Solarized" },
+    "vintage-crt": { bg: "rgba(8,18,8,0.95)",    border: "rgba(0,255,70,0.55)",    accent: "#00ff46", fg: "#00ff46",
+                     label: "Vintage CRT" },
+    "light":       { bg: "rgba(250,250,252,0.95)", border: "rgba(0,0,0,0.18)",     accent: "#0066cc", fg: "#1c1f24",
+                     label: "Light" },
+    "gruvbox":     { bg: "rgba(40,40,40,0.9)",   border: "rgba(254,128,25,0.45)",  accent: "#fabd2f", fg: "#ebdbb2",
+                     label: "Gruvbox" },
+    "rose-pine":   { bg: "rgba(25,23,36,0.85)",  border: "rgba(235,188,186,0.45)", accent: "#ebbcba", fg: "#e0def4",
+                     label: "Rose Pine" },
+    "cyberpunk":   { bg: "linear-gradient(135deg,rgba(20,4,40,0.95),rgba(4,8,30,0.95))",
+                     border: "rgba(255,30,200,0.6)", accent: "#ff1ec8", fg: "#f0f0ff",
+                     label: "Cyberpunk ⚡" },
+  };
+  grid.innerHTML = "";
+  for (const opt of sel.options) {
+    const name = opt.value;
+    const p = PREVIEWS[name] || PREVIEWS["default"];
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "theme-swatch";
+    tile.dataset.value = name;
+    tile.title = opt.textContent.trim();
+    tile.style.cssText =
+      "background: " + p.bg + "; border: 1.5px solid " + p.border + ";" +
+      " border-radius: 8px; padding: 12px 8px 8px; cursor: pointer;" +
+      " color: " + p.fg + "; font: 11px/1.2 system-ui, sans-serif;" +
+      " text-align: center; transition: transform 0.12s, box-shadow 0.2s;" +
+      " position: relative; min-height: 56px;";
+    tile.innerHTML =
+      '<div style="display:flex; gap:4px; justify-content:center; margin-bottom:6px;">' +
+        '<span style="width:10px; height:10px; border-radius:50%; background:' + p.accent + '; box-shadow: 0 0 6px ' + p.accent + ';"></span>' +
+        '<span style="width:10px; height:10px; border-radius:2px; background:' + p.fg + ';"></span>' +
+      '</div>' +
+      '<div>' + (p.label) + '</div>';
+    tile.addEventListener("click", () => {
+      sel.value = name;
+      sel.dispatchEvent(new Event("change"));
+      _refreshThemeSwatchActive();
+    });
+    grid.appendChild(tile);
+  }
+  function _refreshThemeSwatchActive() {
+    const cur = sel.value || "default";
+    for (const tile of grid.querySelectorAll(".theme-swatch")) {
+      const active = tile.dataset.value === cur;
+      tile.style.boxShadow = active
+        ? "0 0 0 2px var(--accent, #ff5a6e), 0 4px 16px rgba(0,0,0,0.3)"
+        : "0 1px 0 rgba(0,0,0,0.15)";
+      tile.style.transform = active ? "translateY(-2px)" : "";
+    }
+  }
+  // Expose so the settings-push handler can re-sync the highlight
+  // when widgetTheme changes from another tab.
+  window._refreshThemeSwatchActive = _refreshThemeSwatchActive;
+  _refreshThemeSwatchActive();
+})();
 // v1.6.0-beta: stackable mouse-effects. Each checkbox toggles its
 // effect name in the array; on change we push the union back.
 for (const cb of document.querySelectorAll(".mousefx-cb")) {
@@ -8103,6 +8194,9 @@ function renderAll() {
   }
   if (els.widgetTheme) {
     els.widgetTheme.value = settings.widgetTheme || "default";
+    if (typeof window._refreshThemeSwatchActive === "function") {
+      window._refreshThemeSwatchActive();
+    }
   }
   // v1.6.0-beta: mouse-effects checkboxes reflect the persisted set.
   {

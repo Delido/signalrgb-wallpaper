@@ -570,7 +570,17 @@
     --theme-shadow:  0 0 12px rgba(0, 255, 70, 0.4),
                      inset 0 0 24px rgba(0, 255, 70, 0.12);
   }
-  /* CRT scanlines on widgets only (not the wallpaper background). */
+  /* CRT scanlines on widgets only (not the wallpaper background).
+     v1.6.1-beta hotfix3: do NOT override position — widgets are
+     already position:absolute (line 397) which makes the ::before
+     position itself relative to the widget anyway. Adding
+     `position: relative` here collapsed widgets back into normal
+     document flow and stacked them vertically across the screen.
+     `overflow: hidden` is fine because the ::before already
+     respects the widget's border-radius via `inherit`. */
+  body.theme-vintage-crt .widget {
+    overflow: hidden;
+  }
   body.theme-vintage-crt .widget::before {
     content: "";
     position: absolute; inset: 0;
@@ -580,12 +590,63 @@
     pointer-events: none;
     border-radius: inherit;
     mix-blend-mode: screen;
+    /* Keep the scanlines BEHIND widget content but above the
+       widget's themed background — z-index 0 puts it at the
+       widget's own stacking context base. */
+    z-index: 0;
   }
-  body.theme-vintage-crt .widget { position: relative; overflow: hidden; }
+  body.theme-vintage-crt .widget > * { position: relative; z-index: 1; }
   body.theme-light {
     --theme-bg:      rgba(250, 250, 252, 0.92);
     --theme-radius:  8px;
     --theme-shadow:  0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+  /* Gruvbox Dark — earthy retro palette, beloved by Vim users. */
+  body.theme-gruvbox {
+    --theme-bg-glass:  rgba(40, 40, 40, 0.78);
+    --theme-bg-solid:  rgba(40, 40, 40, 0.94);
+    --theme-bg-clear:  rgba(254, 128, 25, 0.06);
+    --theme-border:    rgba(254, 128, 25, 0.28);
+    --theme-fg:        #ebdbb2;
+    --theme-fg-muted:  rgba(235, 219, 178, 0.62);
+    --theme-accent:    #fabd2f;
+    --theme-bg:        rgba(40, 40, 40, 0.82);
+    --theme-radius:    6px;
+    --theme-shadow:    0 2px 0 rgba(254, 128, 25, 0.25);
+  }
+  /* Rose Pine — muted pastel rose + plum + sage. */
+  body.theme-rose-pine {
+    --theme-bg-glass:  rgba(25, 23, 36, 0.78);
+    --theme-bg-solid:  rgba(25, 23, 36, 0.94);
+    --theme-bg-clear:  rgba(235, 188, 186, 0.06);
+    --theme-border:    rgba(235, 188, 186, 0.25);
+    --theme-fg:        #e0def4;
+    --theme-fg-muted:  rgba(224, 222, 244, 0.62);
+    --theme-accent:    #ebbcba;
+    --theme-bg:        rgba(25, 23, 36, 0.82);
+    --theme-radius:    12px;
+    --theme-shadow:    0 3px 16px rgba(235, 188, 186, 0.18);
+  }
+  /* Cyberpunk Neon — magenta + cyan glow, the SignalRGB vibe. */
+  body.theme-cyberpunk {
+    --theme-bg-glass:  rgba(8, 4, 20, 0.85);
+    --theme-bg-solid:  rgba(8, 4, 20, 0.97);
+    --theme-bg-clear:  rgba(255, 30, 200, 0.08);
+    --theme-border:    rgba(255, 30, 200, 0.45);
+    --theme-fg:        #f0f0ff;
+    --theme-fg-muted:  rgba(240, 240, 255, 0.62);
+    --theme-accent:    #ff1ec8;
+    --theme-bg:        linear-gradient(135deg,
+                         rgba(20, 4, 40, 0.92) 0%,
+                         rgba(4, 8, 30, 0.92) 100%);
+    --theme-radius:    4px;
+    --theme-shadow:    0 0 18px rgba(255, 30, 200, 0.45),
+                       0 0 36px rgba(0, 240, 255, 0.20);
+  }
+  body.theme-cyberpunk .widget {
+    border-image: linear-gradient(
+      135deg, #ff1ec8, #00f0ff) 1;
+    text-shadow: 0 0 6px rgba(255, 30, 200, 0.4);
   }
   /* v1.6.1-beta: widget-only pulse on theme change. Animates
      --pulse-scale (registered above via @property so keyframes
@@ -3130,6 +3191,11 @@ function applyWidgetTileStyle(style) {
 const WIDGET_THEMES = [
   "default", "dracula", "nord", "tokyo-night",
   "catppuccin", "solarized", "vintage-crt", "light",
+  // v1.6.1-beta hotfix2: three more for variety. Gruvbox is a
+  // long-time dev favourite, Rose Pine has the warm-pastel
+  // aesthetic Catppuccin nailed but with a different palette,
+  // Cyberpunk Neon is on-brand for the SignalRGB audience.
+  "gruvbox", "rose-pine", "cyberpunk",
 ];
 function applyWidgetTheme(theme) {
   const safe = WIDGET_THEMES.indexOf(theme) >= 0 ? theme : "default";
