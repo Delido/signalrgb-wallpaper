@@ -420,16 +420,6 @@ licence-compatibility guidance, see [docs/roadmap.md](docs/roadmap.md).
   stocks / RSS / crypto / arbitrary REST APIs with one widget
   type instead of one per service. ~5-6 h.
 
-### 🅿️ Parked
-
-- **Mobile Configurator view** — would need the bridge to bind to
-  `0.0.0.0` with a "this exposes your wallpaper config to the LAN"
-  opt-in, and most users sit at the PC the wallpaper runs on.
-- **Community wallpaper gallery** — high copyright-infringement
-  risk for an unfiltered public submission flow (brand IP, anime
-  stills, game art). The bundled starter library + per-user
-  upload remain the supported path.
-
 Got a wish that isn't here?
 [Open an issue](https://github.com/Delido/signalrgb-wallpaper/issues/new)
 and tag it `enhancement`.

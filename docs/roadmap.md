@@ -348,21 +348,6 @@ needs a PR through their submission flow + ongoing manifest
 updates per release. Left as a manual task for the maintainer
 when there's audience for it.
 
-### 🅿️ Mobile Configurator view — parked
-
-Removed from the roadmap: niche use case, would need the bridge
-to bind to 0.0.0.0 with a "this exposes your wallpaper config
-to the LAN" opt-in, and most users sit at the PC the wallpaper
-runs on anyway.
-
-### 🅿️ Community wallpaper gallery — parked
-
-Removed from the roadmap: high copyright-infringement risk
-(unfiltered user uploads of brand IP, anime stills, game art,
-etc.) — moderating a public submission flow would dwarf the
-useful curation work. The bundled starter library + per-user
-upload remain the supported path.
-
 ### 🚧 Ambient effects: port MIT-licensed CodePen pens — first batch v0.9.12-beta
 
 v0.9.12-beta added **Constellation** + **Fireflies** ambient presets,

@@ -47,6 +47,7 @@ import locale
 import mimetypes
 import os
 import random
+import secrets
 import re
 import struct
 
@@ -72,6 +73,24 @@ try:
 except Exception as _e:
     _sacn = None
     print(f"[sacn] codec module load failed: {_e}")
+
+# v1.5.0-beta: MQTT 3.1.1 client for the HA / MQTT bridge.
+try:
+    from mqtt_client import MQTTClient as _MQTTClient
+except Exception as _e:
+    _MQTTClient = None
+    print(f"[mqtt] client module load failed: {_e}")
+
+
+def _redact_mqtt(d: dict) -> dict:
+    """Copy of the mqttBridge config with `password` blanked. Used
+    by Configurator pushes so a screenshot doesn't leak the broker
+    credential; the real value stays only on disk + in the worker
+    thread's `_connect` path."""
+    out = dict(d or {})
+    if out.get("password"):
+        out["password"] = "***"
+    return out
 import sys
 import threading
 import time
@@ -676,7 +695,7 @@ APP_VERSION = "1.5.0-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "1.3.0"
+WALLPAPER_VERSION = "1.5.0-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -1048,6 +1067,28 @@ WIDGET_DEFAULTS = {
                     "itemCount": 8, "refreshMin": 15,
                     "showDate": True, "tintFromGlow": False},
     },
+    # v1.5.0-beta: generic HTTP widget. Polls a user-configured URL
+    # every refreshMin minutes, parses JSON if the Content-Type says
+    # so (else treats as text), and renders the value via a tiny
+    # mustache-flavoured template (`{{path.to.field}}` substitutions).
+    # Covers Discord-unread / stock-ticker / RSS-headline /
+    # crypto-price / arbitrary REST API with ONE widget type instead
+    # of one widget per service. Lives on the wallpaper page (no
+    # bridge proxy) — the target's CORS + cache headers apply
+    # directly, same as the RSS widget.
+    "http": {
+        "label":   "Custom HTTP",
+        "x": 1100, "y": 360, "w": 360, "h": 160,
+        "options": {
+            "url":           "",
+            "method":        "GET",
+            "headers":       "",   # one "Key: value" pair per line
+            "title":         "",
+            "template":      "{{.}}",
+            "refreshMin":    5,
+            "tintFromGlow":  False,
+        },
+    },
 }
 if not ENABLE_NOWPLAYING:
     WIDGET_DEFAULTS.pop("now-playing", None)
@@ -1411,6 +1452,26 @@ def default_config() -> dict:
             # Defaults: screen 0 → universe 1, screen 1 → 2, …
             "universes": {str(n): n + 1 for n in range(N_SCREENS)},
         },
+        # v1.5.0-beta: REST API bearer token. Auto-generated on first
+        # run; shown + regenerable in the Configurator's System card.
+        # Bypassed for loopback requests so the existing Configurator
+        # / wallpaper page keep working without changes — gating only
+        # kicks in when a request arrives over a non-127.0.0.1 socket
+        # (future-proofing for the LAN-binding opt-in).
+        "apiToken": secrets.token_urlsafe(32),
+        # v1.5.0-beta: HA / MQTT bridge config. Disabled by default;
+        # publishes per-screen state to a configurable topic prefix
+        # and subscribes to .../set topics for control. See the
+        # MqttBridge class for the topic layout.
+        "mqttBridge": {
+            "enabled":     False,
+            "host":        "localhost",
+            "port":        1883,
+            "username":    "",
+            "password":    "",
+            "clientId":    "signalrgb-wallpaper",
+            "topicPrefix": "signalrgb-wallpaper",
+        },
         "screens": {str(n): dict(DEFAULT_SCREEN_SETTINGS) for n in range(N_SCREENS)},
     }
 
@@ -1719,6 +1780,23 @@ def load_config() -> dict:
         cfg["sacnOutput"]["universes"] = {}
     for n in range(N_SCREENS):
         cfg["sacnOutput"]["universes"].setdefault(str(n), n + 1)
+    # v1.5.0-beta: REST API token backfill. Generated lazily so
+    # pre-v1.5 configs get a fresh token on first migration; existing
+    # tokens (string, non-empty) are preserved across upgrades.
+    tok = cfg.get("apiToken")
+    if not (isinstance(tok, str) and len(tok) >= 16):
+        cfg["apiToken"] = secrets.token_urlsafe(32)
+    # v1.5.0-beta: MQTT bridge backfill.
+    cfg.setdefault("mqttBridge", {})
+    if not isinstance(cfg.get("mqttBridge"), dict):
+        cfg["mqttBridge"] = {}
+    cfg["mqttBridge"].setdefault("enabled", False)
+    cfg["mqttBridge"].setdefault("host", "localhost")
+    cfg["mqttBridge"].setdefault("port", 1883)
+    cfg["mqttBridge"].setdefault("username", "")
+    cfg["mqttBridge"].setdefault("password", "")
+    cfg["mqttBridge"].setdefault("clientId", "signalrgb-wallpaper")
+    cfg["mqttBridge"].setdefault("topicPrefix", "signalrgb-wallpaper")
     cfg.setdefault("screens", {})
     for n in range(N_SCREENS):
         s = cfg["screens"].setdefault(str(n), {})
@@ -2159,6 +2237,12 @@ class Broadcaster:
                 "screenCount": int(self.get_screen_count()),
                 "profiles": self._get_profiles_for_push(),
                 "bridge": self.get_bridge_state(),
+                # v1.5.0-beta plugin API: catalogue of discovered
+                # 3rd-party widget plugins. The Configurator surfaces
+                # them in the picker as `plugin/<name>` entries, and
+                # the wallpaper page renders each instance into a
+                # sandboxed iframe.
+                "plugins": self._get_plugin_catalogue(),
                 "wsProtocolVersion": WS_PROTOCOL_VERSION,
             })))
         except Exception as e:
@@ -2379,6 +2463,24 @@ class Broadcaster:
         try:
             with rt.config_lock:
                 return list(rt.config.get("profiles", []) or [])
+        except Exception:
+            return []
+
+    def _get_plugin_catalogue(self) -> list:
+        """v1.5.0-beta plugin API: list of {name, label, iconSvg,
+        defaultSize, defaultOptions, version, author, description}
+        the wallpaper page + Configurator use to render plugin
+        widgets. Empty list when no plugins are installed or the
+        registry isn't wired yet."""
+        reg = getattr(self, "plugin_registry", None)
+        if reg is None:
+            return []
+        try:
+            # Strip the absolute `folder` path before pushing — the
+            # wallpaper page + Configurator address plugins via the
+            # `/plugins/<name>/…` URL, never via the on-disk path.
+            return [{k: v for k, v in p.items() if k != "folder"}
+                    for p in reg.list_plugins()]
         except Exception:
             return []
 
@@ -2762,6 +2864,8 @@ class Broadcaster:
             "/sacn/status":          "sacn_output_provider",
             "/sacn-input/status":    "sacn_input_provider",
             "/sources/status":       "source_provider",
+            "/mqtt/status":          "mqtt_provider",
+            "/plugins":              "plugin_provider",
         }
         if method == "GET" and target.split("?", 1)[0] in _v15_status_routes:
             attr = _v15_status_routes[target.split("?", 1)[0]]
@@ -3372,11 +3476,430 @@ class Broadcaster:
                 except Exception: pass
                 return
 
+        # v1.5.0-beta plugin API: serve plugin assets under
+        # /plugins/<name>/<rel>. The PluginRegistry's resolve_asset
+        # refuses anything that escapes the plugin's own folder.
+        # Files are served with a strict CSP so a plugin can't
+        # exfiltrate to arbitrary origins via fetch / XHR. The
+        # sandbox attribute on the iframe in the wallpaper page is
+        # the primary isolation; CSP is belt + braces.
+        if (method == "GET"
+                and target.split("?", 1)[0].startswith("/plugins/")):
+            parts = target.split("?", 1)[0].split("/")
+            # ["", "plugins", "<name>", *rest]
+            if len(parts) >= 4 and parts[2]:
+                plug_name = parts[2]
+                rel = "/".join(parts[3:]) or "widget.html"
+                reg = getattr(self, "plugin_registry", None)
+                if reg is None:
+                    http_error(writer, 503,
+                               "plugin registry not wired",
+                               request_headers=headers)
+                else:
+                    asset = reg.resolve_asset(plug_name, rel)
+                    if asset is None:
+                        http_error(writer, 404, "plugin asset not found",
+                                   request_headers=headers)
+                    else:
+                        try:
+                            data = asset.read_bytes()
+                            ctype = (mimetypes.guess_type(str(asset))[0]
+                                     or "application/octet-stream")
+                            head_b = (
+                                "HTTP/1.1 200 OK\r\n"
+                                f"Content-Type: {ctype}\r\n"
+                                f"Content-Length: {len(data)}\r\n"
+                                "Cache-Control: no-store\r\n"
+                                "Content-Security-Policy: "
+                                "default-src 'self' 'unsafe-inline'; "
+                                "img-src 'self' data:; "
+                                "connect-src 'self'\r\n"
+                                f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                                "Connection: close\r\n\r\n"
+                            ).encode()
+                            writer.write(head_b + data)
+                        except Exception as e:
+                            http_error(writer, 500,
+                                       f"plugin asset read failed: {e}",
+                                       request_headers=headers)
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+
+        # v1.5.0-beta: REST API + OpenAPI. All /api/v1/* routes go
+        # through `_handle_api_request` which enforces token auth on
+        # non-loopback requests (loopback bypasses so the local
+        # Configurator + same-host HA work without configuration).
+        # /api/openapi.json is served public so clients can fetch the
+        # spec without auth.
+        clean_target = target.split("?", 1)[0]
+        if clean_target == "/api/openapi.json":
+            await self._serve_openapi_spec(writer, headers)
+            return
+        if clean_target.startswith("/api/v1/"):
+            # Pull the request body when present — the handler picks
+            # the routes that actually need it.
+            body = b""
+            try:
+                content_length = int(headers.get("content-length") or "0")
+            except ValueError:
+                content_length = 0
+            if content_length > 0 and content_length < 1_048_576:
+                try:
+                    body = await reader.readexactly(content_length)
+                except Exception:
+                    body = b""
+            await self._handle_api_request(reader, writer, method,
+                                            clean_target, target,
+                                            headers, body)
+            return
+
         http_error(writer, 404, "not found")
         try: await writer.drain()
         except Exception: pass
         try: writer.close()
         except Exception: pass
+
+    # ── v1.5.0-beta REST API ────────────────────────────────────────────
+
+    def _is_loopback_request(self, writer) -> bool:
+        """True iff the request arrived over a 127.0.0.1 / ::1 socket.
+        WS_HOST is currently bound to 127.0.0.1 so this is always
+        True today; kept as a separate helper so a future LAN-binding
+        opt-in still has the right gate available."""
+        try:
+            peer = writer.get_extra_info("peername")
+            if peer is None:
+                return True
+            host = str(peer[0])
+            return host in ("127.0.0.1", "::1", "0:0:0:0:0:0:0:1")
+        except Exception:
+            return True
+
+    def _check_api_auth(self, writer, headers: dict) -> bool:
+        """Loopback requests bypass; remote requests need a valid
+        `Authorization: Bearer <apiToken>` header. The token lives
+        under `config.apiToken` and is auto-generated on first run."""
+        if self._is_loopback_request(writer):
+            return True
+        runtime = getattr(self, "bridge_runtime", None)
+        if runtime is None:
+            return False
+        expected = ""
+        try:
+            with runtime.config_lock:
+                expected = str(runtime.config.get("apiToken") or "")
+        except Exception:
+            return False
+        if not expected:
+            return False
+        auth = (headers.get("authorization") or "").strip()
+        if not auth.lower().startswith("bearer "):
+            return False
+        return auth.split(" ", 1)[1].strip() == expected
+
+    async def _send_json(self, writer, headers: dict,
+                        status: int, payload: dict) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        head = (
+            f"HTTP/1.1 {status} {'OK' if 200 <= status < 300 else 'Error'}\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Cache-Control: no-store\r\n"
+            f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+            "Access-Control-Allow-Headers: Authorization, Content-Type\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode()
+        writer.write(head + body)
+        try: await writer.drain()
+        except Exception: pass
+        try: writer.close()
+        except Exception: pass
+
+    async def _serve_openapi_spec(self, writer, headers: dict) -> None:
+        """Minimal OpenAPI 3.1 surface for the v1 endpoints. Hand-
+        written rather than introspected so it stays accurate when
+        endpoints change — the surface is small enough to maintain
+        manually + a generated spec would mean depending on FastAPI
+        or similar, neither of which we ship."""
+        spec = {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "SignalRGB Wallpaper Bridge API",
+                "version": "1",
+                "description": (
+                    "Local-only HTTP API exposed by the SignalRGB "
+                    "Wallpaper Bridge on 127.0.0.1:17320. All "
+                    "endpoints under /api/v1 require an "
+                    "`Authorization: Bearer <apiToken>` header "
+                    "when accessed over a non-loopback socket; "
+                    "loopback bypasses auth so the Configurator + "
+                    "same-host integrations work out of the box. "
+                    "The token lives under config.apiToken and is "
+                    "shown / regenerable from the Configurator's "
+                    "System card."
+                ),
+            },
+            "servers": [{"url": f"http://{WS_HOST}:{WS_PORT}"}],
+            "components": {
+                "securitySchemes": {
+                    "bearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                    },
+                },
+            },
+            "security": [{"bearerAuth": []}],
+            "paths": {
+                "/api/v1/info": {
+                    "get": {
+                        "summary": "Bridge version + capabilities",
+                        "responses": {"200": {"description": "OK"}},
+                    },
+                },
+                "/api/v1/auth/verify": {
+                    "post": {
+                        "summary": "Verify the supplied token works",
+                        "responses": {
+                            "200": {"description": "Authorised"},
+                            "401": {"description": "Bad / missing token"},
+                        },
+                    },
+                },
+                "/api/v1/screens": {
+                    "get": {
+                        "summary": "List all bridge screens with summary",
+                        "responses": {"200": {"description": "OK"}},
+                    },
+                },
+                "/api/v1/screens/{n}/settings": {
+                    "get": {
+                        "summary": "Read per-screen settings",
+                        "parameters": [
+                            {"name": "n", "in": "path", "required": True,
+                             "schema": {"type": "integer",
+                                        "minimum": 0,
+                                        "maximum": N_SCREENS - 1}},
+                        ],
+                        "responses": {"200": {"description": "OK"}},
+                    },
+                },
+                "/api/v1/screens/{n}/preset/{slot}/apply": {
+                    "post": {
+                        "summary": "Apply preset slot to a screen",
+                        "parameters": [
+                            {"name": "n", "in": "path", "required": True,
+                             "schema": {"type": "integer"}},
+                            {"name": "slot", "in": "path", "required": True,
+                             "schema": {"type": "integer", "minimum": 0,
+                                        "maximum": PRESET_SLOTS - 1}},
+                        ],
+                        "responses": {
+                            "200": {"description": "Applied"},
+                            "404": {"description": "Screen / slot invalid"},
+                        },
+                    },
+                },
+                "/api/v1/screens/{n}/pause": {
+                    "post": {
+                        "summary": "Set manual pause state for the bridge",
+                        "requestBody": {
+                            "content": {"application/json": {"schema": {
+                                "type": "object",
+                                "properties": {
+                                    "paused": {"type": "boolean"},
+                                },
+                            }}},
+                        },
+                        "responses": {"200": {"description": "OK"}},
+                    },
+                },
+                "/api/v1/profiles": {
+                    "get": {"summary": "List per-app profile rules"},
+                },
+                "/api/v1/plugins": {
+                    "get": {
+                        "summary": "List third-party widget plugins discovered "
+                                   "in %LOCALAPPDATA%\\SignalRGBWallpaper\\plugins\\",
+                    },
+                },
+            },
+        }
+        await self._send_json(writer, headers, 200, spec)
+
+    async def _handle_api_request(self, reader, writer,
+                                    method: str, route: str,
+                                    target_raw: str,
+                                    headers: dict, body: bytes) -> None:
+        """Dispatch /api/v1/* requests. Keeps each route tiny so
+        future additions / removals stay self-contained."""
+        if not self._check_api_auth(writer, headers):
+            await self._send_json(writer, headers, 401, {
+                "error": "auth required",
+                "hint": "send `Authorization: Bearer <apiToken>` "
+                        "(token is shown in the Configurator's "
+                        "System card)",
+            })
+            return
+        runtime = getattr(self, "bridge_runtime", None)
+        if runtime is None:
+            await self._send_json(writer, headers, 503, {
+                "error": "bridge runtime not wired",
+            })
+            return
+
+        # GET /api/v1/info
+        if method == "GET" and route == "/api/v1/info":
+            await self._send_json(writer, headers, 200, {
+                "appVersion":       APP_VERSION,
+                "wallpaperVersion": WALLPAPER_VERSION,
+                "screenCount":      int(self.get_screen_count()),
+                "maxScreens":       N_SCREENS,
+                "presetSlots":      PRESET_SLOTS,
+                "capabilities":     [
+                    "presets", "profiles", "openrgbOutput",
+                    "openrgbInput", "sacnOutput", "sacnInput",
+                    "spatialMapping", "mqttBridge", "plugins",
+                ],
+            })
+            return
+
+        # POST /api/v1/auth/verify
+        if method == "POST" and route == "/api/v1/auth/verify":
+            await self._send_json(writer, headers, 200, {"ok": True})
+            return
+
+        # GET /api/v1/screens
+        if method == "GET" and route == "/api/v1/screens":
+            sc = int(self.get_screen_count())
+            screens = []
+            for n in range(N_SCREENS):
+                try:
+                    s = self.get_settings(n)
+                    screens.append({
+                        "index":    n,
+                        "active":   n < sc,
+                        "viewportW": s.get("viewportW"),
+                        "viewportH": s.get("viewportH"),
+                        "mirrorOf":  s.get("mirrorOf"),
+                        "bgImage":   s.get("bgImage"),
+                    })
+                except Exception:
+                    screens.append({"index": n, "active": n < sc})
+            await self._send_json(writer, headers, 200, {"screens": screens})
+            return
+
+        # GET /api/v1/screens/<n>/settings
+        m = re.match(r"^/api/v1/screens/(\d+)/settings$", route)
+        if m and method == "GET":
+            n = int(m.group(1))
+            if not 0 <= n < N_SCREENS:
+                await self._send_json(writer, headers, 404,
+                                       {"error": "screen out of range"})
+                return
+            try:
+                await self._send_json(writer, headers, 200,
+                                       self.get_settings(n))
+            except Exception as e:
+                await self._send_json(writer, headers, 500,
+                                       {"error": str(e)})
+            return
+
+        # POST /api/v1/screens/<n>/preset/<slot>/apply
+        m = re.match(r"^/api/v1/screens/(\d+)/preset/(\d+)/apply$", route)
+        if m and method == "POST":
+            n = int(m.group(1)); slot = int(m.group(2))
+            if not 0 <= n < N_SCREENS:
+                await self._send_json(writer, headers, 404,
+                                       {"error": "screen out of range"})
+                return
+            if not 0 <= slot < PRESET_SLOTS:
+                await self._send_json(writer, headers, 404,
+                                       {"error": "slot out of range"})
+                return
+            try:
+                result = runtime.apply_preset(n, slot)
+                if result is None:
+                    await self._send_json(writer, headers, 409, {
+                        "error": "preset slot empty / screen mirrored",
+                    })
+                else:
+                    await self._send_json(writer, headers, 200,
+                                           {"ok": True})
+            except Exception as e:
+                await self._send_json(writer, headers, 500,
+                                       {"error": str(e)})
+            return
+
+        # POST /api/v1/screens/<n>/pause   { "paused": bool }
+        m = re.match(r"^/api/v1/screens/(\d+)/pause$", route)
+        if m and method == "POST":
+            try:
+                payload = json.loads(body or b"{}")
+            except Exception:
+                payload = {}
+            paused = bool(payload.get("paused", True))
+            try:
+                runtime.set_manual_pause(paused)
+                await self._send_json(writer, headers, 200,
+                                       {"paused": paused})
+            except Exception as e:
+                await self._send_json(writer, headers, 500,
+                                       {"error": str(e)})
+            return
+
+        # GET /api/v1/profiles
+        if method == "GET" and route == "/api/v1/profiles":
+            try:
+                with runtime.config_lock:
+                    profiles = copy.deepcopy(runtime.config.get("profiles") or [])
+                await self._send_json(writer, headers, 200,
+                                       {"profiles": profiles})
+            except Exception as e:
+                await self._send_json(writer, headers, 500,
+                                       {"error": str(e)})
+            return
+
+        # GET /api/v1/sacn/discovered — list senders + their universes
+        if method == "GET" and route == "/api/v1/sacn/discovered":
+            provider = getattr(self, "sacn_input_provider", None)
+            if provider is None:
+                await self._send_json(writer, headers, 200,
+                                       {"senders": []})
+                return
+            try:
+                await self._send_json(writer, headers, 200,
+                                       {"senders": provider.get_discovered()})
+            except Exception as e:
+                await self._send_json(writer, headers, 500,
+                                       {"error": str(e)})
+            return
+
+        # GET /api/v1/plugins  — defined by PluginRegistry below
+        if method == "GET" and route == "/api/v1/plugins":
+            reg = getattr(self, "plugin_provider", None)
+            if reg is None:
+                await self._send_json(writer, headers, 200,
+                                       {"plugins": []})
+                return
+            try:
+                await self._send_json(writer, headers, 200,
+                                       {"plugins": reg.list_plugins()})
+            except Exception as e:
+                await self._send_json(writer, headers, 500,
+                                       {"error": str(e)})
+            return
+
+        # CORS preflight for the entire API surface
+        if method == "OPTIONS" and route.startswith("/api/v1/"):
+            await self._send_json(writer, headers, 200, {})
+            return
+
+        await self._send_json(writer, headers, 404,
+                               {"error": "unknown route",
+                                "route": route, "method": method})
 
     async def _on_hello(self, writer, screen: int, msg: dict):
         """v1.2.12: respond to the wallpaper page's hello handshake.
@@ -5168,6 +5691,11 @@ class SacnInputManager:
     once on UDP port 5568 with SO_REUSEADDR so other sACN tools on
     the same host (testers, monitors) keep working alongside us."""
 
+    # E1.31 senders re-announce universes every ~10 s. Catalogue
+    # entries that haven't been refreshed for 3× that window are
+    # considered stale (sender went offline) and dropped.
+    _DISCOVERY_STALE_S = 35.0
+
     def __init__(self, bridge_runtime, source_mgr):
         self.bridge = bridge_runtime
         self.source_mgr = source_mgr
@@ -5179,6 +5707,14 @@ class SacnInputManager:
         self._last_error: str = ""
         self._last_rx_ts: float = 0.0
         self._rx_count: int = 0
+        # v1.5.0-beta sACN discovery: passively listen on
+        # 239.255.250.214 for E1.31 Universe Discovery packets.
+        # Catalogue keyed by hex(CID) so a single sender announcing
+        # multiple universes shows up as one entry. Surfaced via
+        # /api/v1/sacn/discovered + /sacn-discovery for the
+        # Configurator's universe pick-list.
+        self._discovered: dict[str, dict] = {}
+        self._discovery_joined = False
 
     def start(self) -> None:
         if _sacn is None:
@@ -5204,7 +5740,29 @@ class SacnInputManager:
             "lastRxTs":    self._last_rx_ts,
             "rxCount":     self._rx_count,
             "joined":      sorted(self._joined_groups),
+            "discovered":  self.get_discovered(),
         }
+
+    def get_discovered(self) -> list:
+        """v1.5.0-beta sACN discovery: list of {cid, sourceName,
+        universes, lastSeen} for every sender currently announcing
+        on the network. Stale entries (>35 s without a re-announce)
+        are pruned on read."""
+        now = time.time()
+        out: list = []
+        for cid_hex, entry in list(self._discovered.items()):
+            if now - entry.get("lastSeen", 0) > self._DISCOVERY_STALE_S:
+                del self._discovered[cid_hex]
+                continue
+            out.append({
+                "cid":        cid_hex,
+                "sourceName": entry.get("sourceName") or "",
+                "universes":  sorted(entry.get("universes") or []),
+                "lastSeen":   entry.get("lastSeen"),
+            })
+        # Deterministic ordering by source name for stable UI render.
+        out.sort(key=lambda e: (e["sourceName"], e["cid"]))
+        return out
 
     def _wanted_universes(self) -> dict[int, int]:
         """{universe -> screen} for every sACN-typed screen. If two
@@ -5240,10 +5798,55 @@ class SacnInputManager:
             s.bind(("", _sacn.E131_PORT))
             s.settimeout(0.5)
             self._sock = s
+            # Membership state belongs to the old socket — reset so
+            # `_ensure_discovery_membership` + `_sync_memberships`
+            # re-join cleanly on the new one.
+            self._discovery_joined = False
+            self._joined_groups.clear()
             return True
         except OSError as e:
             self._last_error = f"bind failed: {e}"
             return False
+
+    def _ensure_discovery_membership(self) -> None:
+        """Join the fixed E1.31 Universe Discovery multicast group
+        (239.255.250.214) once per socket lifetime. Senders announce
+        their universe lists there at ~10 s intervals; we passively
+        record what we see and surface it to the Configurator's
+        universe pick-list."""
+        if self._discovery_joined or self._sock is None:
+            return
+        try:
+            _sacn.join_multicast_group(
+                self._sock, _sacn.DISCOVERY_MULTICAST_GROUP)
+            self._discovery_joined = True
+            print(f"[sacn-in] joined discovery group "
+                  f"({_sacn.DISCOVERY_MULTICAST_GROUP})")
+        except (OSError, ValueError) as e:
+            self._last_error = f"discovery join: {e}"
+
+    def _ingest_discovery(self, data: bytes) -> bool:
+        """Try parsing `data` as a Universe Discovery packet. Returns
+        True on a successful parse (caller skips the data-packet
+        path), False on anything else."""
+        info = _sacn.parse_e131_universe_discovery(data)
+        if info is None:
+            return False
+        cid_hex = info["cid"].hex()
+        entry = self._discovered.get(cid_hex)
+        if entry is None:
+            entry = {"sourceName": info["sourceName"],
+                     "universes": set(), "lastSeen": time.time()}
+            self._discovered[cid_hex] = entry
+        # Universe-discovery packets can be paginated when the sender
+        # has more universes than fit in one packet; the universe
+        # union across pages from one CID gives the full list. We
+        # don't track per-page state — instead we just keep adding +
+        # the stale-entry sweep drops senders that go silent.
+        entry["sourceName"] = info["sourceName"]
+        entry["universes"].update(info["universes"])
+        entry["lastSeen"] = time.time()
+        return True
 
     def _sync_memberships(self, wanted: dict[int, int]) -> None:
         if self._sock is None:
@@ -5275,21 +5878,33 @@ class SacnInputManager:
         last_sync = 0.0
         while not self._stop.is_set():
             wanted = self._wanted_universes()
+            # v1.5.0-beta sACN discovery: also bind the socket when no
+            # sACN source is wired so the discovery group can still be
+            # populated (the Configurator pre-shows discovered senders
+            # before the user picks one). Discovery-only mode joins
+            # ONLY the discovery group; data groups stay closed.
             if not wanted:
-                # No sACN-sourced screens — shut the socket so the
-                # bridge isn't bound to port 5568 unnecessarily.
-                if self._sock is not None:
-                    try: self._sock.close()
-                    except Exception: pass
-                    self._sock = None
-                    self._joined_groups.clear()
-                if self._stop.wait(1.0):
-                    return
+                # Discovery mode: ensure socket + discovery membership,
+                # idle on recv.
+                if not self._ensure_socket():
+                    if self._stop.wait(2.0):
+                        return
+                    continue
+                self._ensure_discovery_membership()
+                if self._joined_groups:
+                    # Drop any data-group memberships left over.
+                    self._sync_memberships({})
+                try:
+                    data, _addr = self._sock.recvfrom(1500)
+                except (TimeoutError, OSError):
+                    continue
+                self._ingest_discovery(data)
                 continue
             if not self._ensure_socket():
                 if self._stop.wait(2.0):
                     return
                 continue
+            self._ensure_discovery_membership()
             # Re-sync memberships ~every second; cheap.
             now = time.monotonic()
             if now - last_sync > 1.0:
@@ -5298,6 +5913,11 @@ class SacnInputManager:
             try:
                 data, _addr = self._sock.recvfrom(1500)
             except (TimeoutError, OSError):
+                continue
+            # Try discovery parse first — cheap, returns None on
+            # any non-discovery packet, so the data-packet path runs
+            # next without overhead.
+            if self._ingest_discovery(data):
                 continue
             pkt = _sacn.parse_e131(data)
             if pkt is None:
@@ -5501,6 +6121,393 @@ class SacnOutputManager:
                 return
 
 
+# ============================================================================
+# MQTT bridge — publish wallpaper state, subscribe to control topics (v1.5)
+# ============================================================================
+
+class MqttBridge:
+    """v1.5.0-beta: MQTT bridge for Home Assistant + scripts.
+
+    Publishes per-screen state (active preset, manual-pause flag,
+    glow colour, current background) under a configurable topic
+    prefix, and subscribes to `*/set` topics for control. Designed
+    around HA's MQTT-Discovery conventions so adding the bridge as
+    an integration is a one-line broker config.
+
+    Topic layout (with the default `signalrgb-wallpaper` prefix):
+
+        signalrgb-wallpaper/bridge/online        retained "online"/"offline"
+        signalrgb-wallpaper/bridge/version       retained, app version
+        signalrgb-wallpaper/screen/<n>/preset    retained, active slot (or "-")
+        signalrgb-wallpaper/screen/<n>/preset/set            apply preset slot
+        signalrgb-wallpaper/screen/<n>/pause     retained, "on"/"off"
+        signalrgb-wallpaper/screen/<n>/pause/set             "on" / "off"
+        signalrgb-wallpaper/screen/<n>/background retained, current bg path
+        signalrgb-wallpaper/screen/<n>/glow      retained, "#rrggbb"
+
+    State publishes throttle to once per change — we listen on the
+    broadcaster's frame tap for glow updates + push on settings
+    push for everything else. The publisher worker thread does the
+    keep-alive + reconnect-with-backoff dance."""
+
+    PUBLISH_INTERVAL_S = 1.0      # max state-refresh rate
+    RECONNECT_MIN_S    = 2.0
+    RECONNECT_MAX_S    = 60.0
+
+    def __init__(self, bridge_runtime):
+        self.bridge = bridge_runtime
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._client = None
+        self._last_error: str = ""
+        self._last_connect_ts: float = 0.0
+        # Per-screen latest colour cache, populated by the frame tap.
+        self._latest_color: dict[int, tuple] = {}
+        # Per-screen last-published cache so we only re-publish on change.
+        self._published: dict[str, str] = {}
+        # Status counters surfaced to /api/v1/mqtt/status.
+        self._publish_count = 0
+        self._recv_count = 0
+
+    def start(self) -> None:
+        if _MQTTClient is None:
+            print("[mqtt] client module unavailable — bridge disabled")
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="mqtt-bridge")
+        self._thread.start()
+        print("[mqtt] bridge manager started (will connect on demand)")
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def on_frame(self, screen: int, payload: bytes) -> None:
+        """Frame-tap entry point. Averages once + caches; the worker
+        publishes the colour on its tick if it changed. Quietly
+        skipped when disabled."""
+        if not self._is_enabled():
+            return
+        if len(payload) < 7:
+            return
+        w = (payload[3] << 8) | payload[4]
+        h = (payload[5] << 8) | payload[6]
+        total = w * h
+        if total <= 0:
+            return
+        data = payload[7:]
+        if len(data) < total * 3:
+            return
+        r_sum = g_sum = b_sum = 0
+        off = 0
+        for _ in range(total):
+            r_sum += data[off]
+            g_sum += data[off + 1]
+            b_sum += data[off + 2]
+            off += 3
+        self._latest_color[screen] = (
+            r_sum // total, g_sum // total, b_sum // total)
+
+    def get_status(self) -> dict:
+        return {
+            "available":     _MQTTClient is not None,
+            "enabled":       self._is_enabled(),
+            "connected":     bool(self._client and self._client.is_connected),
+            "lastError":     self._last_error,
+            "lastConnectTs": self._last_connect_ts,
+            "publishCount":  self._publish_count,
+            "recvCount":     self._recv_count,
+            "topicPrefix":   self._cfg().get("topicPrefix", ""),
+            "host":          self._cfg().get("host", ""),
+        }
+
+    # ── config helpers ─────────────────────────────────────────────────
+
+    def _cfg(self) -> dict:
+        try:
+            with self.bridge.config_lock:
+                return dict(self.bridge.config.get("mqttBridge") or {})
+        except Exception:
+            return {}
+
+    def _is_enabled(self) -> bool:
+        return bool(self._cfg().get("enabled", False))
+
+    def _prefix(self) -> str:
+        return str(self._cfg().get("topicPrefix") or "signalrgb-wallpaper")
+
+    # ── publish helpers ────────────────────────────────────────────────
+
+    def _publish_retained(self, suffix: str, payload: str) -> None:
+        if not (self._client and self._client.is_connected):
+            return
+        topic = self._prefix() + "/" + suffix
+        if self._published.get(topic) == payload:
+            return
+        if self._client.publish(topic, payload, retain=True):
+            self._published[topic] = payload
+            self._publish_count += 1
+
+    def _publish_state_snapshot(self) -> None:
+        """One pass of per-screen state publishes. Pulls from the
+        bridge's config + the latest frame-tap colour cache."""
+        try:
+            with self.bridge.config_lock:
+                screens_cfg = dict(self.bridge.config.get("screens") or {})
+                screen_count = int(self.bridge.config.get("screenCount") or 1)
+        except Exception:
+            return
+        for n in range(screen_count):
+            s = screens_cfg.get(str(n)) or {}
+            bg = str(s.get("bgImage") or "")
+            self._publish_retained(f"screen/{n}/background", bg)
+            # Active preset slot — we track this by comparing the
+            # current full settings hash to each preset hash. Cheap
+            # for the typical 4-slot case.
+            active = "-"
+            for slot_idx, preset in enumerate(s.get("presets") or []):
+                if preset is None:
+                    continue
+                # Comparing the saved preset shape against `s` is a
+                # superset check: we treat the slot as active when
+                # bgImage matches (proxy for "this preset is on").
+                if preset.get("bgImage") == bg and bg:
+                    active = str(slot_idx)
+                    break
+            self._publish_retained(f"screen/{n}/preset", active)
+            colour = self._latest_color.get(n)
+            if colour is not None:
+                hex_ = f"#{colour[0]:02x}{colour[1]:02x}{colour[2]:02x}"
+                self._publish_retained(f"screen/{n}/glow", hex_)
+        # Pause state is bridge-global today (manual + fullscreen).
+        try:
+            paused = self.bridge.is_manual_paused()
+        except Exception:
+            paused = False
+        for n in range(screen_count):
+            self._publish_retained(f"screen/{n}/pause",
+                                    "on" if paused else "off")
+
+    # ── subscribe callbacks ────────────────────────────────────────────
+
+    def _on_preset_set(self, topic: str, payload: bytes) -> None:
+        self._recv_count += 1
+        # Topic: <prefix>/screen/<n>/preset/set
+        parts = topic.split("/")
+        try:
+            n = int(parts[parts.index("screen") + 1])
+            slot = int(payload.decode("utf-8", "replace").strip())
+        except (ValueError, IndexError):
+            return
+        try:
+            self.bridge.apply_preset(n, slot)
+        except Exception as e:
+            print(f"[mqtt] apply_preset failed: {e}")
+
+    def _on_pause_set(self, topic: str, payload: bytes) -> None:
+        self._recv_count += 1
+        body = payload.decode("utf-8", "replace").strip().lower()
+        paused = body in ("on", "true", "1", "pause", "paused")
+        try:
+            self.bridge.set_manual_pause(paused)
+        except Exception as e:
+            print(f"[mqtt] set_manual_pause failed: {e}")
+
+    # ── worker loop ────────────────────────────────────────────────────
+
+    def _disconnect_client(self) -> None:
+        if self._client is not None:
+            try: self._client.disconnect()
+            except Exception: pass
+            self._client = None
+        self._published.clear()
+
+    def _connect(self) -> bool:
+        cfg = self._cfg()
+        host       = str(cfg.get("host") or "localhost")
+        port       = int(cfg.get("port") or 1883)
+        username   = str(cfg.get("username") or "")
+        password   = str(cfg.get("password") or "")
+        client_id  = str(cfg.get("clientId") or "signalrgb-wallpaper")
+        prefix     = str(cfg.get("topicPrefix") or "signalrgb-wallpaper")
+        will_topic = prefix + "/bridge/online"
+        c = _MQTTClient(host=host, port=port, client_id=client_id,
+                         username=username, password=password,
+                         will_topic=will_topic,
+                         will_payload=b"offline",
+                         will_retain=True)
+        if not c.connect():
+            self._last_error = c.last_error or "connect failed"
+            return False
+        # Online + version announcements (retained).
+        c.publish(will_topic, "online", retain=True)
+        c.publish(prefix + "/bridge/version", APP_VERSION, retain=True)
+        # Subscribe to control surface.
+        c.subscribe(prefix + "/screen/+/preset/set", self._on_preset_set)
+        c.subscribe(prefix + "/screen/+/pause/set", self._on_pause_set)
+        self._client = c
+        self._last_error = ""
+        self._last_connect_ts = time.time()
+        print(f"[mqtt] connected to {host}:{port} as {client_id}")
+        return True
+
+    def _run(self) -> None:
+        backoff = self.RECONNECT_MIN_S
+        while not self._stop.is_set():
+            if not self._is_enabled():
+                self._disconnect_client()
+                if self._stop.wait(1.0):
+                    return
+                backoff = self.RECONNECT_MIN_S
+                continue
+            if not (self._client and self._client.is_connected):
+                self._disconnect_client()
+                if not self._connect():
+                    if self._stop.wait(backoff):
+                        return
+                    backoff = min(self.RECONNECT_MAX_S, backoff * 1.5)
+                    continue
+                backoff = self.RECONNECT_MIN_S
+            try:
+                self._publish_state_snapshot()
+            except Exception as e:
+                self._last_error = f"publish loop: {e}"
+            if self._stop.wait(self.PUBLISH_INTERVAL_S):
+                return
+
+
+# ============================================================================
+# Plugin registry — third-party widget loader (v1.5.0-beta)
+# ============================================================================
+
+class PluginRegistry:
+    """v1.5.0-beta: scans `%LOCALAPPDATA%\\SignalRGBWallpaper\\plugins\\`
+    on startup and on demand, exposes the discovered plugins to the
+    Configurator (catalogue), the wallpaper page (renderer +
+    iframe sandbox), and the HTTP file-server (sandboxed serve of
+    plugin assets under `/plugins/<name>/<path>`).
+
+    Plugin layout:
+        plugins/<name>/manifest.json   required
+        plugins/<name>/widget.html     loaded into a sandboxed iframe
+        plugins/<name>/icon.svg        optional, picker icon
+        plugins/<name>/*               any other assets (css, js, png)
+
+    Manifest schema (all string lengths clamped for safety):
+        name            (string)  Stable identifier, used in URL paths
+        version         (string)
+        label           (string)  Human-readable, shown in the picker
+        author          (string)
+        description     (string)
+        widgetHtml      (string)  Default: "widget.html"
+        iconSvg         (string)  Inline SVG markup OR filename
+        defaultSize     {w, h}
+        defaultOptions  (object)  Initial options for new instances
+
+    Security: the iframe gets `sandbox="allow-scripts"` (no
+    same-origin / no top-nav / no forms) and a `Content-Security-
+    Policy: default-src 'self'` header on every served file. Plugins
+    can't read the main page's DOM, cookies, or the WS — they
+    receive everything via postMessage from the wallpaper page."""
+
+    def __init__(self):
+        self._plugins: dict[str, dict] = {}
+        self._last_scan_ts: float = 0.0
+        self._last_error: str = ""
+        self.rescan()
+
+    @property
+    def root(self) -> Path:
+        return config_path().parent / "plugins"
+
+    def rescan(self) -> None:
+        d = self.root
+        if not d.exists():
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            self._plugins = {}
+            self._last_scan_ts = time.time()
+            return
+        out: dict[str, dict] = {}
+        for sub in d.iterdir():
+            if not sub.is_dir() or sub.name.startswith("."):
+                continue
+            manifest_path = sub / "manifest.json"
+            if not manifest_path.exists():
+                continue
+            try:
+                m = json.loads(manifest_path.read_text("utf-8"))
+            except Exception as e:
+                self._last_error = f"{sub.name}: {e}"
+                print(f"[plugin] {sub.name} manifest load failed: {e}")
+                continue
+            # Stable identifier — strict alnum/_/- only, prevents
+            # path-traversal via the manifest's `name`.
+            name = re.sub(r'[^a-zA-Z0-9_-]', '',
+                          str(m.get("name") or sub.name))
+            if not name:
+                continue
+            entry = {
+                "name":           name,
+                "version":        str(m.get("version") or "0.0.0")[:32],
+                "label":          str(m.get("label") or name)[:64],
+                "author":         str(m.get("author") or "")[:64],
+                "description":    str(m.get("description") or "")[:512],
+                "widgetHtml":     str(m.get("widgetHtml") or "widget.html")[:128],
+                "iconSvg":        str(m.get("iconSvg") or "")[:8192],
+                "defaultSize":    m.get("defaultSize") or {"w": 320, "h": 200},
+                "defaultOptions": m.get("defaultOptions") or {},
+                "folder":         str(sub.resolve()),
+            }
+            # Sanity-check widgetHtml exists; we don't want a plugin
+            # in the catalogue that can't be loaded.
+            target = sub / entry["widgetHtml"]
+            if not target.exists():
+                self._last_error = f"{name}: widgetHtml not found"
+                print(f"[plugin] {name}: {entry['widgetHtml']} missing")
+                continue
+            out[name] = entry
+        self._plugins = out
+        self._last_scan_ts = time.time()
+        print(f"[plugin] scanned {len(out)} plugin(s) under {d}")
+
+    def list_plugins(self) -> list:
+        return list(self._plugins.values())
+
+    def get(self, name: str) -> dict | None:
+        return self._plugins.get(name)
+
+    def get_status(self) -> dict:
+        return {
+            "available": True,
+            "count":     len(self._plugins),
+            "root":      str(self.root),
+            "lastScan":  self._last_scan_ts,
+            "lastError": self._last_error,
+            "plugins":   self.list_plugins(),
+        }
+
+    def resolve_asset(self, name: str, rel: str) -> Path | None:
+        """Resolve `<folder>/<rel>` for plugin `name`, refusing any
+        path that escapes the plugin folder. Used by the HTTP
+        `/plugins/<name>/<rel>` handler."""
+        plug = self._plugins.get(name)
+        if not plug:
+            return None
+        base = Path(plug["folder"])
+        try:
+            target = (base / rel).resolve()
+            target.relative_to(base)
+        except (ValueError, OSError):
+            return None
+        if not target.is_file():
+            return None
+        return target
+
+
 class BridgeRuntime:
     """Lives in a daemon thread, owns the asyncio loop and the broadcaster."""
 
@@ -5617,6 +6624,11 @@ class BridgeRuntime:
                 "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
                 "sources":       copy.deepcopy(self.config.get("sources") or {}),
                 "sacnOutput":    copy.deepcopy(self.config.get("sacnOutput") or {}),
+                # v1.5.0-beta: MQTT bridge config + the REST API token.
+                # Password sanitised so a Configurator screenshot
+                # doesn't accidentally leak the broker creds.
+                "mqttBridge":    _redact_mqtt(self.config.get("mqttBridge") or {}),
+                "apiToken":      str(self.config.get("apiToken") or ""),
             }
 
     def _on_fullscreen_state(self, paused: bool):
@@ -5773,11 +6785,33 @@ class BridgeRuntime:
                    x: int | None = None, y: int | None = None,
                    w: int | None = None, h: int | None = None,
                    options: dict | None = None) -> dict | None:
-        if widget_type not in WIDGET_DEFAULTS:
+        # v1.5.0-beta plugin API: widget types of the form
+        # "plugin/<name>" are looked up dynamically from the plugin
+        # registry. Defaults come from the plugin's manifest (label,
+        # size, options), so a plugin can ship with sensible initial
+        # values without our static catalogue knowing about it.
+        defaults = None
+        if widget_type.startswith("plugin/"):
+            reg = getattr(self, "plugin_registry", None)
+            plug_name = widget_type.split("/", 1)[1]
+            plug = reg.get(plug_name) if reg else None
+            if plug is None:
+                print(f"[widgets] unknown plugin: {plug_name!r}")
+                return None
+            size = plug.get("defaultSize") or {}
+            defaults = {
+                "x": 60, "y": 60,
+                "w": int(size.get("w") or 320),
+                "h": int(size.get("h") or 200),
+                "options": dict(plug.get("defaultOptions") or {}),
+                "label": plug.get("label") or plug_name,
+            }
+        elif widget_type in WIDGET_DEFAULTS:
+            defaults = WIDGET_DEFAULTS[widget_type]
+        else:
             print(f"[widgets] unknown type: {widget_type!r}")
             return None
         if self._block_if_mirror(screen, "widget-add"): return None
-        defaults = WIDGET_DEFAULTS[widget_type]
 
         def mutate(s):
             existing = s.setdefault("widgets", [])
@@ -6612,6 +7646,8 @@ class BridgeRuntime:
         # Both travel as their full sub-dict — same validation pattern
         # as openrgbOutput.
         "sources", "sacnOutput",
+        # v1.5.0-beta: MQTT bridge config block.
+        "mqttBridge",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -6846,6 +7882,45 @@ class BridgeRuntime:
             except Exception as e:
                 print(f"[settings] save_config failed: {e}")
             print(f"[settings] sacnOutput -> {cleaned}")
+        elif key == "mqttBridge":
+            # v1.5.0-beta MQTT bridge — same shape-tolerant validation.
+            if not isinstance(value, dict):
+                print(f"[settings] mqttBridge value not a dict: {type(value).__name__}")
+                return
+            # Preserve the saved password when the incoming value is
+            # the redacted sentinel ("***") — the Configurator never
+            # sees the real password, so a settings-update that keeps
+            # the field unchanged shouldn't wipe it.
+            with self.config_lock:
+                prev_pwd = str((self.config.get("mqttBridge") or {})
+                                .get("password") or "")
+            try:
+                incoming_pwd = str(value.get("password") or "")
+                if incoming_pwd in ("***", ""):
+                    incoming_pwd = prev_pwd
+                cleaned = {
+                    "enabled":     bool(value.get("enabled", False)),
+                    "host":        str(value.get("host") or "localhost")[:128],
+                    "port":        max(1, min(65535, int(value.get("port") or 1883))),
+                    "username":    str(value.get("username") or "")[:128],
+                    "password":    incoming_pwd[:256],
+                    "clientId":    str(value.get("clientId") or "signalrgb-wallpaper")[:64],
+                    "topicPrefix": str(value.get("topicPrefix") or "signalrgb-wallpaper")[:64],
+                }
+            except (TypeError, ValueError) as e:
+                print(f"[settings] mqttBridge malformed: {e}")
+                return
+            with self.config_lock:
+                prev = self.config.get("mqttBridge") or {}
+                if dict(prev) == cleaned:
+                    return
+                self.config["mqttBridge"] = cleaned
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            print(f"[settings] mqttBridge -> {dict(cleaned, password='***')}")
 
     def _on_widget_command(self, screen: int, msg: dict):
         """Asyncio-thread callback bridging Broadcaster→BridgeRuntime. We
@@ -6914,7 +7989,50 @@ class BridgeRuntime:
                 # bridge + tray exist; bail silently if not yet
                 # ready (shouldn't happen in practice).
                 action = str(msg.get("action", ""))
-                if self.tray is None:
+                # v1.5.0-beta: bridge-runtime actions (token regen,
+                # plugin rescan, open plugins folder) live OUTSIDE
+                # the tray namespace because they touch
+                # config/registry state directly.
+                if action == "regenerate-api-token":
+                    new_tok = secrets.token_urlsafe(32)
+                    with self.config_lock:
+                        self.config["apiToken"] = new_tok
+                        snap = json.loads(json.dumps(self.config))
+                    try: save_config(snap)
+                    except Exception as e:
+                        print(f"[system-action] save_config failed: {e}")
+                    # Push the fresh token to every connected client
+                    # so the Configurator's display updates without
+                    # waiting for the next periodic settings round.
+                    for s in range(N_SCREENS):
+                        try:
+                            self.push_settings(s, self.get_settings(s))
+                        except Exception:
+                            pass
+                    print(f"[system-action] API token regenerated")
+                elif action == "rescan-plugins":
+                    reg = getattr(self.broadcaster, "plugin_registry", None)
+                    if reg is not None:
+                        try:
+                            reg.rescan()
+                        except Exception as e:
+                            print(f"[system-action] rescan-plugins failed: {e}")
+                    for s in range(N_SCREENS):
+                        try:
+                            self.push_settings(s, self.get_settings(s))
+                        except Exception:
+                            pass
+                    print(f"[system-action] plugins rescanned")
+                elif action == "open-plugins-folder":
+                    reg = getattr(self.broadcaster, "plugin_registry", None)
+                    folder = str(reg.root) if reg else ""
+                    if folder:
+                        try:
+                            os.makedirs(folder, exist_ok=True)
+                            os.startfile(folder)
+                        except Exception as e:
+                            print(f"[system-action] open plugins: {e}")
+                elif self.tray is None:
                     print(f"[system-action] tray not wired up — dropping {action!r}")
                 else:
                     handler = {
@@ -7103,6 +8221,10 @@ class BridgeRuntime:
         # unconditionally has zero cost for users who never opt in.
         # When enabled, the broadcaster's frame tap feeds averaged
         # RGB into the worker thread which pushes via the SDK.
+        # v1.5.0-beta REST API: attach the runtime so /api/v1/* routes
+        # can reach apply_preset / set_manual_pause / etc. without
+        # threading new callbacks through Broadcaster.__init__.
+        self.broadcaster.bridge_runtime = self
         self.openrgb = OpenRgbOutputManager(self)
         self.broadcaster.add_frame_tap(self.openrgb.on_frame)
         # /openrgb/status reaches the manager through the broadcaster
@@ -7128,6 +8250,21 @@ class BridgeRuntime:
         self.broadcaster.add_frame_tap(self.sacn_out.on_frame)
         self.broadcaster.sacn_output_provider = self.sacn_out
         self.sacn_out.start()
+        # v1.5.0-beta MQTT bridge: same frame-tap-as-input pattern as
+        # OpenRGB / sACN output, plus a publisher thread for slower
+        # state topics (preset, pause, background). Stays idle until
+        # mqttBridge.enabled is flipped on in the config.
+        self.mqtt = MqttBridge(self)
+        self.broadcaster.add_frame_tap(self.mqtt.on_frame)
+        self.broadcaster.mqtt_provider = self.mqtt
+        self.mqtt.start()
+        # v1.5.0-beta plugin registry. Stateless except for the
+        # scanned catalogue — rescan on demand via the Configurator
+        # or by hitting /plugins. Stays alive even when no plugins
+        # are installed so the API surface is consistent.
+        self.plugin_registry = PluginRegistry()
+        self.broadcaster.plugin_registry = self.plugin_registry
+        self.broadcaster.plugin_provider = self.plugin_registry
         try:
             loop.run_until_complete(self._serve())
         except Exception as e:

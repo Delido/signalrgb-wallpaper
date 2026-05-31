@@ -1604,6 +1604,15 @@ function connect() {
       try {
         const msg = JSON.parse(ev.data);
         if (msg && msg.type === "settings" && msg.data && typeof msg.data === "object") {
+          // v1.5.0-beta plugin API: register each discovered plugin
+          // as a widget type BEFORE applying settings (which may
+          // include a `plugin/<name>` widget instance that needs the
+          // type already registered).
+          if (Array.isArray(msg.plugins)) {
+            for (const p of msg.plugins) {
+              if (p && p.name) ensurePluginWidgetType(p);
+            }
+          }
           for (const k of Object.keys(msg.data)) {
             applyProperty(k, msg.data[k]);
           }
@@ -2637,7 +2646,200 @@ const WIDGET_REGISTRY = {
     },
     editOptions: openWidgetInConfigurator,
   },
+
+  // ── Plugin widgets (sandboxed iframe) ──────────────────────────────────
+  // v1.5.0-beta: 3rd-party widgets discovered by the bridge under
+  // %LOCALAPPDATA%\SignalRGBWallpaper\plugins\<name>\. The bridge pushes
+  // a catalogue with each settings frame (`msg.plugins`); we register a
+  // `plugin/<name>` entry into WIDGET_REGISTRY for each one. The widget
+  // body is an `<iframe sandbox="allow-scripts">` pointing at
+  // `/plugins/<name>/widget.html` — the sandbox blocks cookie access,
+  // same-origin reads, top-nav, popups, etc. The wallpaper page is the
+  // ONLY channel for data into the plugin, via postMessage:
+  //   { type: "init",  options, tint }            on creation
+  //   { type: "tint",  color }                    on glow colour change
+  //   { type: "opts",  options }                  on options change
+  // Plugins talk back with:
+  //   { type: "ready" }                           handshake (optional)
+  //   { type: "log",   message }                  forwarded to console
+  function ensurePluginWidgetType(plug) {
+    const type = "plugin/" + plug.name;
+    if (WIDGET_REGISTRY[type]) {
+      // Catalogue refresh — replace metadata so a manifest edit
+      // (label / icon) is picked up without a wallpaper reload.
+      WIDGET_REGISTRY[type].label = plug.label || plug.name;
+      WIDGET_REGISTRY[type]._pluginMeta = plug;
+      return;
+    }
+    WIDGET_REGISTRY[type] = {
+      label: plug.label || plug.name,
+      _pluginMeta: plug,
+      icon: plug.iconSvg && plug.iconSvg.indexOf("<svg") === 0
+        ? plug.iconSvg
+        : '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/>' +
+          '<path d="M8 12h8 M12 8v8"/></svg>',
+      markup: () => '<iframe class="plugin-frame" sandbox="allow-scripts"' +
+                    ' style="width:100%; height:100%; border:0; background:transparent;"' +
+                    ' src="/plugins/' + encodeURIComponent(plug.name) +
+                    '/' + (plug.widgetHtml || 'widget.html') + '"></iframe>',
+      mount: (rec) => {
+        const frame = rec.el.querySelector(".plugin-frame");
+        if (!frame) return;
+        rec._frame = frame;
+        // Wait for the iframe to load before sending the first init —
+        // a plugin posting before its own script runs would lose the
+        // message.
+        frame.addEventListener("load", () => {
+          _sendPluginMessage(rec, {
+            type: "init",
+            options: rec.opts || {},
+            tint: currentTintCss,
+          });
+        });
+      },
+      tick: (rec) => {
+        // Re-emit tint each second so a plugin loaded after a glow
+        // colour change still sees a current value.
+        _sendPluginMessage(rec, { type: "tint", color: currentTintCss });
+      },
+      editOptions: openWidgetInConfigurator,
+    };
+  }
+  function _sendPluginMessage(rec, msg) {
+    try {
+      if (rec._frame && rec._frame.contentWindow) {
+        rec._frame.contentWindow.postMessage(msg, "*");
+      }
+    } catch (_) { /* iframe still loading or torn down */ }
+  }
+  // Single inbound listener for ALL plugin frames — dispatches to the
+  // matching record by source window.
+  window.addEventListener("message", (ev) => {
+    if (!ev.data || typeof ev.data !== "object") return;
+    if (ev.data.type === "log") {
+      console.log("[plugin]", ev.data.message);
+      return;
+    }
+    // Outgoing-only protocol for v1; plugins can't request settings
+    // changes from here yet. A future revision could open a tiny set
+    // of safe RPCs (e.g. "subscribe to sysstats") via postMessage.
+  });
+
+  // ── Generic HTTP widget ────────────────────────────────────────────────
+  // v1.5.0-beta: fetches a user-configured URL on a refresh interval,
+  // tries to parse as JSON, runs the result through a tiny mustache-
+  // flavoured template (`{{path.to.field}}`), and displays the rendered
+  // string. Covers Discord-unread / stocks / RSS-headline / crypto-price
+  // / arbitrary REST APIs with ONE widget type. The fetch runs from the
+  // wallpaper page directly (no bridge proxy) — the target's CORS
+  // headers apply. Same path as RSS in that sense.
+  http: {
+    label: "Custom HTTP",
+    icon: '<svg viewBox="0 0 24 24">' +
+          '<circle cx="12" cy="12" r="9"/>' +
+          '<path d="M3 12 h18 M12 3 a9 9 0 0 1 0 18 a9 9 0 0 1 0 -18"/></svg>',
+    markup: () => '<div class="http-head"></div>' +
+                  '<div class="http-body">loading…</div>' +
+                  '<div class="http-foot"></div>',
+    tick: (rec) => {
+      const now = Date.now();
+      const refreshMin = Math.max(1,
+        parseInt((rec.opts && rec.opts.refreshMin) || 5, 10));
+      const REFRESH = refreshMin * 60 * 1000;
+      const head = rec.el.querySelector(".http-head");
+      if (head) head.textContent = (rec.opts && rec.opts.title) || "";
+      if (!rec.lastFetch || now - rec.lastFetch > REFRESH) {
+        rec.lastFetch = now;
+        fetchHttpWidget(rec);
+      }
+    },
+    editOptions: openWidgetInConfigurator,
+  },
 };
+
+// ── Generic HTTP widget runtime ────────────────────────────────────────────
+//
+// Tiny mustache: `{{foo.bar[0].baz}}` walks the parsed JSON, returns the
+// string at the path, or "" on miss. `{{.}}` returns the whole value
+// JSON-stringified — useful as a default template for "just dump what
+// you got". Bracketed array indices supported, no helpers, no escaping.
+// 50 LOC vs pulling mustache.js (33 KB).
+
+function _getByPath(obj, path) {
+  if (path === "." || path === "") return obj;
+  const parts = path.split(/\.|\[(\d+)\]/).filter(Boolean);
+  let cur = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p] !== undefined ? cur[p] : cur[Number(p)];
+  }
+  return cur;
+}
+
+function _renderHttpTemplate(template, data) {
+  if (!template) template = "{{.}}";
+  return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, path) => {
+    let v = _getByPath(data, path.trim());
+    if (v == null) return "";
+    if (typeof v === "object") {
+      try { return JSON.stringify(v); }
+      catch (_) { return String(v); }
+    }
+    return String(v);
+  });
+}
+
+function _parseHttpHeaders(raw) {
+  // Lines of "Key: value", blanks + #-comments tolerated.
+  const out = {};
+  if (!raw) return out;
+  for (const line of String(raw).split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const i = t.indexOf(":");
+    if (i <= 0) continue;
+    out[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+  }
+  return out;
+}
+
+async function fetchHttpWidget(rec) {
+  const body = rec.el.querySelector(".http-body");
+  const foot = rec.el.querySelector(".http-foot");
+  const opts = rec.opts || {};
+  const url = String(opts.url || "").trim();
+  if (!url) {
+    if (body) body.textContent = "Click ⚙ to set a URL";
+    if (foot) foot.textContent = "";
+    return;
+  }
+  try {
+    const r = await fetch(url, {
+      method: String(opts.method || "GET").toUpperCase(),
+      headers: _parseHttpHeaders(opts.headers),
+      mode: "cors",
+      cache: "no-store",
+    });
+    const ct = r.headers.get("content-type") || "";
+    let data;
+    if (ct.toLowerCase().includes("application/json")) {
+      data = await r.json();
+    } else {
+      data = await r.text();
+    }
+    const text = _renderHttpTemplate(opts.template, data);
+    if (body) body.textContent = text || "(empty)";
+    if (foot) foot.textContent = "updated " + new Date().toLocaleTimeString();
+    if (opts.tintFromGlow && currentTintCss && body) {
+      body.style.color = currentTintCss;
+    } else if (body) {
+      body.style.color = "";
+    }
+  } catch (e) {
+    if (body) body.textContent = "fetch failed";
+    if (foot) foot.textContent = String(e.message || e).slice(0, 80);
+  }
+}
 
 // ── Cross-widget state ─────────────────────────────────────────────────────
 const widgetsContainer = document.getElementById("widgets-container");
@@ -2769,6 +2971,11 @@ function applyWidgetOptions(rec, w) {
   if (changed) {
     rec.cache = null;
     rec.lastFetch = 0;
+    // v1.5.0-beta plugin API: push new options into the sandboxed
+    // iframe so a plugin can react without a full reload.
+    if (rec.type && rec.type.startsWith("plugin/")) {
+      _sendPluginMessage(rec, { type: "opts", options: nextOpts });
+    }
   }
   rec.el.classList.toggle("tinted", !!rec.opts.tintFromGlow);
   if (rec.opts.tintFromGlow) {

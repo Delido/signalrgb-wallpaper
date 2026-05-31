@@ -131,15 +131,125 @@ the diagnostic-log surface added in the second pass:
   defensive catch-all swallowed silently, so the editor never
   unhid even when conditions held.
 
+### Added — strip mode for OpenRGB output
+
+Multi-LED devices (RAM, light strips, keyboard rows, fan rings) can
+follow a *line* on the wallpaper instead of a single point. Each
+LED on the device samples its position along the line, so a
+horizontal stick of RAM shows a horizontal gradient that tracks
+the wallpaper underneath. Toggle per-device from a Point ● / Line ↔
+button under the live-preview canvas; line mode adds a second
+draggable endpoint with a yellow ring + a gradient stroke between
+the two endpoints. Backward-compatible: any device without a `mode`
+field collapses to point mode (= v1.4-style single sample).
+
+### Added — REST API + token auth + OpenAPI spec
+
+The bridge already exposed a handful of HTTP endpoints
+(`/config`, `/library/list`, `/hwmon/sensors`, …). v1.5.0-beta
+formalises the surface under `/api/v1/*`:
+
+- `GET  /api/v1/info`                          bridge version + capabilities
+- `POST /api/v1/auth/verify`                   verify the supplied token
+- `GET  /api/v1/screens`                       list screens with summary
+- `GET  /api/v1/screens/<n>/settings`          per-screen settings
+- `POST /api/v1/screens/<n>/preset/<slot>/apply`   apply a preset
+- `POST /api/v1/screens/<n>/pause`             {paused: bool}
+- `GET  /api/v1/profiles`                      per-app rules
+- `GET  /api/v1/plugins`                       installed widget plugins
+- `GET  /api/v1/sacn/discovered`               passively-discovered sACN senders
+- `GET  /api/v1/mqtt/status`                   MQTT bridge state
+- `GET  /api/openapi.json`                     hand-written OpenAPI 3.1 spec
+
+Auth: loopback requests bypass (Configurator + same-host
+integrations need zero config); remote requests need
+`Authorization: Bearer <apiToken>`. Token auto-generated on first
+run, shown + regenerable from the Configurator's System card.
+
+### Added — sACN/E1.31 universe discovery
+
+The sACN input manager additionally joins the
+`239.255.250.214` multicast group to passively catalogue every
+E1.31 sender on the LAN (xLights, sACN View, OLA, Hyperion,
+custom controllers, …). Senders re-announce every ~10 s; we
+track `{cid: {sourceName, universes[], lastSeen}}` and prune
+entries that go silent for >35 s. Surfaced via
+`/api/v1/sacn/discovered` so the Configurator can offer a pick-
+list instead of "type the universe number".
+
+### Added — generic HTTP widget
+
+New widget type `http` covers Discord-unread / stock-ticker /
+RSS-headline / crypto-price / arbitrary REST API in ONE widget
+instead of one widget per service. Fetches a user-configured URL
+on a refresh interval, parses JSON (or treats as text), runs the
+result through a tiny mustache-flavoured template
+(`{{path.to.field}}` substitutions). Lives on the wallpaper page;
+no bridge proxy — the target's CORS + cache headers apply.
+
+### Added — Home Assistant / MQTT bridge
+
+The bridge publishes per-screen state and subscribes to control
+topics under a configurable prefix (default `signalrgb-wallpaper`):
+
+- `<prefix>/bridge/online`              "online" / "offline" (LWT, retained)
+- `<prefix>/bridge/version`             bridge version (retained)
+- `<prefix>/screen/<n>/preset`          active preset slot (retained)
+- `<prefix>/screen/<n>/preset/set`      subscribe — apply preset slot
+- `<prefix>/screen/<n>/pause`           "on" / "off" (retained)
+- `<prefix>/screen/<n>/pause/set`       subscribe — pause / resume
+- `<prefix>/screen/<n>/background`      current background path
+- `<prefix>/screen/<n>/glow`            "#rrggbb" from the live frame tap
+
+Custom 400 LOC MQTT 3.1.1 client (`mqtt_client.py`) — stdlib only,
+no paho-mqtt dependency. Disabled by default; password redacted to
+"***" in the WS bridge-state push so a Configurator screenshot
+can't leak broker credentials, restored from the on-disk config
+when the Configurator pushes back unchanged.
+
+### Added — Plugin API for 3rd-party widgets
+
+The bridge scans
+`%LOCALAPPDATA%\SignalRGBWallpaper\plugins\<name>\` on startup
+and on demand for `manifest.json` files. Each discovered plugin
+becomes a `plugin/<name>` widget type. Each instance renders
+into a sandboxed iframe (`sandbox="allow-scripts"`, no
+same-origin / no top-nav / no forms) served from
+`/plugins/<name>/<asset>`. The HTTP route refuses path
+traversal; assets ship with a strict `Content-Security-Policy`
+header.
+
+Wallpaper page ↔ plugin contract uses `postMessage` only:
+
+- `{type: "init",  options, tint}` once on iframe load
+- `{type: "tint",  color}` on every glow-colour change + 1 Hz
+- `{type: "opts",  options}` on options edit
+
+Full author contract documented in [docs/plugin-api.md](docs/plugin-api.md).
+Minimal hello-world example included in the doc.
+
+### Changed — WALLPAPER_VERSION bump to 1.5.0-beta
+
+`wallpaper/index.html` gained the generic HTTP widget runtime
+plus the plugin iframe + postMessage dispatcher, so the
+wallpaper-bundle version constant moves from `1.3.0` to
+`1.5.0-beta`. Existing 1.3.0 / 1.4.0 bundles will trigger the
+"out of date" banner on first connect. **Shipping this beta will
+require a Workshop re-upload + Lively re-import** — handled by the
+installer's auto-import task; Workshop submitters run
+`installer\maintainer-restore-workshopid.ps1` first per the v1.4
+gotcha.
+
 ### Notes
 
-Still touches the bridge + Configurator only — no Lively / Wallpaper
-Engine / SignalRGB-plugin changes. Default behaviour is unchanged:
+Default behaviour for an upgrading user is still mostly unchanged:
 every screen starts on `signalrgb`, OpenRGB output stays off, sACN
 output stays off, every device's spatial mapping defaults to
 (0.5, 0.5) which matches v1.4's averaged behaviour on uniform
-effects. The new channels light up only when the user opens the
-System card and enables them.
+effects, MQTT bridge stays off, no plugins shipped by default,
+REST API token is generated but external clients can't reach the
+bridge yet (loopback-only binding). The new channels light up only
+when the user opens the System card and enables them.
 
 ## [1.4.0-beta] - 2026-05-30
 

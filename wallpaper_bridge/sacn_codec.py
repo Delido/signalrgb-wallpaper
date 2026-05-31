@@ -35,10 +35,19 @@ import uuid
 E131_PORT             = 5568
 ACN_PACKET_IDENTIFIER = b"ASC-E1.17\x00\x00\x00"
 ROOT_VECTOR_DATA      = 0x00000004
+ROOT_VECTOR_EXTENDED  = 0x00000008
 FRAMING_VECTOR_DATA   = 0x00000002
+FRAMING_VECTOR_DISCOVERY = 0x00000002
+UNIVERSE_DISCOVERY_VECTOR = 0x00000001
 DMP_VECTOR            = 0x02
 DMP_ADDR_DATA_TYPE    = 0xa1
 DEFAULT_PRIORITY      = 100
+
+# Per E1.31 sec. 9.3.2 the Universe Discovery multicast group is
+# fixed at 239.255.250.214. Senders broadcast their universe list
+# there at low frequency (~once per 10 s); receivers + monitors
+# subscribe to build a global view of what's on the wire.
+DISCOVERY_MULTICAST_GROUP = "239.255.250.214"
 
 # Length minimums per spec (header sizes when slot_count = 1)
 # We compute exact lengths per-packet — these are illustrative.
@@ -183,6 +192,55 @@ def parse_e131(packet: bytes) -> dict | None:
         "priority":    priority,
         "source_name": source_name,
         "dmx":         dmx,
+    }
+
+
+# ─── universe discovery (E1.31 sec. 8) ──────────────────────────────────
+
+def parse_e131_universe_discovery(packet: bytes) -> dict | None:
+    """Parse an inbound E1.31 Universe Discovery packet. Senders that
+    implement discovery (xLights, sACN View, OLA, Hyperion, …) emit
+    these every 10 s announcing which universes they're driving;
+    receivers like us build a {cid: {sourceName, universes, lastSeen}}
+    catalogue to surface a "what's on the wire" pick-list in the UI.
+
+    Returns None on protocol mismatch / truncation. The returned dict
+    has: cid (16 raw bytes), sourceName, page, lastPage, universes
+    (list[int])."""
+    if len(packet) < 120:
+        return None
+    if packet[0:2] != b"\x00\x10" or packet[2:4] != b"\x00\x00":
+        return None
+    if packet[4:16] != ACN_PACKET_IDENTIFIER:
+        return None
+    root_vector = struct.unpack_from(">I", packet, 18)[0]
+    if root_vector != ROOT_VECTOR_EXTENDED:
+        return None
+    cid = bytes(packet[22:38])
+    framing_vector = struct.unpack_from(">I", packet, 40)[0]
+    if framing_vector != FRAMING_VECTOR_DISCOVERY:
+        return None
+    source_name = packet[44:108].rstrip(b"\x00").decode("utf-8", "replace")
+    # 4 reserved bytes at 108..111, then the discovery layer at 112
+    discovery_vector = struct.unpack_from(">I", packet, 114)[0]
+    if discovery_vector != UNIVERSE_DISCOVERY_VECTOR:
+        return None
+    page      = packet[118]
+    last_page = packet[119]
+    # Universe list starts at 120, each entry uint16 BE.
+    body_len = len(packet) - 120
+    n = body_len // 2
+    universes: list[int] = []
+    for i in range(n):
+        u = struct.unpack_from(">H", packet, 120 + i * 2)[0]
+        if 1 <= u <= 63999:
+            universes.append(u)
+    return {
+        "cid":        cid,
+        "sourceName": source_name,
+        "page":       page,
+        "lastPage":   last_page,
+        "universes":  universes,
     }
 
 

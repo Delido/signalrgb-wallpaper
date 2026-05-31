@@ -1905,6 +1905,106 @@
                style="max-width:90px;">
       </div>
       <div id="sacn-universes" style="margin-top: 8px;"></div>
+
+      <!-- v1.5.0-beta: HA / MQTT bridge. Publishes per-screen state
+           (active preset, manual-pause, glow colour, current
+           background) to a configurable topic prefix; subscribes to
+           `*/set` topics for control. Disabled by default. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="mqtt.header" style="margin: 0; flex: 1 1 100%;">
+          Home Assistant / MQTT bridge (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="mqtt.hint">
+        Publishes per-screen state to your MQTT broker and accepts
+        control commands on the matching `*/set` topics. Drop-in
+        for Home Assistant, Node-RED, IFTTT-style automations.
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <label for="mqtt-enabled" data-i18n="mqtt.enabled">Enabled</label>
+        <input type="checkbox" id="mqtt-enabled">
+        <span class="val" id="mqtt-status-pill" style="margin-left:8px;">—</span>
+      </div>
+      <div class="row">
+        <label for="mqtt-host" data-i18n="mqtt.host">Broker host</label>
+        <input type="text" id="mqtt-host" placeholder="localhost"
+               style="max-width:200px;">
+        <label for="mqtt-port" data-i18n="mqtt.port" style="margin-left:12px;">Port</label>
+        <input type="number" id="mqtt-port" min="1" max="65535"
+               style="max-width:90px;">
+      </div>
+      <div class="row">
+        <label for="mqtt-username" data-i18n="mqtt.username">Username</label>
+        <input type="text" id="mqtt-username" autocomplete="off"
+               style="max-width:160px;">
+        <label for="mqtt-password" data-i18n="mqtt.password" style="margin-left:12px;">Password</label>
+        <input type="password" id="mqtt-password" autocomplete="new-password"
+               style="max-width:160px;">
+      </div>
+      <div class="row">
+        <label for="mqtt-clientid" data-i18n="mqtt.clientid">Client ID</label>
+        <input type="text" id="mqtt-clientid" placeholder="signalrgb-wallpaper"
+               style="max-width:200px;">
+        <label for="mqtt-prefix" data-i18n="mqtt.prefix" style="margin-left:12px;">Topic prefix</label>
+        <input type="text" id="mqtt-prefix" placeholder="signalrgb-wallpaper"
+               style="max-width:200px;">
+      </div>
+      <div id="mqtt-topics-hint" class="hint sub" style="margin-top:6px;"></div>
+
+      <!-- v1.5.0-beta: REST API token (auto-generated). Loopback
+           requests bypass auth; remote integrations (future LAN-bind
+           opt-in) must supply this as `Authorization: Bearer <token>`. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="api.header" style="margin: 0; flex: 1 1 100%;">
+          REST API token (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="api.hint">
+        Auto-generated per install. Loopback requests bypass auth so
+        the Configurator + same-host integrations work without
+        configuration. External clients send it as
+        `Authorization: Bearer &lt;token&gt;`. OpenAPI spec at
+        <code>/api/openapi.json</code>.
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <label for="api-token-field" data-i18n="api.token">Token</label>
+        <input type="text" id="api-token-field" readonly
+               style="font-family:monospace; flex:1; min-width:240px;">
+        <button class="btn" id="api-token-copy" type="button"
+                data-i18n="api.copy">Copy</button>
+        <button class="btn" id="api-token-regen" type="button"
+                data-i18n="api.regenerate"
+                style="margin-left:6px;">Regenerate…</button>
+      </div>
+      <div class="row" style="margin-top:4px;">
+        <a href="/api/openapi.json" target="_blank"
+           data-i18n="api.spec_link">View OpenAPI spec</a>
+      </div>
+
+      <!-- v1.5.0-beta: Plugins. Bridge scans
+           %LOCALAPPDATA%\SignalRGBWallpaper\plugins\ at startup +
+           on demand. Each discovered manifest.json becomes a new
+           `plugin/<name>` widget type in the picker. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="plugins.header" style="margin: 0; flex: 1 1 100%;">
+          3rd-party widget plugins (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="plugins.hint">
+        Drop a folder with a <code>manifest.json</code> under
+        <code>%LOCALAPPDATA%\SignalRGBWallpaper\plugins\</code> and
+        hit <em>Rescan</em>. Each plugin runs in a sandboxed iframe
+        on the wallpaper page. Contract documented in
+        <code>docs/plugin-api.md</code>.
+      </div>
+      <div class="row" style="margin-top: 8px;">
+        <button class="btn" id="plugins-rescan" type="button"
+                data-i18n="plugins.rescan">Rescan plugins folder</button>
+        <button class="btn" id="plugins-open-folder" type="button"
+                data-i18n="plugins.open_folder"
+                style="margin-left:6px;">Open plugins folder…</button>
+      </div>
+      <div id="plugins-list" class="hint" style="margin-top: 8px;"></div>
     </div>
   </section>
 
@@ -2066,6 +2166,51 @@ const TRANSLATIONS = {
                                   de: "sendet · {n} Paket(e) ausgegeben" },
   "sacn.status.disabled":       { en: "disabled",          de: "deaktiviert" },
   "sacn.status.error":          { en: "error: {err}",      de: "Fehler: {err}" },
+
+  // v1.5.0-beta MQTT bridge labels.
+  "mqtt.header":                { en: "Home Assistant / MQTT bridge (beta)",
+                                  de: "Home Assistant / MQTT-Bridge (Beta)" },
+  "mqtt.hint":                  { en: "Publishes per-screen state to your MQTT broker and accepts control commands on the matching `*/set` topics. Drop-in for Home Assistant, Node-RED, IFTTT-style automations.",
+                                  de: "Veröffentlicht den Status pro Bildschirm an deinen MQTT-Broker und akzeptiert Steuerbefehle auf den passenden `*/set`-Topics. Einsetzbar mit Home Assistant, Node-RED, IFTTT-artigen Automatisierungen." },
+  "mqtt.enabled":               { en: "Enabled",            de: "Aktiviert" },
+  "mqtt.host":                  { en: "Broker host",        de: "Broker-Host" },
+  "mqtt.port":                  { en: "Port",               de: "Port" },
+  "mqtt.username":              { en: "Username",           de: "Benutzername" },
+  "mqtt.password":              { en: "Password",           de: "Passwort" },
+  "mqtt.clientid":              { en: "Client ID",          de: "Client-ID" },
+  "mqtt.prefix":                { en: "Topic prefix",       de: "Topic-Präfix" },
+  "mqtt.status.disabled":       { en: "disabled",           de: "deaktiviert" },
+  "mqtt.status.connected":      { en: "connected · {n} publish(es)",
+                                  de: "verbunden · {n} Veröffentlichung(en)" },
+  "mqtt.status.connecting":     { en: "connecting…",        de: "verbinde…" },
+  "mqtt.status.error":          { en: "error: {err}",       de: "Fehler: {err}" },
+
+  // v1.5.0-beta REST API token labels.
+  "api.header":                 { en: "REST API token (beta)",
+                                  de: "REST-API-Token (Beta)" },
+  "api.hint":                   { en: "Auto-generated per install. Loopback requests bypass auth so the Configurator + same-host integrations work without configuration. External clients send it as <code>Authorization: Bearer &lt;token&gt;</code>. OpenAPI spec at <code>/api/openapi.json</code>.",
+                                  de: "Pro Installation automatisch generiert. Loopback-Anfragen umgehen die Authentifizierung, damit Configurator + Integrationen auf demselben Host ohne Konfiguration laufen. Externe Clients senden ihn als <code>Authorization: Bearer &lt;token&gt;</code>. OpenAPI-Spec unter <code>/api/openapi.json</code>." },
+  "api.token":                  { en: "Token",              de: "Token" },
+  "api.copy":                   { en: "Copy",               de: "Kopieren" },
+  "api.regenerate":             { en: "Regenerate…",        de: "Neu erzeugen…" },
+  "api.spec_link":              { en: "View OpenAPI spec",
+                                  de: "OpenAPI-Spec ansehen" },
+  "api.regen_confirm":          { en: "Regenerate the API token? Any external client currently using it will need the new value.",
+                                  de: "Den API-Token neu erzeugen? Externe Clients mit dem alten Token müssen den neuen Wert nutzen." },
+  "api.copied":                 { en: "Token copied to clipboard",
+                                  de: "Token in Zwischenablage kopiert" },
+
+  // v1.5.0-beta plugins labels.
+  "plugins.header":             { en: "3rd-party widget plugins (beta)",
+                                  de: "Drittanbieter-Widget-Plugins (Beta)" },
+  "plugins.hint":               { en: "Drop a folder with a <code>manifest.json</code> under <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\plugins\\</code> and hit <em>Rescan</em>. Each plugin runs in a sandboxed iframe on the wallpaper page. Contract documented in <code>docs/plugin-api.md</code>.",
+                                  de: "Lege einen Ordner mit einer <code>manifest.json</code> unter <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\plugins\\</code> ab und klicke <em>Neu scannen</em>. Jedes Plugin läuft in einem sandboxed iframe auf der Wallpaper-Seite. Spezifikation in <code>docs/plugin-api.md</code>." },
+  "plugins.rescan":             { en: "Rescan plugins folder",
+                                  de: "Plugins-Ordner neu scannen" },
+  "plugins.open_folder":        { en: "Open plugins folder…",
+                                  de: "Plugins-Ordner öffnen…" },
+  "plugins.empty":              { en: "(no plugins installed)",
+                                  de: "(keine Plugins installiert)" },
 
   "system.reload_config":   { en: "Reload config from disk",
                               de: "Config von Festplatte neu laden" },
@@ -5213,6 +5358,7 @@ function renderSystemSection() {
       } else {
         if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
         if (_sacnPollTimer) { clearInterval(_sacnPollTimer); _sacnPollTimer = null; }
+        if (_mqttPollTimer) { clearInterval(_mqttPollTimer); _mqttPollTimer = null; }
         // v1.5.0-beta spatial-mapping: stop the dedicated preview WS
         // when the System card is collapsed — no canvas visible
         // means no need to drain frames.
@@ -5222,6 +5368,184 @@ function renderSystemSection() {
     new MutationObserver(_sync).observe(sysCard, { attributes: true, attributeFilter: ["class"] });
     _sync();
   }
+
+  // ── v1.5.0-beta MQTT bridge controls ─────────────────────────────
+  function _pushMqtt(patch) {
+    const cur = (bridgeState && bridgeState.mqttBridge) || {};
+    const next = Object.assign(
+      { enabled: false, host: "localhost", port: 1883, username: "",
+        password: "", clientId: "signalrgb-wallpaper",
+        topicPrefix: "signalrgb-wallpaper" },
+      cur, patch);
+    bridgeState.mqttBridge = next;
+    sendCmd({ type: "bridge-setting-update", key: "mqttBridge", value: next });
+  }
+  function _renderMqttControls() {
+    const cur = (bridgeState && bridgeState.mqttBridge) || {};
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val == null ? "" : String(val);
+    };
+    const en = document.getElementById("mqtt-enabled");
+    if (en) en.checked = !!cur.enabled;
+    set("mqtt-host",     cur.host || "");
+    set("mqtt-port",     cur.port != null ? cur.port : 1883);
+    set("mqtt-username", cur.username || "");
+    set("mqtt-password", cur.password || "");
+    set("mqtt-clientid", cur.clientId || "");
+    set("mqtt-prefix",   cur.topicPrefix || "");
+    const hint = document.getElementById("mqtt-topics-hint");
+    if (hint) {
+      const p = (cur.topicPrefix || "signalrgb-wallpaper");
+      hint.innerHTML =
+        "Topics: <code>" + p + "/bridge/online</code> · " +
+        "<code>" + p + "/screen/&lt;n&gt;/preset/set</code> · " +
+        "<code>" + p + "/screen/&lt;n&gt;/pause/set</code>";
+    }
+  }
+  const _mqttEn = document.getElementById("mqtt-enabled");
+  if (_mqttEn) _mqttEn.addEventListener("change",
+    () => _pushMqtt({ enabled: _mqttEn.checked }));
+  function _wireMqttField(id, key, parser) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      const v = parser ? parser(el.value) : el.value;
+      _pushMqtt({ [key]: v });
+    });
+  }
+  _wireMqttField("mqtt-host", "host");
+  _wireMqttField("mqtt-port", "port",
+    v => Math.max(1, Math.min(65535, parseInt(v, 10) || 1883)));
+  _wireMqttField("mqtt-username", "username");
+  _wireMqttField("mqtt-password", "password");
+  _wireMqttField("mqtt-clientid", "clientId");
+  _wireMqttField("mqtt-prefix", "topicPrefix");
+
+  let _mqttPollTimer = null;
+  async function _pollMqttStatus() {
+    const pill = document.getElementById("mqtt-status-pill");
+    if (!pill) return;
+    const cur = (bridgeState && bridgeState.mqttBridge) || {};
+    if (!cur.enabled) {
+      pill.textContent = t("mqtt.status.disabled") || "disabled";
+      return;
+    }
+    try {
+      const r = await fetch("/mqtt/status", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const s = await r.json();
+      if (s.connected) {
+        pill.textContent = (t("mqtt.status.connected")
+          || "connected · {n} publish(es)")
+          .replace("{n}", String(s.publishCount || 0));
+      } else if (s.lastError) {
+        pill.textContent = (t("mqtt.status.error") || "error: {err}")
+          .replace("{err}", s.lastError);
+      } else {
+        pill.textContent = t("mqtt.status.connecting") || "connecting…";
+      }
+    } catch (e) {
+      pill.textContent = (t("mqtt.status.error") || "error: {err}")
+        .replace("{err}", String(e.message || e));
+    }
+  }
+  function _restartMqttPoll() {
+    if (_mqttPollTimer) { clearInterval(_mqttPollTimer); _mqttPollTimer = null; }
+    _pollMqttStatus();
+    _mqttPollTimer = setInterval(_pollMqttStatus, 2000);
+  }
+  // Re-render MQTT controls + start poll on settings ingest.
+  const _origRenderSystem2 = renderSystemSection;
+  window.renderSystemSection = renderSystemSection = function() {
+    _origRenderSystem2();
+    _renderMqttControls();
+    _renderApiToken();
+    _renderPluginsList(window._lastPluginsCatalogue || []);
+  };
+  // Tie MQTT polling into the existing system-card visibility sync.
+  const _sysCard2 = document.getElementById("card-system");
+  if (_sysCard2) {
+    const _sync2 = () => {
+      if (!_sysCard2.classList.contains("collapsed")) _restartMqttPoll();
+    };
+    new MutationObserver(_sync2).observe(_sysCard2,
+      { attributes: true, attributeFilter: ["class"] });
+    _sync2();
+  }
+
+  // ── v1.5.0-beta API token controls ───────────────────────────────
+  function _renderApiToken() {
+    const inp = document.getElementById("api-token-field");
+    if (!inp) return;
+    inp.value = (bridgeState && bridgeState.apiToken) || "";
+  }
+  const _apiCopy = document.getElementById("api-token-copy");
+  if (_apiCopy) _apiCopy.addEventListener("click", () => {
+    const tok = (bridgeState && bridgeState.apiToken) || "";
+    if (!tok) return;
+    try {
+      navigator.clipboard.writeText(tok);
+      toast(t("api.copied") || "Token copied to clipboard", "good");
+    } catch (_) {
+      // Older browsers: select + execCommand fallback.
+      const inp = document.getElementById("api-token-field");
+      if (inp) {
+        inp.select(); inp.setSelectionRange(0, tok.length);
+        try { document.execCommand("copy"); } catch (__) {}
+      }
+    }
+  });
+  const _apiRegen = document.getElementById("api-token-regen");
+  if (_apiRegen) _apiRegen.addEventListener("click", () => {
+    const confirmMsg = t("api.regen_confirm")
+      || "Regenerate the API token?";
+    if (!confirm(confirmMsg)) return;
+    sendCmd({ type: "system-action", action: "regenerate-api-token" });
+  });
+
+  // ── v1.5.0-beta plugins list ─────────────────────────────────────
+  function _renderPluginsList(plugins) {
+    const wrap = document.getElementById("plugins-list");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!plugins || !plugins.length) {
+      wrap.textContent = t("plugins.empty") || "(no plugins installed)";
+      return;
+    }
+    for (const p of plugins) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex; align-items:center; gap:8px; padding:4px 0; border-bottom:1px dashed var(--border,#333);";
+      const ic = document.createElement("span");
+      ic.style.cssText = "width:22px; height:22px; display:inline-block; opacity:0.8;";
+      if (p.iconSvg && p.iconSvg.indexOf("<svg") === 0) {
+        ic.innerHTML = p.iconSvg;
+      } else {
+        ic.textContent = "🧩";
+      }
+      row.appendChild(ic);
+      const meta = document.createElement("span");
+      meta.style.cssText = "flex:1;";
+      meta.innerHTML = "<b>" + (p.label || p.name) + "</b> " +
+        "<span style='opacity:0.6;'>v" + (p.version || "?") +
+        (p.author ? " · " + p.author : "") + "</span>";
+      row.appendChild(meta);
+      const typ = document.createElement("code");
+      typ.style.cssText = "font-size:0.85em; opacity:0.7;";
+      typ.textContent = "plugin/" + p.name;
+      row.appendChild(typ);
+      wrap.appendChild(row);
+    }
+  }
+  // Catalogue arrives with each settings push (`msg.plugins`).
+  const _plugRescan = document.getElementById("plugins-rescan");
+  if (_plugRescan) _plugRescan.addEventListener("click", () => {
+    sendCmd({ type: "system-action", action: "rescan-plugins" });
+  });
+  const _plugOpen = document.getElementById("plugins-open-folder");
+  if (_plugOpen) _plugOpen.addEventListener("click", () => {
+    sendCmd({ type: "system-action", action: "open-plugins-folder" });
+  });
 })();
 
 if (els.mirrorSelect) {
@@ -5522,6 +5846,12 @@ function connect() {
         // v1.2.1: bridge-scoped toggles for the System section. Echoed
         // back on every settings push so the toggle UI stays in sync
         // with the persisted config across tabs.
+        // v1.5.0-beta plugin API: stash the catalogue before
+        // calling renderSystemSection so the plugins-list renderer
+        // (hooked inside that fn) reads the freshest value.
+        if (Array.isArray(msg.plugins)) {
+          window._lastPluginsCatalogue = msg.plugins;
+        }
         if (msg.bridge && typeof msg.bridge === "object") {
           bridgeState = msg.bridge;
           renderSystemSection();
