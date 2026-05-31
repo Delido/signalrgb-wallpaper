@@ -2647,84 +2647,6 @@ const WIDGET_REGISTRY = {
     editOptions: openWidgetInConfigurator,
   },
 
-  // ── Plugin widgets (sandboxed iframe) ──────────────────────────────────
-  // v1.5.0-beta: 3rd-party widgets discovered by the bridge under
-  // %LOCALAPPDATA%\SignalRGBWallpaper\plugins\<name>\. The bridge pushes
-  // a catalogue with each settings frame (`msg.plugins`); we register a
-  // `plugin/<name>` entry into WIDGET_REGISTRY for each one. The widget
-  // body is an `<iframe sandbox="allow-scripts">` pointing at
-  // `/plugins/<name>/widget.html` — the sandbox blocks cookie access,
-  // same-origin reads, top-nav, popups, etc. The wallpaper page is the
-  // ONLY channel for data into the plugin, via postMessage:
-  //   { type: "init",  options, tint }            on creation
-  //   { type: "tint",  color }                    on glow colour change
-  //   { type: "opts",  options }                  on options change
-  // Plugins talk back with:
-  //   { type: "ready" }                           handshake (optional)
-  //   { type: "log",   message }                  forwarded to console
-  function ensurePluginWidgetType(plug) {
-    const type = "plugin/" + plug.name;
-    if (WIDGET_REGISTRY[type]) {
-      // Catalogue refresh — replace metadata so a manifest edit
-      // (label / icon) is picked up without a wallpaper reload.
-      WIDGET_REGISTRY[type].label = plug.label || plug.name;
-      WIDGET_REGISTRY[type]._pluginMeta = plug;
-      return;
-    }
-    WIDGET_REGISTRY[type] = {
-      label: plug.label || plug.name,
-      _pluginMeta: plug,
-      icon: plug.iconSvg && plug.iconSvg.indexOf("<svg") === 0
-        ? plug.iconSvg
-        : '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/>' +
-          '<path d="M8 12h8 M12 8v8"/></svg>',
-      markup: () => '<iframe class="plugin-frame" sandbox="allow-scripts"' +
-                    ' style="width:100%; height:100%; border:0; background:transparent;"' +
-                    ' src="/plugins/' + encodeURIComponent(plug.name) +
-                    '/' + (plug.widgetHtml || 'widget.html') + '"></iframe>',
-      mount: (rec) => {
-        const frame = rec.el.querySelector(".plugin-frame");
-        if (!frame) return;
-        rec._frame = frame;
-        // Wait for the iframe to load before sending the first init —
-        // a plugin posting before its own script runs would lose the
-        // message.
-        frame.addEventListener("load", () => {
-          _sendPluginMessage(rec, {
-            type: "init",
-            options: rec.opts || {},
-            tint: currentTintCss,
-          });
-        });
-      },
-      tick: (rec) => {
-        // Re-emit tint each second so a plugin loaded after a glow
-        // colour change still sees a current value.
-        _sendPluginMessage(rec, { type: "tint", color: currentTintCss });
-      },
-      editOptions: openWidgetInConfigurator,
-    };
-  }
-  function _sendPluginMessage(rec, msg) {
-    try {
-      if (rec._frame && rec._frame.contentWindow) {
-        rec._frame.contentWindow.postMessage(msg, "*");
-      }
-    } catch (_) { /* iframe still loading or torn down */ }
-  }
-  // Single inbound listener for ALL plugin frames — dispatches to the
-  // matching record by source window.
-  window.addEventListener("message", (ev) => {
-    if (!ev.data || typeof ev.data !== "object") return;
-    if (ev.data.type === "log") {
-      console.log("[plugin]", ev.data.message);
-      return;
-    }
-    // Outgoing-only protocol for v1; plugins can't request settings
-    // changes from here yet. A future revision could open a tiny set
-    // of safe RPCs (e.g. "subscribe to sysstats") via postMessage.
-  });
-
   // ── Generic HTTP widget ────────────────────────────────────────────────
   // v1.5.0-beta: fetches a user-configured URL on a refresh interval,
   // tries to parse as JSON, runs the result through a tiny mustache-
@@ -2756,6 +2678,92 @@ const WIDGET_REGISTRY = {
     editOptions: openWidgetInConfigurator,
   },
 };
+
+// ── Plugin widgets (sandboxed iframe) ──────────────────────────────────────
+// v1.5.0-beta: 3rd-party widgets discovered by the bridge under
+// %LOCALAPPDATA%\SignalRGBWallpaper\plugins\<name>\. The bridge pushes a
+// catalogue with each settings frame (`msg.plugins`); we register a
+// `plugin/<name>` entry into WIDGET_REGISTRY for each one. The widget body
+// is an `<iframe sandbox="allow-scripts">` pointing at
+// `/plugins/<name>/widget.html` — the sandbox blocks cookie access,
+// same-origin reads, top-nav, popups, etc. The wallpaper page is the ONLY
+// channel for data into the plugin, via postMessage:
+//   { type: "init",  options, tint }            on creation
+//   { type: "tint",  color }                    on glow colour change
+//   { type: "opts",  options }                  on options change
+// Plugins talk back with:
+//   { type: "ready" }                           handshake (optional)
+//   { type: "log",   message }                  forwarded to console
+//
+// v1.5.0-beta hotfix: this block lives at module scope (NOT inside the
+// WIDGET_REGISTRY object literal). The earlier version put the function
+// declarations between the `rss:` and `http:` entries which is a
+// SyntaxError — `function name() {}` isn't valid as an object-literal
+// member, only `name: function() {}` / shorthand `name() {}` is. The
+// resulting parse failure took the whole script down with it (= black
+// desktop / "no wallpaper", + every Configurator widget preview broken).
+function ensurePluginWidgetType(plug) {
+  const type = "plugin/" + plug.name;
+  if (WIDGET_REGISTRY[type]) {
+    // Catalogue refresh — replace metadata so a manifest edit
+    // (label / icon) is picked up without a wallpaper reload.
+    WIDGET_REGISTRY[type].label = plug.label || plug.name;
+    WIDGET_REGISTRY[type]._pluginMeta = plug;
+    return;
+  }
+  WIDGET_REGISTRY[type] = {
+    label: plug.label || plug.name,
+    _pluginMeta: plug,
+    icon: plug.iconSvg && plug.iconSvg.indexOf("<svg") === 0
+      ? plug.iconSvg
+      : '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/>' +
+        '<path d="M8 12h8 M12 8v8"/></svg>',
+    markup: () => '<iframe class="plugin-frame" sandbox="allow-scripts"' +
+                  ' style="width:100%; height:100%; border:0; background:transparent;"' +
+                  ' src="/plugins/' + encodeURIComponent(plug.name) +
+                  '/' + (plug.widgetHtml || 'widget.html') + '"></iframe>',
+    mount: (rec) => {
+      const frame = rec.el.querySelector(".plugin-frame");
+      if (!frame) return;
+      rec._frame = frame;
+      // Wait for the iframe to load before sending the first init —
+      // a plugin posting before its own script runs would lose the
+      // message.
+      frame.addEventListener("load", () => {
+        _sendPluginMessage(rec, {
+          type: "init",
+          options: rec.opts || {},
+          tint: currentTintCss,
+        });
+      });
+    },
+    tick: (rec) => {
+      // Re-emit tint each second so a plugin loaded after a glow
+      // colour change still sees a current value.
+      _sendPluginMessage(rec, { type: "tint", color: currentTintCss });
+    },
+    editOptions: openWidgetInConfigurator,
+  };
+}
+function _sendPluginMessage(rec, msg) {
+  try {
+    if (rec._frame && rec._frame.contentWindow) {
+      rec._frame.contentWindow.postMessage(msg, "*");
+    }
+  } catch (_) { /* iframe still loading or torn down */ }
+}
+// Single inbound listener for ALL plugin frames — dispatches to the
+// matching record by source window.
+window.addEventListener("message", (ev) => {
+  if (!ev.data || typeof ev.data !== "object") return;
+  if (ev.data.type === "log") {
+    console.log("[plugin]", ev.data.message);
+    return;
+  }
+  // Outgoing-only protocol for v1; plugins can't request settings
+  // changes from here yet. A future revision could open a tiny set
+  // of safe RPCs (e.g. "subscribe to sysstats") via postMessage.
+});
 
 // ── Generic HTTP widget runtime ────────────────────────────────────────────
 //
