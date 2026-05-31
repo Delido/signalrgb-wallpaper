@@ -3248,6 +3248,16 @@ function applyWidgetTheme(theme) {
 // document.mousemove handlers further down in this file — kept
 // just the declaration here.
 let _cursorX = 0, _cursorY = 0;
+// Throttle var for the wormhole diagnostic log so the console
+// doesn't spam every spawn (~30/s).
+let _wormholeDiagTs = 0;
+// Anchor helpers: wormhole uses the cursor when one's tracked,
+// otherwise the screen centre. Single source of truth so spawn
+// + step always agree (mismatch was the cause of the "only in
+// middle" bug — spawn fell back to centre while step still
+// pulled to (0,0)).
+function _wormholeAnchorX(w) { return _cursorX || (w / 2); }
+function _wormholeAnchorY(h) { return _cursorY || (h / 2); }
 
 const MouseFx = (function () {
   let active = new Set();
@@ -5067,26 +5077,39 @@ const AMBIENT_PRESETS = {
     targetCount: (d, w, h) => Math.round((w * h) / 9000 * (d / 60)),
     spawn: (w, h) => {
       const angle = Math.random() * Math.PI * 2;
-      // Ring covers most of the viewport now — from 150 px out
-      // to ~55 % of the longer screen edge. Particles spawn
-      // across the entire screen instead of a tiny disc.
       const ringMin = 150;
       const ringMax = Math.max(w, h) * 0.55;
-      // Slight bias toward outer ring so the periphery stays
-      // populated. sqrt distribution gives uniform area density
-      // (otherwise centre would dominate by sheer ring math).
       const t = Math.sqrt(Math.random());
       const dist = ringMin + t * (ringMax - ringMin);
-      const cx = _cursorX || w / 2;
-      const cy = _cursorY || h / 2;
+      // v1.6.1-beta hotfix8: BOTH spawn AND step use the same
+      // anchor. If the cursor isn't being tracked (_cursorX = 0,
+      // typical Lively click-through state where
+      // livelyCurrentCursorPos never fires), fall back to screen
+      // centre. Previously spawn fell back to centre but step
+      // pulled to (0,0) — particles spawned at centre, drifted
+      // toward the corner, and the user perceived "only in
+      // middle" because the spawn point was the dominant visual.
+      const ax = _wormholeAnchorX(w);
+      const ay = _wormholeAnchorY(h);
       const ca = Math.cos(angle), sa = Math.sin(angle);
-      // Bigger initial velocities so particles cover ground
-      // before gravity does its work.
       const inSpeed    = 70 + Math.random() * 80;
       const swirlSpeed = 280 + Math.random() * 180;
+      // Periodic diagnostic so Lively-DevTools sessions can see
+      // whether cursor tracking is alive. Throttled to one log
+      // per 3 s.
+      const _now = performance.now();
+      if (_now - _wormholeDiagTs > 3000) {
+        _wormholeDiagTs = _now;
+        console.log("[wormhole] anchor=(" + ax.toFixed(0) + "," +
+                    ay.toFixed(0) + ") cursor=(" + _cursorX + "," +
+                    _cursorY + ")  — if cursor stays (0,0) Lively " +
+                    "isn't forwarding pointer events. Enable " +
+                    "Wallpaper Interaction in Lively, or check " +
+                    "the cursor-pos callback.");
+      }
       return {
-        x: cx + ca * dist,
-        y: cy + sa * dist,
+        x: ax + ca * dist,
+        y: ay + sa * dist,
         px: 0, py: 0,
         vx: -ca * inSpeed - sa * swirlSpeed,
         vy: -sa * inSpeed + ca * swirlSpeed,
@@ -5101,36 +5124,39 @@ const AMBIENT_PRESETS = {
     step: (p, dt, w, h) => {
       p.life += dt;
       p.px = p.x; p.py = p.y;
-      const dx = _cursorX - p.x;
-      const dy = _cursorY - p.y;
+      const ax = _wormholeAnchorX(w);
+      const ay = _wormholeAnchorY(h);
+      const dx = ax - p.x;
+      const dy = ay - p.y;
       const distSq = dx * dx + dy * dy;
       const dist = Math.sqrt(distSq) + 1;
       if (dist < 16) return false;                       // consumed
       if (dist > Math.max(w, h) * 1.6) return false;     // escaped
-      // Velocity-based integration. Lighter gravity than the
-      // previous attempt — particles take longer to spiral in
-      // so the visible orbital field around the cursor stays
-      // populated instead of getting vacuumed instantly.
-      const accel = 50000 / distSq;
+      // v1.6.1-beta hotfix8: gravity 50000 → 250000 (5×) — user
+      // reported "way too weakly pulled in". Even at distance
+      // 1000 px, accel was 0.05 px/s²; now 0.25 px/s². Plus
+      // lighter damping (0.992 → 0.995) so particles keep
+      // momentum across more of the screen.
+      const accel = 250000 / distSq;
       p.vx += (dx / dist) * accel * dt;
       p.vy += (dy / dist) * accel * dt;
-      // Lighter damping so particles keep momentum + cover more
-      // screen real estate before being consumed.
-      p.vx *= 0.992;
-      p.vy *= 0.992;
+      p.vx *= 0.995;
+      p.vy *= 0.995;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       return true;
     },
     render: (ctx, p, tint) => {
-      const dx = _cursorX - p.x;
-      const dy = _cursorY - p.y;
+      // Same anchor as spawn + step so brightness ramps relative
+      // to the actual singularity, not the (0,0) fallback.
+      const ax = _wormholeAnchorX(window.innerWidth  || 1920);
+      const ay = _wormholeAnchorY(window.innerHeight || 1080);
+      const dx = ax - p.x;
+      const dy = ay - p.y;
       const dist = Math.hypot(dx, dy);
       // Brighten + thicken as we approach the singularity. The
       // 1200 px reference scales the intensity so far-away
-      // particles on a 5120-wide screen are still visible
-      // (previously 400 px = anything past 640 dropped to
-      // floor alpha and looked like nothing).
+      // particles on a 5120-wide screen are still visible.
       const intensity = Math.min(1, 1.6 - dist / 1200);
       const a = p.alpha * Math.max(0.5, intensity);
       const color = tint
