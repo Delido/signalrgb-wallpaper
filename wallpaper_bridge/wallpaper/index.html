@@ -517,11 +517,48 @@
      `font-family` at the .widget level so child elements inherit
      naturally without each widget knowing about the palette. */
   .widget {
-    color:       var(--theme-fg);
+    color:       var(--theme-fg) !important;
     font-family: var(--theme-font);
   }
   .widget.tinted {
-    color: var(--w-tint, var(--theme-accent));
+    color: var(--w-tint, var(--theme-accent)) !important;
+  }
+  /* v1.6.1-beta: ensure the theme is visible even when tile-style
+     is "off" (= no widget background). Each non-default theme adds
+     a subtle full-screen overlay tinted in the theme's accent
+     colour so the user gets immediate feedback that the theme is
+     active. Pointer-events: none keeps the desktop interactive. */
+  body.theme-dracula::after,
+  body.theme-nord::after,
+  body.theme-tokyo-night::after,
+  body.theme-catppuccin::after,
+  body.theme-solarized::after,
+  body.theme-vintage-crt::after,
+  body.theme-light::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    z-index: 5;
+    opacity: 0.12;
+  }
+  body.theme-dracula::after     { background: #6272a4; }
+  body.theme-nord::after        { background: #5e81ac; }
+  body.theme-tokyo-night::after { background: #1a1b26; }
+  body.theme-catppuccin::after  { background: #45475a; }
+  body.theme-solarized::after   { background: #073642; }
+  body.theme-vintage-crt::after {
+    background:
+      repeating-linear-gradient(0deg,
+        transparent 0, transparent 2px,
+        rgba(0, 255, 70, 0.18) 2px, rgba(0, 255, 70, 0.18) 3px);
+    mix-blend-mode: screen;
+    opacity: 0.35;
+  }
+  body.theme-light::after {
+    background: #ffffff;
+    mix-blend-mode: screen;
+    opacity: 0.18;
   }
 
   /* v1.6.0-beta Mouse FX support styles. Each rule guarded behind a
@@ -3038,6 +3075,21 @@ function applyWidgetTheme(theme) {
     if (t === "default") continue;
     document.body.classList.toggle("theme-" + t, t === safe);
   }
+  // v1.6.1-beta diagnostic: log the resulting class state so a
+  // user inspecting Lively DevTools can confirm the theme actually
+  // landed. Also flash a 1-second visible border in the active
+  // theme's accent colour so the change is unmistakable even if
+  // CSS variables don't propagate to the widgets (e.g. tile-style
+  // off).
+  const accent = getComputedStyle(document.body)
+    .getPropertyValue("--theme-accent").trim() || "#6ab0ff";
+  console.log("[wallpaper] theme:", safe, "body class:",
+              document.body.className, "accent:", accent);
+  document.body.style.boxShadow = `inset 0 0 0 4px ${accent}`;
+  clearTimeout(applyWidgetTheme._flashTimer);
+  applyWidgetTheme._flashTimer = setTimeout(() => {
+    document.body.style.boxShadow = "";
+  }, 1500);
 }
 
 // ── v1.6.0-beta mouse-driven distortion effects ─────────────────────────────

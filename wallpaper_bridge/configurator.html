@@ -1693,38 +1693,41 @@
         — pick a shell variant for chrome and a theme for colours.
       </div>
 
-      <!-- v1.6.0-beta stackable mouse-driven distortion effects. All
-           four can run concurrently; each one is independent. -->
+      <!-- v1.6.1-beta cursor-driven wallpaper effects. These act on
+           the WALLPAPER itself when the cursor moves over the
+           desktop — not on widget editing or anything in the
+           Configurator. All stackable. -->
       <div class="row" style="margin-top: 14px; flex-wrap: wrap;">
         <label data-i18n="mousefx.label" style="font-weight:500; flex: 1 1 100%;">
-          Mouse distortion effects (stackable)
+          Cursor effects on the wallpaper (stackable)
         </label>
       </div>
       <div id="mousefx-options" style="display:flex; gap:14px; flex-wrap:wrap; padding-top:4px;">
         <label class="row" style="gap:6px; cursor:pointer;">
-          <input type="checkbox" class="mousefx-cb" value="repulsion">
-          <span data-i18n="mousefx.repulsion">Widget Repulsion</span>
+          <input type="checkbox" class="mousefx-cb" value="ripple">
+          <span data-i18n="mousefx.ripple">Liquid Distortion 🌊</span>
         </label>
         <label class="row" style="gap:6px; cursor:pointer;">
           <input type="checkbox" class="mousefx-cb" value="chromatic">
-          <span data-i18n="mousefx.chromatic">Chromatic Aberration</span>
+          <span data-i18n="mousefx.chromatic">Chromatic Halo 🌈</span>
         </label>
         <label class="row" style="gap:6px; cursor:pointer;">
           <input type="checkbox" class="mousefx-cb" value="spotlight">
-          <span data-i18n="mousefx.spotlight">Magnify Spotlight</span>
+          <span data-i18n="mousefx.spotlight">Spotlight 🔦</span>
         </label>
         <label class="row" style="gap:6px; cursor:pointer;">
-          <input type="checkbox" class="mousefx-cb" value="ripple">
-          <span data-i18n="mousefx.ripple">Liquid Ripple</span>
+          <input type="checkbox" class="mousefx-cb" value="repulsion">
+          <span data-i18n="mousefx.repulsion">Widget Float 🧲</span>
         </label>
       </div>
       <div class="hint" data-i18n="mousefx.hint" style="margin-top: 6px;">
-        Widget Repulsion = widgets ease away from the cursor.
-        Chromatic = R/G/B halo around the cursor. Spotlight = dim
-        outside a 180 px disc following the cursor. Liquid Ripple =
-        SVG-driven distortion that pulls the background pixels with
-        cursor movement. Disabled inside the Live preview iframe to
-        keep it cheap.
+        These react to mouse movement over your desktop while the
+        wallpaper is running — not in the Configurator. Liquid
+        Distortion pulls the background pixels with the cursor.
+        Chromatic Halo paints an R/G/B glow around the cursor.
+        Spotlight dims everything outside a disc around the cursor.
+        Widget Float (optional) makes widgets ease away from the
+        cursor on display, never in edit mode.
       </div>
 
       <div class="live-preview-wrap" id="live-preview-wrap">
@@ -2249,15 +2252,15 @@ const TRANSLATIONS = {
   "widgets.theme.light":        { en: "Light Mode",         de: "Heller Modus" },
   "widgets.theme.hint":         { en: "Repaints every widget at once with a coordinated colour palette + font stack. Independent of <em>Tile style</em> above — pick a shell variant for chrome and a theme for colours.",
                                   de: "Färbt alle Widgets gleichzeitig mit einer abgestimmten Farb-Palette + Font-Stack neu. Unabhängig vom <em>Tile-Style</em> oben — wähle eine Shell-Variante für die Hülle und ein Theme für die Farben." },
-  "mousefx.label":              { en: "Mouse distortion effects (stackable)",
-                                  de: "Mausgesteuerte Verzerrungs-Effekte (stapelbar)" },
-  "mousefx.repulsion":          { en: "Widget Repulsion",   de: "Widget-Abstoßung" },
-  "mousefx.chromatic":          { en: "Chromatic Aberration",
-                                  de: "Chromatische Aberration" },
-  "mousefx.spotlight":          { en: "Magnify Spotlight",  de: "Spotlight" },
-  "mousefx.ripple":             { en: "Liquid Ripple",      de: "Flüssige Welle" },
-  "mousefx.hint":               { en: "Widget Repulsion = widgets ease away from the cursor. Chromatic = R/G/B halo around the cursor. Spotlight = dim outside a 180 px disc following the cursor. Liquid Ripple = SVG-driven distortion that pulls background pixels with cursor movement. Disabled inside the Live preview iframe to keep it cheap.",
-                                  de: "Widget-Abstoßung = Widgets weichen dem Cursor sanft aus. Chromatisch = R/G/B-Halo um den Cursor. Spotlight = dunkel außerhalb eines 180-px-Kreises um den Cursor. Flüssige Welle = SVG-Verzerrung die Hintergrund-Pixel mit der Mausbewegung zieht. In der Live-Vorschau-iframe deaktiviert um sie billig zu halten." },
+  "mousefx.label":              { en: "Cursor effects on the wallpaper (stackable)",
+                                  de: "Cursor-Effekte auf dem Wallpaper (stapelbar)" },
+  "mousefx.repulsion":          { en: "Widget Float 🧲",    de: "Widget-Schwung 🧲" },
+  "mousefx.chromatic":          { en: "Chromatic Halo 🌈",  de: "Chromatischer Halo 🌈" },
+  "mousefx.spotlight":          { en: "Spotlight 🔦",       de: "Spotlight 🔦" },
+  "mousefx.ripple":             { en: "Liquid Distortion 🌊",
+                                  de: "Flüssige Verzerrung 🌊" },
+  "mousefx.hint":               { en: "These react to mouse movement over your desktop while the wallpaper is running — not in the Configurator. Liquid Distortion pulls the background pixels with the cursor. Chromatic Halo paints an R/G/B glow around the cursor. Spotlight dims everything outside a disc around the cursor. Widget Float (optional) makes widgets ease away from the cursor on display, never in edit mode.",
+                                  de: "Diese reagieren auf Mausbewegungen über deinem Desktop während das Wallpaper läuft — nicht im Configurator. Flüssige Verzerrung zieht die Hintergrund-Pixel dem Cursor nach. Chromatischer Halo malt einen R/G/B-Glow um den Cursor. Spotlight dunkelt alles außerhalb einer Scheibe um den Cursor ab. Widget-Schwung (optional) lässt Widgets dem Cursor im Normalbetrieb ausweichen, nie im Bearbeiten-Modus." },
 
   // v1.5.0-beta MQTT bridge labels.
   "mqtt.header":                { en: "Home Assistant / MQTT bridge (beta)",
