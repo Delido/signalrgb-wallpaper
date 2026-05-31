@@ -1671,6 +1671,62 @@
         Off keeps the v1.0 transparent-overlay look every existing user is already running.
       </div>
 
+      <!-- v1.6.0-beta theme palette. Stacks on top of the tile style:
+           tile style picks the shell (glass / solid / clear); theme
+           picks the colour palette + typography underneath. -->
+      <div class="row" style="margin-top: 12px;">
+        <label for="widget-theme" data-i18n="widgets.theme.label">Theme</label>
+        <select id="widget-theme">
+          <option value="default"     data-i18n="widgets.theme.default">Default — glow-tinted (v1.5)</option>
+          <option value="dracula"     data-i18n="widgets.theme.dracula">Dracula</option>
+          <option value="nord"        data-i18n="widgets.theme.nord">Nord</option>
+          <option value="tokyo-night" data-i18n="widgets.theme.tokyo">Tokyo Night</option>
+          <option value="catppuccin"  data-i18n="widgets.theme.catppuccin">Catppuccin Mocha</option>
+          <option value="solarized"   data-i18n="widgets.theme.solarized">Solarized Dark</option>
+          <option value="vintage-crt" data-i18n="widgets.theme.crt">Vintage CRT</option>
+          <option value="light"       data-i18n="widgets.theme.light">Light Mode</option>
+        </select>
+      </div>
+      <div class="hint" data-i18n="widgets.theme.hint" style="margin-top: 6px;">
+        Repaints every widget at once with a coordinated colour
+        palette + font stack. Independent of <em>Tile style</em> above
+        — pick a shell variant for chrome and a theme for colours.
+      </div>
+
+      <!-- v1.6.0-beta stackable mouse-driven distortion effects. All
+           four can run concurrently; each one is independent. -->
+      <div class="row" style="margin-top: 14px; flex-wrap: wrap;">
+        <label data-i18n="mousefx.label" style="font-weight:500; flex: 1 1 100%;">
+          Mouse distortion effects (stackable)
+        </label>
+      </div>
+      <div id="mousefx-options" style="display:flex; gap:14px; flex-wrap:wrap; padding-top:4px;">
+        <label class="row" style="gap:6px; cursor:pointer;">
+          <input type="checkbox" class="mousefx-cb" value="repulsion">
+          <span data-i18n="mousefx.repulsion">Widget Repulsion</span>
+        </label>
+        <label class="row" style="gap:6px; cursor:pointer;">
+          <input type="checkbox" class="mousefx-cb" value="chromatic">
+          <span data-i18n="mousefx.chromatic">Chromatic Aberration</span>
+        </label>
+        <label class="row" style="gap:6px; cursor:pointer;">
+          <input type="checkbox" class="mousefx-cb" value="spotlight">
+          <span data-i18n="mousefx.spotlight">Magnify Spotlight</span>
+        </label>
+        <label class="row" style="gap:6px; cursor:pointer;">
+          <input type="checkbox" class="mousefx-cb" value="ripple">
+          <span data-i18n="mousefx.ripple">Liquid Ripple</span>
+        </label>
+      </div>
+      <div class="hint" data-i18n="mousefx.hint" style="margin-top: 6px;">
+        Widget Repulsion = widgets ease away from the cursor.
+        Chromatic = R/G/B halo around the cursor. Spotlight = dim
+        outside a 180 px disc following the cursor. Liquid Ripple =
+        SVG-driven distortion that pulls the background pixels with
+        cursor movement. Disabled inside the Live preview iframe to
+        keep it cheap.
+      </div>
+
       <div class="live-preview-wrap" id="live-preview-wrap">
         <div class="layout-preview-head">
           <span data-i18n="widgets.preview.live_head">Live preview · WYSIWYG iframe of the actual wallpaper page</span>
@@ -2179,6 +2235,29 @@ const TRANSLATIONS = {
                                   de: "sendet · {n} Paket(e) ausgegeben" },
   "sacn.status.disabled":       { en: "disabled",          de: "deaktiviert" },
   "sacn.status.error":          { en: "error: {err}",      de: "Fehler: {err}" },
+
+  // v1.6.0-beta Theme system + Mouse FX labels.
+  "widgets.theme.label":        { en: "Theme",              de: "Theme" },
+  "widgets.theme.default":      { en: "Default — glow-tinted (v1.5)",
+                                  de: "Standard — Glow-getintet (v1.5)" },
+  "widgets.theme.dracula":      { en: "Dracula",            de: "Dracula" },
+  "widgets.theme.nord":         { en: "Nord",               de: "Nord" },
+  "widgets.theme.tokyo":        { en: "Tokyo Night",        de: "Tokyo Night" },
+  "widgets.theme.catppuccin":   { en: "Catppuccin Mocha",   de: "Catppuccin Mocha" },
+  "widgets.theme.solarized":    { en: "Solarized Dark",     de: "Solarized Dark" },
+  "widgets.theme.crt":          { en: "Vintage CRT",        de: "Vintage CRT" },
+  "widgets.theme.light":        { en: "Light Mode",         de: "Heller Modus" },
+  "widgets.theme.hint":         { en: "Repaints every widget at once with a coordinated colour palette + font stack. Independent of <em>Tile style</em> above — pick a shell variant for chrome and a theme for colours.",
+                                  de: "Färbt alle Widgets gleichzeitig mit einer abgestimmten Farb-Palette + Font-Stack neu. Unabhängig vom <em>Tile-Style</em> oben — wähle eine Shell-Variante für die Hülle und ein Theme für die Farben." },
+  "mousefx.label":              { en: "Mouse distortion effects (stackable)",
+                                  de: "Mausgesteuerte Verzerrungs-Effekte (stapelbar)" },
+  "mousefx.repulsion":          { en: "Widget Repulsion",   de: "Widget-Abstoßung" },
+  "mousefx.chromatic":          { en: "Chromatic Aberration",
+                                  de: "Chromatische Aberration" },
+  "mousefx.spotlight":          { en: "Magnify Spotlight",  de: "Spotlight" },
+  "mousefx.ripple":             { en: "Liquid Ripple",      de: "Flüssige Welle" },
+  "mousefx.hint":               { en: "Widget Repulsion = widgets ease away from the cursor. Chromatic = R/G/B halo around the cursor. Spotlight = dim outside a 180 px disc following the cursor. Liquid Ripple = SVG-driven distortion that pulls background pixels with cursor movement. Disabled inside the Live preview iframe to keep it cheap.",
+                                  de: "Widget-Abstoßung = Widgets weichen dem Cursor sanft aus. Chromatisch = R/G/B-Halo um den Cursor. Spotlight = dunkel außerhalb eines 180-px-Kreises um den Cursor. Flüssige Welle = SVG-Verzerrung die Hintergrund-Pixel mit der Mausbewegung zieht. In der Live-Vorschau-iframe deaktiviert um sie billig zu halten." },
 
   // v1.5.0-beta MQTT bridge labels.
   "mqtt.header":                { en: "Home Assistant / MQTT bridge (beta)",
@@ -3210,6 +3289,7 @@ const els = {
   libraryStrip:       $("library-strip"),
   lockBar:        $("lock-bar"),
   widgetTileStyle: $("widget-tile-style"),
+  widgetTheme:     $("widget-theme"),
   lockLabel:      $("lock-label"),
   lockHint:       $("lock-hint"),
   lockToggle:     $("lock-toggle"),
@@ -6322,6 +6402,20 @@ if (els.widgetTileStyle) {
   els.widgetTileStyle.addEventListener("change",
     () => setSetting("widgetTileStyle", els.widgetTileStyle.value));
 }
+if (els.widgetTheme) {
+  els.widgetTheme.addEventListener("change",
+    () => setSetting("widgetTheme", els.widgetTheme.value));
+}
+// v1.6.0-beta: stackable mouse-effects. Each checkbox toggles its
+// effect name in the array; on change we push the union back.
+for (const cb of document.querySelectorAll(".mousefx-cb")) {
+  cb.addEventListener("change", () => {
+    const next = Array.from(document.querySelectorAll(".mousefx-cb"))
+      .filter(x => x.checked)
+      .map(x => x.value);
+    setSetting("mouseEffects", next);
+  });
+}
 els.bgDim  .addEventListener("input",  () => {
   els.bgDimVal.textContent = els.bgDim.value + " %";
 });
@@ -8003,6 +8097,17 @@ function renderAll() {
   updateBgTileScaleVisibility();
   if (els.widgetTileStyle) {
     els.widgetTileStyle.value = settings.widgetTileStyle || "off";
+  }
+  if (els.widgetTheme) {
+    els.widgetTheme.value = settings.widgetTheme || "default";
+  }
+  // v1.6.0-beta: mouse-effects checkboxes reflect the persisted set.
+  {
+    const wanted = new Set(
+      Array.isArray(settings.mouseEffects) ? settings.mouseEffects : []);
+    for (const cb of document.querySelectorAll(".mousefx-cb")) {
+      cb.checked = wanted.has(cb.value);
+    }
   }
   els.bgDim.value   = String(settings.bgDim ?? 0);
   els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";

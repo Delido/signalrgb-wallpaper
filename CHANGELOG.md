@@ -4,6 +4,70 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0-beta] - 2026-05-31
+
+The **visual polish** beta. v1.5 closed the integration roadmap;
+v1.6 turns to the look-and-feel surface that's been on hold since
+the v1.1 widget tile-shell pass. Two stackable feature lines:
+
+### Added — Widget Theme System
+
+A new `widgetTheme` per-screen setting picks one of 8 coordinated
+colour-palette + typography pairings that recolour every widget at
+once. Independent of the v1.1 *Tile style* (Glass / Solid /
+Clear / Off) — tile style = shell chrome, theme = palette
+underneath. CSS-variable based: each theme is one `body.theme-<n>`
+class that sets `--theme-bg-glass`, `--theme-bg-solid`,
+`--theme-bg-clear`, `--theme-border`, `--theme-fg`,
+`--theme-fg-muted`, `--theme-accent`, `--theme-font`.
+
+Built-in themes:
+
+- **Default** — the v1.5 glow-tinted palette (visual no-op for
+  existing users who don't pick a theme)
+- **Dracula** — purple accent on `#282a36`
+- **Nord** — cool blue-grey, the Arctic palette
+- **Tokyo Night** — very dark blue + cyan accent
+- **Catppuccin Mocha** — warm dark mode + pink accent
+- **Solarized Dark** — the developer-classic high-contrast palette
+- **Vintage CRT** — monospace green on near-black with a soft
+  text-shadow glow; pairs with the audio-spectrum + matrix
+  ambient for an actual CRT-monitor vibe
+- **Light Mode** — daylight palette for users editing in bright
+  rooms
+
+### Added — Mouse-driven distortion effects
+
+Four stackable mouse-position-driven effects, configured via a
+multi-checkbox in the per-screen Widgets card. All four can run
+concurrently; each one is independent. Disabled inside the
+Configurator's `?preview=1` iframe so the preview stays cheap.
+
+- **Widget Repulsion** — widgets ease away from the cursor via a
+  smoothed rAF loop that writes `--repel-x` / `--repel-y` CSS
+  variables. 220 px radius, 50 px max push, cubic-bezier ease.
+  No compositor cost beyond the existing widget layers.
+- **Chromatic Aberration** — three R/G/B radial gradients at
+  offset positions around the cursor, `mix-blend-mode: screen`
+  recombines them. Falls off to invisible past ~250 px. Adds
+  one overlay div, no per-frame canvas work.
+- **Magnify Spotlight** — radial-gradient mask following the
+  cursor: transparent disc inside 100 px, fading to 55 % black
+  past 240 px. Reading-lamp-in-a-dark-room effect.
+- **Liquid Ripple** — SVG `<feDisplacementMap>` on the
+  background + glow grid. A small 256 × 256 canvas renders the
+  decaying displacement map (encoding cursor movement as
+  R + G offsets); the feImage references the canvas via a
+  per-frame dataURL refresh. Most expensive of the four —
+  opt-in only.
+
+### Changed — WALLPAPER_VERSION bump to 1.6.0-beta
+
+`wallpaper/index.html` gained the theme CSS variable system + the
+MouseFx module + the `applyMouseEffects` / `applyWidgetTheme`
+property handlers. Workshop re-upload + Lively re-import follow
+the same path as the v1.5 bump.
+
 ## [1.5.0-beta] - 2026-05-30
 
 The **LED ecosystem hub** beta. v1.4.0-beta opened a single one-way

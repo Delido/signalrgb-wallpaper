@@ -432,8 +432,115 @@
      Applied via a class on <body> so a single attribute toggles
      every widget at once. Default state (no class) preserves the
      v1.0 transparent-overlay look. */
+  /* v1.6.0-beta theme palette variables. Defaults match the v1.5
+     hardcoded values so an upgrade without picking a theme is a
+     visual no-op. Each body.theme-<name> class below overrides
+     these to repaint every widget at once. */
+  :root {
+    --theme-bg-glass:  rgba(15, 22, 36, 0.55);
+    --theme-bg-solid:  rgba(20, 26, 38, 0.92);
+    --theme-bg-clear:  rgba(255, 255, 255, 0.04);
+    --theme-border:    rgba(255, 255, 255, 0.12);
+    --theme-fg:        #f5f7fb;
+    --theme-fg-muted:  rgba(245, 247, 251, 0.65);
+    --theme-accent:    var(--w-tint, #6ab0ff);
+    --theme-font:      system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body.theme-dracula {
+    --theme-bg-glass:  rgba(40, 42, 54, 0.62);
+    --theme-bg-solid:  rgba(40, 42, 54, 0.94);
+    --theme-bg-clear:  rgba(189, 147, 249, 0.06);
+    --theme-border:    rgba(189, 147, 249, 0.22);
+    --theme-fg:        #f8f8f2;
+    --theme-fg-muted:  rgba(248, 248, 242, 0.65);
+    --theme-accent:    #ff79c6;
+  }
+  body.theme-nord {
+    --theme-bg-glass:  rgba(46, 52, 64, 0.62);
+    --theme-bg-solid:  rgba(46, 52, 64, 0.94);
+    --theme-bg-clear:  rgba(136, 192, 208, 0.06);
+    --theme-border:    rgba(136, 192, 208, 0.22);
+    --theme-fg:        #eceff4;
+    --theme-fg-muted:  rgba(236, 239, 244, 0.62);
+    --theme-accent:    #88c0d0;
+  }
+  body.theme-tokyo-night {
+    --theme-bg-glass:  rgba(26, 27, 38, 0.65);
+    --theme-bg-solid:  rgba(26, 27, 38, 0.96);
+    --theme-bg-clear:  rgba(125, 207, 255, 0.06);
+    --theme-border:    rgba(125, 207, 255, 0.22);
+    --theme-fg:        #c0caf5;
+    --theme-fg-muted:  rgba(192, 202, 245, 0.62);
+    --theme-accent:    #7dcfff;
+  }
+  body.theme-catppuccin {
+    --theme-bg-glass:  rgba(30, 30, 46, 0.65);
+    --theme-bg-solid:  rgba(30, 30, 46, 0.96);
+    --theme-bg-clear:  rgba(245, 194, 231, 0.06);
+    --theme-border:    rgba(245, 194, 231, 0.22);
+    --theme-fg:        #cdd6f4;
+    --theme-fg-muted:  rgba(205, 214, 244, 0.62);
+    --theme-accent:    #f5c2e7;
+  }
+  body.theme-solarized {
+    --theme-bg-glass:  rgba(0, 43, 54, 0.65);
+    --theme-bg-solid:  rgba(0, 43, 54, 0.96);
+    --theme-bg-clear:  rgba(38, 139, 210, 0.06);
+    --theme-border:    rgba(147, 161, 161, 0.25);
+    --theme-fg:        #93a1a1;
+    --theme-fg-muted:  rgba(147, 161, 161, 0.65);
+    --theme-accent:    #b58900;
+  }
+  body.theme-vintage-crt {
+    --theme-bg-glass:  rgba(8, 18, 8, 0.7);
+    --theme-bg-solid:  rgba(8, 18, 8, 0.97);
+    --theme-bg-clear:  rgba(0, 255, 70, 0.05);
+    --theme-border:    rgba(0, 255, 70, 0.3);
+    --theme-fg:        #00ff46;
+    --theme-fg-muted:  rgba(0, 255, 70, 0.55);
+    --theme-accent:    #00ff46;
+    --theme-font:      "Cascadia Mono", "Consolas", "Menlo", monospace;
+  }
+  body.theme-vintage-crt .widget {
+    text-shadow: 0 0 4px currentColor;
+  }
+  body.theme-light {
+    --theme-bg-glass:  rgba(250, 250, 252, 0.7);
+    --theme-bg-solid:  rgba(255, 255, 255, 0.96);
+    --theme-bg-clear:  rgba(0, 0, 0, 0.04);
+    --theme-border:    rgba(0, 0, 0, 0.12);
+    --theme-fg:        #1c1f24;
+    --theme-fg-muted:  rgba(28, 31, 36, 0.6);
+    --theme-accent:    #0066cc;
+  }
+  /* Apply theme variables to every widget. Hooked via `color` and
+     `font-family` at the .widget level so child elements inherit
+     naturally without each widget knowing about the palette. */
+  .widget {
+    color:       var(--theme-fg);
+    font-family: var(--theme-font);
+  }
+  .widget.tinted {
+    color: var(--w-tint, var(--theme-accent));
+  }
+
+  /* v1.6.0-beta Mouse FX support styles. Each rule guarded behind a
+     body class set by mouseFx.{enable,disable}, so users not opted-in
+     pay nothing — even the transform composite layer the repulsion
+     effect needs only gets promoted when fx-repulsion is on. */
+  body.fx-repulsion .widget {
+    transform: translate(var(--repel-x, 0), var(--repel-y, 0));
+    transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+    will-change: transform;
+  }
+  body.fx-ripple #bg,
+  body.fx-ripple #bars,
+  body.fx-ripple #bars-canvas {
+    filter: url(#fx-ripple-filter);
+  }
+
   body.widget-tile-glass .widget {
-    background: rgba(15, 22, 36, 0.55);
+    background: var(--theme-bg-glass);
     /* v1.2.12: blur radius 12px -> 6px. backdrop-filter blur is the
        single most expensive GPU op on the page — every glass widget
        re-samples the wallpaper area behind it each frame the source
@@ -458,15 +565,15 @@
     padding: var(--widget-tile-padding);
   }
   body.widget-tile-solid .widget {
-    background: rgba(20, 26, 38, 0.92);
+    background: var(--theme-bg-solid);
     border: var(--widget-tile-border);
     border-radius: var(--widget-tile-radius);
     box-shadow: var(--widget-tile-shadow);
     padding: var(--widget-tile-padding);
   }
   body.widget-tile-clear .widget {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: var(--theme-bg-clear);
+    border: 1px solid var(--theme-border);
     border-radius: var(--widget-tile-radius);
     padding: var(--widget-tile-padding);
   }
@@ -485,7 +592,7 @@
      dialog. `.tile-off` explicitly cancels the inherited body
      style (clear background, no border, no shadow). */
   .widget.tile-glass {
-    background: rgba(15, 22, 36, 0.55);
+    background: var(--theme-bg-glass);
     /* v1.2.12: match the body.widget-tile-glass rule above (blur
        12px -> 6px + cache hints). */
     backdrop-filter: blur(6px) saturate(140%);
@@ -498,7 +605,7 @@
     padding: var(--widget-tile-padding);
   }
   .widget.tile-solid {
-    background: rgba(20, 26, 38, 0.92);
+    background: var(--theme-bg-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     border: var(--widget-tile-border);
@@ -2057,6 +2164,20 @@ function applyProperty(name, val) {
       // CSS rule lights up every .widget at once.
       applyWidgetTileStyle(typeof val === "string" ? val : "off");
       break;
+    case "widgetTheme":
+      // v1.6.0-beta theme palette: applies the matching body.theme-<name>
+      // class which sets every widget's --tile-bg / --tile-border /
+      // --tile-fg / --tile-fg-muted / --tile-accent / --tile-font CSS
+      // variable. Stacks with widgetTileStyle (shell variant vs colour
+      // palette are orthogonal).
+      applyWidgetTheme(typeof val === "string" ? val : "default");
+      break;
+    case "mouseEffects":
+      // v1.6.0-beta stackable mouse-driven distortion effects.
+      // Array of strings; each effect manages its own lifecycle via
+      // mouseFx.setActive(name, on).
+      applyMouseEffects(Array.isArray(val) ? val : []);
+      break;
     case "ambientEffect":
       ambient.setPreset(typeof val === "string" ? val : "off");
       break;
@@ -2900,6 +3021,275 @@ function applyWidgetTileStyle(style) {
     if (s === "off") continue;
     document.body.classList.toggle("widget-tile-" + s, s === safe);
   }
+}
+
+// v1.6.0-beta theme palettes. Each theme is a CSS class on <body>
+// that sets the --tile-* variables every widget reads. Adding a new
+// theme = one entry here + one CSS rule below + one i18n key in
+// the Configurator. The "default" theme intentionally has no class —
+// widgets fall back to their hardcoded glow-tinted defaults.
+const WIDGET_THEMES = [
+  "default", "dracula", "nord", "tokyo-night",
+  "catppuccin", "solarized", "vintage-crt", "light",
+];
+function applyWidgetTheme(theme) {
+  const safe = WIDGET_THEMES.indexOf(theme) >= 0 ? theme : "default";
+  for (const t of WIDGET_THEMES) {
+    if (t === "default") continue;
+    document.body.classList.toggle("theme-" + t, t === safe);
+  }
+}
+
+// ── v1.6.0-beta mouse-driven distortion effects ─────────────────────────────
+//
+// Four opt-in effects that read a shared cursor position + each have their
+// own enable/disable/tick lifecycle:
+//
+//   "repulsion"  Widgets ease away from the cursor on a smoothed rAF loop.
+//                Pure CSS transform — no compositor cost beyond the existing
+//                widget layers.
+//   "chromatic"  Three R/G/B-coloured glow-grid clones offset around the
+//                cursor. mix-blend-mode: screen recombines them as you move
+//                away. Falls off to invisible past ~250 px.
+//   "spotlight"  Radial-gradient overlay following the cursor — dim outside
+//                a 250 px disc, transparent inside. Cheap (one rAF for the
+//                CSS var update).
+//   "ripple"     SVG feDisplacementMap on the background. Drives the
+//                displacement map by drawing decaying ripples on a small
+//                canvas + updating an feImage. The most expensive of the
+//                four; gated behind a per-frame canvas decay + dataURL
+//                round-trip.
+//
+// All four run skipped when IS_PREVIEW is true (Configurator's live preview
+// would amplify the cost without the user benefit).
+
+const MouseFx = (function () {
+  let active = new Set();
+  let mouseX = 0, mouseY = 0;
+  let lastMouseX = 0, lastMouseY = 0;
+  let listenersAttached = false;
+
+  function _attachListeners() {
+    if (listenersAttached) return;
+    window.addEventListener("mousemove", (ev) => {
+      mouseX = ev.clientX;
+      mouseY = ev.clientY;
+    }, { passive: true });
+    // Lively's click-through builds also fire `livelyCurrentCursorPos`.
+    window.livelyCurrentCursorPos = (x, y) => {
+      mouseX = x; mouseY = y;
+    };
+    listenersAttached = true;
+  }
+
+  // ── Effect 1: Widget Repulsion ────────────────────────────────────────
+  const repulsion = (function () {
+    const RADIUS = 220;
+    const STRENGTH = 50;     // px push at zero distance
+    let raf = null;
+    function tick() {
+      for (const [_id, rec] of widgetNodes) {
+        const rect = rec.el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = cx - mouseX;
+        const dy = cy - mouseY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > RADIUS) {
+          rec.el.style.setProperty("--repel-x", "0px");
+          rec.el.style.setProperty("--repel-y", "0px");
+          continue;
+        }
+        const k = (1 - dist / RADIUS) * STRENGTH;
+        const angle = Math.atan2(dy, dx);
+        rec.el.style.setProperty("--repel-x", (Math.cos(angle) * k).toFixed(1) + "px");
+        rec.el.style.setProperty("--repel-y", (Math.sin(angle) * k).toFixed(1) + "px");
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    return {
+      enable() {
+        document.body.classList.add("fx-repulsion");
+        if (!raf) raf = requestAnimationFrame(tick);
+      },
+      disable() {
+        document.body.classList.remove("fx-repulsion");
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+        for (const [_id, rec] of widgetNodes) {
+          rec.el.style.removeProperty("--repel-x");
+          rec.el.style.removeProperty("--repel-y");
+        }
+      },
+    };
+  })();
+
+  // ── Effect 2: Glow Chromatic Aberration ───────────────────────────────
+  const chromatic = (function () {
+    let raf = null;
+    let overlay = null;
+    function ensureOverlay() {
+      if (overlay) return overlay;
+      overlay = document.createElement("div");
+      overlay.id = "fx-chromatic-overlay";
+      overlay.style.cssText =
+        "position: fixed; inset: 0; pointer-events: none; z-index: 1.5;" +
+        " mix-blend-mode: screen; opacity: 0;" +
+        " transition: opacity 200ms;";
+      overlay.innerHTML =
+        '<div class="fx-chr-r" style="position:absolute; inset:0; background:radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(255,0,80,0.45) 0, transparent 180px); transform:translate(-6px,-2px);"></div>' +
+        '<div class="fx-chr-g" style="position:absolute; inset:0; background:radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(0,255,120,0.45) 0, transparent 180px); transform:translate(2px,0px);"></div>' +
+        '<div class="fx-chr-b" style="position:absolute; inset:0; background:radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(80,120,255,0.45) 0, transparent 180px); transform:translate(4px,4px);"></div>';
+      document.body.appendChild(overlay);
+      return overlay;
+    }
+    function tick() {
+      const o = ensureOverlay();
+      o.style.setProperty("--mx", mouseX + "px");
+      o.style.setProperty("--my", mouseY + "px");
+      raf = requestAnimationFrame(tick);
+    }
+    return {
+      enable() {
+        const o = ensureOverlay();
+        o.style.opacity = "1";
+        if (!raf) raf = requestAnimationFrame(tick);
+      },
+      disable() {
+        if (overlay) overlay.style.opacity = "0";
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+      },
+    };
+  })();
+
+  // ── Effect 3: Magnify Spotlight ───────────────────────────────────────
+  const spotlight = (function () {
+    let raf = null;
+    let overlay = null;
+    function ensureOverlay() {
+      if (overlay) return overlay;
+      overlay = document.createElement("div");
+      overlay.id = "fx-spotlight-overlay";
+      overlay.style.cssText =
+        "position: fixed; inset: 0; pointer-events: none; z-index: 2.5;" +
+        " opacity: 0; transition: opacity 200ms;";
+      document.body.appendChild(overlay);
+      return overlay;
+    }
+    function tick() {
+      const o = ensureOverlay();
+      o.style.background =
+        "radial-gradient(circle 180px at " + mouseX + "px " + mouseY + "px," +
+        " transparent 100px, rgba(0,0,0,0.55) 240px)";
+      raf = requestAnimationFrame(tick);
+    }
+    return {
+      enable() {
+        const o = ensureOverlay();
+        o.style.opacity = "1";
+        if (!raf) raf = requestAnimationFrame(tick);
+      },
+      disable() {
+        if (overlay) overlay.style.opacity = "0";
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+      },
+    };
+  })();
+
+  // ── Effect 4: Liquid Ripple (SVG feDisplacementMap) ──────────────────
+  const ripple = (function () {
+    let raf = null;
+    let mapCanvas = null;
+    let mapCtx = null;
+    let svgFilter = null;
+    let feImg = null;
+    const MAP_SIZE = 256;
+    function ensureFilter() {
+      if (svgFilter) return;
+      // Hidden SVG container with the displacement filter. Applied
+      // to #bg via CSS class .fx-ripple-target.
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.style.cssText = "position:absolute; width:0; height:0;";
+      svg.setAttribute("aria-hidden", "true");
+      svg.innerHTML =
+        '<defs><filter id="fx-ripple-filter" x="0" y="0" width="100%" height="100%">' +
+        '<feImage id="fx-ripple-img" preserveAspectRatio="none" result="map" x="0" y="0" width="100%" height="100%"/>' +
+        '<feDisplacementMap in="SourceGraphic" in2="map" scale="50"' +
+        ' xChannelSelector="R" yChannelSelector="G"/>' +
+        '</filter></defs>';
+      document.body.appendChild(svg);
+      svgFilter = svg;
+      feImg = svg.querySelector("#fx-ripple-img");
+      mapCanvas = document.createElement("canvas");
+      mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
+      mapCtx = mapCanvas.getContext("2d");
+      // Neutral grey = no displacement (128, 128, 0). Initialize.
+      mapCtx.fillStyle = "rgb(128,128,0)";
+      mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+    }
+    function tick() {
+      // Decay existing ripple — blend toward neutral grey at 6 %/frame.
+      mapCtx.fillStyle = "rgba(128, 128, 0, 0.06)";
+      mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+      // Draw a fresh ripple at cursor (scaled into MAP_SIZE coords).
+      const dx = mouseX - lastMouseX;
+      const dy = mouseY - lastMouseY;
+      const moved = Math.hypot(dx, dy) > 2;
+      if (moved) {
+        const mx = (mouseX / window.innerWidth)  * MAP_SIZE;
+        const my = (mouseY / window.innerHeight) * MAP_SIZE;
+        // Encode movement direction into R+G channels so the
+        // displacement map drags pixels with the cursor.
+        const r = Math.max(0, Math.min(255, 128 + dx * 4));
+        const g = Math.max(0, Math.min(255, 128 + dy * 4));
+        const grad = mapCtx.createRadialGradient(mx, my, 0, mx, my, 18);
+        grad.addColorStop(0, "rgba(" + r + "," + g + ",0,0.85)");
+        grad.addColorStop(1, "rgba(128,128,0,0)");
+        mapCtx.fillStyle = grad;
+        mapCtx.fillRect(mx - 20, my - 20, 40, 40);
+      }
+      lastMouseX = mouseX; lastMouseY = mouseY;
+      feImg.setAttribute("href", mapCanvas.toDataURL());
+      raf = requestAnimationFrame(tick);
+    }
+    return {
+      enable() {
+        ensureFilter();
+        document.body.classList.add("fx-ripple");
+        if (!raf) raf = requestAnimationFrame(tick);
+      },
+      disable() {
+        document.body.classList.remove("fx-ripple");
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+      },
+    };
+  })();
+
+  const _EFFECTS = { repulsion, chromatic, spotlight, ripple };
+
+  return {
+    setActive(names) {
+      // No-op in IS_PREVIEW — the preview iframe doesn't need or
+      // benefit from these effects.
+      if (typeof IS_PREVIEW !== "undefined" && IS_PREVIEW) {
+        for (const fx of Object.values(_EFFECTS)) fx.disable();
+        active.clear();
+        return;
+      }
+      _attachListeners();
+      const want = new Set((names || []).filter(n => _EFFECTS[n]));
+      for (const n of active) {
+        if (!want.has(n) && _EFFECTS[n]) _EFFECTS[n].disable();
+      }
+      for (const n of want) {
+        if (!active.has(n)) _EFFECTS[n].enable();
+      }
+      active = want;
+    },
+  };
+})();
+
+function applyMouseEffects(arr) {
+  MouseFx.setActive(arr);
 }
 
 function setWidgetsLocked(locked) {

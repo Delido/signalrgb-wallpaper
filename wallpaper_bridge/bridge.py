@@ -672,7 +672,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.5.0-beta"
+APP_VERSION = "1.6.0-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -695,7 +695,7 @@ APP_VERSION = "1.5.0-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "1.5.0-beta"
+WALLPAPER_VERSION = "1.6.0-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -861,6 +861,15 @@ DEFAULT_SCREEN_SETTINGS = {
     # Default "off" preserves the v1.0 transparent-overlay look every
     # existing user is already running.
     "widgetTileStyle": "off",
+    # v1.6.0-beta: theme palette applied across every widget. Each
+    # theme is a set of CSS variables (background, border, primary
+    # text, secondary text, accent, font stack) defined under a
+    # body.theme-<name> class in wallpaper/index.html. Stacks with
+    # widgetTileStyle (style = container chrome; theme = colours +
+    # typography). One of:
+    #   "default" | "dracula" | "nord" | "tokyo-night" |
+    #   "catppuccin" | "solarized" | "vintage-crt" | "light"
+    "widgetTheme":     "default",
     # Full-canvas ambient effect (Phase 2). One of:
     #   "off" | "snow" | "rain" | "sparks" | "aurora"
     "ambientEffect":   "off",
@@ -876,6 +885,15 @@ DEFAULT_SCREEN_SETTINGS = {
     # trail works even with click-through enabled; ripples need real clicks
     # (Lively interaction must be on).
     "pixelfx":         "off",
+    # v1.6.0-beta: stackable mouse-driven distortion effects, parallel
+    # to the existing pixelfx single-select. Array of any of:
+    #   "repulsion"       — widgets ease away from the cursor
+    #   "chromatic"       — glow zones near the cursor split R/G/B
+    #   "spotlight"       — radial cone follows cursor (vignette inverse)
+    #   "ripple"          — SVG feDisplacementMap-driven liquid distortion
+    # All four can run concurrently — each one is opt-in and uses its
+    # own rAF chain or static SVG filter. Empty array = none active.
+    "mouseEffects":    [],
     # Parallax 3D — when > 0 the background image translates a fraction
     # of the cursor offset (smooth lerp), creating a fake-depth effect.
     # Value is the maximum displacement in CSS pixels at the cursor's
