@@ -5358,7 +5358,6 @@ function renderSystemSection() {
       } else {
         if (_ogPollTimer) { clearInterval(_ogPollTimer); _ogPollTimer = null; }
         if (_sacnPollTimer) { clearInterval(_sacnPollTimer); _sacnPollTimer = null; }
-        if (_mqttPollTimer) { clearInterval(_mqttPollTimer); _mqttPollTimer = null; }
         // v1.5.0-beta spatial-mapping: stop the dedicated preview WS
         // when the System card is collapsed — no canvas visible
         // means no need to drain frames.
@@ -5467,7 +5466,12 @@ function renderSystemSection() {
   const _sysCard2 = document.getElementById("card-system");
   if (_sysCard2) {
     const _sync2 = () => {
-      if (!_sysCard2.classList.contains("collapsed")) _restartMqttPoll();
+      if (!_sysCard2.classList.contains("collapsed")) {
+        _restartMqttPoll();
+      } else if (_mqttPollTimer) {
+        clearInterval(_mqttPollTimer);
+        _mqttPollTimer = null;
+      }
     };
     new MutationObserver(_sync2).observe(_sysCard2,
       { attributes: true, attributeFilter: ["class"] });
