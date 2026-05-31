@@ -7186,9 +7186,21 @@ window.addEventListener("resize", () => {
 function setLivePreviewVisible(on) {
   if (!els.livePreviewWrap) return;
   els.livePreviewWrap.classList.toggle("collapsed", !on);
-  // Source the iframe lazily — no point chewing CPU + GPU on a
-  // wallpaper page the user has collapsed away.
-  if (on && !els.livePreviewIframe.src) refreshLivePreview();
+  if (on) {
+    if (!els.livePreviewIframe.src
+        || els.livePreviewIframe.src === "about:blank") {
+      refreshLivePreview();
+    }
+  } else if (els.livePreviewIframe) {
+    // v1.5.0-beta-hotfix: a `display:none` iframe still runs every
+    // rAF loop + holds its WS connection. The live wallpaper page
+    // inside is full-rate (ambient effects + glow zones + audio
+    // glow + sysstats) → user's Performance profile showed
+    // "Animation" eating 28% of total + 7× JS-heap growth in 7 s
+    // from the iframe alone. Actively navigate to about:blank to
+    // kill every rAF, WS, and event listener inside.
+    try { els.livePreviewIframe.src = "about:blank"; } catch (_) {}
+  }
   try { localStorage.setItem("cfg.livePreview", on ? "1" : "0"); } catch (_) {}
 }
 

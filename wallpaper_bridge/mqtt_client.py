@@ -300,7 +300,11 @@ class MQTTClient:
 
     def _recv_packet(self):
         """Returns (fixed_header_byte, body_bytes) or None on
-        timeout / clean close."""
+        recv-timeout. Raises ConnectionError on a clean close so the
+        outer read loop tears down + exits instead of spinning on
+        zero-byte recvs at 100 % CPU (v1.5.0-beta-hotfix: that
+        spin showed up as Configurator-tab-pegging the user's PC at
+        95 °C every time the broker dropped the TCP)."""
         if self._sock is None:
             return None
         try:
@@ -308,7 +312,7 @@ class MQTTClient:
         except (TimeoutError, socket.timeout):
             return None
         if not first:
-            return None
+            raise ConnectionError("broker closed the socket")
         length = _decode_remaining_length(self._sock)
         body = self._recv_exact(length) if length else b""
         return (first[0], body)
