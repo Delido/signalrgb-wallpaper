@@ -4744,7 +4744,7 @@ function renderSystemSection() {
       } else {
         _closePreviewWs();
       }
-      _drawMappingEditor();
+      _scheduleMappingDraw();
     } catch (_) { /* defensive */ }
   }
   function _pushOpenRgbMapping(patch) {
@@ -4787,6 +4787,15 @@ function renderSystemSection() {
   let _dragHandle = "a";      // "a" (start / point) or "b" (line end)
   let _dragOffsetX = 0;
   let _dragOffsetY = 0;
+  // v1.5.0-beta-hotfix: redraw throttling. SignalRGB can push 60-200
+  // Hz; redrawing the canvas at full WS rate AND running the
+  // pre-existing live-wallpaper-preview iframe AND the real
+  // wallpaper in Lively/WE = three concurrent renders, which the
+  // user observed as 95 °C CPU + YouTube stuttering. We coalesce
+  // into one rAF-scheduled redraw per browser frame (so the
+  // effective max is the screen refresh rate, usually 60 Hz, and
+  // most browsers cap rAF for background tabs).
+  let _drawScheduled = false;
   const _MARKER_R = 8;        // radius in px on the editor canvas
 
   function _ensurePreviewWs(screen) {
@@ -4827,8 +4836,23 @@ function renderSystemSection() {
     if (!w || !h) return;
     const need = 7 + w * h * 3;
     if (buf.length < need) return;
-    _latestGrid = { w, h, rgb: buf.subarray(7, need) };
-    _drawMappingEditor();
+    // Copy out the slice so the next WS arrival doesn't mutate the
+    // buffer we're about to draw from.
+    _latestGrid = { w, h, rgb: buf.slice(7, need) };
+    _scheduleMappingDraw();
+  }
+
+  function _scheduleMappingDraw() {
+    if (_drawScheduled) return;
+    // Skip the redraw entirely when the editor isn't on screen — a
+    // collapsed System card or a hidden browser tab burns no CPU.
+    if (document.hidden) return;
+    if (_mappingWrap && _mappingWrap.style.display === "none") return;
+    _drawScheduled = true;
+    requestAnimationFrame(() => {
+      _drawScheduled = false;
+      _drawMappingEditor();
+    });
   }
 
   function _currentDevices() {
@@ -5020,7 +5044,7 @@ function renderSystemSection() {
           d.mapping = Object.assign({}, cur, { x: xn, y: yn });
         }
       }
-      _drawMappingEditor();
+      _scheduleMappingDraw();
     });
     function _releaseDrag(ev) {
       if (_dragDeviceId == null) return;
