@@ -1468,8 +1468,9 @@
           <span class="val" data-i18n="cycle.minutes">min</span>
           <label for="cycle-pool" data-i18n="cycle.pool" style="margin-left: 12px;">From</label>
           <select id="cycle-pool">
-            <option value="all"    data-i18n="cycle.pool.all">All library</option>
-            <option value="pinned" data-i18n="cycle.pool.pinned">Pinned only</option>
+            <option value="all"         data-i18n="cycle.pool.all">All library</option>
+            <option value="backgrounds" data-i18n="cycle.pool.backgrounds">Backgrounds only</option>
+            <option value="pinned"      data-i18n="cycle.pool.pinned">Pinned only</option>
           </select>
           <label for="cycle-order" data-i18n="cycle.order" style="margin-left: 12px;">Order</label>
           <select id="cycle-order">
@@ -2415,6 +2416,24 @@ const TRANSLATIONS = {
   "bg.library.ctx.delete":    { en: "Delete…",            de: "Löschen…" },
   "bg.library.pinned_toast":  { en: "Pinned {label}",     de: "{label} angeheftet" },
   "bg.library.unpinned_toast":{ en: "Unpinned {label}",   de: "{label} gelöst" },
+  // v1.6.1-beta: library category labels.
+  "bg.library.ctx.cat.background": { en: "🖼  Use as Background",
+                                     de: "🖼  Als Hintergrund nutzen" },
+  "bg.library.ctx.cat.template":   { en: "🎨  Use as Template (Builder source)",
+                                     de: "🎨  Als Vorlage (Builder-Quelle)" },
+  "bg.library.ctx.cat.both":       { en: "🔄  Both — Background + Template",
+                                     de: "🔄  Beides — Hintergrund + Vorlage" },
+  "bg.library.cat.background":     { en: "Background", de: "Hintergrund" },
+  "bg.library.cat.template":       { en: "Template",   de: "Vorlage" },
+  "bg.library.cat.both":           { en: "Both",       de: "Beides" },
+  "bg.library.cat_set_toast":      { en: "{label} → {cat}",
+                                     de: "{label} → {cat}" },
+  "bg.library.filter.all":         { en: "All",         de: "Alle" },
+  "bg.library.filter.background":  { en: "🖼 Backgrounds", de: "🖼 Hintergründe" },
+  "bg.library.filter.template":    { en: "🎨 Templates",   de: "🎨 Vorlagen" },
+  "bg.library.filter.pinned":      { en: "📌 Pinned",      de: "📌 Angeheftet" },
+  "cycle.pool.backgrounds":        { en: "Backgrounds only",
+                                     de: "Nur Hintergründe" },
   "bg.library.reorder_failed":{ en: "Reorder failed: {msg}", de: "Sortierung fehlgeschlagen: {msg}" },
   "bg.library.rename_prompt": { en: "New name:",          de: "Neuer Name:" },
   "bg.library.renamed":     { en: "Renamed {from} → {to}",
@@ -3712,9 +3731,56 @@ function sortLibraryItems(items) {
   });
 }
 
+// v1.6.1-beta library categories: which category to show in the
+// strip. "all" shows everything; "background" hides templates;
+// "template" hides backgrounds; "pinned" shows only pinned items
+// regardless of category. State persisted in localStorage so the
+// chip survives a page reload.
+let _libraryFilter = (function () {
+  try { return localStorage.getItem("cfg.libraryFilter") || "all"; }
+  catch (_) { return "all"; }
+})();
+function setLibraryFilter(f) {
+  _libraryFilter = f;
+  try { localStorage.setItem("cfg.libraryFilter", f); } catch (_) {}
+  renderLibraryStrip();
+}
+function _itemPassesFilter(item) {
+  const cat = item.category || "both";
+  switch (_libraryFilter) {
+    case "background": return cat === "background" || cat === "both";
+    case "template":   return cat === "template"   || cat === "both";
+    case "pinned":     return !!item.pinned;
+    default:           return true;
+  }
+}
+
 function renderLibraryStrip() {
   if (!els.libraryStrip) return;
   els.libraryStrip.innerHTML = "";
+  // Filter chips strip. Built before the tiles so the user can
+  // narrow what's shown — handy on a large library where
+  // templates would otherwise clutter the background browser.
+  const chipRow = document.createElement("div");
+  chipRow.className = "lib-filter-row";
+  chipRow.style.cssText =
+    "display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;";
+  for (const f of ["all", "background", "template", "pinned"]) {
+    const c = document.createElement("button");
+    c.type = "button";
+    c.className = "lib-filter-chip" + (_libraryFilter === f ? " active" : "");
+    c.style.cssText =
+      "font-size:11px; padding:3px 9px; border-radius:11px;" +
+      " border:1px solid var(--border, #333); cursor:pointer;" +
+      " background:" + (_libraryFilter === f
+        ? "var(--accent, #ff5a6e)"
+        : "transparent") +
+      "; color:" + (_libraryFilter === f ? "#fff" : "inherit") + ";";
+    c.textContent = t("bg.library.filter." + f);
+    c.addEventListener("click", () => setLibraryFilter(f));
+    chipRow.appendChild(c);
+  }
+  els.libraryStrip.appendChild(chipRow);
   if (!libraryCatalogue || libraryCatalogue.length === 0) {
     const empty = document.createElement("span");
     empty.className = "lib-empty";
@@ -3724,6 +3790,7 @@ function renderLibraryStrip() {
     return;
   }
   for (const item of sortLibraryItems(libraryCatalogue)) {
+    if (!_itemPassesFilter(item)) continue;
     const btn = document.createElement("button");
     btn.className = "lib-tile" + (item.pinned ? " pinned" : "");
     btn.title = item.label || item.id;
@@ -3761,6 +3828,22 @@ function renderLibraryStrip() {
     lbl.className = "label";
     lbl.textContent = item.label || item.id;
     btn.appendChild(lbl);
+    // v1.6.1-beta: small category badge in the top-left corner.
+    // 🖼 background, 🎨 template, 🔄 both. Skip for "both" so
+    // existing libraries (every entry defaults to "both") don't
+    // get visually noisier on upgrade.
+    const cat = item.category || "both";
+    if (cat !== "both") {
+      const cb = document.createElement("span");
+      cb.className = "lib-tile-cat";
+      cb.style.cssText =
+        "position:absolute; top:4px; left:4px; padding:1px 4px;" +
+        " background:rgba(0,0,0,0.55); border-radius:8px;" +
+        " font-size:11px; pointer-events:none;";
+      cb.textContent = cat === "background" ? "🖼" : "🎨";
+      cb.title = t("bg.library.cat." + cat);
+      btn.appendChild(cb);
+    }
     const del = document.createElement("button");
     del.className = "del";
     del.textContent = "×";
@@ -4010,6 +4093,25 @@ function showLibraryContextMenu(item, x, y) {
     ? t("bg.library.ctx.unpin")
     : t("bg.library.ctx.pin");
   el.appendChild(make(pinLabel,                      () => pinLibraryItem(item, !item.pinned)));
+  // v1.6.1-beta: category picker. One row per category, the active
+  // one rendered with a leading check (· no-op when clicked).
+  const cat = item.category || "both";
+  const catEntry = (key, label) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "lib-ctx-item";
+    b.textContent = (cat === key ? "● " : "○ ") + label;
+    b.addEventListener("click", () => {
+      hideLibraryContextMenu();
+      if (cat !== key) setLibraryCategory(item, key);
+    });
+    return b;
+  };
+  el.appendChild(sep());
+  el.appendChild(catEntry("background", t("bg.library.ctx.cat.background")));
+  el.appendChild(catEntry("template",   t("bg.library.ctx.cat.template")));
+  el.appendChild(catEntry("both",       t("bg.library.ctx.cat.both")));
+  el.appendChild(sep());
   el.appendChild(make(t("bg.library.ctx.rename"),    () => renameLibraryItem(item)));
   el.appendChild(make(t("bg.library.ctx.duplicate"), () => duplicateLibraryItem(item)));
   el.appendChild(sep());
@@ -4051,7 +4153,10 @@ async function renameLibraryItem(item) {
     const r = await fetch("/library/" + encodeURIComponent(item.file));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const blob = await r.blob();
-    const up = await fetch("/library/upload?name=" + encodeURIComponent(trimmed), {
+    // v1.6.1-beta: preserve the source entry's category during rename.
+    const renameCat = (item.category || "both");
+    const up = await fetch("/library/upload?name=" + encodeURIComponent(trimmed)
+                           + "&category=" + encodeURIComponent(renameCat), {
       method: "POST",
       headers: { "Content-Type": blob.type || "image/png" },
       body: blob,
@@ -4073,7 +4178,10 @@ async function duplicateLibraryItem(item) {
     const r = await fetch("/library/" + encodeURIComponent(item.file));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const blob = await r.blob();
-    const up = await fetch("/library/upload?name=" + encodeURIComponent(newLabel), {
+    // v1.6.1-beta: preserve the source entry's category during duplicate.
+    const dupCat = (item.category || "both");
+    const up = await fetch("/library/upload?name=" + encodeURIComponent(newLabel)
+                           + "&category=" + encodeURIComponent(dupCat), {
       method: "POST",
       headers: { "Content-Type": blob.type || "image/png" },
       body: blob,
@@ -4103,6 +4211,26 @@ async function pinLibraryItem(item, pinned) {
             { label: item.label || item.id }), "good");
   } catch (e) {
     toast("Pin failed: " + e.message, "bad");
+  }
+}
+
+// v1.6.1-beta library categories: POST /library/category persists
+// the per-item role flag. Tile + cycle-pool re-render after.
+async function setLibraryCategory(item, category) {
+  try {
+    const r = await fetch("/library/category", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: item.file, category: category }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    item.category = category;
+    renderLibraryStrip();
+    toast(t("bg.library.cat_set_toast", {
+      label: item.label || item.id, cat: t("bg.library.cat." + category),
+    }), "good");
+  } catch (e) {
+    toast("Category update failed: " + e.message, "bad");
   }
 }
 
@@ -4166,7 +4294,11 @@ if (_libUpload) {
     const label = file.name.replace(/\.(png|jpe?g|webp|gif|bmp)$/i, "");
     try {
       const buf = await file.arrayBuffer();
-      const url = "/library/upload?name=" + encodeURIComponent(label);
+      // v1.6.1-beta: explicit Background category — the Configurator's
+      // "Upload" button is the user's intent path for backgrounds. Source
+      // images for the Builder can be re-categorised via right-click.
+      const url = "/library/upload?name=" + encodeURIComponent(label)
+                + "&category=background";
       const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": file.type || "application/octet-stream" },
@@ -6695,7 +6827,8 @@ els.bgFile.addEventListener("change", async (e) => {
       const label = f.name.replace(/\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v|mkv)$/i, "");
       const rawBuf = await f.arrayBuffer();
       const libResp = await fetch(
-        "/library/upload?name=" + encodeURIComponent(label),
+        "/library/upload?name=" + encodeURIComponent(label)
+        + "&category=background",
         {
           method: "POST",
           headers: { "Content-Type": f.type || "application/octet-stream" },

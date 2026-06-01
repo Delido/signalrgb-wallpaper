@@ -1308,14 +1308,23 @@ def _library_rebuild_catalogue(lib: Path) -> None:
             added_at_default = int(fp.stat().st_mtime * 1000)
         except OSError:
             added_at_default = int(time.time() * 1000)
+        # v1.6.1-beta library categories: "background" (suitable for
+        # the wallpaper / auto-cycle pool), "template" (Builder
+        # source material — not meant to be shown raw), "both".
+        # Existing entries default to "both" so the upgrade is a
+        # visual no-op.
+        category = prev_it.get("category") or "both"
+        if category not in ("background", "template", "both"):
+            category = "both"
         entry = {
-            "id":      stem,
-            "label":   stem.replace("-", " ").replace("_", " ").title(),
-            "file":    fp.name,
-            "thumb":   thumb or fp.name,
-            "pinned":  bool(prev_it.get("pinned", False)),
-            "order":   prev_it.get("order"),
-            "addedAt": prev_it.get("addedAt", added_at_default),
+            "id":       stem,
+            "label":    stem.replace("-", " ").replace("_", " ").title(),
+            "file":     fp.name,
+            "thumb":    thumb or fp.name,
+            "pinned":   bool(prev_it.get("pinned", False)),
+            "category": category,
+            "order":    prev_it.get("order"),
+            "addedAt":  prev_it.get("addedAt", added_at_default),
         }
         if entry["order"] is None:
             del entry["order"]
@@ -3097,6 +3106,15 @@ class Broadcaster:
             qs = target.split("?", 1)[1] if "?" in target else ""
             params = dict(p.split("=", 1) for p in qs.split("&") if "=" in p)
             label = urllib.parse.unquote(params.get("name", "Untitled")).strip() or "Untitled"
+            # v1.6.1-beta library categories: the uploader can declare
+            # the new entry's category via ?category=template / background
+            # / both. Builder uses "template" for raw source uploads,
+            # Library tile-add uses "background". Anything unknown
+            # falls back to "both" so old clients still get the v1.5
+            # behaviour.
+            upload_category = params.get("category", "both")
+            if upload_category not in ("background", "template", "both"):
+                upload_category = "both"
             try:
                 content_length = int(headers.get(b"content-length", b"0") or 0)
             except ValueError:
@@ -3142,6 +3160,14 @@ class Broadcaster:
                 fp = library_dir() / (slug + ext)
                 fp.write_bytes(body)
                 _library_rebuild_catalogue(library_dir())
+                # Apply the uploader-specified category to the
+                # freshly-catalogued entry. Done AFTER rebuild so the
+                # entry exists in library.json.
+                if upload_category != "both":
+                    _library_update_item(
+                        library_dir(), fp.name,
+                        lambda it, c=upload_category: it.update({"category": c})
+                    )
                 payload = json.dumps({"ok": True, "id": slug, "file": fp.name}).encode("utf-8")
                 head = (
                     "HTTP/1.1 200 OK\r\n"
@@ -3253,6 +3279,63 @@ class Broadcaster:
                 http_error(writer, 400, "incomplete body")
             except Exception as e:
                 http_error(writer, 500, f"pin failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v1.6.1-beta: POST /library/category — body is JSON
+        # {"file": "...", "category": "background"|"template"|"both"}.
+        # Configurator's library tile context-menu writes this when
+        # the user changes an item's role. Sanity-checked the same
+        # way pin/reorder are.
+        if method == "POST" and target.split("?", 1)[0] == "/library/category":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 8192):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                file = str(req.get("file", ""))
+                cat = str(req.get("category", "both"))
+                if cat not in ("background", "template", "both"):
+                    cat = "both"
+                if not file or "/" in file or "\\" in file or ".." in file:
+                    http_error(writer, 400, "bad file name")
+                    try: await writer.drain()
+                    except Exception: pass
+                    try: writer.close()
+                    except Exception: pass
+                    return
+                updated = _library_update_item(
+                    library_dir(), file,
+                    lambda it: it.update({"category": cat})
+                )
+                if updated is None:
+                    http_error(writer, 404, f"library entry not found: {file}")
+                else:
+                    payload = json.dumps({"ok": True, "item": updated}).encode("utf-8")
+                    head = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json\r\n"
+                        f"Content-Length: {len(payload)}\r\n"
+                        "Cache-Control: no-store\r\n"
+                        "Connection: close\r\n\r\n"
+                    ).encode()
+                    writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 500, f"category update failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -4596,8 +4679,18 @@ class CycleScheduler:
         except Exception:
             return
         items = cat.get("items", [])
+        # v1.6.1-beta library categories: "backgrounds" pool only
+        # picks items the user has flagged as Background or Both —
+        # Templates (Builder source material) stay out of the
+        # auto-cycle rotation. "pinned" filter is unchanged (orthogonal
+        # to category). Default "all" still considers every entry so
+        # an existing user who has never set a category sees the
+        # same behaviour they had before.
         if pool_name == "pinned":
             items = [it for it in items if isinstance(it, dict) and it.get("pinned")]
+        elif pool_name == "backgrounds":
+            items = [it for it in items if isinstance(it, dict) and "file" in it
+                     and (it.get("category") or "both") in ("background", "both")]
         else:
             items = [it for it in items if isinstance(it, dict) and "file" in it]
         if not items:
@@ -7726,7 +7819,10 @@ class BridgeRuntime:
         return snap
 
     _CYCLE_USER_FIELDS = ("enabled", "intervalMin", "pool", "order")
-    _CYCLE_ALLOWED_POOLS  = {"all", "pinned"}
+    # v1.6.1-beta library categories: "backgrounds" picks items
+    # flagged Background or Both — Template-only items (Builder
+    # source material) stay out of the rotation.
+    _CYCLE_ALLOWED_POOLS  = {"all", "pinned", "backgrounds"}
     _CYCLE_ALLOWED_ORDERS = {"sequential", "random"}
 
     def _update_cycle(self, screen: int, value) -> dict | None:

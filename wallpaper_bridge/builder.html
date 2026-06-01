@@ -4478,7 +4478,11 @@ els.saveLibBtn.addEventListener("click", async () => {
   if (!trimmed) return;
   try {
     const blob = await canvasToBlob();
-    const up = await fetch("/library/upload?name=" + encodeURIComponent(trimmed), {
+    // v1.6.1-beta: Builder save → "template" so the produced source
+    // image is excluded from the auto-cycle "Backgrounds only" pool by
+    // default. Right-click → Background promotes it later.
+    const up = await fetch("/library/upload?name=" + encodeURIComponent(trimmed)
+                           + "&category=template", {
       method: "POST",
       headers: { "Content-Type": "image/png" },
       body: blob,
