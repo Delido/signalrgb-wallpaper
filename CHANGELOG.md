@@ -63,10 +63,71 @@ manager.
 
 New sub-section in the Integrations tab below the existing OpenRGB
 output block. Enabled toggle + port input + live status pill +
-per-device summary (`Wallpaper Screen 1: 32×16 matrix (512 LEDs)`).
-Status poll against `GET /openrgb-sdk/status` every 2 s while the
-tab is visible, surfacing running state + connected client count +
-bind errors. i18n strings ship in EN + DE.
+per-device summary (`Wallpaper Screen 1: 512 LEDs`). Status poll
+against `GET /openrgb-sdk/status` every 2 s while the tab is
+visible, surfacing running state + connected client count + bind
+errors. i18n strings ship in EN + DE.
+
+### Added — Built-in effect modes + bridge-side engine
+
+Each virtual device ships 6 modes the OpenRGB GUI's Mode dropdown
+exposes. Five mirror what real OpenRGB devices typically advertise;
+**Color Wave** is bridge-specific.
+
+- **Direct** — accepts `UpdateLEDs` writes verbatim (Effects
+  Plugin / scripts)
+- **Static** — solid colour from the picker
+- **Breathing** — solid colour pulsing on `sin(t)` brightness
+- **Rainbow** — uniform hue cycle across all LEDs
+- **Rainbow Wave** — hue varies per LED position + time
+- **Color Wave** — wave centred on the picked colour's hue (±15° range)
+
+When the user picks a non-Direct mode in the GUI, the bridge-side
+effect engine starts a 30 Hz daemon thread that renders the
+corresponding pattern at the chosen speed / brightness / colour and
+pushes the result through the same `_on_update_leds` callback
+Direct uses. Speed slider 0..100 maps to per-mode cadence (Rainbow
+cycles every ~5 s at 100, frozen at 0). Direct is skipped so the
+GUI's writes aren't fought.
+
+Full guide at [docs/openrgb-sdk-server.md](docs/openrgb-sdk-server.md).
+
+### Fixed — descriptor format vs OpenRGB GUI
+
+The descriptor went through five hotfix iterations against the
+real OpenRGB GUI before connect → enumerate → mode-pick worked
+end to end. Future SDK-server work should respect these:
+
+- **Required `Direct` mode** — `num_modes = 0` segfaulted the GUI;
+  every device needs at least one mode the selector + effect
+  plugin can dereference.
+- **Correct flag + `color_mode` enum values** — the first attempt
+  used `flags = 0x01` thinking it meant `HAS_PER_LED_COLOR` (it's
+  `HAS_SPEED`) and `color_mode = 4` which doesn't exist (valid
+  range is 0..3). Wrong values → empty Zone dropdown, no LEDs
+  parsed. Correct combo for Direct is `flags = 0x20`
+  (`HAS_PER_LED_COLOR`) + `color_mode = 1` (`MODE_COLORS_PER_LED`).
+- **Linear zone with `matrix_size = 0`** instead of a matrix
+  descriptor — the byte encoding of `matrix_size` differs between
+  OpenRGB server implementations and the right value for the GUI
+  is still being pinned down. Linear zone works in the meantime;
+  Rainbow Wave on a 32×16 device sweeps left-to-right across the
+  full 512-LED index range instead of walking 16 rows of 32.
+- **Pre-seeded mode-specific colours** — Static / Breathing /
+  Color Wave advertised `colors_min = 1` but emitted
+  `num_colors = 0`. The GUI's mode picker reads `mode.colors[0]`
+  for the swatch preview unconditionally → buffer underflow →
+  crash on click. Default-seeded with white per slot; the user's
+  actual pick arrives via `UpdateMode` and the engine takes over.
+- **Only expose active screens** — initial build iterated
+  `N_SCREENS` (max slot count) instead of `config.screenCount`,
+  showing 4 ghost devices for single-screen setups. `screenCount`
+  changes now also kick `openrgb_sdk.reload()` so the GUI sees the
+  new device list on next reconnect.
+- **`_SETTABLE_BRIDGE_KEYS` whitelist entry** — without it, every
+  `bridge-setting-update` for `openrgbSdkServer` got silently
+  dropped before the elif handler ran; the Enabled toggle in the
+  Configurator did nothing.
 
 ### Changed — APP_VERSION bump to 1.6.2-beta
 
