@@ -5741,6 +5741,47 @@ class OpenRgbOutputManager:
 # OpenRGB input manager — drives the wallpaper from an OpenRGB device
 # ============================================================================
 
+def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[int, int, int]:
+    """Cheap HSV→RGB conversion for the OpenRGB-SDK effect engine.
+    Output is int 0..255 per channel. Pulled into a module-level
+    helper so the per-frame loop doesn't pay a method-lookup cost."""
+    if s <= 0:
+        c = int(v * 255)
+        return (c, c, c)
+    h6 = (h - int(h)) * 6.0
+    sector = int(h6)
+    f = h6 - sector
+    p = v * (1.0 - s)
+    q = v * (1.0 - s * f)
+    t = v * (1.0 - s * (1.0 - f))
+    if   sector == 0: r, g, b = v, t, p
+    elif sector == 1: r, g, b = q, v, p
+    elif sector == 2: r, g, b = p, v, t
+    elif sector == 3: r, g, b = p, q, v
+    elif sector == 4: r, g, b = t, p, v
+    else:             r, g, b = v, p, q
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def _rgb_to_hue(rgb: tuple[int, int, int]) -> float:
+    """Tiny RGB→hue used by Color Wave so the wave varies around the
+    user's picked colour. Saturation/value ignored — only the hue
+    angle matters here. Returns 0..1."""
+    r, g, b = rgb
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    if mx == mn:
+        return 0.0
+    d = mx - mn
+    if mx == r:
+        h = ((g - b) / d) % 6.0
+    elif mx == g:
+        h = ((b - r) / d) + 2.0
+    else:
+        h = ((r - g) / d) + 4.0
+    return (h / 6.0) % 1.0
+
+
 class OpenRgbSdkServerManager:
     """v1.6.2-beta: expose the bridge to the OpenRGB GUI / SDK clients
     as a set of virtual matrix devices (one per screen). Reverse
@@ -5772,6 +5813,14 @@ class OpenRgbSdkServerManager:
         # (last_colors, ts).
         self._last_frames: dict[int, tuple[list, float]] = {}
         self._frames_lock = threading.Lock()
+        # v1.6.2-beta hotfix4: built-in effect engine. Runs at 30 Hz
+        # while the server is up, renders each device's active mode
+        # (when not Direct), and pushes the result through the same
+        # _on_update_leds callback Direct uses. Engine reads device
+        # state (mode_index / speed / brightness / color) live so
+        # GUI mode picks take effect on the next tick.
+        self._engine_stop = threading.Event()
+        self._engine_thread: threading.Thread | None = None
 
     # ── config helpers ─────────────────────────────────────────────
 
@@ -5833,13 +5882,23 @@ class OpenRgbSdkServerManager:
         if not self._server.start():
             self._last_error = self._server.last_error
             self._server = None
+            return
+        # Effect engine — renders non-Direct modes at 30 Hz into the
+        # same UpdateLEDs callback path Direct uses.
+        self._engine_stop.clear()
+        self._engine_thread = threading.Thread(
+            target=self._effect_loop, daemon=True,
+            name="openrgb-sdk-effects")
+        self._engine_thread.start()
 
     def stop(self) -> None:
+        self._engine_stop.set()
         if self._server is not None:
             try: self._server.stop()
             except Exception as e:
                 print(f"[openrgb-sdk] stop failed: {e}")
             self._server = None
+        self._engine_thread = None
         with self._frames_lock:
             self._last_frames.clear()
 
@@ -5848,6 +5907,94 @@ class OpenRgbSdkServerManager:
         matrix changes via the Configurator's setting-update channel."""
         self.stop()
         self.start()
+
+    # ── effect engine ──────────────────────────────────────────────
+
+    def _effect_loop(self) -> None:
+        """30-Hz render loop. For each connected device whose active
+        mode is NOT Direct, computes the colour array for the current
+        frame from the device's mode + speed + brightness + colour,
+        then forwards it through _on_update_leds — same path Direct
+        uses, so the wallpaper / SourceManager routing stays uniform.
+
+        Direct is skipped because the GUI will be sending its own
+        UpdateLEDs writes; running the engine on top would cause
+        last-write-wins flicker."""
+        import math
+        TICK_S = 1.0 / 30.0
+        t0 = time.monotonic()
+        while not self._engine_stop.is_set():
+            if self._server is None:
+                if self._engine_stop.wait(TICK_S):
+                    return
+                continue
+            devices = list(self._server._devices)
+            now = time.monotonic() - t0
+            for dev in devices:
+                if dev.mode_index <= 0:
+                    continue   # Direct — engine no-op
+                try:
+                    colors = self._render_mode(dev, now, math)
+                except Exception as e:
+                    print(f"[openrgb-sdk] render {dev.name} failed: {e}")
+                    continue
+                if colors:
+                    try:
+                        self._on_update_leds(dev.screen_idx, colors)
+                    except Exception as e:
+                        print(f"[openrgb-sdk] engine emit failed: {e}")
+            if self._engine_stop.wait(TICK_S):
+                return
+
+    def _render_mode(self, dev, now: float, math_mod) -> list:
+        """Compute one frame's worth of (R, G, B) tuples for `dev`.
+        Speed slider 0..100 maps to per-mode cadence; brightness
+        0..100 scales output linearly."""
+        n = dev.led_count
+        if n <= 0:
+            return []
+        # Brightness as 0..1.
+        b = max(0.0, min(1.0, dev.brightness / 100.0))
+        # Mode index 1..len(BUILTIN_MODES)-1.
+        # See openrgb_server.BUILTIN_MODES for the index → name table.
+        idx = dev.mode_index
+        # Static: solid colour.
+        if idx == 1:
+            r, g, gb = (int(c * b) for c in dev.color)
+            return [(r, g, gb)] * n
+        # Speed scaling — map 0..100 to ~0.05..2 Hz.
+        spd = max(0.05, dev.speed / 50.0)
+        if idx == 2:
+            # Breathing — sin(2πft) over device.color.
+            amp = 0.5 + 0.5 * math_mod.sin(2 * math_mod.pi * spd * 0.5 * now)
+            scale = amp * b
+            r, g, bl = (int(c * scale) for c in dev.color)
+            return [(r, g, bl)] * n
+        if idx == 3:
+            # Rainbow — uniform hue cycle across all LEDs.
+            h = (now * spd * 0.2) % 1.0
+            r, g, bl = _hsv_to_rgb(h, 1.0, b)
+            return [(r, g, bl)] * n
+        if idx == 4:
+            # Rainbow Wave — hue varies per LED position + time.
+            out = []
+            for i in range(n):
+                h = ((i / max(1, n - 1)) + now * spd * 0.2) % 1.0
+                out.append(_hsv_to_rgb(h, 1.0, b))
+            return out
+        if idx == 5:
+            # Color Wave — same shape but centred on device.color's hue
+            # ±0.15 hue range so it stays in the user's colour family.
+            base_h = _rgb_to_hue(dev.color)
+            out = []
+            for i in range(n):
+                offset = math_mod.sin(2 * math_mod.pi
+                                       * ((i / max(1, n - 1))
+                                          + now * spd * 0.2))
+                h = (base_h + 0.15 * offset) % 1.0
+                out.append(_hsv_to_rgb(h, 1.0, b))
+            return out
+        return []
 
     # ── UpdateLEDs callback ────────────────────────────────────────
 

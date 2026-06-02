@@ -90,6 +90,57 @@ DEVICE_TYPE_LEDSTRIP = 4
 DEFAULT_PORT = 6743
 
 
+# v1.6.2-beta hotfix4: built-in modes catalogue. Each entry advertises
+# itself to the OpenRGB GUI as a selectable mode; the bridge-side
+# effect engine renders the corresponding pattern at 30 Hz and pushes
+# the result into the wallpaper via the same UpdateLEDs callback path
+# Direct uses. Mode index = position in this list.
+#
+# Flag bits (subset of OpenRGB's MODE_FLAG_*):
+MODE_FLAG_HAS_SPEED           = 0x01
+MODE_FLAG_HAS_DIRECTION_LR    = 0x02
+MODE_FLAG_HAS_DIRECTION_UD    = 0x04
+MODE_FLAG_HAS_DIRECTION_HV    = 0x08
+MODE_FLAG_HAS_BRIGHTNESS      = 0x10
+MODE_FLAG_HAS_PER_LED_COLOR   = 0x20
+MODE_FLAG_HAS_MODE_SPECIFIC_COLOR = 0x40
+MODE_FLAG_HAS_RANDOM_COLOR    = 0x80
+# color_mode enum (OpenRGB's ModeColors):
+MODE_COLORS_NONE              = 0
+MODE_COLORS_PER_LED           = 1
+MODE_COLORS_MODE_SPECIFIC     = 2
+MODE_COLORS_RANDOM            = 3
+
+# Each entry: (name, flags, color_mode, default_speed, num_colors_min,
+# num_colors_max). speed_min/max are fixed to 0..100 across the board
+# so the GUI shows a normalised slider; the engine maps to a per-mode
+# update rate. brightness_min/max are 0..100 too. The values column
+# carries the mode "value" (an arbitrary device-defined identifier;
+# we use the catalogue index since we have no real hardware modes).
+BUILTIN_MODES = [
+    # Direct — what we shipped in v1.6.2-beta hotfix3. Accepts UpdateLEDs
+    # writes verbatim, no engine work. Always index 0 so existing
+    # documentation that refers to "the Direct mode" stays correct.
+    ("Direct",       MODE_FLAG_HAS_PER_LED_COLOR,                          MODE_COLORS_PER_LED, 50, 0, 0),
+    # Static — one solid colour across every LED. num_colors = 1.
+    ("Static",       MODE_FLAG_HAS_MODE_SPECIFIC_COLOR,                    MODE_COLORS_MODE_SPECIFIC, 50, 1, 1),
+    # Breathing — single colour, brightness eased via sin(t).
+    ("Breathing",    MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS
+                     | MODE_FLAG_HAS_MODE_SPECIFIC_COLOR,                  MODE_COLORS_MODE_SPECIFIC, 50, 1, 1),
+    # Rainbow — hue cycles across the whole device uniformly over time.
+    ("Rainbow",      MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS,       MODE_COLORS_NONE,    50, 0, 0),
+    # Rainbow Wave — hue offset varies per LED position so colours sweep
+    # across the strip / matrix. Single direction (LR) on a linear zone.
+    ("Rainbow Wave", MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS
+                     | MODE_FLAG_HAS_DIRECTION_LR,                         MODE_COLORS_NONE,    50, 0, 0),
+    # Color Wave — same shape as Rainbow Wave but uses a user-picked
+    # base colour (interpolated across hues centred on the colour).
+    ("Color Wave",   MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS
+                     | MODE_FLAG_HAS_MODE_SPECIFIC_COLOR
+                     | MODE_FLAG_HAS_DIRECTION_LR,                         MODE_COLORS_MODE_SPECIFIC, 50, 1, 1),
+]
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Device descriptor — what we hand back when a client requests
 # REQUEST_CONTROLLER_DATA. One device per screen; the matrix carries
@@ -100,11 +151,18 @@ DEFAULT_PORT = 6743
 
 class VirtualDevice:
     """One virtual device exposed to OpenRGB. Carries the SignalRGB grid
-    dimensions (width × height) so we can emit a matrix_map; LED count
-    is width*height. Reference is held by the server; the bridge
-    mutates `width` / `height` when the user reconfigures grid size."""
+    dimensions (width × height); LED count is width*height. Active
+    mode + per-mode parameters (speed / brightness / colour) are
+    tracked here so the bridge-side effect engine can read them on
+    every tick.
 
-    __slots__ = ("name", "width", "height", "screen_idx")
+    Mode index 0 is always Direct (UPDATELEDS writes only — no engine
+    work). Other indices map to BUILTIN_MODES; the engine renders
+    those at 30 Hz and pushes through the UpdateLEDs callback."""
+
+    __slots__ = ("name", "width", "height", "screen_idx",
+                 "mode_index", "speed", "brightness", "color",
+                 "direction")
 
     def __init__(self, screen_idx: int, name: str,
                  width: int, height: int):
@@ -112,6 +170,14 @@ class VirtualDevice:
         self.name = str(name)
         self.width = max(1, int(width))
         self.height = max(1, int(height))
+        # Effect-engine state. Defaults match Direct so a freshly
+        # connected GUI without an explicit mode pick stays in
+        # Direct (the engine skips Direct entirely).
+        self.mode_index = 0
+        self.speed = 50
+        self.brightness = 100
+        self.color = (255, 255, 255)
+        self.direction = 0
 
     @property
     def led_count(self) -> int:
@@ -176,54 +242,45 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
     parts.append(_pack_string("1.6.2-beta"))                       # version
     parts.append(_pack_string(""))                                 # serial
     parts.append(_pack_string("bridge"))                           # location
-    # v1.6.2-beta hotfix: OpenRGB's GUI assumes every device exposes
-    # at least one mode (typically "Direct"). num_modes=0 segfaulted
-    # the GUI on connect because the mode selector + the effect plugin
-    # both dereference modes[active_mode] unconditionally. Ship a
-    # single "Direct" mode with HAS_PER_LED_COLOR set so UPDATELEDS
-    # writes are the canonical flow.
-    parts.append(struct.pack("<H", 1))   # num_modes = 1
-    parts.append(struct.pack("<i", 0))   # active_mode = 0 (Direct)
-    parts.append(_pack_string("Direct"))
-    # Mode body layout: 9 × uint32 (proto 0-2) or 12 × uint32 (proto 3+),
-    # then uint16 num_colors + colour array.
-    #
-    # v1.6.2-beta hotfix3: previous values were wrong against OpenRGB's
-    # actual flag table — `0x01` is MODE_FLAG_HAS_SPEED (showed the
-    # speed slider in the GUI, with speed_min = speed_max = 0), and
-    # `color_mode = 4` doesn't exist (valid range is 0..3). OpenRGB
-    # rejected the descriptor silently, which is why the Zone dropdown
-    # stayed empty. The correct combo for a Direct-write mode is:
-    #   flags     = 0x20  (MODE_FLAG_HAS_PER_LED_COLOR)
-    #   color_mode = 1    (MODE_COLORS_PER_LED)
-    # No speed / brightness / direction → flags doesn't set those bits
-    # → the GUI hides the corresponding controls + greys the Direction
-    # / Random-colour pickers, which is the actual Direct-mode UX.
-    MODE_FLAG_HAS_PER_LED_COLOR = 0x20
-    MODE_COLORS_PER_LED = 1
-    if version >= 3:
-        parts.append(struct.pack("<12I",
-            0,                              # value
-            MODE_FLAG_HAS_PER_LED_COLOR,    # flags
-            0, 0,                           # speed_min, speed_max
-            0, 0,                           # brightness_min, brightness_max
-            0, 0,                           # colors_min, colors_max
-            0,                              # speed
-            0,                              # brightness
-            0,                              # direction
-            MODE_COLORS_PER_LED,            # color_mode
-        ))
-    else:
-        parts.append(struct.pack("<9I",
-            0,                              # value
-            MODE_FLAG_HAS_PER_LED_COLOR,    # flags
-            0, 0,                           # speed_min, speed_max
-            0, 0,                           # colors_min, colors_max
-            0,                              # speed
-            0,                              # direction
-            MODE_COLORS_PER_LED,            # color_mode
-        ))
-    parts.append(struct.pack("<H", 0))   # num_colors (Direct has none)
+    # v1.6.2-beta hotfix4: ship the full BUILTIN_MODES catalogue —
+    # Direct + Static + Breathing + Rainbow + Rainbow Wave + Color
+    # Wave. Mode index = position in the catalogue. The bridge-side
+    # effect engine renders non-Direct modes at 30 Hz and pushes the
+    # result through the same UpdateLEDs callback Direct uses.
+    parts.append(struct.pack("<H", len(BUILTIN_MODES)))   # num_modes
+    parts.append(struct.pack("<i", 0))                    # active_mode = 0 (Direct)
+    for i, (mname, mflags, mcolor_mode, mspeed,
+            num_colors_min, num_colors_max) in enumerate(BUILTIN_MODES):
+        parts.append(_pack_string(mname))
+        # speed / brightness range fixed to 0..100 across the board so
+        # the GUI slider is normalised; the engine maps a raw value
+        # back to per-mode update rate / amplitude.
+        if version >= 3:
+            parts.append(struct.pack("<12I",
+                i,                                  # value (= mode index)
+                mflags,                             # flags
+                0, 100,                             # speed_min, speed_max
+                0, 100,                             # brightness_min, brightness_max
+                num_colors_min, num_colors_max,     # colors_min, colors_max
+                mspeed,                             # speed (current)
+                100,                                # brightness
+                0,                                  # direction (LR=0)
+                mcolor_mode,                        # color_mode
+            ))
+        else:
+            parts.append(struct.pack("<9I",
+                i, mflags,
+                0, 100,
+                num_colors_min, num_colors_max,
+                mspeed,
+                0,
+                mcolor_mode,
+            ))
+        # Mode-specific colour array. We don't preset colours — the
+        # GUI lets the user pick one when colors_min >= 1. Empty
+        # array on enumerate; the user's pick comes back via
+        # UPDATEMODE and the engine picks it up there.
+        parts.append(struct.pack("<H", 0))
 
     # v1.6.2-beta hotfix2: single LINEAR zone instead of MATRIX. The
     # original matrix descriptor parsed cleanly with our own
@@ -523,9 +580,85 @@ class OpenRgbSdkServer:
                             NET_PACKET_ID_RGBCONTROLLER_UPDATESINGLELED):
             self._handle_update(dev_idx, packet_id, data)
 
-        # UpdateMode / SetCustomMode / others → no-op. We don't have
-        # device-side modes; the GUI sees a Direct device + writes
-        # colours via UpdateLEDs. Silent ignore is fine.
+        elif packet_id in (NET_PACKET_ID_RGBCONTROLLER_UPDATEMODE,
+                            NET_PACKET_ID_RGBCONTROLLER_SETCUSTOMMODE):
+            self._handle_mode_update(dev_idx, data)
+
+        # Other packet IDs → silent ignore. Forward-compatible with new
+        # packet types future OpenRGB clients might fire.
+
+    # ── UPDATEMODE ────────────────────────────────────────────────
+
+    def _handle_mode_update(self, dev_idx: int, data: bytes) -> None:
+        """Parse RGBCONTROLLER_UPDATEMODE payload + update the device's
+        active mode + speed + brightness + colour. Engine picks up the
+        new state on its next 30-Hz tick.
+
+        Payload layout (matching RGBController_LoadNetwork):
+            uint32  data_size
+            uint32  mode_index
+            string  mode_name           (re-sent for sanity, ignored)
+            mode body — 12 × uint32 (proto 3+) or 9 × uint32 (proto 0-2)
+            uint16  num_colors
+            uint32[num_colors]  colours (BGR0)
+        """
+        if dev_idx >= len(self._devices):
+            return
+        dev = self._devices[dev_idx]
+        try:
+            if len(data) < 8:
+                return
+            mode_idx = struct.unpack_from("<I", data, 4)[0]
+            pos = 8
+            # Skip the mode_name string. _parse_update_mode_string walks
+            # uint16 length + body — same shape as descriptor strings.
+            if pos + 2 > len(data):
+                return
+            name_len = struct.unpack_from("<H", data, pos)[0]
+            pos += 2 + name_len
+            # Mode body: 12 × uint32 on proto 3+, 9 × uint32 on proto 0-2.
+            # We can't tell from the packet alone which version the
+            # client used, but the GUI always honours our handshake, so
+            # we read 12 fields and tolerate the 9-field case via a
+            # bounds check.
+            if pos + 4 * 12 > len(data):
+                if pos + 4 * 9 > len(data):
+                    return
+                fields = struct.unpack_from("<9I", data, pos)
+                pos += 4 * 9
+                # 9-field layout: value, flags, speed_min, speed_max,
+                # colors_min, colors_max, speed, direction, color_mode
+                _value, _flags, _smin, _smax, _cmin, _cmax, speed, direction, _cmode = fields
+                brightness = 100
+            else:
+                fields = struct.unpack_from("<12I", data, pos)
+                pos += 4 * 12
+                # 12-field layout: value, flags, speed_min, speed_max,
+                # brightness_min, brightness_max, colors_min, colors_max,
+                # speed, brightness, direction, color_mode
+                (_value, _flags, _smin, _smax, _bmin, _bmax,
+                 _cmin, _cmax, speed, brightness, direction, _cmode) = fields
+            # num_colors uint16 then colours[]. Use the first colour as
+            # the mode's "Mode-Specific" colour pick. Static / Breathing
+            # / Color Wave all read this.
+            if pos + 2 <= len(data):
+                ncols = struct.unpack_from("<H", data, pos)[0]
+                pos += 2
+                if ncols > 0 and pos + 4 <= len(data):
+                    r, g, b, _ = (data[pos], data[pos + 1],
+                                   data[pos + 2], data[pos + 3])
+                    dev.color = (r, g, b)
+            # Commit.
+            dev.mode_index = max(0, min(len(BUILTIN_MODES) - 1, int(mode_idx)))
+            dev.speed = max(0, min(100, int(speed)))
+            dev.brightness = max(0, min(100, int(brightness)))
+            dev.direction = int(direction) & 0xff
+            print(f"[openrgb-sdk] {dev.name} → mode "
+                  f"{BUILTIN_MODES[dev.mode_index][0]!r} "
+                  f"(speed={dev.speed}, bright={dev.brightness}, "
+                  f"col={dev.color})")
+        except (struct.error, IndexError, ValueError) as e:
+            self.last_error = f"update_mode parse: {e}"
 
     # ── UPDATELEDS family ─────────────────────────────────────────
 
