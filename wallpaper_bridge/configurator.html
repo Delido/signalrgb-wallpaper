@@ -145,77 +145,66 @@
     padding: 22px;
   }
 
-  /* ── Section nav (v1.2.1+) ──
-     Fixed left rail with one icon button per visible <section.card>.
-     Clicking jumps to + expands that section. Hover expands the
-     button into icon+label, so the rail stays narrow at rest. The
-     rail anchors to the viewport edge (overlays the page bg, not
-     <main>'s centred content), which means it doesn't reflow main
-     and disappears cleanly on narrow viewports.
-     IntersectionObserver in JS keeps the active button highlighted
-     as the user scrolls. */
-  #section-nav {
-    position: fixed; top: 110px; left: 8px;
-    z-index: 20;
-    display: flex; flex-direction: column;
-    gap: 4px;
-    padding: 8px 6px;
-    background: rgba(20, 23, 28, 0.78);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition: background 0.2s;
+  /* ── Section tabs (v1.6.1-beta R2) ──
+     Horizontal tab row above <main>. Five tabs filter the
+     <section.card> elements via main[data-active-tab=X] matching
+     section.card[data-section-tab=X]. Replaces the v1.2.1 left-rail
+     #section-nav (deleted). */
+  #section-tabs {
+    max-width: 920px;
+    margin: 8px auto 0;
+    padding: 0 22px;
+    display: flex; gap: 2px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 84px; z-index: 9;
+    background: var(--bg);
   }
-  #section-nav .nav-btn {
-    display: flex; align-items: center; gap: 8px;
-    width: 36px;
-    height: 36px;
-    padding: 0 8px;
+  #section-tabs .stab {
+    display: inline-flex; align-items: center; gap: 7px;
     background: transparent;
     color: var(--text-dim);
     border: 1px solid transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    overflow: hidden;
-    white-space: nowrap;
-    transition: width 0.2s ease, color 0.15s, background 0.15s, border-color 0.15s;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 14px;
+    margin-bottom: -1px;
+    cursor: pointer; font: inherit; font-size: 13px;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
   }
-  #section-nav:hover {
-    background: rgba(26, 30, 38, 0.92);
+  #section-tabs .stab:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
   }
-  #section-nav:hover .nav-btn {
-    width: 168px;
+  #section-tabs .stab.active {
+    color: #d8e6fc;
+    background: var(--accent-bg);
+    border-color: var(--border);
+    border-bottom-color: var(--bg);
   }
-  #section-nav .nav-btn svg {
-    flex: 0 0 auto;
-    width: 20px; height: 20px;
+  #section-tabs .stab svg {
+    width: 16px; height: 16px;
     stroke: currentColor; fill: none;
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   }
-  #section-nav .nav-btn .nav-label {
-    flex: 1 1 auto;
-    font-size: 12px;
-    opacity: 0;
-    transition: opacity 0.15s;
-  }
-  #section-nav:hover .nav-btn .nav-label { opacity: 1; }
-  #section-nav .nav-btn:hover {
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.05);
-  }
-  #section-nav .nav-btn.active {
-    color: #d8e6fc;
-    background: var(--accent-bg);
-    border-color: #3a6ba8;
-  }
-  /* Narrow viewports — page main is 920px wide, header padding 22px,
-     so a viewport under ~1080px starts to overlap. Hide the rail
-     entirely below that threshold; users on small screens fall back
-     to scrolling. */
-  @media (max-width: 1080px) {
-    #section-nav { display: none; }
+  /* Filter: only the cards belonging to the active tab render. */
+  main[data-active-tab] section.card[data-section-tab] { display: none; }
+  main[data-active-tab="look"]         section.card[data-section-tab="look"],
+  main[data-active-tab="effects"]      section.card[data-section-tab="effects"],
+  main[data-active-tab="widgets"]      section.card[data-section-tab="widgets"],
+  main[data-active-tab="integrations"] section.card[data-section-tab="integrations"],
+  main[data-active-tab="system"]       section.card[data-section-tab="system"] { display: block; }
+  /* Narrow viewports — horizontal scroll for the tab row. */
+  @media (max-width: 720px) {
+    #section-tabs {
+      padding: 0 8px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+    }
+    #section-tabs .stab {
+      font-size: 12px; padding: 6px 10px;
+      white-space: nowrap;
+    }
+    #section-tabs .stab svg { width: 14px; height: 14px; }
   }
 
   /* v1.2.14: Mobile / tablet-portrait viewport adjustments. The
@@ -1335,16 +1324,16 @@
           data-i18n="reset_screen.label">Reset this screen…</button>
 </div>
 
-<!-- v1.2.1: left-rail section nav. Populated client-side from the
-     visible <section.card> elements in <main>. Click jumps to +
-     expands the target section; the rail highlights the section
-     currently on-screen via IntersectionObserver. -->
-<aside id="section-nav" aria-label="Section navigation"></aside>
+<!-- v1.6.1-beta R2: horizontal section-tab row. Five tabs
+     (Look / Effects / Widgets / Integrations / System) filter the
+     <section.card> elements below by their data-section-tab
+     attribute. Replaces the v1.2.1 left-rail aside. -->
+<nav id="section-tabs" aria-label="Section tabs"></nav>
 
-<main>
+<main data-active-tab="look">
 
   <!-- ── Presets ───────────────────────────────────────────────────── -->
-  <section class="card collapsed" id="card-presets">
+  <section class="card collapsed" id="card-presets" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.presets">Presets</h2>
@@ -1365,7 +1354,7 @@
        config with the bundle — the new-user shortcut past the
        "intimidating amount of options" hump. Cards generated client-
        side from LOOK_BUNDLES (see configurator.html JS section). -->
-  <section class="card" id="card-looks">
+  <section class="card" id="card-looks" data-section-tab="look">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.looks">Quick Looks</h2>
@@ -1381,7 +1370,7 @@
   </section>
 
   <!-- ── Background ─────────────────────────────────────────────────── -->
-  <section class="card" id="card-bg">
+  <section class="card" id="card-bg" data-section-tab="look">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.bg">Background</h2>
@@ -1484,7 +1473,7 @@
   </section>
 
   <!-- ── Glow ───────────────────────────────────────────────────────── -->
-  <section class="card" id="card-glow">
+  <section class="card" id="card-glow" data-section-tab="look">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.glow">Glow</h2>
@@ -1565,7 +1554,7 @@
   </section>
 
   <!-- ── Effects ────────────────────────────────────────────────────── -->
-  <section class="card" id="card-effects">
+  <section class="card" id="card-effects" data-section-tab="effects">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.effects">Effects</h2>
@@ -1640,7 +1629,7 @@
   </section>
 
   <!-- ── Widgets ────────────────────────────────────────────────────── -->
-  <section class="card" id="card-widgets">
+  <section class="card" id="card-widgets" data-section-tab="widgets">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.widgets">Widgets</h2>
@@ -1793,7 +1782,7 @@
        tray menu's "Advanced" submenu. Same handlers — they now POST
        to bridge endpoints over WS instead of being invoked via
        pystray callbacks. -->
-  <section class="card collapsed" id="card-system">
+  <section class="card collapsed" id="card-system" data-section-tab="integrations">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.system">System</h2>
@@ -2090,7 +2079,7 @@
   </section>
 
   <!-- ── Per-app profiles ────────────────────────────────────────────── -->
-  <section class="card collapsed" id="card-profiles">
+  <section class="card collapsed" id="card-profiles" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.profiles">Per-app profiles</h2>
@@ -2111,7 +2100,7 @@
   </section>
 
   <!-- ── Backup & Restore ───────────────────────────────────────────── -->
-  <section class="card collapsed" id="card-backup">
+  <section class="card collapsed" id="card-backup" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.backup">Backup &amp; Restore</h2>
@@ -2504,9 +2493,14 @@ const TRANSLATIONS = {
   "tour.tab_gear.title":    { en: "Per-screen settings",   de: "Pro-Bildschirm-Einstellungen" },
   "tour.tab_gear.body":     { en: "Each tab has its own gear button. Opens a popover with the Monitor-Setup picker (declare span layouts for ultrawides that are really two monitors), Mirror mode, and Reset this screen.",
                               de: "Jeder Tab hat ein eigenes Zahnrad-Icon. Öffnet ein Popover mit Monitor-Setup (Span-Layouts für Ultrawides die in Wahrheit 2 Monitore sind), Spiegel-Modus und Bildschirm-Reset." },
-  "tour.section_nav.title": { en: "Section nav",          de: "Bereichs-Navigation" },
-  "tour.section_nav.body":  { en: "Icon rail on the left jumps to any settings card. Hover any icon for the label; click to scroll + expand.",
-                              de: "Icon-Leiste links springt zu jeder Einstellungs-Card. Hover für Label, Klick scrollt + öffnet." },
+  "tour.section_tabs.title": { en: "Section tabs",         de: "Bereichs-Tabs" },
+  "tour.section_tabs.body":  { en: "Five tabs split the settings: Look (background + glow + quick looks), Effects, Widgets, Integrations (OpenRGB / sACN / MQTT / API / plugins), System (presets + profiles + backup).",
+                               de: "Fünf Tabs teilen die Einstellungen: Look (Hintergrund + Glow + Quick Looks), Effekte, Widgets, Integrationen (OpenRGB / sACN / MQTT / API / Plugins), System (Voreinstellungen + Profile + Backup)." },
+  "tab.look":               { en: "Look",                 de: "Look" },
+  "tab.effects":            { en: "Effects",              de: "Effekte" },
+  "tab.widgets":            { en: "Widgets",              de: "Widgets" },
+  "tab.integrations":       { en: "Integrations",         de: "Integrationen" },
+  "tab.system":             { en: "System",               de: "System" },
   "tour.looks.title":       { en: "Quick Looks",          de: "Quick Looks" },
   "tour.looks.body":        { en: "Pre-built bundles: streamer overlay, focus mode, pomodoro, news desk, … One click swaps effects + widgets without touching your background. Auto-snapshots current state to preset 1 so you can revert.",
                               de: "Vorgebaute Bundles: Streamer-Overlay, Focus-Mode, Pomodoro, News-Desk, … Ein Klick tauscht Effekte + Widgets ohne den Hintergrund anzufassen. Auto-Snapshot in Preset 1 — wenn's nicht gefällt: revert." },
@@ -4472,111 +4466,73 @@ document.querySelectorAll("section.card > header.section-head[data-toggle]").for
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section nav (v1.2.1) — left rail with one icon button per <section.card>.
-// Each entry knows the card ID, an icon path, and the i18n key for its label.
-// Click expands the section + smooth-scrolls to it. IntersectionObserver
-// keeps the currently-visible section highlighted on the rail.
+// Section tabs (v1.6.1-beta R2) — horizontal tab row above <main>.
+// Five tabs filter the <section.card> elements by their
+// data-section-tab attribute. Replaces the v1.2.1 left-rail
+// #section-nav (sidebar + IntersectionObserver were deleted).
 // ─────────────────────────────────────────────────────────────────────────────
-const SECTION_NAV_ENTRIES = [
-  { id: "card-presets",  i18n: "section.presets",
-    icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>' },
-  { id: "card-looks",    i18n: "section.looks",
-    icon: '<path d="M12 3l2.5 5 5.5 0.8-4 3.9 1 5.5L12 15.8 6.5 18.2l1-5.5-4-3.9 5.5-0.8z"/>' },
-  { id: "card-bg",       i18n: "section.bg",
+const SECTION_TABS = [
+  { key: "look", i18n: "tab.look",
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4-4 3 3 4-5 3 4"/>' },
-  { id: "card-glow",     i18n: "section.glow",
-    icon: '<circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21"/><line x1="3" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21" y2="12"/><line x1="6" y1="6" x2="7.5" y2="7.5"/><line x1="16.5" y1="16.5" x2="18" y2="18"/><line x1="6" y1="18" x2="7.5" y2="16.5"/><line x1="16.5" y1="7.5" x2="18" y2="6"/>' },
-  { id: "card-effects",  i18n: "section.effects",
+  { key: "effects", i18n: "tab.effects",
     icon: '<path d="M5 12l3-3 3 3 3-6 3 6 2-2"/><circle cx="18" cy="6" r="1.4"/>' },
-  { id: "card-widgets",  i18n: "section.widgets",
+  { key: "widgets", i18n: "tab.widgets",
     icon: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>' },
-  { id: "card-system",   i18n: "section.system",
-    icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.4 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.4l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.6 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>' },
-  { id: "card-profiles", i18n: "section.profiles",
-    icon: '<rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="1.2"/><circle cx="7" cy="17" r="1.2"/>' },
-  { id: "card-backup",   i18n: "section.backup",
-    icon: '<path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/>' },
+  { key: "integrations", i18n: "tab.integrations",
+    icon: '<path d="M9 12h6"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/>' },
+  { key: "system", i18n: "tab.system",
+    icon: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
 ];
 
-// v1.2.13: shared timestamp (perf-clock ms). Click handler bumps it
-// to `now + 700ms`; the IntersectionObserver below skips updates
-// while we're inside that window — keeps the click's explicit active
-// section highlighted across the smooth-scroll animation, especially
-// for short cards at the bottom of the page (Profiles + Backup) that
-// otherwise never reach the centre-band the observer keys off.
-let _navHighlightLockUntil = 0;
-
-function buildSectionNav() {
-  const nav = document.getElementById("section-nav");
+function buildSectionTabs() {
+  const nav = document.getElementById("section-tabs");
   if (!nav) return;
   nav.innerHTML = "";
-  for (const entry of SECTION_NAV_ENTRIES) {
-    const card = document.getElementById(entry.id);
-    if (!card) continue;   // section not present — skip
+  for (const entry of SECTION_TABS) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "nav-btn";
-    btn.dataset.target = entry.id;
+    btn.className = "stab";
+    btn.dataset.tab = entry.key;
     btn.innerHTML =
       '<svg viewBox="0 0 24 24">' + entry.icon + '</svg>' +
-      '<span class="nav-label">' + escapeHtml(t(entry.i18n)) + '</span>';
+      '<span>' + escapeHtml(t(entry.i18n)) + '</span>';
     btn.title = t(entry.i18n);
-    btn.addEventListener("click", () => {
-      card.classList.remove("collapsed");
-      // Sticky tabs above main are ~95px tall — offset the scroll so
-      // the section's header lands just below them.
-      const y = card.getBoundingClientRect().top + window.scrollY - 100;
-      window.scrollTo({ top: y, behavior: "smooth" });
-      // v1.2.13: explicit active-state lock. The IntersectionObserver
-      // below uses `rootMargin: -30% 0 -50% 0` so a card has to land
-      // in the middle ~20 % of the viewport to count as active.
-      // Short cards at the bottom of the page (Profiles + Backup with
-      // a wide-monitor / minimal content) may never reach that band —
-      // smooth-scroll bottoms out before the card's body crosses the
-      // -30 % line. Without this lock the rail highlight would
-      // drift back to whatever section was last in the centre.
-      nav.querySelectorAll(".nav-btn").forEach((b) => {
-        b.classList.toggle("active", b === btn);
-      });
-      // Suppress the observer for 700 ms — covers the smooth-scroll
-      // animation. After that the observer takes over again so
-      // manual scrolling still works.
-      _navHighlightLockUntil = performance.now() + 700;
-    });
+    btn.addEventListener("click", () => activateSectionTab(entry.key));
     nav.appendChild(btn);
   }
-  // Highlight whichever section is mid-viewport. We observe the body
-  // of each card (not the head) so a barely-visible header doesn't
-  // mark the section "active" while the user is reading the next one.
-  const observer = new IntersectionObserver((entries) => {
-    // v1.2.13: respect the click-handler's explicit active-state lock
-    // (cards near the bottom of the page never reach the centre band
-    // → observer would re-highlight the wrong section).
-    if (performance.now() < _navHighlightLockUntil) return;
-    // Pick the entry with the highest intersection ratio that's
-    // actually intersecting. Multiple sections can fire at once on a
-    // fast scroll, so we just refresh classes from the full set.
-    let best = null;
-    for (const ent of entries) {
-      if (!ent.isIntersecting) continue;
-      if (!best || ent.intersectionRatio > best.intersectionRatio) best = ent;
-    }
-    if (!best) return;
-    const cardId = best.target.closest("section.card")?.id;
-    if (!cardId) return;
-    nav.querySelectorAll(".nav-btn").forEach((b) => {
-      b.classList.toggle("active", b.dataset.target === cardId);
-    });
-  }, { rootMargin: "-30% 0px -50% 0px", threshold: [0, 0.25, 0.5, 1] });
-  for (const entry of SECTION_NAV_ENTRIES) {
-    const card = document.getElementById(entry.id);
-    if (card) observer.observe(card);
-  }
+  // Restore last-active tab. URL hash (#tab=…) overrides storage —
+  // lets the Tour or external links jump straight to a tab.
+  let initial = "look";
+  try {
+    const stored = localStorage.getItem("cfg.activeSectionTab");
+    if (stored) initial = stored;
+  } catch (_) {}
+  const m = /^#tab=([a-z]+)/i.exec(location.hash || "");
+  if (m) initial = m[1];
+  if (!SECTION_TABS.some((e) => e.key === initial)) initial = "look";
+  activateSectionTab(initial);
 }
+
+// activateSectionTab(key) — flip <main data-active-tab>, mark the
+// matching tab button active, persist. Exposed globally so the Tour +
+// the screen-tab gear popovers can deep-link into a specific tab.
+function activateSectionTab(key) {
+  const mainEl = document.querySelector("main");
+  if (mainEl) mainEl.dataset.activeTab = key;
+  document.querySelectorAll("#section-tabs .stab").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tab === key);
+  });
+  try { localStorage.setItem("cfg.activeSectionTab", key); } catch (_) {}
+  // Scroll to top so users see the freshly revealed cards from their
+  // header — avoids landing mid-card if the previous tab was scrolled.
+  window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
+}
+window.activateSectionTab = activateSectionTab;
+
 // Defer one tick so i18n strings + section cards are definitely
 // in the DOM by the time we build the nav. translateUI() runs at
-// page load to populate t() — buildSectionNav reads that table.
-setTimeout(buildSectionNav, 0);
+// page load to populate t() — buildSectionTabs reads that table.
+setTimeout(buildSectionTabs, 0);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Apply to all screens — per-section button in each card header. Each
@@ -6317,21 +6273,21 @@ document.addEventListener("keydown", (e) => {
 // `signalrgb.tour_seen` localStorage key keeps the tour to a one-shot.
 const TOUR_KEY = "signalrgb.tour_seen";
 let _tourStep = 0;
-// v1.2.2: refreshed tour to walk through the post-v1.2 UX —
-// per-tab settings gear (replaces the old shared trigger), Quick
-// Looks card, section-nav rail, System section. Old steps that
-// pointed at removed UI (overview card for single-monitor users,
-// the legacy mirror bar) are gone.
+// v1.6.1-beta R2: tour walks through the post-redesign UX — screen
+// tabs, the new horizontal section-tab row (replaces the v1.2.1
+// left-rail), then the most-loaded sections inside their tabs.
+// Steps that highlight a card carry `tab` so the runner can switch
+// to it before measuring; otherwise display:none would skip them.
 const TOUR_STEPS = [
   { selector: null,                  i18n: "welcome" },
   { selector: "#tabs",               i18n: "tabs" },
   { selector: ".tab-gear",           i18n: "tab_gear", optional: true },
-  { selector: "#section-nav",        i18n: "section_nav", optional: true },
-  { selector: "#card-looks",         i18n: "looks" },
-  { selector: "#card-bg",            i18n: "bg" },
-  { selector: "#card-widgets",       i18n: "widgets", optional: true },
-  { selector: "#card-presets",       i18n: "presets" },
-  { selector: "#card-system",        i18n: "system", optional: true },
+  { selector: "#section-tabs",       i18n: "section_tabs", optional: true },
+  { selector: "#card-looks",         i18n: "looks",   tab: "look" },
+  { selector: "#card-bg",            i18n: "bg",      tab: "look" },
+  { selector: "#card-widgets",       i18n: "widgets", optional: true, tab: "widgets" },
+  { selector: "#card-presets",       i18n: "presets", tab: "system" },
+  { selector: "#card-system",        i18n: "system",  optional: true, tab: "integrations" },
   { selector: ".btn[href='/builder']", i18n: "builder", optional: true },
   { selector: null,                  i18n: "done" },
 ];
@@ -6398,6 +6354,12 @@ function _renderTourStep() {
     tip.style.bottom = "";
     tip.style.transform = "translate(-50%, -50%)";
     return;
+  }
+  // v1.6.1-beta R2: switch to the step's tab so its card is visible
+  // before measurement. Without this, getBoundingClientRect() returns
+  // 0 height on display:none cards and the step gets skipped.
+  if (step.tab && typeof window.activateSectionTab === "function") {
+    window.activateSectionTab(step.tab);
   }
   const el = document.querySelector(step.selector);
   if (!el || el.getBoundingClientRect().height === 0) {
