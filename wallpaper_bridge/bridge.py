@@ -8203,6 +8203,12 @@ class BridgeRuntime:
         "sources", "sacnOutput",
         # v1.5.0-beta: MQTT bridge config block.
         "mqttBridge",
+        # v1.6.2-beta: OpenRGB-SDK server config block. Carries enabled
+        # + host + port + per-screen matrix dims. Without the
+        # whitelist entry the WS dispatch above silently drops every
+        # setting-update for this key — symptom: clicking the Enabled
+        # toggle in the Configurator does nothing.
+        "openrgbSdkServer",
     }
 
     def update_bridge_setting(self, key: str, value):
