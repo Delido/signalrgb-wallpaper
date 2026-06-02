@@ -4169,15 +4169,18 @@ const ambient = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    // v1.6.1-beta R2.3: drop DPR. Ambient particles are small soft
-    // sprites (1-4 px radius circles, blurred sparks, fuzz) and the
-    // whole canvas sits behind the glow grid — DPR ×2 quadrupled
-    // pixel work for zero perceptible quality gain. On a 5120×1440
-    // surface that's 29.5M px per clear+fill at native rAF; the 1:1
-    // buffer cuts that to 7.4M.
-    canvas.width  = Math.round(viewW);
-    canvas.height = Math.round(viewH);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // v1.6.1-beta R2.4: half-resolution backing buffer. 5120×1440
+    // at 30 Hz × full-viewport clearRect+fill was still ~7 % GPU
+    // even after R2.3's DPR=1 fix — soft particle sprites don't
+    // benefit from native-res, so render at 0.5× and let the
+    // browser bilinear-upscale via CSS (#ambient-canvas already
+    // has width/height: 100%). Particles still think in CSS
+    // pixels thanks to setTransform(0.5, …); the perceptible
+    // change on snow / fireflies / sparks is essentially nil.
+    const SCALE = 0.5;
+    canvas.width  = Math.max(1, Math.round(viewW * SCALE));
+    canvas.height = Math.max(1, Math.round(viewH * SCALE));
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
   }
   window.addEventListener("resize", () => { if (preset !== "off") resize(); });
 
