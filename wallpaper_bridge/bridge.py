@@ -63,6 +63,22 @@ except Exception as _e:
     _OpenRGBError = Exception   # so except clauses don't NameError
     print(f"[openrgb] client module load failed: {_e}")
 
+# v1.6.2-beta: OpenRGB-SDK *server* — the inverse of the client above.
+# Lets the bridge expose itself to the OpenRGB GUI as a set of virtual
+# matrix devices (one per screen). Users can then apply any built-in
+# OpenRGB effect (Rainbow Wave, Audio Visualizer, …) to the wallpaper
+# without needing SignalRGB in the loop. Same try/except guard so a
+# missing module downgrades the feature gracefully.
+try:
+    from openrgb_server import (
+        OpenRgbSdkServer as _OpenRgbSdkServer,
+        VirtualDevice as _OpenRgbVirtualDevice,
+    )
+except Exception as _e:
+    _OpenRgbSdkServer = None
+    _OpenRgbVirtualDevice = None
+    print(f"[openrgb-sdk] server module load failed: {_e}")
+
 # v1.5.0: sACN/E1.31 codec — used both by the outbound emitter (parallel
 # to OpenRGB-output) and the inbound source manager (lets users drive
 # the wallpaper glow from any sACN sender on their network). Wrapped
@@ -672,7 +688,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.6.1-beta"
+APP_VERSION = "1.6.2-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1450,6 +1466,29 @@ def default_config() -> dict:
         # and pushes the source-screen's averaged glow colour to every
         # enumerated OpenRGB device at 30 Hz. Disabled by default so
         # users who don't run OpenRGB pay nothing.
+        # v1.6.2-beta: OpenRGB-SDK *server* — the inverse of the
+        # `openrgbOutput` channel above. When enabled, the bridge
+        # listens on `port` and exposes one virtual matrix device per
+        # screen to any OpenRGB GUI / SDK client that connects. The
+        # client can apply OpenRGB's built-in effects (Rainbow Wave,
+        # Breathing, Audio Visualizer, …) and the resulting LED writes
+        # flow back into the wallpaper as a colour source. Off by
+        # default — opt-in via the Configurator's Integrations tab.
+        # Port 6743 sidesteps the inevitable conflict with a running
+        # OpenRGB GUI server on 6742; users who pick a different port
+        # can override here.
+        "openrgbSdkServer": {
+            "enabled":  False,
+            "host":     "0.0.0.0",
+            "port":     6743,
+            # Grid dimensions per screen for the virtual device's
+            # matrix_map. Defaults to a reasonable 32×16 (matches the
+            # SignalRGB plugin's typical grid resolution). Per-screen
+            # override keyed by screen index. The bridge wires the
+            # matrix's row-major LED indices to the wallpaper's grid
+            # zones on update.
+            "matrix":   {str(n): [32, 16] for n in range(N_SCREENS)},
+        },
         "openrgbOutput": {
             "enabled":      False,
             "host":         "127.0.0.1",
@@ -1794,6 +1833,27 @@ def load_config() -> dict:
     cfg["openrgbOutput"].setdefault("deviceMapping", {})
     if not isinstance(cfg["openrgbOutput"].get("deviceMapping"), dict):
         cfg["openrgbOutput"]["deviceMapping"] = {}
+    # v1.6.2-beta: OpenRGB-SDK server block. Backfill for pre-v1.6.2
+    # configs. Sources list adds "openrgb-sdk" as a valid `type` in
+    # the per-screen picker so the wallpaper can be told to render
+    # SDK-server-driven colours.
+    cfg.setdefault("openrgbSdkServer", {})
+    if not isinstance(cfg.get("openrgbSdkServer"), dict):
+        cfg["openrgbSdkServer"] = {}
+    cfg["openrgbSdkServer"].setdefault("enabled", False)
+    cfg["openrgbSdkServer"].setdefault("host", "0.0.0.0")
+    cfg["openrgbSdkServer"].setdefault("port", 6743)
+    cfg["openrgbSdkServer"].setdefault("matrix", {})
+    if not isinstance(cfg["openrgbSdkServer"].get("matrix"), dict):
+        cfg["openrgbSdkServer"]["matrix"] = {}
+    for n in range(N_SCREENS):
+        m = cfg["openrgbSdkServer"]["matrix"].setdefault(str(n), [32, 16])
+        # Tolerate single-int (treated as square) or list/tuple.
+        if isinstance(m, int):
+            cfg["openrgbSdkServer"]["matrix"][str(n)] = [m, m]
+        elif (not isinstance(m, (list, tuple)) or len(m) != 2
+              or not all(isinstance(v, int) and v > 0 for v in m)):
+            cfg["openrgbSdkServer"]["matrix"][str(n)] = [32, 16]
     # v1.5.0-beta: per-screen source picker. Default every screen to
     # "signalrgb" so existing installs see no behavioural change.
     cfg.setdefault("sources", {})
@@ -1804,7 +1864,7 @@ def load_config() -> dict:
         if not isinstance(src, dict):
             cfg["sources"][str(n)] = src = {}
         src.setdefault("type", "signalrgb")
-        if src["type"] not in ("signalrgb", "openrgb", "sacn"):
+        if src["type"] not in ("signalrgb", "openrgb", "sacn", "openrgb-sdk"):
             src["type"] = "signalrgb"
         # Per-type defaults — kept in the same dict so the Configurator
         # can read every field whether the source is currently active
@@ -2923,12 +2983,14 @@ class Broadcaster:
         # Same single-shot polling pattern as /openrgb/status — Configurator
         # tickles them every 2 s while their sub-panel is visible.
         _v15_status_routes = {
-            "/openrgb-input/status": "openrgb_input_provider",
-            "/sacn/status":          "sacn_output_provider",
-            "/sacn-input/status":    "sacn_input_provider",
-            "/sources/status":       "source_provider",
-            "/mqtt/status":          "mqtt_provider",
-            "/plugins":              "plugin_provider",
+            "/openrgb-input/status":  "openrgb_input_provider",
+            # v1.6.2-beta: SDK-server status. Same poll pattern.
+            "/openrgb-sdk/status":    "openrgb_sdk_provider",
+            "/sacn/status":           "sacn_output_provider",
+            "/sacn-input/status":     "sacn_input_provider",
+            "/sources/status":        "source_provider",
+            "/mqtt/status":           "mqtt_provider",
+            "/plugins":               "plugin_provider",
         }
         if method == "GET" and target.split("?", 1)[0] in _v15_status_routes:
             attr = _v15_status_routes[target.split("?", 1)[0]]
@@ -5288,7 +5350,9 @@ class SourceManager:
             sources = self.bridge.config.get("sources") or {}
             src = sources.get(str(screen)) or {}
             t = src.get("type")
-            if t in ("signalrgb", "openrgb", "sacn"):
+            # v1.6.2-beta: "openrgb-sdk" added — the SDK-server-driven
+            # source where OpenRGB GUI effects feed into the wallpaper.
+            if t in ("signalrgb", "openrgb", "sacn", "openrgb-sdk"):
                 return t
         except Exception:
             pass
@@ -5676,6 +5740,192 @@ class OpenRgbOutputManager:
 # ============================================================================
 # OpenRGB input manager — drives the wallpaper from an OpenRGB device
 # ============================================================================
+
+class OpenRgbSdkServerManager:
+    """v1.6.2-beta: expose the bridge to the OpenRGB GUI / SDK clients
+    as a set of virtual matrix devices (one per screen). Reverse
+    direction of the v1.4 OpenRGB output / v1.5 OpenRGB input —
+    instead of pulling colours from real devices, we let real
+    OpenRGB clients PUSH effects ONTO our virtual devices, and
+    map those LED writes onto the wallpaper grid.
+
+    Per-screen virtual device:
+        name        "Wallpaper Screen N"
+        led_count   = matrix[0] * matrix[1]  (W × H)
+        matrix_map  row-major LED indices in W × H cells
+
+    Receiving an UpdateLEDs from any connected SDK client
+    forwards the colour array to `_on_update_leds`, which Phase 2
+    of the v1.6.2-beta cycle wires into the broadcaster so the
+    wallpaper page renders SDK-driven colours alongside the
+    existing SignalRGB / OpenRGB-input / sACN sources.
+
+    The server lives in `openrgb_server.py`; this class owns its
+    lifecycle, config plumbing, and status surface."""
+
+    def __init__(self, bridge_runtime):
+        self.bridge = bridge_runtime
+        self._server = None
+        self._last_error: str = ""
+        # Stashed by _on_update_leds — Phase 2 reads these to forward
+        # into the broadcaster. Keyed by screen index. Each entry:
+        # (last_colors, ts).
+        self._last_frames: dict[int, tuple[list, float]] = {}
+        self._frames_lock = threading.Lock()
+
+    # ── config helpers ─────────────────────────────────────────────
+
+    def _cfg(self) -> dict:
+        with self.bridge.config_lock:
+            cfg = self.bridge.config.get("openrgbSdkServer") or {}
+            return copy.deepcopy(cfg) if isinstance(cfg, dict) else {}
+
+    def _build_devices(self) -> list:
+        """Construct one VirtualDevice per screen from config.matrix."""
+        if _OpenRgbVirtualDevice is None:
+            return []
+        cfg = self._cfg()
+        matrix_cfg = cfg.get("matrix") or {}
+        devices = []
+        for n in range(N_SCREENS):
+            m = matrix_cfg.get(str(n)) or [32, 16]
+            if (not isinstance(m, (list, tuple)) or len(m) != 2
+                    or not all(isinstance(v, int) and v > 0 for v in m)):
+                m = [32, 16]
+            w, h = int(m[0]), int(m[1])
+            devices.append(_OpenRgbVirtualDevice(
+                screen_idx=n,
+                name=f"Wallpaper Screen {n + 1}",
+                width=w, height=h,
+            ))
+        return devices
+
+    # ── lifecycle ──────────────────────────────────────────────────
+
+    def start(self) -> None:
+        """Start the SDK server if the module loaded AND config has
+        `enabled: true`. Returns silently otherwise so existing
+        installs that haven't opted in pay zero."""
+        if _OpenRgbSdkServer is None:
+            print("[openrgb-sdk] server module unavailable — feature off")
+            return
+        cfg = self._cfg()
+        if not cfg.get("enabled"):
+            print("[openrgb-sdk] disabled in config — not starting")
+            return
+        host = str(cfg.get("host") or "0.0.0.0")
+        port = int(cfg.get("port") or 6743)
+        devices = self._build_devices()
+        self._server = _OpenRgbSdkServer(
+            devices=devices,
+            on_update_leds=self._on_update_leds,
+            host=host, port=port,
+        )
+        if not self._server.start():
+            self._last_error = self._server.last_error
+            self._server = None
+
+    def stop(self) -> None:
+        if self._server is not None:
+            try: self._server.stop()
+            except Exception as e:
+                print(f"[openrgb-sdk] stop failed: {e}")
+            self._server = None
+        with self._frames_lock:
+            self._last_frames.clear()
+
+    def reload(self) -> None:
+        """Tear down + start anew. Called when config.enabled / port /
+        matrix changes via the Configurator's setting-update channel."""
+        self.stop()
+        self.start()
+
+    # ── UpdateLEDs callback ────────────────────────────────────────
+
+    def _on_update_leds(self, screen_idx: int,
+                        colors: list[tuple[int, int, int]]) -> None:
+        """Fired by `openrgb_server.OpenRgbSdkServer` for every
+        RGBCONTROLLER_UPDATELEDS / UPDATEZONELEDS it receives. Stashes
+        the latest array per screen for the status endpoint, then —
+        when the screen's configured source is `openrgb-sdk` — encodes
+        the colours into the SignalRGB wire format and pushes through
+        SourceManager so the wallpaper page renders them like any
+        other source frame.
+
+        SourceManager drops emits when the configured source for that
+        screen doesn't match; that's the same per-screen gating the
+        OpenRGB-input + sACN-input feeds already rely on. If the user
+        flips the source picker away from openrgb-sdk on a given
+        screen, the existing SignalRGB / OpenRGB-input / sACN feed
+        takes over without any explicit re-routing here."""
+        if not (0 <= screen_idx < N_SCREENS):
+            return
+        with self._frames_lock:
+            self._last_frames[screen_idx] = (colors, time.time())
+        # Build the SignalRGB-format frame from the virtual device's
+        # matrix dimensions (W × H). Wire format:
+        #   [S][R][screen u8][wH u8][wL u8][hH u8][hL u8][rgb...]
+        # We need the width/height we ADVERTISED to OpenRGB so the
+        # wallpaper page's zone layout matches the colour array.
+        cfg = self._cfg()
+        matrix_cfg = cfg.get("matrix") or {}
+        dims = matrix_cfg.get(str(screen_idx)) or [32, 16]
+        try:
+            w = int(dims[0]); h = int(dims[1])
+        except (TypeError, ValueError, IndexError):
+            w, h = 32, 16
+        expected_len = w * h
+        # Pad or truncate the incoming colours to exactly W*H. Effects
+        # that target a different LED count would otherwise misalign
+        # the row stride and produce a slanted picture.
+        if len(colors) < expected_len:
+            colors = list(colors) + [(0, 0, 0)] * (expected_len - len(colors))
+        elif len(colors) > expected_len:
+            colors = list(colors)[:expected_len]
+        header = bytes((0x53, 0x52, screen_idx & 0xff,
+                        (w >> 8) & 0xff, w & 0xff,
+                        (h >> 8) & 0xff, h & 0xff))
+        body = bytearray(3 * expected_len)
+        di = 0
+        for r, g, b in colors:
+            body[di]     = r & 0xff
+            body[di + 1] = g & 0xff
+            body[di + 2] = b & 0xff
+            di += 3
+        payload = header + bytes(body)
+        # Route via SourceManager — its `configured_source` check drops
+        # the emit silently when the user has the screen pointed at a
+        # different source type. No extra plumbing needed for that.
+        try:
+            self.bridge.source_mgr.emit_threadsafe(
+                screen_idx, payload, "openrgb-sdk")
+        except Exception as e:
+            print(f"[openrgb-sdk] emit failed for screen {screen_idx}: {e}")
+
+    # ── status (Configurator polls every ~2s) ──────────────────────
+
+    def get_status(self) -> dict:
+        if self._server is None:
+            return {
+                "available": _OpenRgbSdkServer is not None,
+                "running":   False,
+                "lastError": self._last_error,
+                "devices":   [],
+            }
+        s = self._server.status()
+        # Decorate with per-screen update timestamps + colour-sample
+        # so the UI can show "last frame received 0.2s ago" per device.
+        with self._frames_lock:
+            samples = {}
+            for n, (cols, ts) in self._last_frames.items():
+                # First colour as RGB triple, plus ts (epoch s).
+                first = list(cols[0]) if cols else None
+                samples[str(n)] = {"firstColor": first,
+                                    "lastUpdateMs": int(ts * 1000)}
+        s["perScreen"] = samples
+        s["available"] = True
+        return s
+
 
 class OpenRgbInputManager:
     """v1.5.0-beta: poll OpenRGB devices and feed their current LED
@@ -6881,6 +7131,11 @@ class BridgeRuntime:
                 "allowBetas":           bool(self.config.get("allowBetas", False)),
                 "presetHotkeysEnabled": bool(self.config.get("presetHotkeysEnabled", False)),
                 "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
+                # v1.6.2-beta: SDK-server config block surfaced to the
+                # Configurator so the Integrations card can render the
+                # toggle + port + matrix dims out of the same shape.
+                "openrgbSdkServer": copy.deepcopy(
+                    self.config.get("openrgbSdkServer") or {}),
                 "sources":       copy.deepcopy(self.config.get("sources") or {}),
                 "sacnOutput":    copy.deepcopy(self.config.get("sacnOutput") or {}),
                 # v1.5.0-beta: MQTT bridge config + the REST API token.
@@ -8096,6 +8351,63 @@ class BridgeRuntime:
             # iteration — no explicit kick needed; an enabled flip
             # is picked up within one second.
             print(f"[settings] openrgbOutput -> {cleaned}")
+        elif key == "openrgbSdkServer":
+            # v1.6.2-beta: SDK-server config. Same validate-and-persist
+            # pattern as openrgbOutput; reload() is explicit because
+            # the server lifecycle (TCP listen socket) needs to bind
+            # to the new port immediately on enabled flip rather than
+            # waiting for the next poll cycle.
+            if not isinstance(value, dict):
+                print(f"[settings] openrgbSdkServer value not a dict: "
+                      f"{type(value).__name__}")
+                return
+            try:
+                raw_matrix = value.get("matrix") or {}
+                if not isinstance(raw_matrix, dict):
+                    raw_matrix = {}
+                cleaned_matrix: dict[str, list[int]] = {}
+                for n in range(N_SCREENS):
+                    m = raw_matrix.get(str(n)) or [32, 16]
+                    if (not isinstance(m, (list, tuple)) or len(m) != 2
+                            or not all(isinstance(v, int) and v > 0
+                                        for v in m)):
+                        m = [32, 16]
+                    # Clamp to a sane range — matrix_size on the wire
+                    # is uint16 (max 65535), and we encode 4 bytes per
+                    # cell + 8-byte header, so absolute ceiling is
+                    # ~16k cells. Pick 256×256 as a generous cap.
+                    cleaned_matrix[str(n)] = [
+                        max(1, min(256, int(m[0]))),
+                        max(1, min(256, int(m[1]))),
+                    ]
+                cleaned = {
+                    "enabled": bool(value.get("enabled", False)),
+                    "host":    str(value.get("host") or "0.0.0.0")[:128],
+                    "port":    max(1, min(65535,
+                                int(value.get("port") or 6743))),
+                    "matrix":  cleaned_matrix,
+                }
+            except (TypeError, ValueError) as e:
+                print(f"[settings] openrgbSdkServer malformed: {e}")
+                return
+            with self.config_lock:
+                prev = self.config.get("openrgbSdkServer") or {}
+                if dict(prev) == cleaned:
+                    return
+                self.config["openrgbSdkServer"] = cleaned
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            # Explicit reload — the server's listen socket needs to
+            # rebind / shut down based on the new enabled/port/matrix.
+            try:
+                if getattr(self, "openrgb_sdk", None) is not None:
+                    self.openrgb_sdk.reload()
+            except Exception as e:
+                print(f"[settings] openrgb-sdk reload failed: {e}")
+            print(f"[settings] openrgbSdkServer -> {cleaned}")
         elif key == "sources":
             # v1.5.0-beta: per-screen source picker. The Configurator
             # sends the whole `{screen_idx: {type, …}}` block on every
@@ -8111,7 +8423,10 @@ class BridgeRuntime:
                 if not isinstance(raw, dict):
                     raw = {}
                 t = raw.get("type") or "signalrgb"
-                if t not in ("signalrgb", "openrgb", "sacn"):
+                # v1.6.2-beta: "openrgb-sdk" added as a valid type so
+                # users can route a screen's colour feed to the
+                # SDK-server channel from the Configurator.
+                if t not in ("signalrgb", "openrgb", "sacn", "openrgb-sdk"):
                     t = "signalrgb"
                 entry = {"type": t}
                 if t == "openrgb":
@@ -8127,6 +8442,8 @@ class BridgeRuntime:
                     except (TypeError, ValueError):
                         u = 1
                     entry["universe"] = max(1, min(63999, u))
+                # openrgb-sdk has no per-screen extras — the server is
+                # configured globally under config.openrgbSdkServer.
                 cleaned[str(n)] = entry
             with self.config_lock:
                 prev = self.config.get("sources") or {}
@@ -8550,6 +8867,13 @@ class BridgeRuntime:
         self.openrgb_in = OpenRgbInputManager(self, self.source_mgr)
         self.broadcaster.openrgb_input_provider = self.openrgb_in
         self.openrgb_in.start()
+        # v1.6.2-beta: OpenRGB-SDK *server* — exposes the bridge to
+        # OpenRGB GUI / SDK clients as virtual matrix devices, one
+        # per screen. Off until config.openrgbSdkServer.enabled is
+        # flipped on in the Configurator's Integrations tab.
+        self.openrgb_sdk = OpenRgbSdkServerManager(self)
+        self.broadcaster.openrgb_sdk_provider = self.openrgb_sdk
+        self.openrgb_sdk.start()
         self.sacn_in = SacnInputManager(self, self.source_mgr)
         self.broadcaster.sacn_input_provider = self.sacn_in
         self.sacn_in.start()
