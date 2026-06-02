@@ -1971,6 +1971,43 @@
              style="margin-top:6px; font-size:0.85em; opacity:0.7;"></div>
       </div>
 
+      <!-- v1.6.2-beta: OpenRGB-SDK SERVER (inverse of the OpenRGB
+           output above). Exposes the bridge to the OpenRGB GUI as
+           virtual matrix devices, one per screen. Any OpenRGB effect
+           (Rainbow Wave, Audio Visualizer, …) can then drive the
+           wallpaper backlight directly — no SignalRGB plugin needed
+           in the loop. Off by default. The per-screen source picker
+           below gets a new "OpenRGB SDK" option that routes that
+           screen's wallpaper to the SDK-driven colours. -->
+      <div class="pop-divider" style="margin: 14px 0;"></div>
+      <div class="row" style="flex-wrap: wrap;">
+        <h3 data-i18n="openrgb_sdk.header" style="margin: 0; flex: 1 1 100%;">
+          OpenRGB SDK server (beta)</h3>
+      </div>
+      <div class="hint" data-i18n="openrgb_sdk.hint">
+        Exposes the bridge to the OpenRGB GUI as virtual matrix
+        devices (one per screen). Open OpenRGB → you'll see
+        "Wallpaper Screen 1" alongside your real hardware → apply
+        any effect → the wallpaper glow follows. Pick "OpenRGB SDK"
+        in the per-screen source list below to enable on a screen.
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <label for="openrgb-sdk-enabled" data-i18n="openrgb_sdk.enabled">Enabled</label>
+        <input type="checkbox" id="openrgb-sdk-enabled">
+        <span class="val" id="openrgb-sdk-status-pill" style="margin-left:8px;">—</span>
+      </div>
+      <div class="row">
+        <label for="openrgb-sdk-port" data-i18n="openrgb_sdk.port">Port</label>
+        <input type="number" id="openrgb-sdk-port" min="1" max="65535" step="1"
+               style="max-width:90px;">
+        <span class="hint" data-i18n="openrgb_sdk.port_hint"
+              style="margin-left:8px; font-size:0.85em;">
+          Default 6743 (avoids conflict with OpenRGB's own server on 6742).
+        </span>
+      </div>
+      <div id="openrgb-sdk-devices" class="hint"
+           style="margin-top: 8px; font-size:0.85em;"></div>
+
       <!-- v1.5.0-beta: per-screen colour source picker. Each screen
            can independently take its glow colour from SignalRGB UDP
            (default), an OpenRGB device, or an incoming sACN/E1.31
@@ -2273,6 +2310,25 @@ const TRANSLATIONS = {
   "sources.type.signalrgb":     { en: "SignalRGB",         de: "SignalRGB" },
   "sources.type.openrgb":       { en: "OpenRGB",           de: "OpenRGB" },
   "sources.type.sacn":          { en: "sACN / E1.31",      de: "sACN / E1.31" },
+  "sources.type.openrgb_sdk":   { en: "OpenRGB SDK",       de: "OpenRGB SDK" },
+  // v1.6.2-beta: OpenRGB-SDK *server* labels.
+  "openrgb_sdk.header":         { en: "OpenRGB SDK server (beta)",
+                                  de: "OpenRGB-SDK-Server (Beta)" },
+  "openrgb_sdk.hint":           { en: "Exposes the bridge to the OpenRGB GUI as virtual matrix devices (one per screen). Open OpenRGB → you'll see \"Wallpaper Screen 1\" alongside your real hardware → apply any effect → the wallpaper glow follows. Pick \"OpenRGB SDK\" in the per-screen source list below to enable on a screen.",
+                                  de: "Macht die Bridge gegenüber der OpenRGB-GUI zu virtuellen Matrix-Geräten (eines pro Bildschirm). OpenRGB öffnen → siehst „Wallpaper Screen 1\" neben deiner echten Hardware → beliebigen Effekt anwenden → das Wallpaper-Glow folgt. Wähle „OpenRGB SDK\" in der Farbquellen-Liste unten, um einen Bildschirm zu aktivieren." },
+  "openrgb_sdk.enabled":        { en: "Enabled",           de: "Aktiviert" },
+  "openrgb_sdk.port":           { en: "Port",              de: "Port" },
+  "openrgb_sdk.port_hint":      { en: "Default 6743 (avoids conflict with OpenRGB's own server on 6742).",
+                                  de: "Standard 6743 (vermeidet Konflikt mit OpenRGBs eigenem Server auf 6742)." },
+  "openrgb_sdk.running":        { en: "running · {n} client(s)",
+                                  de: "läuft · {n} Client(s)" },
+  "openrgb_sdk.stopped":        { en: "stopped",            de: "gestoppt" },
+  "openrgb_sdk.unavailable":    { en: "unavailable (server module not loaded)",
+                                  de: "nicht verfügbar (Server-Modul nicht geladen)" },
+  "openrgb_sdk.bind_failed":    { en: "bind failed: {msg}",
+                                  de: "Bind fehlgeschlagen: {msg}" },
+  "openrgb_sdk.device":         { en: "{name}: {w}×{h} matrix ({leds} LEDs)",
+                                  de: "{name}: {w}×{h}-Matrix ({leds} LEDs)" },
   "sources.host":               { en: "Host",              de: "Host" },
   "sources.port":               { en: "Port",              de: "Port" },
   "sources.device":             { en: "Device #",          de: "Gerät-Nr." },
@@ -5162,6 +5218,95 @@ function renderSystemSection() {
     _ogPollTimer = setInterval(_pollOpenRgbStatus, 2000);
   }
 
+  // v1.6.2-beta: OpenRGB-SDK *server* status poll. Mirrors the
+  // OpenRGB-output polling above but for the inverse channel —
+  // shows running state, connected client count, and the virtual
+  // device list (one per screen) so the user can confirm the GUI
+  // sees us at the advertised port.
+  const _sdkEnabledEl = document.getElementById("openrgb-sdk-enabled");
+  const _sdkPortEl    = document.getElementById("openrgb-sdk-port");
+  const _sdkPillEl    = document.getElementById("openrgb-sdk-status-pill");
+  const _sdkDevicesEl = document.getElementById("openrgb-sdk-devices");
+  let   _sdkPollTimer = null;
+
+  function _pushSdkServer(patch) {
+    const cur = (bridgeState && bridgeState.openrgbSdkServer) || {};
+    const next = Object.assign({}, cur, patch);
+    bridgeState.openrgbSdkServer = next;
+    sendCmd({ type: "bridge-setting-update",
+               key: "openrgbSdkServer", value: next });
+  }
+
+  if (_sdkEnabledEl) {
+    _sdkEnabledEl.addEventListener("change", () => {
+      _pushSdkServer({ enabled: !!_sdkEnabledEl.checked });
+    });
+  }
+  if (_sdkPortEl) {
+    _sdkPortEl.addEventListener("change", () => {
+      const v = Math.max(1, Math.min(65535,
+                  parseInt(_sdkPortEl.value, 10) || 6743));
+      _sdkPortEl.value = v;
+      _pushSdkServer({ port: v });
+    });
+  }
+
+  async function _pollOpenRgbSdkStatus() {
+    if (!_sdkPillEl || !_sdkDevicesEl) return;
+    const cfg = (bridgeState && bridgeState.openrgbSdkServer) || {};
+    if (_sdkEnabledEl) _sdkEnabledEl.checked = !!cfg.enabled;
+    if (_sdkPortEl && document.activeElement !== _sdkPortEl) {
+      _sdkPortEl.value = cfg.port || 6743;
+    }
+    if (!cfg.enabled) {
+      _sdkPillEl.textContent = t("openrgb_sdk.stopped") || "stopped";
+      _sdkDevicesEl.textContent = "";
+      return;
+    }
+    try {
+      const r = await fetch("/openrgb-sdk/status", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const s = await r.json();
+      if (s.available === false) {
+        _sdkPillEl.textContent = t("openrgb_sdk.unavailable")
+          || "unavailable (server module not loaded)";
+        _sdkDevicesEl.textContent = "";
+        return;
+      }
+      if (!s.running) {
+        if (s.lastError) {
+          _sdkPillEl.textContent = (t("openrgb_sdk.bind_failed")
+            || "bind failed: {msg}").replace("{msg}", s.lastError);
+        } else {
+          _sdkPillEl.textContent = t("openrgb_sdk.stopped") || "stopped";
+        }
+        _sdkDevicesEl.textContent = "";
+        return;
+      }
+      _sdkPillEl.textContent = (t("openrgb_sdk.running")
+        || "running · {n} client(s)").replace("{n}",
+          String(s.clientCount || 0));
+      const lines = (s.devices || []).map(d => (t("openrgb_sdk.device")
+        || "{name}: {w}×{h} matrix ({leds} LEDs)")
+        .replace("{name}", d.name)
+        .replace("{w}", d.matrix ? d.matrix[0] : "?")
+        .replace("{h}", d.matrix ? d.matrix[1] : "?")
+        .replace("{leds}", d.ledCount));
+      _sdkDevicesEl.textContent = lines.join(" · ");
+    } catch (e) {
+      _sdkPillEl.textContent = (t("openrgb_sdk.bind_failed")
+        || "bind failed: {msg}").replace("{msg}",
+        String((e && e.message) || e));
+      _sdkDevicesEl.textContent = "";
+    }
+  }
+  function _restartOpenRgbSdkPoll() {
+    if (_sdkPollTimer) { clearInterval(_sdkPollTimer); _sdkPollTimer = null; }
+    _pollOpenRgbSdkStatus();
+    _sdkPollTimer = setInterval(_pollOpenRgbSdkStatus, 2000);
+  }
+  _restartOpenRgbSdkPoll();
+
   // ── v1.5.0-beta spatial-mapping live-preview editor ────────────────
   //
   // A dedicated WS subscribes to the source screen's broadcast (same
@@ -5567,9 +5712,12 @@ function renderSystemSection() {
       const sel = document.createElement("select");
       sel.id = "src-type-" + n;
       for (const opt of [
-        ["signalrgb", t("sources.type.signalrgb") || "SignalRGB"],
-        ["openrgb",   t("sources.type.openrgb")   || "OpenRGB"],
-        ["sacn",      t("sources.type.sacn")      || "sACN / E1.31"],
+        ["signalrgb",  t("sources.type.signalrgb")  || "SignalRGB"],
+        ["openrgb",    t("sources.type.openrgb")    || "OpenRGB"],
+        ["sacn",       t("sources.type.sacn")       || "sACN / E1.31"],
+        // v1.6.2-beta: SDK-server-driven source. No per-screen extras
+        // — the server's listen port is configured globally above.
+        ["openrgb-sdk", t("sources.type.openrgb_sdk") || "OpenRGB SDK"],
       ]) {
         const o = document.createElement("option");
         o.value = opt[0]; o.textContent = opt[1];
