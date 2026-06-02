@@ -4,6 +4,204 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1-beta] - 2026-06-02
+
+The **iteration + perf sweep** beta. v1.6.0-beta shipped Themes and
+Mouse Distortion Effects; v1.6.1-beta tunes both, adds a new
+cursor-aware ambient preset, restructures the Configurator IA, and
+closes a fleet of GPU regressions that snuck in during the v1.6
+work.
+
+### Added — Wormhole ambient preset
+
+Cursor-aware accretion-disc particle system. Particles spawn at
+random screen positions outside the cursor's pull radius, accelerate
+toward the cursor on an inverse-square gravity curve (`1.5e6 / dist²
++ 600`), and get consumed at the centre. Hybrid swirl tangent gives
+the spiral feel. Density scales with screen area; consumption radius
++ outer escape + hard 3 s lifespan together keep the cluster from
+piling up when the cursor sits still.
+
+Position fed by both `window.livelyCurrentCursorPos` (click-through
+on) and the canonical `document.mousemove` listener — works in any
+Lively interaction mode.
+
+### Added — 3 new widget themes
+
+- **Gruvbox** — warm retro palette (orange / yellow on `#282828`)
+- **Rose Pine** — soft purple-pink on a desaturated dark base
+- **Cyberpunk Neon** — magenta + cyan accents on near-black
+
+Brings the total to 11 themes. Picker switched from a `<select>` to
+a swatch grid so themes are pickable by eye instead of by name.
+
+### Added — Library category system
+
+Every library entry now carries a `category` field — `background`
+(default for image / video uploads), `template` (default for Builder
+saves), or `both` (legacy / explicit). Auto-cycle's pool selector
+gains a `Backgrounds only` option that excludes Builder source
+images from the rotation. Library strip gains filter chips
+(All / Background / Template / Pinned) with localStorage
+persistence + a per-tile category badge. Right-click → category
+picker re-categorises any entry.
+
+Builder's Save → library defaults to `template`; the Configurator's
+Upload button + drag-drop-as-background path both default to
+`background`. Rename + duplicate preserve the source entry's
+category.
+
+### Added — Configurator R2: horizontal section tabs
+
+The 9 settings cards used to live in one long scroll with a
+left-rail nav (v1.2.1). Effects and System had grown into
+mega-cards holding 5-6 sub-sections each. R2 splits the cards
+across 5 tabs:
+
+- **Look** — Background + Glow + Quick Looks
+- **Effects** — Ambient + Mouse + Audio + pixelfx + parallax
+- **Widgets** — Widget catalogue + Theme + tile style
+- **Integrations** — OpenRGB / Sources / sACN / MQTT / REST / Plugins
+- **System** — Presets + Per-app profiles + Backup + Screens
+
+Sticky tab row below the screen picker; last-active tab
+persisted; URL `#tab=KEY` deep-links. Tour steps gain a `tab`
+field so the runner activates the right tab before measuring.
+
+### Added — Preset thumbnails + audit
+
+`PRESET_SNAPSHOT_KEYS` audit caught two settings that v1.6 had
+silently dropped from Save / Apply: `widgetTheme` and
+`mouseEffects`. The `cycle` dict is now snapshot at the
+user-config sub-key level only (`enabled` / `intervalMin` / `pool`
+/ `order`) — runtime state (`lastApplyMs` / `nextIdx`) stays live
+across Apply.
+
+Each filled slot button now renders an 80 × 45 client-side
+thumbnail composed of the live background + dim overlay + widget
+rectangles. Stored as a data-URL in the snapshot's `_thumb`
+field. Older snapshots without `_thumb` fall back to the
+empty-state look — no migration needed.
+
+### Added — Library layout polish
+
+Filter chips moved out of the `#library-strip` flex container into
+their own row above (they were sharing wrap space with tiles).
+Strip itself flipped from flex-wrap to CSS Grid with
+`auto-fill, minmax(118px, 1fr)`; tiles drop their fixed 96 × 54
+pixel size and ride the grid track via `aspect-ratio: 16 / 10`.
+The "Add image…" button moved into the grid as a dashed
+`.lib-tile-add` so it lines up with real tiles instead of
+orphaning below.
+
+### Fixed — Tab-init race (Effects ↔ Widget layout)
+
+After Ctrl+F5 the user saw either the ambient-effect tile
+previews stay empty OR the widget Layout-Vorschau render every
+preview-widget at 0 × 0 px, depending on which tab restored from
+localStorage. Same root cause in both spots — code reads element
+dimensions during init while the tab is `display: none` →
+`clientWidth` is 0 → layout permanently stuck on that 0.
+
+`startTilePreview` now gets a `ResizeObserver` per tile canvas,
+and `activateSectionTab` triggers a `renderLayoutPreview()` +
+synthetic `window-resize` event when its tab becomes visible.
+Together turns the XOR into "both work whichever tab you came
+in on."
+
+### Fixed — Theme always-visible feedback + cursor-fx rename
+
+Theme picker showed no immediate confirmation that a change
+landed. Added a 0.9 s pulse + box-shadow animation on every
+widget when the theme switches (via `@property --pulse-scale`
+registered so keyframes can interpolate without overwriting the
+composed widget transform). "Cursor effects" renamed to "Mouse
+effects" in i18n for consistency with the v1.6 marketing copy.
+
+### Fixed — Widget composed transform
+
+A previous keyframe-based `transform: scale(1)` rule on theme
+change was overwriting the inline `transform: translate(x, y)`
+that the widget position pipeline writes — every widget snapped
+to the top-left corner for the duration of the pulse. Switched
+to a CSS-variable composed transform: `--widget-x` / `--widget-y`
+for position, `--repel-x` / `--repel-y` for repulsion, and
+`--pulse-scale` (registered via `@property`) for the theme pulse.
+The single `.widget { transform: translate(…) scale(…) }` rule
+composes them so no keyframe can clobber position again.
+
+### Fixed — Vintage CRT widget displacement
+
+`body.theme-vintage-crt .widget { position: relative }` was
+overriding the absolute positioning of widgets, dragging every
+widget to the top-left. Removed `position: relative`, kept only
+the `overflow: hidden` rule the CRT scanline pseudo-element
+actually needs.
+
+### Fixed — Mouse-effect z-index
+
+Chromatic (z-index 1.5) and Spotlight (z-index 2.5) overlays sat
+below `#bg` (z-index 2) so neither effect was visible. Raised
+both to z-index 4 so they sit over `#bg` + `#dim` but below
+widgets (z-index 5+).
+
+### Fixed — `widgetTheme` + `mouseEffects` whitelist
+
+`_SETTABLE_SCREEN_KEYS` was missing both keys so the bridge
+silently rejected every theme switch + every mouse-effect
+toggle. Added to the whitelist; both now round-trip correctly.
+
+### Performance — uncapped rAF + DPR sweep
+
+Audit triggered by a user report of ~19 % sustained GPU under
+Snow on 5120 × 1440. Root cause was a bouquet of effect rAF
+chains running uncapped at native 60 Hz + DPR ×2 backing buffers
+on full-viewport canvases.
+
+Fixed every effect rAF to gate on the global `RENDER_INTERVAL_MS`
+cap (default 30 Hz):
+
+- Ambient (all 17 presets — snow / rain / sparks / aurora /
+  constellation / fireflies / plasma / vortex / bubbles / matrix
+  / starfield / lightning / waves / ripples / flowfield /
+  wormhole)
+- Audio glow (pulse / spectrum / wave)
+- pixelfx (trail / glow / click ripple)
+- Mouse-fx repulsion / chromatic / spotlight / ripple — the last
+  one was the worst single offender because `tick()` did
+  `mapCanvas.toDataURL()` every frame
+- parallax3d
+
+Dropped DPR ×2 → ×1 on `#ambient-canvas`, `#pixelfx-canvas`,
+`#audioglow-canvas`. Particle / gradient content is soft enough
+that the upscale was invisible; on a 5120 × 1440 surface the
+clear+fill cost per frame drops from 29.5 M pixels to 7.4 M.
+
+Half-resolution backing buffer on `#ambient-canvas` (0.5 ×
+viewport, CSS `width / height: 100%` for the bilinear upscale on
+the GPU). `setTransform(0.5, …)` keeps the per-preset spawn /
+step / render code in CSS pixel coords. Brought Snow from ~7 %
+→ ~2 % on 5120 × 1440 after the cap + DPR fixes were in place.
+
+Removed `will-change: transform` from `body.fx-repulsion .widget`.
+It forced a GPU compositor layer per widget the entire time
+Widget Repulsion was enabled, paid even when the cursor was
+across the screen. Modern browsers auto-promote during the
+transition itself; the always-on hint cost us nothing during
+real repulsion but saved N × layer cost at idle. Same class as
+the v1.4 [[gotcha-perf-transitions]] regression.
+
+End state on 5120 × 1440: Snow + 3 widgets + glow settled at
+~5-7 % GPU vs ~19 % before. Idle with nothing active = 0 %.
+
+### Changed — WALLPAPER_VERSION bump to 1.6.1-beta
+
+`wallpaper/index.html` saw widespread rAF + DPR + half-res
+backing-buffer changes plus the new Wormhole ambient preset, the
+3 new themes, the composed-transform pipeline, and the
+mouse-effect z-index fixes. Workshop re-upload + Lively
+re-import follow the same path as the v1.6.0-beta bump.
+
 ## [1.6.0-beta] - 2026-05-31
 
 The **visual polish** beta. v1.5 closed the integration roadmap;
