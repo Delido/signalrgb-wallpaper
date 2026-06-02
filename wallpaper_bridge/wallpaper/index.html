@@ -5261,14 +5261,24 @@ const audioGlow = (function () {
   // every FFT update. Each tick lerps the running value toward the latest
   // sample.
   let smoothAmp = 0;
+  // v1.6.1-beta R2.3: throttle this rAF chain to the global frame cap.
+  // Pre-fix it ran at native rAF (60 Hz) and burned ~10 % GPU on a
+  // 5120×1440 surface just from full-viewport clearRect+fill every
+  // frame. Honouring RENDER_INTERVAL_MS (default 30 Hz) halves it.
+  let _audioGlowLastTick = 0;
 
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width  = Math.round(viewW * dpr);
-    canvas.height = Math.round(viewH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // v1.6.1-beta R2.3: audio-glow is a soft, blurred whole-viewport
+    // overlay (radial gradient pulse / wide spectrum bars / lerp'd
+    // wave). DPR-scaling the buffer doubled pixel work on Hi-DPI for
+    // zero perceptible quality — a 5120×1440 surface at DPR 2 means
+    // a 29.5M-pixel clearRect+fill every frame. Drop to 1:1 CSS
+    // pixels; the soft content hides the upscale completely.
+    canvas.width  = Math.round(viewW);
+    canvas.height = Math.round(viewH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
   window.addEventListener("resize", () => { if (mode !== "off") resize(); });
 
@@ -5317,6 +5327,17 @@ const audioGlow = (function () {
     // "wallpaper-resume" listener at the bottom of this IIFE arms a
     // new chain when isPaused goes false.
     if (isPaused) { raf = null; return; }
+    // v1.6.1-beta R2.3: gate by global frameRate. Audio-glow's
+    // visual content (radial pulse, breathing wave, slow-bucketed
+    // spectrum) is perceptually indistinguishable between 30 Hz and
+    // 60 Hz, but the full-viewport clearRect+fill cost is linear in
+    // frame rate. Drop frames when we're inside the interval.
+    const now = performance.now();
+    if (now - _audioGlowLastTick < RENDER_INTERVAL_MS) {
+      raf = requestAnimationFrame(tick);
+      return;
+    }
+    _audioGlowLastTick = now;
     ctx.clearRect(0, 0, viewW, viewH);
     const k = intensity / 100;
     if (mode === "pulse") {
