@@ -214,25 +214,25 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
         ))
     parts.append(struct.pack("<H", 0))   # num_colors (Direct has none)
 
-    # Single zone, matrix layout. zone_type 2 == ZONE_TYPE_MATRIX.
+    # v1.6.2-beta hotfix2: single LINEAR zone instead of MATRIX. The
+    # original matrix descriptor parsed cleanly with our own
+    # openrgb_client.py but OpenRGB's GUI rejected the zone entirely
+    # (Zone dropdown stayed empty in the GUI → no LEDs, no apply).
+    # `matrix_size` encoding turned out to differ between server
+    # implementations: some treat it as the byte size of the matrix
+    # block that follows (8 + 4*W*H), others as a flag (1 if present)
+    # or the cell count. Until we identify which OpenRGB's parser
+    # expects, ship a flat strip — Direct-mode writes still flow,
+    # spatially-aware effects (Rainbow Wave) just iterate linearly
+    # across the strip instead of walking rows. Matrix support comes
+    # back in a follow-up once the byte layout is pinned down.
     parts.append(struct.pack("<H", 1))                # num_zones
-    parts.append(_pack_string("Wallpaper grid"))      # zone_name
-    parts.append(struct.pack("<I", 2))                # zone_type (matrix)
+    parts.append(_pack_string("Wallpaper"))           # zone_name
+    parts.append(struct.pack("<I", 1))                # zone_type (LINEAR)
     parts.append(struct.pack("<I", led_count))        # leds_min
     parts.append(struct.pack("<I", led_count))        # leds_max
     parts.append(struct.pack("<I", led_count))        # leds_count
-
-    # matrix_size is the size of the matrix block that follows: 8 bytes
-    # for height+width plus 4 bytes per cell. The client's parser reads
-    # `matrix_size` as a uint16 — clamp safely; for typical 32×16 grids
-    # this is 8 + 4*512 = 2056 which is well under 65535.
-    matrix_block_size = 8 + 4 * dev.width * dev.height
-    parts.append(struct.pack("<H", min(matrix_block_size, 0xFFFF)))
-    parts.append(struct.pack("<II", dev.height, dev.width))
-    # Row-major LED indices: (row*width + col).
-    for r in range(dev.height):
-        for c in range(dev.width):
-            parts.append(struct.pack("<I", r * dev.width + c))
+    parts.append(struct.pack("<H", 0))                # matrix_size = 0 (no matrix)
     # Segments (proto 4+) — none.
     if version >= 4:
         parts.append(struct.pack("<H", 0))            # num_segments

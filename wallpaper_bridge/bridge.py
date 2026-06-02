@@ -5781,13 +5781,22 @@ class OpenRgbSdkServerManager:
             return copy.deepcopy(cfg) if isinstance(cfg, dict) else {}
 
     def _build_devices(self) -> list:
-        """Construct one VirtualDevice per screen from config.matrix."""
+        """Construct one VirtualDevice per ACTIVE screen from config.matrix.
+
+        Active screen count comes from `config.screenCount` (the
+        Configurator's screen-count picker). We deliberately do NOT
+        expose all N_SCREENS slots — that surfaced ghost devices in
+        the OpenRGB GUI for screens the user hadn't enabled, and
+        cluttered the device list for typical 1-screen setups."""
         if _OpenRgbVirtualDevice is None:
             return []
         cfg = self._cfg()
         matrix_cfg = cfg.get("matrix") or {}
+        with self.bridge.config_lock:
+            sc = int(self.bridge.config.get("screenCount") or 1)
+        sc = max(1, min(N_SCREENS, sc))
         devices = []
-        for n in range(N_SCREENS):
+        for n in range(sc):
             m = matrix_cfg.get(str(n)) or [32, 16]
             if (not isinstance(m, (list, tuple)) or len(m) != 2
                     or not all(isinstance(v, int) and v > 0 for v in m)):
@@ -8244,6 +8253,15 @@ class BridgeRuntime:
                     self.push_settings(s, snapshot["screens"][str(s)])
                 except Exception as e:
                     print(f"[settings] push after screenCount failed: {e}")
+            # v1.6.2-beta: rebuild the SDK-server device list so any
+            # connected OpenRGB GUI sees the updated count on next
+            # reconnect. replace_devices() drops current clients so
+            # they re-enumerate against the fresh descriptor.
+            try:
+                if getattr(self, "openrgb_sdk", None) is not None:
+                    self.openrgb_sdk.reload()
+            except Exception as e:
+                print(f"[settings] openrgb-sdk reload after screenCount failed: {e}")
             print(f"[settings] screenCount -> {n}")
         elif key == "presetHotkeysEnabled":
             enabled = bool(value)
