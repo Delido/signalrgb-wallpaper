@@ -983,10 +983,23 @@ PRESET_SNAPSHOT_KEYS = (
     "gridBlur", "stripesBlur", "barHeight", "barWidth",
     "showStatus",
     "widgets", "widgetTileStyle",
+    # v1.6.1-beta R2.2: v1.6 aesthetic settings that the audit caught
+    # as silently dropped from save/apply. widgetTheme = palette
+    # (Dracula / Nord / CRT / …); mouseEffects = the stackable
+    # cursor-driven distortion array (repulsion / chromatic / spotlight
+    # / ripple). Older saved presets simply don't carry these keys —
+    # apply_preset's `if k in snapshot` guard leaves the live value
+    # alone, so existing slots stay valid.
+    "widgetTheme", "mouseEffects",
     "ambientEffect", "ambientTint", "ambientDensity",
     "pixelfx", "parallax3d",
     "audioGlow", "audioGlowIntensity", "audioGlowTint",
 )
+# v1.6.1-beta R2.2: user-configuration subset of the `cycle` dict that
+# travels with a preset. Runtime state (lastApplyMs, nextIdx) stays
+# live across Apply so the rotation keeps its current position
+# instead of jumping back to the snapshot's frozen index.
+PRESET_CYCLE_SUBKEYS = ("enabled", "intervalMin", "pool", "order")
 PRESET_SLOTS = 4
 
 # Server-side schemas for widget option defaults — keep in sync with the
@@ -5026,6 +5039,17 @@ class ProfileWatcher:
                     for k in PRESET_SNAPSHOT_KEYS:
                         if k in _snap:
                             cur[k] = copy.deepcopy(_snap[k])
+                    # v1.6.1-beta R2.2: restore the stashed `cycle`'s
+                    # user-config subset only so rotation runtime
+                    # state (lastApplyMs / nextIdx) keeps moving
+                    # while the profile was active.
+                    snap_cycle = _snap.get("cycle")
+                    if isinstance(snap_cycle, dict):
+                        cur.setdefault("cycle",
+                                       dict(DEFAULT_SCREEN_SETTINGS["cycle"]))
+                        for k in PRESET_CYCLE_SUBKEYS:
+                            if k in snap_cycle:
+                                cur["cycle"][k] = snap_cycle[k]
                 snap = self.bridge._mutate_screen(s, mutate)
                 if snap is not None:
                     self.bridge.push_settings(s, snap)
@@ -7124,6 +7148,14 @@ class BridgeRuntime:
             if 0 <= slot < PRESET_SLOTS:
                 snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
                             for k in PRESET_SNAPSHOT_KEYS}
+                # v1.6.1-beta R2.2: cycle sub-keys (user-config only)
+                # so later Apply doesn't reset rotation runtime state.
+                live_cycle = s.get("cycle") or {}
+                default_cycle = DEFAULT_SCREEN_SETTINGS["cycle"]
+                snapshot["cycle"] = {
+                    k: copy.deepcopy(live_cycle.get(k, default_cycle.get(k)))
+                    for k in PRESET_CYCLE_SUBKEYS
+                }
                 presets = list(s.get("presets") or [None] * PRESET_SLOTS)
                 while len(presets) < PRESET_SLOTS:
                     presets.append(None)
@@ -7249,17 +7281,33 @@ class BridgeRuntime:
 
     # ----- Preset slots -----
 
-    def save_preset(self, screen: int, slot: int) -> dict | None:
+    def save_preset(self, screen: int, slot: int,
+                    thumbnail: str | None = None) -> dict | None:
         """Capture the screen's current state into preset slot `slot`.
         The snapshot is a deep copy of every PRESET_SNAPSHOT_KEYS value,
         so later mutations to the live settings don't drift into the
-        saved slot."""
+        saved slot. `cycle` is special-cased so only the user-config
+        sub-keys travel (runtime state stays live). When `thumbnail`
+        is supplied (base64 data-URL from the configurator's synthetic
+        renderer) it goes alongside the snapshot for the preset-slot
+        button to render."""
         if not (0 <= slot < PRESET_SLOTS):
             print(f"[preset] bad slot: {slot}")
             return None
         def mutate(s):
             snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
                         for k in PRESET_SNAPSHOT_KEYS}
+            # v1.6.1-beta R2.2: snapshot only the user-config slice of
+            # `cycle` so applying a preset never resets `lastApplyMs` /
+            # `nextIdx` back to the snapshot's frozen-in-time values.
+            live_cycle = s.get("cycle") or {}
+            default_cycle = DEFAULT_SCREEN_SETTINGS["cycle"]
+            snapshot["cycle"] = {
+                k: copy.deepcopy(live_cycle.get(k, default_cycle.get(k)))
+                for k in PRESET_CYCLE_SUBKEYS
+            }
+            if thumbnail:
+                snapshot["_thumb"] = thumbnail
             presets = list(s.get("presets") or [None] * PRESET_SLOTS)
             while len(presets) < PRESET_SLOTS:
                 presets.append(None)
@@ -7292,6 +7340,15 @@ class BridgeRuntime:
             for k in PRESET_SNAPSHOT_KEYS:
                 if k in snapshot:
                     s[k] = snapshot[k]
+            # v1.6.1-beta R2.2: merge the snapshot's `cycle` sub-keys
+            # into the live cycle dict so runtime state (lastApplyMs /
+            # nextIdx) survives Apply. Older snapshots without
+            # `cycle` skip silently.
+            if isinstance(snapshot.get("cycle"), dict):
+                s.setdefault("cycle", dict(DEFAULT_SCREEN_SETTINGS["cycle"]))
+                for k in PRESET_CYCLE_SUBKEYS:
+                    if k in snapshot["cycle"]:
+                        s["cycle"][k] = snapshot["cycle"][k]
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
@@ -8305,7 +8362,11 @@ class BridgeRuntime:
             elif t == "viewport":
                 self.update_viewport(screen, msg.get("w"), msg.get("h"))
             elif t == "preset-save":
-                self.save_preset(screen, int(msg.get("slot", -1)))
+                thumb = msg.get("thumbnail")
+                if not isinstance(thumb, str):
+                    thumb = None
+                self.save_preset(screen, int(msg.get("slot", -1)),
+                                 thumbnail=thumb)
             elif t == "preset-apply":
                 self.apply_preset(screen, int(msg.get("slot", -1)))
             elif t == "preset-clear":
