@@ -995,17 +995,68 @@
   .layout-preview.unlocked .preview-widget .resize-handle { display: block; }
 
   /* Toast for transient status messages */
-  /* Wallpaper library thumbnails — small clickable tiles under the
-     Background section. Click sets the screen's background to the
-     full-res PNG behind that thumb. */
+  /* Wallpaper library — v1.6.1-beta R2.1: chips row + responsive grid.
+     `.lib-grid` lays the tiles out in an auto-fill CSS grid so they
+     line up evenly instead of flex-wrap'ing whatever the row had
+     space for. Tiles themselves drop their fixed pixel size and
+     ride the grid track + aspect-ratio. */
+  .lib-filter-row {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .lib-filter-chip {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer; font: inherit;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .lib-filter-chip:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .lib-filter-chip.active {
+    background: var(--accent-bg);
+    color: #d8e6fc;
+    border-color: #3a6ba8;
+  }
+  .lib-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 8px;
+  }
   .lib-tile {
-    width: 96px; height: 54px;
+    width: 100%;
+    aspect-ratio: 16 / 10;
     border: 1px solid var(--border);
     border-radius: 4px;
     background: #0c0e13 center / cover no-repeat;
     cursor: pointer; padding: 0;
     position: relative;
     transition: border-color 0.15s, transform 0.15s;
+  }
+  .lib-tile-add {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    font: inherit;
+  }
+  .lib-tile-add:hover {
+    color: #d8e6fc;
+    border-color: #3a6ba8;
+    background: rgba(58, 107, 168, 0.08);
+  }
+  .lib-tile-add .add-plus {
+    font-size: 22px; line-height: 1;
+  }
+  .lib-tile-add .add-label {
+    font-size: 10px;
   }
   .lib-tile:hover {
     border-color: #3a6ba8; transform: translateY(-1px);
@@ -1378,15 +1429,16 @@
     <div class="body">
       <div class="row">
         <label data-i18n="bg.library">Library</label>
-        <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-          <div id="library-strip" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
-          <div style="display:flex; gap:6px;">
-            <label class="btn" for="lib-upload" style="flex:0 0 auto"
-                   data-i18n="bg.library.upload">Add image…</label>
-            <input id="lib-upload" type="file"
-                   accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
-                   style="display:none">
-          </div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+          <!-- v1.6.1-beta R2.1: filter chips moved out of the strip so
+               they don't compete with tiles inside one flex-wrap row.
+               Strip itself is now a CSS grid with an "Add image" tile
+               as its first cell (no more orphan button below). -->
+          <div id="library-filter-row" class="lib-filter-row"></div>
+          <div id="library-strip" class="lib-grid"></div>
+          <input id="lib-upload" type="file"
+                 accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
+                 style="display:none">
         </div>
       </div>
       <!-- v1.2.13: the legacy "Image path" text input was confusing —
@@ -2421,6 +2473,8 @@ const TRANSLATIONS = {
   "bg.library.filter.background":  { en: "🖼 Backgrounds", de: "🖼 Hintergründe" },
   "bg.library.filter.template":    { en: "🎨 Templates",   de: "🎨 Vorlagen" },
   "bg.library.filter.pinned":      { en: "📌 Pinned",      de: "📌 Angeheftet" },
+  "bg.library.filter_empty":       { en: "Nothing matches this filter.",
+                                     de: "Keine Einträge in dieser Kategorie." },
   "cycle.pool.backgrounds":        { en: "Backgrounds only",
                                      de: "Nur Hintergründe" },
   "bg.library.reorder_failed":{ en: "Reorder failed: {msg}", de: "Sortierung fehlgeschlagen: {msg}" },
@@ -3752,39 +3806,54 @@ function _itemPassesFilter(item) {
 function renderLibraryStrip() {
   if (!els.libraryStrip) return;
   els.libraryStrip.innerHTML = "";
-  // Filter chips strip. Built before the tiles so the user can
-  // narrow what's shown — handy on a large library where
-  // templates would otherwise clutter the background browser.
-  const chipRow = document.createElement("div");
-  chipRow.className = "lib-filter-row";
-  chipRow.style.cssText =
-    "display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;";
-  for (const f of ["all", "background", "template", "pinned"]) {
-    const c = document.createElement("button");
-    c.type = "button";
-    c.className = "lib-filter-chip" + (_libraryFilter === f ? " active" : "");
-    c.style.cssText =
-      "font-size:11px; padding:3px 9px; border-radius:11px;" +
-      " border:1px solid var(--border, #333); cursor:pointer;" +
-      " background:" + (_libraryFilter === f
-        ? "var(--accent, #ff5a6e)"
-        : "transparent") +
-      "; color:" + (_libraryFilter === f ? "#fff" : "inherit") + ";";
-    c.textContent = t("bg.library.filter." + f);
-    c.addEventListener("click", () => setLibraryFilter(f));
-    chipRow.appendChild(c);
+
+  // v1.6.1-beta R2.1: filter chips render into their own row above
+  // the grid (separate DOM element added in the HTML), so they
+  // don't share a flex-wrap row with the tiles. Pure-CSS styling
+  // (.lib-filter-chip + .active modifier) — no inline `style=`.
+  const filterRow = document.getElementById("library-filter-row");
+  if (filterRow) {
+    filterRow.innerHTML = "";
+    for (const f of ["all", "background", "template", "pinned"]) {
+      const c = document.createElement("button");
+      c.type = "button";
+      c.className = "lib-filter-chip" + (_libraryFilter === f ? " active" : "");
+      c.textContent = t("bg.library.filter." + f);
+      c.addEventListener("click", () => setLibraryFilter(f));
+      filterRow.appendChild(c);
+    }
   }
-  els.libraryStrip.appendChild(chipRow);
+
+  // v1.6.1-beta R2.1: "Add image" lives inside the grid as a dashed
+  // tile, so it lines up with the other tiles instead of orphaning
+  // below them. Click forwards to the hidden file input.
+  const addTile = document.createElement("button");
+  addTile.type = "button";
+  addTile.className = "lib-tile lib-tile-add";
+  addTile.title = t("bg.library.upload");
+  addTile.innerHTML =
+    '<span class="add-plus">+</span>' +
+    '<span class="add-label">' + escapeHtml(t("bg.library.upload")) + '</span>';
+  addTile.addEventListener("click", () => {
+    const inp = document.getElementById("lib-upload");
+    if (inp) inp.click();
+  });
+  els.libraryStrip.appendChild(addTile);
+
   if (!libraryCatalogue || libraryCatalogue.length === 0) {
+    // Empty-state hint takes a full row inside the grid via grid-column.
     const empty = document.createElement("span");
     empty.className = "lib-empty";
     empty.dataset.i18n = "bg.library.empty";
     empty.textContent = t("bg.library.empty");
+    empty.style.cssText = "grid-column: 1 / -1; padding: 6px 2px;";
     els.libraryStrip.appendChild(empty);
     return;
   }
+  let renderedCount = 0;
   for (const item of sortLibraryItems(libraryCatalogue)) {
     if (!_itemPassesFilter(item)) continue;
+    renderedCount++;
     const btn = document.createElement("button");
     btn.className = "lib-tile" + (item.pinned ? " pinned" : "");
     btn.title = item.label || item.id;
@@ -3907,6 +3976,16 @@ function renderLibraryStrip() {
       reorderLibrary(src, item.file, after);
     });
     els.libraryStrip.appendChild(btn);
+  }
+  // v1.6.1-beta R2.1: empty-state hint when an active filter (chip
+  // other than "all") matches nothing — without it the grid just
+  // shows the add-tile and looks broken.
+  if (renderedCount === 0 && _libraryFilter !== "all") {
+    const hint = document.createElement("span");
+    hint.className = "lib-empty";
+    hint.style.cssText = "grid-column: 1 / -1; padding: 6px 2px;";
+    hint.textContent = t("bg.library.filter_empty");
+    els.libraryStrip.appendChild(hint);
   }
 }
 
