@@ -4,6 +4,78 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2-beta] - 2026-06-02
+
+The **wallpaper-as-virtual-device** beta. Inverts the v1.4/v1.5
+OpenRGB direction: instead of the bridge consuming colours from real
+OpenRGB devices, the bridge now exposes itself to the OpenRGB GUI as
+a set of virtual matrix devices. Any built-in OpenRGB effect
+(Rainbow Wave, Audio Visualizer, Breathing, …) can drive the
+wallpaper backlight directly, without SignalRGB in the loop.
+
+### Added — OpenRGB SDK server
+
+New module `openrgb_server.py` speaks the OpenRGB SDK protocol on
+the server side — the inverse of the v1.4 `openrgb_client.py` we
+ship for the OpenRGB output channel. Architecture:
+
+```text
++-----------------+        TCP/6743          +--------------------+
+| OpenRGB GUI     | <----------------------> | Bridge SDK server  |
+| (effect engine) |   ORGB protocol packets  | (openrgb_server.py)|
++-----------------+                          +--------------------+
+                                                       |
+                                            UpdateLEDs colours
+                                                       v
+                                              +--------------------+
+                                              | wallpaper feed     |
+                                              +--------------------+
+```
+
+One virtual device per screen. Each carries a single zone with a
+`matrix_map` shaped to the screen's configured grid resolution
+(default 32×16) so OpenRGB's effects that walk matrices produce
+spatially-coherent output instead of treating the LEDs as a flat
+strip. Device descriptor matches the byte layout the bridge's
+existing client-side parser already handles — same module on both
+ends of the protocol.
+
+Default port is **6743** (not OpenRGB's standard 6742) to sidestep
+the inevitable conflict on machines where both run. Listen address
+is configurable; defaults to `0.0.0.0` so the OpenRGB GUI on the
+same machine can connect via either `127.0.0.1` or the host's LAN
+IP.
+
+Thread-per-client model — multiple GUI instances can connect
+simultaneously, last-write-wins semantics on the wallpaper.
+
+### Added — `openrgb-sdk` as a per-screen source type
+
+The per-screen source picker grows a fourth option alongside
+SignalRGB / OpenRGB / sACN. Picking it routes that screen's
+wallpaper feed to whatever the SDK-server clients are pushing. The
+existing `SourceManager` gating ensures only frames from the
+selected source make it to the wallpaper page — flipping a screen
+between sources doesn't need any explicit re-routing in the SDK
+manager.
+
+### Added — Configurator OpenRGB SDK card
+
+New sub-section in the Integrations tab below the existing OpenRGB
+output block. Enabled toggle + port input + live status pill +
+per-device summary (`Wallpaper Screen 1: 32×16 matrix (512 LEDs)`).
+Status poll against `GET /openrgb-sdk/status` every 2 s while the
+tab is visible, surfacing running state + connected client count +
+bind errors. i18n strings ship in EN + DE.
+
+### Changed — APP_VERSION bump to 1.6.2-beta
+
+WALLPAPER_VERSION stays at 1.6.1-beta — the SDK server runs entirely
+in the bridge process and the new colour source flows through the
+same wire format the wallpaper page already renders, so no
+wallpaper/ side changes are needed in this release. Lively / WE
+re-import is optional.
+
 ## [1.6.1-beta] - 2026-06-02
 
 The **iteration + perf sweep** beta. v1.6.0-beta shipped Themes and
