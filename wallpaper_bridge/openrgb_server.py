@@ -139,11 +139,12 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
         string  version
         string  serial
         string  location
-        uint16  num_modes
-        int32   active_mode
-        # No modes — we don't expose any in the SDK sense. The OpenRGB
-        # GUI's effect plugin writes UpdateLEDs directly; modes are a
-        # device-side capability we don't pretend to have.
+        uint16  num_modes (= 1)
+        int32   active_mode (= 0, "Direct")
+        # One required "Direct" mode — OpenRGB's GUI dereferences
+        # modes[active_mode] unconditionally and crashes on
+        # num_modes=0. Mode body is 9 × uint32 (proto 0-2) or
+        # 12 × uint32 (proto 3+) followed by uint16 num_colors (= 0).
         uint16  num_zones (= 1)
         per zone:
             string  zone_name
@@ -175,9 +176,43 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
     parts.append(_pack_string("1.6.2-beta"))                       # version
     parts.append(_pack_string(""))                                 # serial
     parts.append(_pack_string("bridge"))                           # location
-    # No modes — we have a Direct path only.
-    parts.append(struct.pack("<H", 0))   # num_modes
-    parts.append(struct.pack("<i", 0))   # active_mode (int32)
+    # v1.6.2-beta hotfix: OpenRGB's GUI assumes every device exposes
+    # at least one mode (typically "Direct"). num_modes=0 segfaulted
+    # the GUI on connect because the mode selector + the effect plugin
+    # both dereference modes[active_mode] unconditionally. Ship a
+    # single "Direct" mode with HAS_PER_LED_COLOR set so UPDATELEDS
+    # writes are the canonical flow.
+    parts.append(struct.pack("<H", 1))   # num_modes = 1
+    parts.append(struct.pack("<i", 0))   # active_mode = 0 (Direct)
+    parts.append(_pack_string("Direct"))
+    # Mode body layout: 9 × uint32 (proto 0-2) or 12 × uint32 (proto 3+),
+    # then uint16 num_colors + colour array. Field order matches the
+    # client parser's offset table.
+    #   MODE_FLAG_HAS_PER_LED_COLOR = 0x01
+    #   MODE_COLORS_PER_LED         = 4
+    if version >= 3:
+        parts.append(struct.pack("<12I",
+            0,        # value
+            0x01,     # flags = MODE_FLAG_HAS_PER_LED_COLOR
+            0, 0,     # speed_min, speed_max
+            0, 0,     # brightness_min, brightness_max
+            0, 0,     # colors_min, colors_max
+            0,        # speed
+            0,        # brightness
+            0,        # direction
+            4,        # color_mode = MODE_COLORS_PER_LED
+        ))
+    else:
+        parts.append(struct.pack("<9I",
+            0,        # value
+            0x01,     # flags = MODE_FLAG_HAS_PER_LED_COLOR
+            0, 0,     # speed_min, speed_max
+            0, 0,     # colors_min, colors_max
+            0,        # speed
+            0,        # direction
+            4,        # color_mode = MODE_COLORS_PER_LED
+        ))
+    parts.append(struct.pack("<H", 0))   # num_colors (Direct has none)
 
     # Single zone, matrix layout. zone_type 2 == ZONE_TYPE_MATRIX.
     parts.append(struct.pack("<H", 1))                # num_zones
