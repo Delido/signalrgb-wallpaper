@@ -1241,12 +1241,26 @@
      summary (counts of widgets + active effects); empty slots hide
      Apply/Clear so only Save is offered. */
   .preset-slot {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 10px;
     padding: 8px 10px; margin-top: 6px;
     background: var(--panel-2);
     border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 12px;
+  }
+  /* v1.6.1-beta R2.2: 16:9 mini-thumbnail painted client-side on Save.
+     Solid bg on empty slots so the row keeps its width without
+     jumping when a slot transitions empty → filled. */
+  .preset-slot .thumb {
+    flex: 0 0 80px;
+    width: 80px; height: 45px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: #0c0e13;
+    display: block;
+  }
+  .preset-slot.empty .thumb {
+    opacity: 0.35;
   }
   .preset-slot .name {
     flex: 0 0 60px; font-weight: 600;
@@ -3703,6 +3717,7 @@ const PRESET_SLOTS = 4;
     row.className = "preset-slot empty";
     row.dataset.slot = String(i);
     row.innerHTML =
+      '<canvas class="thumb" width="160" height="90"></canvas>' +
       '<span class="name" data-i18n="presets.slot_label" data-i18n-n="' + (i + 1) + '">Slot ' + (i + 1) + '</span>' +
       '<span class="summary"></span>' +
       '<div class="actions">' +
@@ -3712,8 +3727,16 @@ const PRESET_SLOTS = 4;
       '</div>';
     row.querySelector(".apply").addEventListener("click", () =>
       sendCmd({ type: "preset-apply", slot: i }));
-    row.querySelector(".save").addEventListener("click", () => {
-      sendCmd({ type: "preset-save", slot: i });
+    row.querySelector(".save").addEventListener("click", async () => {
+      // v1.6.1-beta R2.2: synthetic thumbnail captured at save-time
+      // so the slot button shows a recognisable miniature instead of
+      // a text summary alone. Render is pure-client (no wallpaper-
+      // page roundtrip) so it works even with Lively paused.
+      let thumb = null;
+      try {
+        thumb = await generatePresetThumbnail();
+      } catch (_) { /* best-effort */ }
+      sendCmd({ type: "preset-save", slot: i, thumbnail: thumb });
       toast(t("presets.saved_toast", { n: i + 1 }), "good");
     });
     row.querySelector(".clear").addEventListener("click", () =>
@@ -3721,6 +3744,77 @@ const PRESET_SLOTS = 4;
     els.presetSlots.appendChild(row);
   }
 })();
+
+// v1.6.1-beta R2.2: render the live screen state into a 240×135 data-URL
+// from the current `settings` snapshot. The result goes alongside the
+// preset on the bridge as `_thumb`. Three layers:
+//   1. background image (cover-fit from /screen/N/background, image
+//      backgrounds only — videos can't drawImage)
+//   2. dim overlay (bgDim%)
+//   3. widget rectangles (positions only, scaled by viewportW/H)
+async function generatePresetThumbnail() {
+  const W = 240, H = 135;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#0c0e13";
+  ctx.fillRect(0, 0, W, H);
+
+  // Layer 1: background — fetch the active screen's current bg blob
+  // and drawImage cover-fit. Skip videos (createImageBitmap rejects).
+  try {
+    const r = await fetch("/screen/" + activeScreen + "/background", { cache: "no-store" });
+    if (r.ok) {
+      const blob = await r.blob();
+      if (blob.type && blob.type.startsWith("image/")) {
+        const bmp = await createImageBitmap(blob);
+        const ar = bmp.width / bmp.height;
+        const tar = W / H;
+        let sx = 0, sy = 0, sw = bmp.width, sh = bmp.height;
+        if (ar > tar) {
+          // wider than target → crop horizontal
+          sw = bmp.height * tar;
+          sx = (bmp.width - sw) / 2;
+        } else {
+          sh = bmp.width / tar;
+          sy = (bmp.height - sh) / 2;
+        }
+        ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, W, H);
+        try { bmp.close(); } catch (_) {}
+      }
+    }
+  } catch (_) { /* no bg or fetch failed — keep solid */ }
+
+  // Layer 2: dim overlay matching bgDim (0..100 = 0..1 alpha).
+  const dim = Math.max(0, Math.min(100, settings.bgDim || 0)) / 100;
+  if (dim > 0) {
+    ctx.fillStyle = "rgba(0,0,0," + dim + ")";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Layer 3: widget rectangles scaled by the wallpaper-reported
+  // viewport. Filled with the accent + thin outline so they read
+  // even when the bg is busy.
+  const vw = settings.viewportW || 1920;
+  const vh = settings.viewportH || 1080;
+  const scaleX = W / vw, scaleY = H / vh;
+  ctx.fillStyle   = "rgba(108, 176, 255, 0.28)";
+  ctx.strokeStyle = "rgba(190, 220, 255, 0.85)";
+  ctx.lineWidth = 1;
+  for (const w of (settings.widgets || [])) {
+    const x = Math.max(0, (w.x || 0) * scaleX);
+    const y = Math.max(0, (w.y || 0) * scaleY);
+    const ww = Math.max(2, (w.w || 0) * scaleX);
+    const hh = Math.max(2, (w.h || 0) * scaleY);
+    ctx.fillRect(x, y, ww, hh);
+    ctx.strokeRect(x + 0.5, y + 0.5, ww - 1, hh - 1);
+  }
+
+  // PNG keeps the rectangle outlines crisp; data-URL is small enough
+  // (~3-8 KB) to stash in the preset JSON without bloating it.
+  return canvas.toDataURL("image/png");
+}
 
 function renderPresets() {
   const slots = Array.isArray(settings.presets) ? settings.presets : [];
@@ -3734,6 +3828,23 @@ function renderPresets() {
     sum.textContent = filled ? summariseSnapshot(snap) : t("presets.empty");
     row.querySelector(".apply").disabled = !filled;
     row.querySelector(".clear").disabled = !filled;
+    // v1.6.1-beta R2.2: paint the cached thumb if the snapshot
+    // carries one. Older snapshots (saved before this commit) just
+    // miss `_thumb` — thumb canvas shows the empty-state CSS state.
+    const thumbCanvas = row.querySelector(".thumb");
+    if (thumbCanvas) {
+      const tctx = thumbCanvas.getContext("2d");
+      tctx.clearRect(0, 0, thumbCanvas.width, thumbCanvas.height);
+      if (filled && typeof snap._thumb === "string"
+          && snap._thumb.startsWith("data:image/")) {
+        const img = new Image();
+        img.onload = () => {
+          tctx.drawImage(img, 0, 0,
+                         thumbCanvas.width, thumbCanvas.height);
+        };
+        img.src = snap._thumb;
+      }
+    }
   }
 }
 
