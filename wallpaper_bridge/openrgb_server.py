@@ -186,31 +186,42 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
     parts.append(struct.pack("<i", 0))   # active_mode = 0 (Direct)
     parts.append(_pack_string("Direct"))
     # Mode body layout: 9 × uint32 (proto 0-2) or 12 × uint32 (proto 3+),
-    # then uint16 num_colors + colour array. Field order matches the
-    # client parser's offset table.
-    #   MODE_FLAG_HAS_PER_LED_COLOR = 0x01
-    #   MODE_COLORS_PER_LED         = 4
+    # then uint16 num_colors + colour array.
+    #
+    # v1.6.2-beta hotfix3: previous values were wrong against OpenRGB's
+    # actual flag table — `0x01` is MODE_FLAG_HAS_SPEED (showed the
+    # speed slider in the GUI, with speed_min = speed_max = 0), and
+    # `color_mode = 4` doesn't exist (valid range is 0..3). OpenRGB
+    # rejected the descriptor silently, which is why the Zone dropdown
+    # stayed empty. The correct combo for a Direct-write mode is:
+    #   flags     = 0x20  (MODE_FLAG_HAS_PER_LED_COLOR)
+    #   color_mode = 1    (MODE_COLORS_PER_LED)
+    # No speed / brightness / direction → flags doesn't set those bits
+    # → the GUI hides the corresponding controls + greys the Direction
+    # / Random-colour pickers, which is the actual Direct-mode UX.
+    MODE_FLAG_HAS_PER_LED_COLOR = 0x20
+    MODE_COLORS_PER_LED = 1
     if version >= 3:
         parts.append(struct.pack("<12I",
-            0,        # value
-            0x01,     # flags = MODE_FLAG_HAS_PER_LED_COLOR
-            0, 0,     # speed_min, speed_max
-            0, 0,     # brightness_min, brightness_max
-            0, 0,     # colors_min, colors_max
-            0,        # speed
-            0,        # brightness
-            0,        # direction
-            4,        # color_mode = MODE_COLORS_PER_LED
+            0,                              # value
+            MODE_FLAG_HAS_PER_LED_COLOR,    # flags
+            0, 0,                           # speed_min, speed_max
+            0, 0,                           # brightness_min, brightness_max
+            0, 0,                           # colors_min, colors_max
+            0,                              # speed
+            0,                              # brightness
+            0,                              # direction
+            MODE_COLORS_PER_LED,            # color_mode
         ))
     else:
         parts.append(struct.pack("<9I",
-            0,        # value
-            0x01,     # flags = MODE_FLAG_HAS_PER_LED_COLOR
-            0, 0,     # speed_min, speed_max
-            0, 0,     # colors_min, colors_max
-            0,        # speed
-            0,        # direction
-            4,        # color_mode = MODE_COLORS_PER_LED
+            0,                              # value
+            MODE_FLAG_HAS_PER_LED_COLOR,    # flags
+            0, 0,                           # speed_min, speed_max
+            0, 0,                           # colors_min, colors_max
+            0,                              # speed
+            0,                              # direction
+            MODE_COLORS_PER_LED,            # color_mode
         ))
     parts.append(struct.pack("<H", 0))   # num_colors (Direct has none)
 
