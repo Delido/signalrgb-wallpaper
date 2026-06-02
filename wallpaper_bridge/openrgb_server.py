@@ -276,11 +276,19 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
                 0,
                 mcolor_mode,
             ))
-        # Mode-specific colour array. We don't preset colours — the
-        # GUI lets the user pick one when colors_min >= 1. Empty
-        # array on enumerate; the user's pick comes back via
-        # UPDATEMODE and the engine picks it up there.
-        parts.append(struct.pack("<H", 0))
+        # v1.6.2-beta hotfix5: pre-seed colours_min default colours.
+        # Previous version emitted num_colors = 0 across the board.
+        # That parsed cleanly when colors_min = 0 (Direct / Rainbow /
+        # Rainbow Wave) but crashed the OpenRGB GUI on every mode
+        # where colors_min >= 1 (Static / Breathing / Color Wave) —
+        # the GUI dereferences mode.colors[0] for the picker preview
+        # without a bounds check. Seed with white per slot so the
+        # picker shows something on first display; the user's pick
+        # comes back via UPDATEMODE and the engine takes over.
+        parts.append(struct.pack("<H", num_colors_min))
+        for _ in range(num_colors_min):
+            # Wire is BGR0 packed as LE-uint32: bytes (R, G, B, 0).
+            parts.append(b"\xff\xff\xff\x00")
 
     # v1.6.2-beta hotfix2: single LINEAR zone instead of MATRIX. The
     # original matrix descriptor parsed cleanly with our own
