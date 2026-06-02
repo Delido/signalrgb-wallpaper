@@ -3276,7 +3276,14 @@ const MouseFx = (function () {
     const RADIUS = 220;
     const STRENGTH = 50;     // px push at zero distance
     let raf = null;
-    function tick() {
+    // v1.6.1-beta R2.3: cap to RENDER_INTERVAL_MS. Repulsion sets
+    // 2 CSS vars per widget per frame — at N widgets that's N×2
+    // style invalidations on the main thread.
+    let _lastTick = 0;
+    function tick(now) {
+      raf = requestAnimationFrame(tick);
+      if (now - _lastTick < RENDER_INTERVAL_MS) return;
+      _lastTick = now;
       for (const [_id, rec] of widgetNodes) {
         const rect = rec.el.getBoundingClientRect();
         const cx = rect.left + rect.width / 2;
@@ -3294,7 +3301,6 @@ const MouseFx = (function () {
         rec.el.style.setProperty("--repel-x", (Math.cos(angle) * k).toFixed(1) + "px");
         rec.el.style.setProperty("--repel-y", (Math.sin(angle) * k).toFixed(1) + "px");
       }
-      raf = requestAnimationFrame(tick);
     }
     return {
       enable() {
@@ -3316,6 +3322,7 @@ const MouseFx = (function () {
   const chromatic = (function () {
     let raf = null;
     let overlay = null;
+    let _lastTick = 0;
     function ensureOverlay() {
       if (overlay) return overlay;
       overlay = document.createElement("div");
@@ -3335,11 +3342,13 @@ const MouseFx = (function () {
       document.body.appendChild(overlay);
       return overlay;
     }
-    function tick() {
+    function tick(now) {
+      raf = requestAnimationFrame(tick);
+      if (now - _lastTick < RENDER_INTERVAL_MS) return;
+      _lastTick = now;
       const o = ensureOverlay();
       o.style.setProperty("--mx", _cursorX + "px");
       o.style.setProperty("--my", _cursorY + "px");
-      raf = requestAnimationFrame(tick);
     }
     return {
       enable() {
@@ -3358,6 +3367,7 @@ const MouseFx = (function () {
   const spotlight = (function () {
     let raf = null;
     let overlay = null;
+    let _lastTick = 0;
     function ensureOverlay() {
       if (overlay) return overlay;
       overlay = document.createElement("div");
@@ -3369,12 +3379,14 @@ const MouseFx = (function () {
       document.body.appendChild(overlay);
       return overlay;
     }
-    function tick() {
+    function tick(now) {
+      raf = requestAnimationFrame(tick);
+      if (now - _lastTick < RENDER_INTERVAL_MS) return;
+      _lastTick = now;
       const o = ensureOverlay();
       o.style.background =
         "radial-gradient(circle 180px at " + _cursorX + "px " + _cursorY + "px," +
         " transparent 100px, rgba(0,0,0,0.55) 240px)";
-      raf = requestAnimationFrame(tick);
     }
     return {
       enable() {
@@ -3396,6 +3408,10 @@ const MouseFx = (function () {
     let mapCtx = null;
     let svgFilter = null;
     let feImg = null;
+    // v1.6.1-beta R2.3: cap tick. Each tick does mapCanvas.toDataURL()
+    // (256×256 PNG encode) + feImage href update; at native 60 Hz
+    // that's the most expensive of the four mouse effects.
+    let _lastTick = 0;
     const MAP_SIZE = 256;
     function ensureFilter() {
       if (svgFilter) return;
@@ -3420,7 +3436,10 @@ const MouseFx = (function () {
       mapCtx.fillStyle = "rgb(128,128,0)";
       mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
     }
-    function tick() {
+    function tick(now) {
+      raf = requestAnimationFrame(tick);
+      if (now - _lastTick < RENDER_INTERVAL_MS) return;
+      _lastTick = now;
       // Decay existing ripple — blend toward neutral grey at 6 %/frame.
       mapCtx.fillStyle = "rgba(128, 128, 0, 0.06)";
       mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
@@ -3443,7 +3462,6 @@ const MouseFx = (function () {
       }
       lastMouseX = _cursorX; lastMouseY = _cursorY;
       feImg.setAttribute("href", mapCanvas.toDataURL());
-      raf = requestAnimationFrame(tick);
     }
     return {
       enable() {
@@ -4134,14 +4152,25 @@ const ambient = (function () {
   let raf = null;
   let lastT = 0;
   let viewW = 0, viewH = 0;
+  // v1.6.1-beta R2.3: throttle this rAF chain to RENDER_INTERVAL_MS.
+  // Same regression as audio-glow had — uncapped native rAF (~60 Hz)
+  // burning ~2× the GPU it needs to. Particle motion is dt-driven
+  // and visually identical at 30 Hz on the slow / smoothed presets
+  // (snow, fireflies, plasma, aurora …).
+  let _ambientLastTick = 0;
 
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width  = Math.round(viewW * dpr);
-    canvas.height = Math.round(viewH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // v1.6.1-beta R2.3: drop DPR. Ambient particles are small soft
+    // sprites (1-4 px radius circles, blurred sparks, fuzz) and the
+    // whole canvas sits behind the glow grid — DPR ×2 quadrupled
+    // pixel work for zero perceptible quality gain. On a 5120×1440
+    // surface that's 29.5M px per clear+fill at native rAF; the 1:1
+    // buffer cuts that to 7.4M.
+    canvas.width  = Math.round(viewW);
+    canvas.height = Math.round(viewH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
   window.addEventListener("resize", () => { if (preset !== "off") resize(); });
 
@@ -4178,8 +4207,15 @@ const ambient = (function () {
     // back up on unpause.
     if (isPaused) { raf = null; return; }
     raf = requestAnimationFrame(tick);
+    // v1.6.1-beta R2.3: gate by the global frame cap. dt is computed
+    // from the actual elapsed time so particle physics still moves
+    // the correct amount per visible frame; we just skip the render
+    // half (and the spawn / step churn) when we're inside the
+    // interval. RENDER_INTERVAL_MS defaults to 33 ms (30 Hz).
+    if (now - _ambientLastTick < RENDER_INTERVAL_MS) return;
     const dt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
+    _ambientLastTick = now;
     const def = AMBIENT_PRESETS[preset];
     if (!def) return;
     const target = def.targetCount(density, viewW, viewH);
@@ -5439,12 +5475,16 @@ const pixelfx = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width  = Math.round(viewW * dpr);
-    canvas.height = Math.round(viewH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // v1.6.1-beta R2.3: drop DPR (same reasoning as ambient — soft
+    // trail / glow / ripple sprites don't read sharper at ×2, and
+    // the full-viewport clearRect+fill cost is quadratic).
+    canvas.width  = Math.round(viewW);
+    canvas.height = Math.round(viewH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
   window.addEventListener("resize", () => { if (mode !== "off") resize(); });
+  // v1.6.1-beta R2.3: throttle to RENDER_INTERVAL_MS like ambient.
+  let _pixelfxLastTick = 0;
 
   const active       = () => mode !== "off";
   const wantsTrail   = () => mode === "trail"  || mode === "all";
@@ -5469,8 +5509,13 @@ const pixelfx = (function () {
     if (isPaused) { raf = null; return; }
     if (!active()) return;
     raf = requestAnimationFrame(tick);
+    // v1.6.1-beta R2.3: gate by global frame cap. Trail/glow/ripple
+    // are smoothly animated (life-based fades + arc strokes), 30 Hz
+    // is visually identical to 60 Hz.
+    if (now - _pixelfxLastTick < RENDER_INTERVAL_MS) return;
     const dt = Math.min(0.1, (now - lastT) / 1000);
     lastT = now;
+    _pixelfxLastTick = now;
     if (wantsTrail() && cursorX > -50 && cursorY > -50) {
       trail.push({ x: cursorX, y: cursorY, life: 0 });
       while (trail.length > 60) trail.shift();
@@ -5593,10 +5638,14 @@ const parallax = (function () {
   let curX = 0, curY = 0;        // smoothed offset (CSS px)
   let cursorX = -1, cursorY = -1;
   let raf = null;
+  // v1.6.1-beta R2.3: cap to RENDER_INTERVAL_MS. Lerp is dt-driven so
+  // the smoothing speed stays the same; we just skip the one DOM
+  // transform write per off-cap frame.
+  let _lastTick = 0;
 
   function lerp(a, b, t) { return a + (b - a) * t; }
 
-  function tick() {
+  function tick(now) {
     // v1.2.12: rAF cancel-on-pause. See ambient.tick for rationale;
     // resume listener at the bottom of this IIFE re-arms. The
     // strength<=0 path lets the chain die too — setStrength()
@@ -5604,6 +5653,8 @@ const parallax = (function () {
     // restart vector when the user dials parallax back up.
     if (isPaused || strength <= 0) { raf = null; return; }
     raf = requestAnimationFrame(tick);
+    if (now - _lastTick < RENDER_INTERVAL_MS) return;
+    _lastTick = now;
     const w = window.innerWidth  || 1920;
     const h = window.innerHeight || 1080;
     // Normalised cursor offset from centre, clamped to [-1, 1].
