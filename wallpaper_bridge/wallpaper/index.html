@@ -1651,6 +1651,28 @@ function _resetZoneColorCache(total) {
 let RENDER_INTERVAL_MS = 33;
 let _lastRenderTs = 0;
 
+// v1.6.3-beta: effect-canvas quality bucket. Drives the per-canvas
+// SCALE + DPR resize functions used by ambient / pixelfx /
+// audio-glow. See the "effectQuality" case in the settings handler
+// below for the bucket → values mapping.
+let _effectQuality = "performance";
+function _qualityScale() {
+  switch (_effectQuality) {
+    case "balanced": return 0.75;
+    case "quality":  return 1.0;
+    default:         return 0.5;   // performance
+  }
+}
+function _qualityDpr() {
+  // Only the Quality bucket gets DPR-scaled backing buffers; the
+  // others stay 1:1 with CSS pixels so the 5120×1440 surface
+  // doesn't burn 4× the pixel work.
+  if (_effectQuality === "quality") {
+    return Math.min(window.devicePixelRatio || 1, 2);
+  }
+  return 1;
+}
+
 // v1.5.0-beta hotfix: preview mode. The Configurator's live-
 // preview iframe loads /wallpaper?preview=1 so it can render the
 // scene at-scale, but it doesn't need to be a fully-fidelity
@@ -2291,6 +2313,35 @@ function applyProperty(name, val) {
       const cls = (val === "low" || val === "high") ? "glass-quality-" + val : null;
       document.body.classList.remove("glass-quality-low", "glass-quality-high");
       if (cls) document.body.classList.add(cls);
+      break;
+    }
+    case "effectQuality": {
+      // v1.6.3-beta: effect-canvas quality bucket. The v1.6.1-beta GPU
+      // sweep dropped the ambient/pixelfx/audio-glow canvases to half
+      // resolution + DPR 1 + 30 Hz cap to reach 0% idle on a 5120×1440
+      // surface. That's the right floor when nothing's happening, but
+      // users on heavier hardware want the option to crank quality
+      // back up for active sessions. Three buckets:
+      //   "performance" → 0.5× ambient, DPR 1, 30 Hz (sweep defaults)
+      //   "balanced"    → 0.75× ambient, DPR 1, 30 Hz
+      //   "quality"     → 1.0× ambient, DPR up to 2, 60 Hz
+      // Each canvas's resize() pulls the active bucket via
+      // `getEffectQuality()` so a config change triggers a re-size on
+      // the next dispatchEvent("resize") call below. The frame-rate
+      // override only kicks in when the user hasn't manually picked a
+      // different frameRate — bucket implies a rate, but explicit
+      // wins.
+      const ALLOWED = ["performance", "balanced", "quality"];
+      _effectQuality = ALLOWED.indexOf(val) >= 0 ? val : "performance";
+      // Quality bucket bumps the cap to 60 Hz; the other two leave
+      // RENDER_INTERVAL_MS at whatever frameRate already set.
+      if (_effectQuality === "quality") {
+        RENDER_INTERVAL_MS = Math.max(1, Math.round(1000 / 60));
+      }
+      // Kick a resize so every canvas with a ResizeObserver / window
+      // resize listener (ambient / pixelfx / audio-glow) re-pulls
+      // the new scale + DPR on the next tick.
+      try { window.dispatchEvent(new Event("resize")); } catch (_) {}
       break;
     }
     case "showBars":
@@ -4169,18 +4220,17 @@ const ambient = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    // v1.6.1-beta R2.4: half-resolution backing buffer. 5120×1440
-    // at 30 Hz × full-viewport clearRect+fill was still ~7 % GPU
-    // even after R2.3's DPR=1 fix — soft particle sprites don't
-    // benefit from native-res, so render at 0.5× and let the
-    // browser bilinear-upscale via CSS (#ambient-canvas already
-    // has width/height: 100%). Particles still think in CSS
-    // pixels thanks to setTransform(0.5, …); the perceptible
-    // change on snow / fireflies / sparks is essentially nil.
-    const SCALE = 0.5;
-    canvas.width  = Math.max(1, Math.round(viewW * SCALE));
-    canvas.height = Math.max(1, Math.round(viewH * SCALE));
-    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+    // v1.6.3-beta: backing scale + DPR pulled from effectQuality.
+    // performance → 0.5× / DPR 1  (5120×1440 ≈ 7.4M px → 1.85M)
+    // balanced    → 0.75× / DPR 1 (5120×1440 ≈ 7.4M px → 4.2M)
+    // quality     → 1.0×  / DPR 2 (5120×1440 → 29.5M px, was the
+    //                              pre-v1.6.1-beta default)
+    const SCALE = _qualityScale();
+    const dpr = _qualityDpr();
+    const effective = SCALE * dpr;
+    canvas.width  = Math.max(1, Math.round(viewW * effective));
+    canvas.height = Math.max(1, Math.round(viewH * effective));
+    ctx.setTransform(effective, 0, 0, effective, 0, 0);
   }
   window.addEventListener("resize", () => { if (preset !== "off") resize(); });
 
@@ -5316,15 +5366,15 @@ const audioGlow = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    // v1.6.1-beta R2.3: audio-glow is a soft, blurred whole-viewport
-    // overlay (radial gradient pulse / wide spectrum bars / lerp'd
-    // wave). DPR-scaling the buffer doubled pixel work on Hi-DPI for
-    // zero perceptible quality — a 5120×1440 surface at DPR 2 means
-    // a 29.5M-pixel clearRect+fill every frame. Drop to 1:1 CSS
-    // pixels; the soft content hides the upscale completely.
-    canvas.width  = Math.round(viewW);
-    canvas.height = Math.round(viewH);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // v1.6.3-beta: audio-glow gets the same quality-bucket DPR scaling
+    // as the other full-viewport canvases. The content is soft enough
+    // (radial gradient pulse / wide spectrum bars / lerp'd wave) that
+    // performance + balanced stay at 1:1; quality bumps DPR back up
+    // for users who want pre-v1.6.1-beta fidelity.
+    const dpr = _qualityDpr();
+    canvas.width  = Math.round(viewW * dpr);
+    canvas.height = Math.round(viewH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   window.addEventListener("resize", () => { if (mode !== "off") resize(); });
 
@@ -5485,12 +5535,15 @@ const pixelfx = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    // v1.6.1-beta R2.3: drop DPR (same reasoning as ambient — soft
-    // trail / glow / ripple sprites don't read sharper at ×2, and
-    // the full-viewport clearRect+fill cost is quadratic).
-    canvas.width  = Math.round(viewW);
-    canvas.height = Math.round(viewH);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // v1.6.3-beta: DPR pulled from effectQuality. Quality bucket
+    // pushes back to native DPR for crisper trail edges; performance
+    // and balanced stay at 1:1 since the trail/glow/ripple sprites
+    // are soft and the full-viewport clearRect+fill cost is quadratic
+    // in pixel count.
+    const dpr = _qualityDpr();
+    canvas.width  = Math.round(viewW * dpr);
+    canvas.height = Math.round(viewH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   window.addEventListener("resize", () => { if (mode !== "off") resize(); });
   // v1.6.1-beta R2.3: throttle to RENDER_INTERVAL_MS like ambient.

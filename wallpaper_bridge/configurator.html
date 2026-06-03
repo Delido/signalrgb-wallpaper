@@ -1639,6 +1639,23 @@
         <input type="range" id="ambient-density" min="1" max="100" step="1">
         <span class="val" id="ambient-density-val">60</span>
       </div>
+      <!-- v1.6.3-beta: effect-canvas quality bucket. Controls the
+           backing-buffer resolution + DPR of ambient / pixelfx /
+           audio-glow canvases. Default "performance" matches the
+           v1.6.1-beta GPU-sweep settings; pick higher to trade GPU
+           for sharper particle / glow edges. -->
+      <div class="row">
+        <label for="effect-quality" data-i18n="effects.quality">Quality</label>
+        <select id="effect-quality">
+          <option value="performance" data-i18n="effects.quality.performance">Performance (0.5×, DPR 1)</option>
+          <option value="balanced"    data-i18n="effects.quality.balanced">Balanced (0.75×, DPR 1)</option>
+          <option value="quality"     data-i18n="effects.quality.quality">Quality (1.0×, DPR 2, 60 Hz)</option>
+        </select>
+        <span class="hint" data-i18n="effects.quality_hint"
+              style="margin-left:8px; font-size:0.85em;">
+          Higher = sharper particles, more GPU.
+        </span>
+      </div>
 
       <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
 
@@ -2699,6 +2716,16 @@ const TRANSLATIONS = {
   "effects.tint":           { en: "Tint particles with the live glow colour",
                               de: "Partikel mit live Glow-Farbe einfärben" },
   "effects.density":        { en: "Density",              de: "Dichte" },
+  // v1.6.3-beta: per-screen effect-canvas quality bucket.
+  "effects.quality":           { en: "Quality",             de: "Qualität" },
+  "effects.quality.performance": { en: "Performance (0.5×, DPR 1)",
+                                  de: "Performance (0.5×, DPR 1)" },
+  "effects.quality.balanced":  { en: "Balanced (0.75×, DPR 1)",
+                                  de: "Ausgewogen (0.75×, DPR 1)" },
+  "effects.quality.quality":   { en: "Quality (1.0×, DPR 2, 60 Hz)",
+                                  de: "Qualität (1.0×, DPR 2, 60 Hz)" },
+  "effects.quality_hint":     { en: "Higher = sharper particles, more GPU.",
+                                  de: "Höher = schärfere Partikel, mehr GPU." },
   "effects.pixelfx":        { en: "Pixelfx (cursor)",     de: "Pixelfx (Cursor)" },
   "effects.parallax":       { en: "3D parallax",          de: "3D-Parallax" },
   "effects.audio_glow":           { en: "Audio glow",         de: "Audio-Glow" },
@@ -3429,6 +3456,7 @@ const els = {
   ambientTint:    $("ambient-tint"),
   ambientDensity: $("ambient-density"),
   ambientDensityVal: $("ambient-density-val"),
+  effectQuality:  $("effect-quality"),
   pixelfxRow:     $("pixelfx-row"),
   parallax3d:     $("parallax3d"),
   parallax3dVal:  $("parallax3d-val"),
@@ -4810,6 +4838,7 @@ const SECTION_KEYS = {
                            "gridBlur",  "stripesBlur"] },
   "card-effects": { i18n: "section.effects",
                     keys: ["ambientEffect", "ambientTint", "ambientDensity",
+                           "effectQuality",
                            "pixelfx", "parallax3d",
                            "audioGlow", "audioGlowIntensity", "audioGlowTint"] },
   "card-widgets": { i18n: "section.widgets",
@@ -7238,6 +7267,13 @@ bindRangeChange(els.parallax3d,     els.parallax3dVal,     "parallax3d",     " p
 bindRangeChange(els.audioGlowIntensity, els.audioGlowIntensityVal, "audioGlowIntensity", "");
 els.audioGlowMode.addEventListener("change", () => setSetting("audioGlow", els.audioGlowMode.value));
 els.audioGlowTint.addEventListener("change", () => setSetting("audioGlowTint", els.audioGlowTint.checked));
+// v1.6.3-beta: effect-canvas quality bucket. Per-screen setting; the
+// wallpaper page's "effectQuality" case re-sizes the ambient /
+// pixelfx / audio-glow canvases via a synthetic resize event.
+if (els.effectQuality) {
+  els.effectQuality.addEventListener("change", () =>
+    setSetting("effectQuality", els.effectQuality.value));
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Effects section
@@ -8760,6 +8796,11 @@ function renderAll() {
   els.ambientTint.checked = !!settings.ambientTint;
   els.ambientDensity.value = String(settings.ambientDensity ?? 60);
   els.ambientDensityVal.textContent = String(settings.ambientDensity ?? 60);
+  if (els.effectQuality) {
+    const q = settings.effectQuality;
+    els.effectQuality.value = (q === "balanced" || q === "quality")
+      ? q : "performance";
+  }
   els.parallax3d.value = String(settings.parallax3d ?? 0);
   els.parallax3dVal.textContent = (settings.parallax3d ?? 0) + " px";
   els.audioGlowMode.value      = settings.audioGlow || "off";

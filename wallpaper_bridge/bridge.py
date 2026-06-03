@@ -688,7 +688,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.6.2-beta"
+APP_VERSION = "1.6.3-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -711,7 +711,7 @@ APP_VERSION = "1.6.2-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "1.6.1-beta"
+WALLPAPER_VERSION = "1.6.3-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -845,6 +845,25 @@ DEFAULT_SCREEN_SETTINGS = {
     #        60 Hz on the blurred glow layer
     #   60 → "Quality"     — matches the plugin's typical rate
     "frameRate": 30,
+    # v1.6.3-beta: effect-canvas quality bucket. Controls the backing-
+    # buffer resolution + DPR of the three full-viewport effect
+    # canvases (#ambient-canvas, #pixelfx-canvas, #audioglow-canvas).
+    # The v1.6.1-beta GPU sweep dropped DPR to 1 + halved the ambient
+    # resolution to reach 0% idle on a 5120×1440 setup — that's the
+    # right floor for "I'm idle, don't burn the GPU", but users on
+    # heavier hardware want the option to crank the quality back up
+    # for active sessions. Three buckets:
+    #   "performance" → 0.5× ambient backing, DPR 1, 30 Hz cap.
+    #                   Matches v1.6.1-beta's GPU sweep defaults.
+    #   "balanced"    → 0.75× ambient backing, DPR 1, 30 Hz.
+    #                   Middle ground; softer than performance,
+    #                   ~half the GPU of quality.
+    #   "quality"     → 1.0× ambient backing, DPR up to 2, 60 Hz.
+    #                   Pre-v1.6.1-beta visual fidelity; expect 3-4×
+    #                   the GPU of performance on a 5120×1440 surface.
+    # Stays "performance" for new installs so the perf-sweep gains
+    # don't regress silently when users upgrade.
+    "effectQuality": "performance",
     # v1.2.12: glass-tile backdrop-filter quality. Per-widget
     # backdrop-filter is the single most expensive GPU op on the
     # page; the radius cost is quadratic. Three buckets:
@@ -8130,6 +8149,11 @@ class BridgeRuntime:
         "barLayout", "showBars", "glowStrength",
         "gridBlur", "stripesBlur", "barHeight", "barWidth",
         "gridRenderer", "glassQuality", "frameRate",
+        # v1.6.3-beta: effect-canvas quality bucket (performance /
+        # balanced / quality). Controls ambient + pixelfx + audio-glow
+        # canvas backing resolution + DPR + frame cap. Missing from
+        # the whitelist → wallpaper never sees the user's pick.
+        "effectQuality",
         "showStatus",
         "ambientEffect", "ambientTint", "ambientDensity",
         "pixelfx", "parallax3d",

@@ -4,6 +4,71 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3-beta] - 2026-06-03
+
+The **quality bucket + OpenRGB 2D** beta. Two follow-ups to v1.6.2's
+SDK server work plus a long-requested perf/quality knob.
+
+### Added — `effectQuality` per-screen setting
+
+The v1.6.1-beta GPU sweep dropped the ambient / pixelfx / audio-glow
+canvases to 0.5× backing resolution + DPR 1 to reach 0 % idle on a
+5120×1440 surface. That's the right floor when nothing's happening,
+but users on heavier hardware want the option to crank quality back
+up. New per-screen `effectQuality` setting with three buckets:
+
+| Bucket | Ambient backing | DPR | Frame cap |
+|---|---|---|---|
+| **Performance** *(default)* | 0.5× | 1.0 | per `frameRate` |
+| **Balanced** | 0.75× | 1.0 | per `frameRate` |
+| **Quality** | 1.0× | up to 2 | 60 Hz override |
+
+Picker lives in the Effects tab next to ambient density. Default is
+`performance` so the v1.6.1-beta GPU gains don't regress on
+upgrade. Quality bucket roughly matches pre-v1.6.1-beta visual
+fidelity at 3-4× the GPU cost of performance on 5120×1440.
+
+Affects `#ambient-canvas` (snow / rain / sparks / constellation /
+wormhole / …), `#pixelfx-canvas` (trail / glow / click ripple),
+and `#audioglow-canvas` (pulse / spectrum / wave). A synthetic
+window-resize event fires on bucket change so all three canvases
+re-size on the next tick without a wallpaper reload.
+
+### Fixed — OpenRGB SDK Static mode produced black output
+
+Static doesn't carry the `HAS_BRIGHTNESS` flag, so the OpenRGB GUI
+hides the brightness slider and sends a meaningless value
+(typically 0) in the UpdateMode packet's brightness field. The
+engine multiplied the picked colour by `0/100` → black wallpaper.
+
+Fixed by ignoring the packet's brightness field on any mode that
+doesn't advertise the flag. Static now renders the picked colour
+at full brightness as intended.
+
+### Changed — OpenRGB SDK zone back to MATRIX
+
+v1.6.2-beta hotfix2 fell back to a `LINEAR` zone while we
+suspected the matrix descriptor was the cause of the empty-Zone
+dropdown. Hotfix3 showed the actual culprit was the bogus
+`color_mode = 4` / `flags = 0x01` combo in the mode block. With
+those corrected, switching back to `ZONE_TYPE_MATRIX` (matrix_size
+= 8 + 4·W·H, row-major LED index map) is safe and gives effects
+a proper 2D layout to walk.
+
+Rainbow Wave + Color Wave now render 2D-aware: hue varies per LED
+**column** instead of per linear index, then the column values get
+replicated across rows. On a 32×16 wallpaper this is a real
+horizontal sweep instead of left-to-right across a flat 512-LED
+index range. Cost is O(W) HSV conversions per frame instead of
+O(W·H) thanks to the row-replication trick.
+
+### Changed — WALLPAPER_VERSION bump to 1.6.3-beta
+
+`wallpaper/index.html` gained the `effectQuality` settings handler
++ helper functions + the three canvas resize functions migrated
+from hard-coded scale/DPR to the quality-bucket helpers. Lively /
+Wallpaper Engine re-import required.
+
 ## [1.6.2-beta] - 2026-06-02
 
 The **wallpaper-as-virtual-device** beta. Inverts the v1.4/v1.5
