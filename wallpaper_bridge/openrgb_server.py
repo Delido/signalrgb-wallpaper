@@ -290,25 +290,34 @@ def build_controller_data(dev: VirtualDevice, version: int) -> bytes:
             # Wire is BGR0 packed as LE-uint32: bytes (R, G, B, 0).
             parts.append(b"\xff\xff\xff\x00")
 
-    # v1.6.2-beta hotfix2: single LINEAR zone instead of MATRIX. The
-    # original matrix descriptor parsed cleanly with our own
-    # openrgb_client.py but OpenRGB's GUI rejected the zone entirely
-    # (Zone dropdown stayed empty in the GUI → no LEDs, no apply).
-    # `matrix_size` encoding turned out to differ between server
-    # implementations: some treat it as the byte size of the matrix
-    # block that follows (8 + 4*W*H), others as a flag (1 if present)
-    # or the cell count. Until we identify which OpenRGB's parser
-    # expects, ship a flat strip — Direct-mode writes still flow,
-    # spatially-aware effects (Rainbow Wave) just iterate linearly
-    # across the strip instead of walking rows. Matrix support comes
-    # back in a follow-up once the byte layout is pinned down.
+    # v1.6.2-beta hotfix6: switch back to MATRIX zone now that the
+    # mode descriptor is well-formed. The original empty-Zone symptom
+    # under v1.6.2-beta hotfix1 was the bogus `color_mode = 4` /
+    # `flags = 0x01` combo in the mode block, NOT the matrix
+    # encoding — hotfix3 corrected those and Direct + the other
+    # modes worked end-to-end against the GUI on the linear
+    # fallback. Putting matrix back means Rainbow Wave / Color Wave
+    # walk the matrix row-by-row instead of left-to-right across
+    # a flat 512-LED index range, so the wallpaper sees an actual
+    # 2D sweep.
+    #
+    # matrix_size = byte count of (matrix_height + matrix_width +
+    # matrix_data) = 8 + 4 * W * H. For typical 32×16 grids that's
+    # 2056, well under the uint16 limit.
     parts.append(struct.pack("<H", 1))                # num_zones
     parts.append(_pack_string("Wallpaper"))           # zone_name
-    parts.append(struct.pack("<I", 1))                # zone_type (LINEAR)
+    parts.append(struct.pack("<I", 2))                # zone_type (MATRIX)
     parts.append(struct.pack("<I", led_count))        # leds_min
     parts.append(struct.pack("<I", led_count))        # leds_max
     parts.append(struct.pack("<I", led_count))        # leds_count
-    parts.append(struct.pack("<H", 0))                # matrix_size = 0 (no matrix)
+    matrix_block = 8 + 4 * dev.width * dev.height
+    parts.append(struct.pack("<H", min(matrix_block, 0xFFFF)))
+    parts.append(struct.pack("<II", dev.height, dev.width))
+    # Row-major LED indices: (row * width + col). OpenRGB walks the
+    # matrix in row-major order for spatial effects like Rainbow Wave.
+    for r in range(dev.height):
+        for c in range(dev.width):
+            parts.append(struct.pack("<I", r * dev.width + c))
     # Segments (proto 4+) — none.
     if version >= 4:
         parts.append(struct.pack("<H", 0))            # num_segments
@@ -659,6 +668,15 @@ class OpenRgbSdkServer:
             # Commit.
             dev.mode_index = max(0, min(len(BUILTIN_MODES) - 1, int(mode_idx)))
             dev.speed = max(0, min(100, int(speed)))
+            # v1.6.2-beta hotfix6: when the mode doesn't advertise
+            # HAS_BRIGHTNESS, OpenRGB's GUI hides the slider and the
+            # brightness field in the UpdateMode packet is meaningless
+            # (often 0). Using that 0 would multiply Static's picked
+            # colour by 0 → black wallpaper. Default to full brightness
+            # for any mode that doesn't carry the flag.
+            mode_flags = BUILTIN_MODES[dev.mode_index][1]
+            if not (mode_flags & MODE_FLAG_HAS_BRIGHTNESS):
+                brightness = 100
             dev.brightness = max(0, min(100, int(brightness)))
             dev.direction = int(direction) & 0xff
             print(f"[openrgb-sdk] {dev.name} → mode "

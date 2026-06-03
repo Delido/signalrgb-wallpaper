@@ -5976,23 +5976,37 @@ class OpenRgbSdkServerManager:
             r, g, bl = _hsv_to_rgb(h, 1.0, b)
             return [(r, g, bl)] * n
         if idx == 4:
-            # Rainbow Wave — hue varies per LED position + time.
+            # Rainbow Wave — hue varies per LED COLUMN + time. v1.6.2-beta
+            # hotfix6: the matrix zone gives us a real 2D layout, so a
+            # column at x=0..W-1 sweeps the hue across the wallpaper
+            # horizontally instead of left-to-right across a flat
+            # 512-LED index range. Computed per-column then replicated
+            # across rows so cost is O(W) HSV conversions instead of
+            # O(W·H).
+            w, h = dev.width, dev.height
+            col_colors = []
+            for col in range(w):
+                hue = ((col / max(1, w - 1)) + now * spd * 0.2) % 1.0
+                col_colors.append(_hsv_to_rgb(hue, 1.0, b))
             out = []
-            for i in range(n):
-                h = ((i / max(1, n - 1)) + now * spd * 0.2) % 1.0
-                out.append(_hsv_to_rgb(h, 1.0, b))
+            for _ in range(h):
+                out.extend(col_colors)
             return out
         if idx == 5:
-            # Color Wave — same shape but centred on device.color's hue
-            # ±0.15 hue range so it stays in the user's colour family.
+            # Color Wave — same 2D shape as Rainbow Wave but the hue
+            # oscillates ±0.15 around the user's picked colour's hue.
             base_h = _rgb_to_hue(dev.color)
-            out = []
-            for i in range(n):
+            w, h = dev.width, dev.height
+            col_colors = []
+            for col in range(w):
                 offset = math_mod.sin(2 * math_mod.pi
-                                       * ((i / max(1, n - 1))
+                                       * ((col / max(1, w - 1))
                                           + now * spd * 0.2))
-                h = (base_h + 0.15 * offset) % 1.0
-                out.append(_hsv_to_rgb(h, 1.0, b))
+                hue = (base_h + 0.15 * offset) % 1.0
+                col_colors.append(_hsv_to_rgb(hue, 1.0, b))
+            out = []
+            for _ in range(h):
+                out.extend(col_colors)
             return out
         return []
 
