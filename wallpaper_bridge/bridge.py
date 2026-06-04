@@ -44,6 +44,7 @@ import hashlib
 import copy
 import json
 import locale
+import math
 import mimetypes
 import os
 import random
@@ -688,7 +689,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.6.3-beta"
+APP_VERSION = "1.6.4-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -711,7 +712,7 @@ APP_VERSION = "1.6.3-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "1.6.3-beta"
+WALLPAPER_VERSION = "1.6.4-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -1505,7 +1506,14 @@ def default_config() -> dict:
         # can override here.
         "openrgbSdkServer": {
             "enabled":  False,
-            "host":     "0.0.0.0",
+            # v1.6.4-beta: default to loopback. Earlier "0.0.0.0"
+            # default exposed the SDK server to the whole LAN — anyone
+            # on the same network could enumerate + drive the
+            # wallpaper. OpenRGB itself ships with the 127.0.0.1
+            # default for the same reason. Users on LAN-aware setups
+            # (driving from another machine) can flip this back to
+            # 0.0.0.0 or a specific NIC address explicitly.
+            "host":     "127.0.0.1",
             "port":     6743,
             # Grid dimensions per screen for the virtual device's
             # matrix_map. Defaults to a reasonable 32×16 (matches the
@@ -1867,7 +1875,8 @@ def load_config() -> dict:
     if not isinstance(cfg.get("openrgbSdkServer"), dict):
         cfg["openrgbSdkServer"] = {}
     cfg["openrgbSdkServer"].setdefault("enabled", False)
-    cfg["openrgbSdkServer"].setdefault("host", "0.0.0.0")
+    # v1.6.4-beta: loopback default (was 0.0.0.0 = LAN-exposed).
+    cfg["openrgbSdkServer"].setdefault("host", "127.0.0.1")
     cfg["openrgbSdkServer"].setdefault("port", 6743)
     cfg["openrgbSdkServer"].setdefault("matrix", {})
     if not isinstance(cfg["openrgbSdkServer"].get("matrix"), dict):
@@ -5919,6 +5928,15 @@ class OpenRgbSdkServerManager:
 
     def stop(self) -> None:
         self._engine_stop.set()
+        # v1.6.4-beta: join the engine thread so a fast reload()
+        # can't briefly run the old + new engine in parallel. The
+        # loop polls _engine_stop on every TICK_S wait — at 33 ms
+        # that's the worst-case join time. Daemon=True kept as a
+        # safety net for interpreter shutdown only.
+        prev = self._engine_thread
+        if prev is not None and prev.is_alive():
+            try: prev.join(timeout=0.2)
+            except Exception: pass
         if self._server is not None:
             try: self._server.stop()
             except Exception as e:
@@ -5946,7 +5964,6 @@ class OpenRgbSdkServerManager:
         Direct is skipped because the GUI will be sending its own
         UpdateLEDs writes; running the engine on top would cause
         last-write-wins flicker."""
-        import math
         TICK_S = 1.0 / 30.0
         t0 = time.monotonic()
         while not self._engine_stop.is_set():
@@ -5960,7 +5977,7 @@ class OpenRgbSdkServerManager:
                 if dev.mode_index <= 0:
                     continue   # Direct — engine no-op
                 try:
-                    colors = self._render_mode(dev, now, math)
+                    colors = self._render_mode(dev, now)
                 except Exception as e:
                     print(f"[openrgb-sdk] render {dev.name} failed: {e}")
                     continue
@@ -5972,7 +5989,7 @@ class OpenRgbSdkServerManager:
             if self._engine_stop.wait(TICK_S):
                 return
 
-    def _render_mode(self, dev, now: float, math_mod) -> list:
+    def _render_mode(self, dev, now: float) -> list:
         """Compute one frame's worth of (R, G, B) tuples for `dev`.
         Speed slider 0..100 maps to per-mode cadence; brightness
         0..100 scales output linearly."""
@@ -5992,7 +6009,7 @@ class OpenRgbSdkServerManager:
         spd = max(0.05, dev.speed / 50.0)
         if idx == 2:
             # Breathing — sin(2πft) over device.color.
-            amp = 0.5 + 0.5 * math_mod.sin(2 * math_mod.pi * spd * 0.5 * now)
+            amp = 0.5 + 0.5 * math.sin(2 * math.pi * spd * 0.5 * now)
             scale = amp * b
             r, g, bl = (int(c * scale) for c in dev.color)
             return [(r, g, bl)] * n
@@ -6001,38 +6018,49 @@ class OpenRgbSdkServerManager:
             h = (now * spd * 0.2) % 1.0
             r, g, bl = _hsv_to_rgb(h, 1.0, b)
             return [(r, g, bl)] * n
-        if idx == 4:
-            # Rainbow Wave — hue varies per LED COLUMN + time. v1.6.2-beta
-            # hotfix6: the matrix zone gives us a real 2D layout, so a
-            # column at x=0..W-1 sweeps the hue across the wallpaper
-            # horizontally instead of left-to-right across a flat
-            # 512-LED index range. Computed per-column then replicated
-            # across rows so cost is O(W) HSV conversions instead of
-            # O(W·H).
+        # v1.6.4-beta: direction-aware wave rendering for Rainbow Wave +
+        # Color Wave. OpenRGB direction enum:
+        #   0 = LEFT, 1 = RIGHT, 2 = UP, 3 = DOWN,
+        #   4 = HORIZONTAL, 5 = VERTICAL
+        # Vertical (UP/DOWN) iterates rows; HV-axis enums are alias to
+        # one direction each. RIGHT/DOWN reverse the time sign so the
+        # sweep flows the picked direction.
+        # The flag table (HAS_DIRECTION_LR) advertised LR-only at the
+        # descriptor level; with both LR/UD present in the wave modes
+        # the GUI's direction picker now actually does something.
+        d = dev.direction
+        if idx == 4 or idx == 5:
             w, h = dev.width, dev.height
-            col_colors = []
-            for col in range(w):
-                hue = ((col / max(1, w - 1)) + now * spd * 0.2) % 1.0
-                col_colors.append(_hsv_to_rgb(hue, 1.0, b))
+            vertical = (d == 2 or d == 3 or d == 5)
+            reverse  = (d == 1 or d == 3)
+            extent = h if vertical else w
+            line_colors = []
+            if idx == 4:
+                for i in range(extent):
+                    pos = (i / max(1, extent - 1))
+                    t = now * spd * 0.2
+                    hue = ((pos + (-t if reverse else t))) % 1.0
+                    line_colors.append(_hsv_to_rgb(hue, 1.0, b))
+            else:
+                base_h = _rgb_to_hue(dev.color)
+                for i in range(extent):
+                    pos = (i / max(1, extent - 1))
+                    t = now * spd * 0.2
+                    offset = math.sin(2 * math.pi
+                                       * (pos + (-t if reverse else t)))
+                    hue = (base_h + 0.15 * offset) % 1.0
+                    line_colors.append(_hsv_to_rgb(hue, 1.0, b))
+            # Build the W*H output. Vertical: each row r gets
+            # line_colors[r] across all W columns. Horizontal: each row
+            # gets the full line_colors array repeated.
             out = []
-            for _ in range(h):
-                out.extend(col_colors)
-            return out
-        if idx == 5:
-            # Color Wave — same 2D shape as Rainbow Wave but the hue
-            # oscillates ±0.15 around the user's picked colour's hue.
-            base_h = _rgb_to_hue(dev.color)
-            w, h = dev.width, dev.height
-            col_colors = []
-            for col in range(w):
-                offset = math_mod.sin(2 * math_mod.pi
-                                       * ((col / max(1, w - 1))
-                                          + now * spd * 0.2))
-                hue = (base_h + 0.15 * offset) % 1.0
-                col_colors.append(_hsv_to_rgb(hue, 1.0, b))
-            out = []
-            for _ in range(h):
-                out.extend(col_colors)
+            if vertical:
+                for row in range(h):
+                    col = line_colors[row]
+                    out.extend([col] * w)
+            else:
+                for _ in range(h):
+                    out.extend(line_colors)
             return out
         return []
 

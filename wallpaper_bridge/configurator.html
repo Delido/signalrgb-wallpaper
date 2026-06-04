@@ -156,7 +156,14 @@
     padding: 0 22px;
     display: flex; gap: 2px;
     border-bottom: 1px solid var(--border);
-    position: sticky; top: 84px; z-index: 9;
+    /* v1.6.4-beta: top was 84px which sat INSIDE the .tabs (screen-
+       picker) sticky band — when scrolling, section-tabs overlapped
+       the lower half of .tabs and the top edge of section-tabs
+       slipped under .tabs. header (~46px) + .tabs (~50px) ≈ 96px,
+       so 100 clears both with a small buffer. Also bumped z-index so
+       drop-shadow / hover hits the right element when both are
+       stacked. */
+    position: sticky; top: 100px; z-index: 8;
     background: var(--bg);
   }
   #section-tabs .stab {
@@ -1398,7 +1405,7 @@
 <main data-active-tab="look">
 
   <!-- ── Presets ───────────────────────────────────────────────────── -->
-  <section class="card collapsed" id="card-presets" data-section-tab="system">
+  <section class="card" id="card-presets" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.presets">Presets</h2>
@@ -1865,7 +1872,7 @@
        tray menu's "Advanced" submenu. Same handlers — they now POST
        to bridge endpoints over WS instead of being invoked via
        pystray callbacks. -->
-  <section class="card collapsed" id="card-system" data-section-tab="integrations">
+  <section class="card" id="card-system" data-section-tab="integrations">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.system">System</h2>
@@ -2199,7 +2206,7 @@
   </section>
 
   <!-- ── Per-app profiles ────────────────────────────────────────────── -->
-  <section class="card collapsed" id="card-profiles" data-section-tab="system">
+  <section class="card" id="card-profiles" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.profiles">Per-app profiles</h2>
@@ -2220,7 +2227,7 @@
   </section>
 
   <!-- ── Backup & Restore ───────────────────────────────────────────── -->
-  <section class="card collapsed" id="card-backup" data-section-tab="system">
+  <section class="card" id="card-backup" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.backup">Backup &amp; Restore</h2>
@@ -2457,6 +2464,13 @@ const TRANSLATIONS = {
 
   "system.reload_config":   { en: "Reload config from disk",
                               de: "Config von Festplatte neu laden" },
+  // v1.6.4-beta: missing i18n entries for the system-action toasts.
+  // Without these, clicking "Jetzt prüfen" / "Releases-Seite öffnen"
+  // raised a toast with the literal i18n key as visible text.
+  "system.check_updates_now": { en: "Checking for updates…",
+                                de: "Suche nach Updates…" },
+  "system.open_releases":   { en: "Opening releases page…",
+                              de: "Öffne Releases-Seite…" },
   "system.reload_wallpapers": { en: "Reload wallpaper pages",
                               de: "Wallpaper-Seiten neu laden" },
   "system.reimport_bundles": { en: "Re-import wallpaper bundles…",

@@ -130,14 +130,19 @@ BUILTIN_MODES = [
     # Rainbow — hue cycles across the whole device uniformly over time.
     ("Rainbow",      MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS,       MODE_COLORS_NONE,    50, 0, 0),
     # Rainbow Wave — hue offset varies per LED position so colours sweep
-    # across the strip / matrix. Single direction (LR) on a linear zone.
+    # across the matrix. v1.6.4-beta: ship LR + UD direction flags so
+    # the GUI's direction picker offers all four arrow directions; the
+    # bridge-side render switches between row-major and column-major
+    # iteration based on the picked direction.
     ("Rainbow Wave", MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS
-                     | MODE_FLAG_HAS_DIRECTION_LR,                         MODE_COLORS_NONE,    50, 0, 0),
+                     | MODE_FLAG_HAS_DIRECTION_LR
+                     | MODE_FLAG_HAS_DIRECTION_UD,                         MODE_COLORS_NONE,    50, 0, 0),
     # Color Wave — same shape as Rainbow Wave but uses a user-picked
     # base colour (interpolated across hues centred on the colour).
     ("Color Wave",   MODE_FLAG_HAS_SPEED | MODE_FLAG_HAS_BRIGHTNESS
                      | MODE_FLAG_HAS_MODE_SPECIFIC_COLOR
-                     | MODE_FLAG_HAS_DIRECTION_LR,                         MODE_COLORS_MODE_SPECIFIC, 50, 1, 1),
+                     | MODE_FLAG_HAS_DIRECTION_LR
+                     | MODE_FLAG_HAS_DIRECTION_UD,                         MODE_COLORS_MODE_SPECIFIC, 50, 1, 1),
 ]
 
 

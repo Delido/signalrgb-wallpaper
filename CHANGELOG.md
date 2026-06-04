@@ -4,6 +4,106 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.4-beta] - 2026-06-03
+
+The **audit follow-up** beta. A sweep of correctness + UX +
+security findings from the v1.6.3-beta review.
+
+### Fixed — section-tabs row not sticky on scroll
+
+The `#section-tabs` row used `top: 84px`, which sat *inside* the
+`.tabs` (screen-picker) sticky band — when scrolling, the upper
+slice of section-tabs slipped under the screen-picker and the
+tab labels visibly overlapped page content. Header (~46 px) +
+screen-tabs (~50 px) ≈ 96 px, so 100 clears both with a small
+buffer.
+
+### Fixed — `Integrations` + `System` tab cards collapsed by default
+
+The R2 IA split the 9 cards across 5 tabs, but four cards
+(`card-presets`, `card-profiles`, `card-backup`, `card-system`)
+kept their pre-R2 `collapsed` class. With each tab now showing
+1–3 cards instead of all 9, manual expansion was just friction.
+Removed the initial `collapsed` class from those four; users
+can still collapse them manually.
+
+### Fixed — missing `system.check_updates_now` + `system.open_releases` i18n
+
+Clicking "Jetzt prüfen" / "Releases-Seite öffnen" in the System
+tab raised a toast with the raw i18n key as visible text. Added
+both translations (EN + DE).
+
+### Fixed — `dev.direction` from `UpdateMode` was unused
+
+OpenRGB GUI's direction picker on Rainbow Wave + Color Wave did
+nothing — the picked direction was parsed into `dev.direction`
+but the render code only ever swept LR. Fixed: render now
+respects all four directions (LEFT / RIGHT / UP / DOWN), with
+vertical directions iterating by row and reverse directions
+flipping the time sign so the sweep flows the picked way. Both
+wave modes also gain the `HAS_DIRECTION_UD` flag so the GUI
+offers up/down picks alongside left/right.
+
+### Fixed — SDK server default host exposed LAN
+
+`openrgbSdkServer.host` defaulted to `0.0.0.0`, which bound the
+listen socket on every NIC — anyone on the same LAN could
+enumerate + drive the wallpaper. OpenRGB itself ships with the
+`127.0.0.1` default for the same reason. Changed default to
+loopback; LAN-aware setups (driving from another machine) can
+flip back to `0.0.0.0` or a specific NIC explicitly.
+
+### Fixed — `reload()` race between old + new effect engine threads
+
+A fast `reload()` could briefly run two engine daemons in parallel
+because `start()` cleared `_engine_stop` before the previous
+loop's wait returned. `stop()` now joins the previous thread
+(0.2 s timeout — worst case is one TICK_S = 33 ms) so the new
+engine never races the old one.
+
+### Fixed — `effectQuality` leaked `RENDER_INTERVAL_MS`
+
+Picking Quality bumped the frame cap to 60 Hz as intended, but
+switching back to Performance / Balanced left the cap pinned at
+16 ms — the user's `frameRate` pick was forgotten until they
+touched the dropdown again. Fixed by tracking the user's
+frameRate-derived interval in `_userFrameInterval` separately.
+The `effectQuality` case picks between that shadow value (for
+performance / balanced) and the 60 Hz override (for quality).
+`frameRate` writes update both globals, so dialling frameRate
+while in Quality stages the new value for when the user later
+drops out of Quality.
+
+### Fixed — `SetCustomMode` left the engine in the wrong mode
+
+OpenRGB GUI's "Custom mode" button fires `SetCustomMode` (packet
+1100), which is semantically *"switch to the mode that accepts
+UpdateLEDs writes verbatim"* — on our descriptor that's mode 0
+(Direct). v1.6.3-beta routed it through the `UpdateMode` parser,
+which bailed on the smaller payload but left `dev.mode_index`
+pointing at the previous mode. Now `SetCustomMode` has its own
+branch that flips `dev.mode_index = 0` and logs the transition.
+
+### Added — `effectQuality` travels with presets
+
+Added to `PRESET_SNAPSHOT_KEYS` so per-preset quality intent
+("Cinema = Quality, Idle = Performance") survives Save/Apply.
+`frameRate` / `glassQuality` / `gridRenderer` stay excluded.
+
+### Changed — `math` hoisted to module-level import
+
+`_effect_loop` had an inline `import math` and threaded the
+module reference through `_render_mode(dev, now, math_mod)`. The
+import is at the module top now, the parameter is gone, and the
+render code references `math.sin` / `math.pi` directly.
+
+### Changed — WALLPAPER_VERSION bump to 1.6.4-beta
+
+`wallpaper/index.html` gained the `_userFrameInterval` shadow +
+the corrected `effectQuality` / `frameRate` interplay + the
+`#section-tabs` top offset bump. Lively / Wallpaper Engine
+re-import required.
+
 ## [1.6.3-beta] - 2026-06-03
 
 The **quality bucket + OpenRGB 2D** beta. Two follow-ups to v1.6.2's
@@ -26,7 +126,10 @@ up. New per-screen `effectQuality` setting with three buckets:
 Picker lives in the Effects tab next to ambient density. Default is
 `performance` so the v1.6.1-beta GPU gains don't regress on
 upgrade. Quality bucket roughly matches pre-v1.6.1-beta visual
-fidelity at 3-4× the GPU cost of performance on 5120×1440.
+fidelity at **~8–12× the GPU cost** of performance on 5120×1440
+(16× pixel work from 0.5× → 1.0× backing buffer + DPR 1 → 2,
+plus 2× from the 60 Hz override, partially absorbed by compositing
+overhead).
 
 Affects `#ambient-canvas` (snow / rain / sparks / constellation /
 wormhole / …), `#pixelfx-canvas` (trail / glow / click ripple),

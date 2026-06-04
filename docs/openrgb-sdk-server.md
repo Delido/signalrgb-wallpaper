@@ -93,8 +93,9 @@ real OpenRGB devices; **Color Wave** is bridge-specific.
 | **Color Wave** | Same shape as Rainbow Wave but centred on the picked colour's hue (±15° hue range). | ✓ | ✓ | yes (1 colour) |
 
 Speed slider is normalised 0..100. Internally it maps to a per-mode
-cadence — at 100 a Rainbow cycle takes about 5 seconds across the
-strip, at 0 it's effectively frozen.
+cadence — at 100 a Rainbow cycle takes about **2.5 seconds**
+across the matrix, at 50 about 5 seconds, at 0 it's effectively
+frozen.
 
 Brightness slider scales the output linearly. 0 turns the device off
 without dropping the mode; 100 is full.
