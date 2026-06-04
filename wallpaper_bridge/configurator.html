@@ -282,6 +282,33 @@
   section.card.collapsed > header.section-head .chev { transform: rotate(-90deg); }
   section.card > .body { padding: 16px; }
   section.card.collapsed > .body { display: none; }
+  /* v1.6.5-beta: visual separators for the h3 sub-sections inside
+     #card-system (OpenRGB / Sources / sACN / MQTT / REST / Plugins
+     / SDK server). With card-system auto-expanded in the
+     Integrations tab the user sees all 6+ sub-blocks at once;
+     without dividers they bleed into each other and the user can't
+     tell where one ends and the next begins. h3 gets a subtle
+     panel-tinted bar + top spacing so each sub-section reads as a
+     self-contained unit. */
+  #card-system > .body > h3,
+  #card-system > .body > .row:has(> h3) {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  #card-system > .body > h3:first-of-type,
+  #card-system > .body > .row:has(> h3):first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+  #card-system > .body > h3 {
+    background: var(--panel-2);
+    margin-left: -16px; margin-right: -16px;
+    padding: 8px 16px;
+    border-top-color: transparent;
+    border-bottom: 1px solid var(--border);
+  }
   /* Apply-to-all button — injected into each section-head when screenCount
      > 1. Right-aligned, doesn't fight the collapse-toggle click. */
   section.card > header.section-head .apply-all {
@@ -2465,12 +2492,13 @@ const TRANSLATIONS = {
   "system.reload_config":   { en: "Reload config from disk",
                               de: "Config von Festplatte neu laden" },
   // v1.6.4-beta: missing i18n entries for the system-action toasts.
-  // Without these, clicking "Jetzt prüfen" / "Releases-Seite öffnen"
-  // raised a toast with the literal i18n key as visible text.
-  "system.check_updates_now": { en: "Checking for updates…",
-                                de: "Suche nach Updates…" },
-  "system.open_releases":   { en: "Opening releases page…",
-                              de: "Öffne Releases-Seite…" },
+  // v1.6.5-beta: rephrased to match the existing infinitive/button-
+  // label style (`system.reload_config` = "Reload config from disk")
+  // instead of the gerund-with-ellipsis style ("Checking…").
+  "system.check_updates_now": { en: "Check for updates now",
+                                de: "Jetzt nach Updates suchen" },
+  "system.open_releases":   { en: "Open releases page",
+                              de: "Releases-Seite öffnen" },
   "system.reload_wallpapers": { en: "Reload wallpaper pages",
                               de: "Wallpaper-Seiten neu laden" },
   "system.reimport_bundles": { en: "Re-import wallpaper bundles…",

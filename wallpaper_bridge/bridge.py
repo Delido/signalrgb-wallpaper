@@ -689,7 +689,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.6.4-beta"
+APP_VERSION = "1.6.5-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -5854,7 +5854,12 @@ class OpenRgbSdkServerManager:
         # _on_update_leds callback Direct uses. Engine reads device
         # state (mode_index / speed / brightness / color) live so
         # GUI mode picks take effect on the next tick.
-        self._engine_stop = threading.Event()
+        # v1.6.5-beta: each generation gets its OWN Event so a fast
+        # reload() can't reach into the new generation and clear the
+        # old thread's stop flag. The old Event stays set forever
+        # → the old thread exits on its next tick + can never be
+        # re-armed by start().
+        self._engine_stop: threading.Event | None = None
         self._engine_thread: threading.Thread | None = None
 
     # ── config helpers ─────────────────────────────────────────────
@@ -5919,20 +5924,28 @@ class OpenRgbSdkServerManager:
             self._server = None
             return
         # Effect engine — renders non-Direct modes at 30 Hz into the
-        # same UpdateLEDs callback path Direct uses.
-        self._engine_stop.clear()
+        # same UpdateLEDs callback path Direct uses. v1.6.5-beta:
+        # spawn a NEW Event for this generation. The old generation
+        # (if any) holds onto its own Event in its closure via
+        # _effect_loop's stop_evt argument — start() never reaches
+        # in to clear it, so a join-timeout from stop() can't
+        # resurrect the old thread.
+        stop_evt = threading.Event()
+        self._engine_stop = stop_evt
         self._engine_thread = threading.Thread(
-            target=self._effect_loop, daemon=True,
-            name="openrgb-sdk-effects")
+            target=self._effect_loop, args=(stop_evt,),
+            daemon=True, name="openrgb-sdk-effects")
         self._engine_thread.start()
 
     def stop(self) -> None:
-        self._engine_stop.set()
+        if self._engine_stop is not None:
+            self._engine_stop.set()
         # v1.6.4-beta: join the engine thread so a fast reload()
         # can't briefly run the old + new engine in parallel. The
-        # loop polls _engine_stop on every TICK_S wait — at 33 ms
-        # that's the worst-case join time. Daemon=True kept as a
-        # safety net for interpreter shutdown only.
+        # loop polls its OWN stop event (passed as argument) so a
+        # subsequent start() that allocates a fresh Event leaves
+        # the old one signalled forever — the old thread exits
+        # cleanly even if join() times out.
         prev = self._engine_thread
         if prev is not None and prev.is_alive():
             try: prev.join(timeout=0.2)
@@ -5954,7 +5967,7 @@ class OpenRgbSdkServerManager:
 
     # ── effect engine ──────────────────────────────────────────────
 
-    def _effect_loop(self) -> None:
+    def _effect_loop(self, stop_evt: threading.Event) -> None:
         """30-Hz render loop. For each connected device whose active
         mode is NOT Direct, computes the colour array for the current
         frame from the device's mode + speed + brightness + colour,
@@ -5963,12 +5976,16 @@ class OpenRgbSdkServerManager:
 
         Direct is skipped because the GUI will be sending its own
         UpdateLEDs writes; running the engine on top would cause
-        last-write-wins flicker."""
+        last-write-wins flicker.
+
+        `stop_evt` is the per-generation stop signal — passed in by
+        start() so a subsequent reload()'s start() that allocates a
+        fresh Event can't reach in and clear OUR stop flag."""
         TICK_S = 1.0 / 30.0
         t0 = time.monotonic()
-        while not self._engine_stop.is_set():
+        while not stop_evt.is_set():
             if self._server is None:
-                if self._engine_stop.wait(TICK_S):
+                if stop_evt.wait(TICK_S):
                     return
                 continue
             devices = list(self._server._devices)
@@ -5986,7 +6003,7 @@ class OpenRgbSdkServerManager:
                         self._on_update_leds(dev.screen_idx, colors)
                     except Exception as e:
                         print(f"[openrgb-sdk] engine emit failed: {e}")
-            if self._engine_stop.wait(TICK_S):
+            if stop_evt.wait(TICK_S):
                 return
 
     def _render_mode(self, dev, now: float) -> list:
@@ -6022,17 +6039,20 @@ class OpenRgbSdkServerManager:
         # Color Wave. OpenRGB direction enum:
         #   0 = LEFT, 1 = RIGHT, 2 = UP, 3 = DOWN,
         #   4 = HORIZONTAL, 5 = VERTICAL
-        # Vertical (UP/DOWN) iterates rows; HV-axis enums are alias to
-        # one direction each. RIGHT/DOWN reverse the time sign so the
-        # sweep flows the picked direction.
-        # The flag table (HAS_DIRECTION_LR) advertised LR-only at the
-        # descriptor level; with both LR/UD present in the wave modes
-        # the GUI's direction picker now actually does something.
+        # Vertical (UP/DOWN) iterates rows; HV-axis enums are aliases
+        # to one direction each.
+        #
+        # v1.6.5-beta: OpenRGB convention has LEFT increment hue_base
+        # and RIGHT decrement — visually the pattern moves leftward
+        # for LEFT, rightward for RIGHT. Our previous wiring inverted
+        # this. Swapped: LEFT (d=0) / UP (d=2) now reverse the time
+        # sign (-t), RIGHT (d=1) / DOWN (d=3) keep +t. HORIZONTAL
+        # (4) / VERTICAL (5) stay as the forward defaults.
         d = dev.direction
         if idx == 4 or idx == 5:
             w, h = dev.width, dev.height
             vertical = (d == 2 or d == 3 or d == 5)
-            reverse  = (d == 1 or d == 3)
+            reverse  = (d == 0 or d == 2)
             extent = h if vertical else w
             line_colors = []
             if idx == 4:
@@ -6042,7 +6062,16 @@ class OpenRgbSdkServerManager:
                     hue = ((pos + (-t if reverse else t))) % 1.0
                     line_colors.append(_hsv_to_rgb(hue, 1.0, b))
             else:
+                # v1.6.5-beta: when the user-picked colour is
+                # grayscale (default white before any explicit pick),
+                # _rgb_to_hue returns 0 → Color Wave centres on red.
+                # That's a surprising default. Fall back to a calm
+                # cyan-blue (0.55) so the wave reads as "colour
+                # wave" rather than "red wave" until the user picks
+                # something deliberate.
                 base_h = _rgb_to_hue(dev.color)
+                if base_h == 0.0 and dev.color[0] == dev.color[1] == dev.color[2]:
+                    base_h = 0.55
                 for i in range(extent):
                     pos = (i / max(1, extent - 1))
                     t = now * spd * 0.2

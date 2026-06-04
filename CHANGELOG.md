@@ -4,6 +4,58 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.5-beta] - 2026-06-03
+
+The **audit follow-up #2** beta. Five findings from the v1.6.4-beta
+review.
+
+### Fixed — `reload()` race fully closed
+
+v1.6.4-beta added a `prev.join(timeout=0.2)` in `stop()` to keep
+the old + new engine threads from running in parallel. But on
+timeout, the old thread was still alive when `start()` cleared
+the shared `_engine_stop` flag → the old thread saw `stop=False`
+on its next tick and lived forever. Each generation now owns its
+own `Event`, passed in via `_effect_loop(stop_evt)`. Old
+generations hold the old Event in their closure; `start()`
+allocates a fresh one and never reaches into the old.
+
+### Fixed — Color Wave centred on red when colour is grayscale
+
+`_rgb_to_hue` returns 0 for any grayscale input. `dev.color`
+defaults to white (255, 255, 255) on a new GUI connection, so
+Color Wave's ±0.15-hue wave centred around hue 0 → all red until
+the user picked an explicit colour. Now a grayscale-base fallback
+nudges base_h to 0.55 (calm cyan-blue) so the wave reads as
+"colour wave" rather than "red wave" out of the box.
+
+### Fixed — direction convention inverted for wave modes
+
+OpenRGB convention: LEFT (d=0) increments the hue offset → pattern
+visually moves leftward. RIGHT decrements → moves rightward. My
+previous wiring had this backwards — picking LEFT in the GUI
+moved the wave rightward and vice versa. Swapped the `reverse`
+bitset to match OpenRGB.
+
+### Changed — i18n style consistency for system-action toasts
+
+`system.check_updates_now` + `system.open_releases` shipped with a
+gerund-with-ellipsis style ("Checking…" / "Opening…") that
+clashed with the existing infinitive/button-label style
+(`system.reload_config` = "Reload config from disk"). Rephrased
+to match the rest.
+
+### Changed — visual separators between `card-system` sub-sections
+
+Auto-expanding `card-system` in v1.6.4-beta surfaced the System
+card's full 7-block content stack (OpenRGB output / SDK server /
+Sources / sACN / MQTT / REST / Plugins) at once with no visual
+separation — sub-sections bled into each other and the user
+couldn't tell where one ended and the next began. Added
+panel-tinted h3 bars + border-tops so each sub-block reads as a
+self-contained unit without forcing the user back to manual
+collapse.
+
 ## [1.6.4-beta] - 2026-06-03
 
 The **audit follow-up** beta. A sweep of correctness + UX +
