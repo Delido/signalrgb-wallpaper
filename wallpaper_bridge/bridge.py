@@ -1026,6 +1026,13 @@ PRESET_SNAPSHOT_KEYS = (
     # apply_preset's `if k in snapshot` guard leaves the live value
     # alone, so existing slots stay valid.
     "widgetTheme", "mouseEffects",
+    # v1.6.3-beta hotfix1: effectQuality bucket. Travels with
+    # presets so a user's "Cinema preset = Quality" / "Idle preset =
+    # Performance" intent survives Save/Apply. frameRate / glassQuality
+    # / gridRenderer stay excluded — those are hardware-perf knobs
+    # the user picks once for their machine; effectQuality is the
+    # aesthetic-perf trade and reasonably scoped per preset.
+    "effectQuality",
     "ambientEffect", "ambientTint", "ambientDensity",
     "pixelfx", "parallax3d",
     "audioGlow", "audioGlowIntensity", "audioGlowTint",

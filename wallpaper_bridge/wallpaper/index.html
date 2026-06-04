@@ -1651,6 +1651,14 @@ function _resetZoneColorCache(total) {
 let RENDER_INTERVAL_MS = 33;
 let _lastRenderTs = 0;
 
+// v1.6.3-beta hotfix1: track the user's chosen frameRate-derived
+// interval separately so the effectQuality bucket can override
+// without losing it. Without this shadow, switching from Quality
+// (60 Hz override) back to Performance/Balanced left
+// RENDER_INTERVAL_MS pinned at 16 ms — the user's frameRate pick
+// was forgotten until they touched the frameRate dropdown again.
+let _userFrameInterval = 33;
+
 // v1.6.3-beta: effect-canvas quality bucket. Drives the per-canvas
 // SCALE + DPR resize functions used by ambient / pixelfx /
 // audio-glow. See the "effectQuality" case in the settings handler
@@ -2303,7 +2311,12 @@ function applyProperty(name, val) {
         ? val
         : parseInt(val, 10);
       const clamped = (rate > 0 && rate <= 240) ? rate : 30;
-      RENDER_INTERVAL_MS = Math.max(1, Math.round(1000 / clamped));
+      // v1.6.3-beta hotfix1: stash the user-derived interval too so
+      // the effectQuality bucket can restore it when leaving Quality.
+      _userFrameInterval = Math.max(1, Math.round(1000 / clamped));
+      RENDER_INTERVAL_MS = (_effectQuality === "quality")
+        ? Math.max(1, Math.round(1000 / 60))
+        : _userFrameInterval;
       break;
     }
     case "glassQuality": {
@@ -2333,11 +2346,14 @@ function applyProperty(name, val) {
       // wins.
       const ALLOWED = ["performance", "balanced", "quality"];
       _effectQuality = ALLOWED.indexOf(val) >= 0 ? val : "performance";
-      // Quality bucket bumps the cap to 60 Hz; the other two leave
-      // RENDER_INTERVAL_MS at whatever frameRate already set.
-      if (_effectQuality === "quality") {
-        RENDER_INTERVAL_MS = Math.max(1, Math.round(1000 / 60));
-      }
+      // v1.6.3-beta hotfix1: choose between the user-derived interval
+      // and the Quality bucket's 60 Hz override. Without this branch,
+      // leaving Quality left RENDER_INTERVAL_MS pinned at 16 ms and
+      // the user's frameRate pick was forgotten until they touched
+      // the frameRate dropdown again.
+      RENDER_INTERVAL_MS = (_effectQuality === "quality")
+        ? Math.max(1, Math.round(1000 / 60))
+        : _userFrameInterval;
       // Kick a resize so every canvas with a ResizeObserver / window
       // resize listener (ambient / pixelfx / audio-glow) re-pulls
       // the new scale + DPR on the next tick.

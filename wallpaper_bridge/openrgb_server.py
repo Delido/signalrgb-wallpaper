@@ -597,9 +597,24 @@ class OpenRgbSdkServer:
                             NET_PACKET_ID_RGBCONTROLLER_UPDATESINGLELED):
             self._handle_update(dev_idx, packet_id, data)
 
-        elif packet_id in (NET_PACKET_ID_RGBCONTROLLER_UPDATEMODE,
-                            NET_PACKET_ID_RGBCONTROLLER_SETCUSTOMMODE):
+        elif packet_id == NET_PACKET_ID_RGBCONTROLLER_UPDATEMODE:
             self._handle_mode_update(dev_idx, data)
+
+        elif packet_id == NET_PACKET_ID_RGBCONTROLLER_SETCUSTOMMODE:
+            # v1.6.3-beta hotfix1: SetCustomMode tells the device to
+            # enter its custom / direct-write mode — semantically
+            # different from UpdateMode (which carries a full mode
+            # descriptor). Real devices treat this as "switch to the
+            # mode that accepts UpdateLEDs writes verbatim", which on
+            # our descriptor is mode 0 (Direct). Previously routed
+            # through the UpdateMode parser, which bailed on the
+            # smaller payload but left dev.mode_index pointing at the
+            # old mode — engine kept running effects on top of the
+            # GUI's writes.
+            if dev_idx < len(self._devices):
+                self._devices[dev_idx].mode_index = 0
+                print(f"[openrgb-sdk] {self._devices[dev_idx].name} "
+                      f"→ Direct (SetCustomMode)")
 
         # Other packet IDs → silent ignore. Forward-compatible with new
         # packet types future OpenRGB clients might fire.
