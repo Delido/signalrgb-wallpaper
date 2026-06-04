@@ -4,6 +4,117 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-06-03
+
+The **stable cut** of everything that landed between v1.3.0 (last
+stable) and the v1.6.5-beta head. Three months of beta cycles
+collapsed into one promote-to-stable. Read the v1.4 → v1.6.5-beta
+sections below for the line-by-line history; this entry just calls
+out the headline groups.
+
+### Added — LED ecosystem (v1.4 → v1.5)
+
+- **OpenRGB output channel** (v1.4): mirror the wallpaper glow onto
+  real OpenRGB devices (RAM / fans / keyboards / strips).
+- **Spatial mapping** (v1.5): per-device `(x, y)` point or line
+  endpoints on the source screen so multi-LED devices show a
+  gradient instead of one averaged colour.
+- **Per-screen source picker** (v1.5): each screen can independently
+  take its glow from SignalRGB UDP, OpenRGB (polled), or sACN /
+  E1.31 multicast.
+- **sACN / E1.31 outbound emitter** (v1.5): per-screen universe
+  publishing on the standard multicast group — receivers like
+  xLights, QLC+, Hyperion can drive lighting from the wallpaper.
+- **HA / MQTT bridge** (v1.5): publishes per-screen state with HA
+  Discovery payloads so Home Assistant auto-creates entities for
+  preset / pause / glow / background per screen.
+- **OpenRGB SDK server** (v1.6.2): inverse of the output channel —
+  the bridge exposes itself to the OpenRGB GUI as virtual matrix
+  devices, one per screen. 6 built-in modes (Direct / Static /
+  Breathing / Rainbow / Rainbow Wave / Color Wave) with a
+  bridge-side 30 Hz effect engine. See
+  [docs/openrgb-sdk-server.md](docs/openrgb-sdk-server.md).
+
+### Added — API surface (v1.5)
+
+- **REST API at `/api/v1/*`** — info, screens, settings, preset
+  apply, pause, profiles, plugins. Per-install bearer token with
+  loopback bypass. Hand-written OpenAPI 3.1 spec at
+  `/api/openapi.json` + a human-readable companion at
+  [docs/api.md](docs/api.md).
+- **Plugin API for 3rd-party widgets** (v1.5): sandboxed-iframe
+  runtime + `manifest.json` discovery + postMessage IPC. Author
+  contract at [docs/plugin-api.md](docs/plugin-api.md).
+- **Generic HTTP widget** (v1.5): URL + refresh interval + mustache
+  templating covers Discord / stocks / RSS / crypto / arbitrary
+  REST with one widget type.
+
+### Added — Visual polish (v1.6)
+
+- **Widget Theme System** (v1.6.0 → v1.6.1): 11 colour-palette +
+  typography pairings (Default / Dracula / Nord / Tokyo Night /
+  Catppuccin / Solarized / Vintage CRT / Light / Gruvbox / Rose
+  Pine / Cyberpunk Neon). Swatch-grid picker, instant pulse
+  feedback on switch. CSS-variable based — independent of the
+  v1.1 tile style.
+- **Mouse-driven distortion effects** (v1.6.0): four stackable
+  cursor-position-driven effects — Widget Repulsion, Chromatic
+  Aberration, Magnify Spotlight, Liquid Ripple
+  (`feDisplacementMap`).
+- **Wormhole ambient preset** (v1.6.1): cursor-aware accretion-disc
+  particle system with inverse-square gravity + tangential swirl.
+- **Library category system** (v1.6.1): per-entry
+  `background` / `template` / `both` so auto-cycle never picks
+  Builder source images. Filter chips + tile category badges +
+  right-click recategorise.
+
+### Added — UX overhaul (v1.6.1)
+
+- **Configurator R2** — 9 settings cards split across 5
+  horizontal tabs (Look / Effects / Widgets / Integrations /
+  System). Sticky tab row, last-active tab persisted, `#tab=KEY`
+  deep-links. Tour walks each tab.
+- **Library grid layout** — filter chips out of the strip, CSS
+  Grid with auto-fill tiles, dashed `+ Add image` in-grid.
+- **Preset thumbnails** — each filled slot button renders an
+  80×45 client-side miniature.
+- **`effectQuality` per-screen** (v1.6.3): performance / balanced /
+  quality bucket controls ambient + pixelfx + audio-glow canvas
+  backing resolution + DPR + frame cap. Default `performance`.
+
+### Performance — GPU sweep (v1.6.1)
+
+User report of ~19 % sustained GPU under Snow on 5120×1440 →
+audit found every effect rAF chain running uncapped at native
+60 Hz + DPR ×2 backing buffers on full-viewport canvases. Sweep
+fixes documented in
+[memory `gotcha-uncapped-raf-dpr`]. End state on 5120×1440:
+Snow + 3 widgets + glow at ~5-7 % (was ~19 %); idle = 0 %.
+
+### Fixed — picked up along the way
+
+Roughly two dozen smaller fixes during the beta cycle. The big
+ones:
+
+- Preset `Save/Apply` audit caught `widgetTheme` + `mouseEffects`
+  silently dropped (added in v1.6.0 but missing from
+  `PRESET_SNAPSHOT_KEYS`).
+- Tab-init race (Effects tile previews XOR widget Layout-Vorschau
+  depending on which tab restored from localStorage).
+- Audio-glow uncapped at native rAF rate burning ~10 % GPU
+  (fixed by the GPU sweep above).
+- OpenRGB SDK descriptor format took five hotfix iterations
+  against the real OpenRGB GUI before connect → enumerate →
+  mode-pick worked end to end. Documented for future
+  maintainers in the v1.6.2-beta CHANGELOG block.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 1.7.0
+
+`wallpaper/index.html` is 1,203 lines heavier than v1.3.0 with
+themes / mouse-fx / wormhole / R2 layout / quality picker / GPU
+sweep. **Lively + Wallpaper Engine re-import required** for
+existing users.
+
 ## [1.6.5-beta] - 2026-06-03
 
 The **audit follow-up #2** beta. Five findings from the v1.6.4-beta
