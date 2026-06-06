@@ -4,6 +4,33 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4-beta] - 2026-06-06
+
+### Fixed — library filter chips stayed English on first paint
+
+The Background-tab library strip's filter chips (`All / Backgrounds /
+Templates / Pinned`) are rendered into dynamically-built DOM inside
+`renderLibraryStrip()`, which uses `t()` for the labels. The Configurator's
+language detection runs **after** the WebSocket settings push from the
+bridge — meaning if the library catalogue loaded first (the
+`/library/list` fetch resolves quickly), the chips got their boot-time
+English labels baked in.
+
+`setLanguage()` then called `renderAll()` to refresh dynamic strings, but
+`renderAll()` didn't include `renderLibraryStrip()` — every other dynamic
+surface picked up the language switch, the library chips alone stayed
+in their original language until the user clicked anything (which
+triggered a re-render and surfaced the German labels).
+
+Added `renderLibraryStrip()` to `renderAll()`'s tail so the language
+switch refreshes the chips too. Guarded against the rare case where
+`renderAll()` runs before the library has finished loading.
+
+### Changed — APP_VERSION → 1.7.4-beta
+
+WALLPAPER_VERSION unchanged. configurator.html only; Lively / Wallpaper
+Engine re-import not required.
+
 ## [1.7.3-beta] - 2026-06-06
 
 ### Fixed — Wormhole ambient cohort die-off was jerky

@@ -8908,6 +8908,15 @@ function renderAll() {
   renderLockBar();
   renderLayoutPreview();
   renderWidgetList();
+  // v1.7.4-beta: library strip's filter chips ("All / Backgrounds /
+  // Templates / Pinned") are i18n strings rendered into dynamically-
+  // built DOM by renderLibraryStrip(). Without including it here, the
+  // chips kept their boot-time English labels until the user touched
+  // anything — setLanguage()'s renderAll() refreshed every other
+  // dynamic surface but skipped this one. Guarded against the rare
+  // case where renderAll() runs before the library catalogue has
+  // loaded (the strip's empty-state branch handles that gracefully).
+  try { renderLibraryStrip(); } catch (_) {}
 }
 
 function escapeHtml(s) {
