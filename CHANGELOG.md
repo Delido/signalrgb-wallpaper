@@ -4,6 +4,52 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3-beta] - 2026-06-06
+
+### Fixed — Wormhole ambient cohort die-off was jerky
+
+Every particle hit the 3.0 s hard-lifespan cap at the same time it
+was spawned in a burst — after the initial fill, or after a
+cursor-move triggered mass respawn, the population was effectively
+single-cohort and died synchronously 3 seconds later → visible
+mass disappear + instant fresh respawn = "abgehakt" / stuttering.
+
+Two-part fix:
+
+- **Stagger lifespans at spawn**. New particles start at
+  `life = -Math.random() * 1.8` instead of `life = 0`, so each
+  particle's effective max-life is between 3.0 s and 4.8 s. The
+  cohort's death timing is spread across a ~2 s window from spawn
+  one onward.
+- **End-of-life alpha fade**. The render path now reads `maxLife`
+  off the particle and ramps alpha linearly to zero over the last
+  0.4 s of life. Particles dissolve smoothly into the swarm instead
+  of popping out.
+
+Both also apply to the inner-consume / outer-escape kill paths
+(`dist < 24`, `dist > hypot(w,h)*0.5`) so all three death triggers
+get the same gradual fade-out.
+
+### Added — cursor-aware ambient effects get a mouse badge
+
+The ambient-effect tile picker now renders a small mouse-pointer
+SVG badge in the top-right corner of any preset whose particle
+dynamics use the live cursor position as an anchor. Currently
+that's just Wormhole — but the `CURSOR_AWARE_AMBIENT` Set in
+configurator.html keeps the door open for future cursor-driven
+presets (constellation-follows-cursor, fireflies-attracted, …).
+
+Hover tooltip surfaces the same info as text
+(EN: "follows the mouse cursor" / DE: "folgt dem Mauszeiger").
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 1.7.3-beta
+
+`wallpaper/index.html` gained the Wormhole lifespan staggering + the
+end-of-life fade, so the bundle needs to re-load. Lively /
+Wallpaper Engine re-import recommended (auto-reimport runs on the
+new bridge's first startup so most users don't need to touch
+anything).
+
 ## [1.7.2-beta] - 2026-06-06
 
 The **cmd-free update flow** beta. Local-only staging — not

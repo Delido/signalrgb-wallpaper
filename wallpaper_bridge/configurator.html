@@ -709,6 +709,25 @@
     background: linear-gradient(transparent, rgba(0,0,0,0.55));
     padding: 12px 0 3px;
   }
+  /* v1.7.3-beta: mouse-driven badge for cursor-aware ambient presets
+     (currently just Wormhole). Sits in the top-right corner of the
+     tile so users see at a glance that this effect responds to the
+     pointer. Same styling pattern as the .lib-tile-cat badge. */
+  .ambient-tile .tile-mouse-badge {
+    position: absolute; top: 5px; right: 5px;
+    width: 22px; height: 22px;
+    padding: 3px;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 50%;
+    color: #d8e6fc;
+    pointer-events: none;
+    line-height: 0;
+  }
+  .ambient-tile .tile-mouse-badge svg {
+    width: 100%; height: 100%;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
 
   /* ── Pixelfx radios ───────────────────────────────────────────────── */
   .seg-row {
@@ -2758,6 +2777,11 @@ const TRANSLATIONS = {
   "effects.tint":           { en: "Tint particles with the live glow colour",
                               de: "Partikel mit live Glow-Farbe einfärben" },
   "effects.density":        { en: "Density",              de: "Dichte" },
+  // v1.7.3-beta: tooltip for cursor-aware ambient tiles (Wormhole +
+  // future). Surfaces on hover; the mouse-badge icon is the at-a-
+  // glance signal.
+  "effects.cursor_aware":   { en: "follows the mouse cursor",
+                              de: "folgt dem Mauszeiger" },
   // v1.6.3-beta: per-screen effect-canvas quality bucket.
   "effects.quality":           { en: "Quality",             de: "Qualität" },
   "effects.quality.performance": { en: "Performance (0.5×, DPR 1)",
@@ -7322,6 +7346,11 @@ if (els.effectQuality) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles", "matrix", "starfield", "lightning", "waves", "ripples", "flowfield", "wormhole"];
+// v1.7.3-beta: presets whose particle dynamics use the live cursor
+// position as an anchor — currently just Wormhole. The tile picker
+// renders a mouse badge on these so users see at a glance that the
+// effect responds to pointer movement.
+const CURSOR_AWARE_AMBIENT = new Set(["wormhole"]);
 const PIXELFX_MODES   = [
   { value: "off",    label: "Off" },
   { value: "trail",  label: "Trail" },
@@ -7338,13 +7367,34 @@ function buildAmbientTiles() {
     const tile = document.createElement("button");
     tile.className = "ambient-tile";
     tile.dataset.preset = preset;
-    tile.title = preset;
+    const isCursor = CURSOR_AWARE_AMBIENT.has(preset);
+    // Native title-attr tooltip surfaces the cursor-aware nature on
+    // hover; the badge is the at-a-glance signal.
+    tile.title = isCursor
+      ? (preset + " — " + (t("effects.cursor_aware") ||
+                            "follows the mouse cursor"))
+      : preset;
     const canvas = document.createElement("canvas");
     const label = document.createElement("span");
     label.className = "tile-label";
     label.textContent = preset === "off" ? "Off" : preset[0].toUpperCase() + preset.slice(1);
     tile.appendChild(canvas);
     tile.appendChild(label);
+    if (isCursor) {
+      const badge = document.createElement("span");
+      badge.className = "tile-mouse-badge";
+      badge.setAttribute("aria-label",
+        t("effects.cursor_aware") || "Mouse-driven effect");
+      // Minimal mouse-pointer glyph (body + scroll wheel). Matches
+      // the configurator's other inline SVGs' stroke style so it
+      // doesn't look out of place.
+      badge.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+          '<path d="M8 3.5h8a4 4 0 0 1 4 4v9a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-9a4 4 0 0 1 4-4z"/>' +
+          '<line x1="12" y1="7" x2="12" y2="11"/>' +
+        '</svg>';
+      tile.appendChild(badge);
+    }
     tile.addEventListener("click", () => setSetting("ambientEffect", preset));
     els.ambientTiles.appendChild(tile);
     if (preset !== "off") startTilePreview(canvas, preset);

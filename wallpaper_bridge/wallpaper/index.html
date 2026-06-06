@@ -5245,7 +5245,18 @@ const AMBIENT_PRESETS = {
           ? 210 + Math.random() * 50    // blues
           : 290 + Math.random() * 50,   // magenta / purples
         alpha: 0.75 + Math.random() * 0.25,
-        life: 0,
+        // v1.7.2-beta: stagger lifespans so the cohort doesn't die
+        // synchronously. Pre-fix every particle hit the 3 s hard
+        // cap at the same time the moment they were spawned in a
+        // burst (initial fill, cursor-move respawn) → visible mass
+        // die-off + instant respawn = jerky. Each particle now starts
+        // with a random -1.8..0 s head-start so the death timing is
+        // spread across a ~2 s window — pop disappears gradually
+        // instead of all at once.
+        life: -Math.random() * 1.8,
+        // maxLife stashed per-particle so the render fade-out reads
+        // the same value the step path checks against.
+        maxLife: 3.0,
       };
     },
     step: (p, dt, w, h) => {
@@ -5278,7 +5289,7 @@ const AMBIENT_PRESETS = {
       //      stable orbit at exactly the right radius).
       if (dist < 24) return false;                       // consumed
       if (dist > Math.hypot(w, h) * 0.5) return false;   // escaped
-      if (p.life > 3.0) return false;                    // expired
+      if (p.life > p.maxLife) return false;              // expired
       // v1.6.1-beta hotfix9: hybrid pull. Inverse-square at the
       // close range for the classic black-hole feel, plus a
       // constant component that scales linearly outward so
@@ -5305,7 +5316,14 @@ const AMBIENT_PRESETS = {
       // keeps the far-out field visible on ultrawide displays.
       const intensity = Math.max(0,
         Math.min(1, 1.6 - dist / 1200));
-      const a = p.alpha * Math.max(0.55, intensity);
+      // v1.7.2-beta: end-of-life alpha fade. Without it the
+      // particle popped out instantly when life > maxLife (or when
+      // the inner/outer kill paths fired) — visible as the cohort
+      // strobing. Last 0.4 s linear-ramps down to zero so the
+      // particle dissolves gracefully into the swarm.
+      const remaining = (p.maxLife || 3.0) - Math.max(0, p.life);
+      const lifeFade = Math.max(0, Math.min(1, remaining / 0.4));
+      const a = p.alpha * Math.max(0.55, intensity) * lifeFade;
       const color = tint
         ? rgbToRgba(tint, a)
         : "hsla(" + p.hue + ", 95%, " +
