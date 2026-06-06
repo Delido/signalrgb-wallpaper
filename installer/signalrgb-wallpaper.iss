@@ -285,9 +285,20 @@ Filename: "powershell.exe"; \
 ;    "Download + install update" flow) the bridge auto-restarts after
 ;    the new exe is in place. In interactive mode the `postinstall`
 ;    checkbox still gates this on user opt-in.
+;
+;    v1.7.2: launch the bridge via Inno's `shellexec` flag — that routes
+;    the launch through ShellExecuteEx, which gives the spawned process a
+;    clean user-context token + the standard shell DLL search path. That's
+;    the same launch path our `download_and_install` code in bridge.py
+;    already uses successfully via ctypes ShellExecuteW. Replaces the
+;    v1.2.11 cmd-indirection workaround (and the fragile 40-second
+;    deferred-cmd relaunch in bridge.py) with the canonical Windows
+;    "launch as if from Explorer" path — no cmd flash, no fragile
+;    timeout, just ShellExecuteEx returning to the installer immediately
+;    while the bridge starts in its own clean process tree.
 Filename: "{app}\{#MyAppExeName}"; \
   Description: "Start the SignalRGB Wallpaper Bridge now"; \
-  Flags: postinstall nowait; Tasks: autostart
+  Flags: postinstall nowait shellexec; Tasks: autostart
 ; ── Configurator: open the in-browser settings UI so the user can pick
 ;    a wallpaper from the bundled Library, set up screens, etc., right
 ;    after install. Gated on the new openconfigurator task.

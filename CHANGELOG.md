@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2-beta] - 2026-06-06
+
+The **cmd-free update flow** beta. Local-only staging — not
+released yet. Reworks the auto-update relaunch path to fix
+"installer ran but new bridge never appeared" reports.
+
+### Fixed — auto-update sometimes left the user without a running bridge
+
+The old flow had the dying bridge spawn a detached
+`cmd /c timeout /t 40 /nobreak && start "" "<exe>"` to relaunch
+the newly-installed bridge ~40 s later. That spawned a visible
+cmd window with a countdown — which on user setups was getting
+killed by AV / window-manager edge cases / accidental close
+before the timeout fired. End result: installer ran, replaced
+the exe, but no new bridge process appeared. User had to
+manually start the bridge from the Start menu.
+
+Reworked: the Inno `[Run]` entry now launches the new bridge
+directly via the `shellexec` flag — which routes through
+`ShellExecuteEx`, the canonical "as if launched from Explorer"
+path. That's the same launch mechanism `download_and_install`
+in bridge.py already uses successfully via ctypes
+`ShellExecuteW`. Fresh user-context token + standard shell DLL
+search path → no LoadLibrary regression (which was the v1.2.11
+reason the deferred-cmd workaround existed in the first place).
+
+`autostart` re-added to `MERGETASKS` in `download_and_install`
+so the `[Run]` entry fires under `/SILENT` install too. The
+40-second cmd-timeout block is gone; the bridge just exits
+after spawning the installer + dropping the `.pending-reimport`
+marker.
+
+End result: no cmd window flash, no fragile timeout, no
+"installer ran but bridge missing" failure mode.
+
+### Changed — APP_VERSION → 1.7.2-beta
+
+WALLPAPER_VERSION unchanged at 1.7.0. No wallpaper/ side changes.
+Lively / Wallpaper Engine re-import NOT required.
+
 ## [1.7.1] - 2026-06-06
 
 The **encoding hotfix** patch. First fresh-install report from a

@@ -475,21 +475,24 @@ class UpdateChecker:
                 # during silent re-install — plugin / Lively ZIPs / WE
                 # bundle would stay at the previous-install state.
                 #
-                # v1.2.11: `autostart` deliberately REMOVED from this
-                # list. Inno's [Run] entry for autostart launched the
-                # bridge in a token / search-path context that on some
-                # user setups caused `LoadLibrary(python313.dll)` to
-                # fail with "specified module not found" — the bundled
-                # vcruntime DLLs are present but the OS loader couldn't
-                # resolve them in that context. Users saw the
-                # post-install error popup and the bridge never auto-
-                # started; manual launch from the Start menu worked
-                # fine. The relaunch is now driven by the delayed cmd
-                # launcher we spawn below — runs as a normal user
-                # process with no Inno-side context contamination.
-                # The autostart Registry value still installs (it's in
-                # [Registry], not gated by [Run]) so the bridge comes
-                # up at next Windows login regardless.
+                # v1.7.2: `autostart` re-added. The v1.2.11 LoadLibrary
+                # regression was caused by Inno's [Run] launching the
+                # bridge via CreateProcess from the installer's process
+                # context; the fix landed in
+                # installer/signalrgb-wallpaper.iss by switching that
+                # [Run] entry to the `shellexec` flag, which routes
+                # the launch through ShellExecuteEx — the canonical
+                # "as if launched from Explorer" path that gives the
+                # bridge a fresh user-context token + the standard
+                # shell DLL search path. Same mechanism our
+                # `download_and_install` here already uses successfully
+                # via ctypes ShellExecuteW. With that in place the
+                # deferred-cmd relaunch hack we used to ship is gone —
+                # no cmd, no fragile 40 s timeout, the installer itself
+                # handles the bridge restart cleanly. Fixes the
+                # "installer ran but new bridge never appeared" reports
+                # from users whose AV or window manager killed the
+                # standalone cmd-timeout window before it fired.
                 #
                 # autoinstall + openconfigurator deliberately omitted:
                 # the former would re-download Lively every update,
@@ -497,7 +500,8 @@ class UpdateChecker:
                 mergetasks = (
                     "installplugin,"
                     "installlively,installlively\\autoimport,"
-                    "installwallpaperengine"
+                    "installwallpaperengine,"
+                    "autostart"
                 )
                 args = ('/SILENT /SUPPRESSMSGBOXES /NORESTART '
                         f'/MERGETASKS="{mergetasks}"')
@@ -531,65 +535,23 @@ class UpdateChecker:
         if on_done:
             try: on_done(str(target), None)
             except Exception: pass
-        # v1.2.11: schedule a user-context relaunch of the new bridge
-        # exe ~25 s from now (long enough for Inno to finish replacing
-        # files + drop locks) via a detached cmd.exe. We deliberately
-        # do NOT lean on Inno's [Run] section to launch the bridge
-        # after install: that path runs in Inno's installer-spawned
-        # token context, which on some user setups (AV / EDR /
-        # Controlled-Folder-Access policies that key off process
-        # ancestry) refuses LoadLibrary on the PyInstaller _MEI temp
-        # extraction directory even when every required DLL is
-        # bundled. Spawning the relaunch from a plain cmd.exe child
-        # of the OLD bridge process — itself running as the logged-in
-        # user — gives the new bridge a clean user-context token and
-        # the DLL search behaves normally. cmd.exe survives our
-        # `os._exit` thanks to CREATE_BREAKAWAY_FROM_JOB; the bridge
-        # path is the same after the update (`sys.executable`) so we
-        # can hard-code it.
-        try:
-            import subprocess as _sp
-            exe_path = sys.executable
-            # v1.2.12: relaunch budget bumped from 25 s -> 40 s. The
-            # extra window absorbs slow disks + AV real-time-scan of
-            # the just-replaced exe before we try `start`.
-            delay_s = 40
-            # Switched from `ping -n N 127.0.0.1 >NUL` to `timeout /t N
-            # /nobreak >NUL` so the wait doesn't depend on the ping
-            # binary being reachable. Some Defender ASR-rule profiles
-            # treat a parent-spawned `ping.exe` as a network-probe
-            # heuristic and block / log it; `timeout` is a pure
-            # scheduler wait with no network surface. Both binaries
-            # live in System32 so neither is "missing", just gated.
-            # `&&` (not `&`) gates the start on a clean timeout exit:
-            # if timeout somehow fails (vanishingly rare), don't race
-            # the installer mid-overwrite — fall back to the
-            # HKCU\…\Run autostart firing at next Windows login.
-            cmdline = (
-                f'timeout /t {delay_s} /nobreak >NUL && '
-                f'start "" /B "{exe_path}"'
-            )
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-            _sp.Popen(
-                ['cmd', '/c', cmdline],
-                creationflags=(DETACHED_PROCESS
-                               | CREATE_NEW_PROCESS_GROUP
-                               | CREATE_BREAKAWAY_FROM_JOB),
-                stdin=_sp.DEVNULL, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
-                close_fds=True,
-            )
-            _log(f"delayed relaunch scheduled (T+{delay_s}s -> {exe_path})")
-        except Exception as e:
-            _log(f"delayed relaunch spawn FAILED — user will need to start "
-                 f"the bridge manually after install ({e})")
+        # v1.7.2: NO MORE deferred-cmd relaunch. Old flow spawned a
+        # `cmd /c timeout 40 && start ""` window that survived our
+        # process-exit thanks to CREATE_BREAKAWAY_FROM_JOB; users
+        # reported the cmd window getting killed (by AV, by accidental
+        # close, by window-manager edge cases) before its timeout
+        # fired, leaving the installer's job done but no new bridge
+        # running. Worse, the cmd flash was a visible 40-second hack
+        # that looked unprofessional. Inno's [Run] entry now handles
+        # the relaunch directly via `cmd /c start ""` (see the .iss);
+        # `autostart` is back in MERGETASKS so the [Run] fires even
+        # under silent /SILENT install.
         # Give the spawned installer a moment to grab its handles
         # before we kill the bridge process. Bumped from 1.5 s to 3 s
         # so AV real-time-scan of the just-downloaded exe has time to
         # complete before the parent process exits.
         time.sleep(3.0)
-        _log("bridge exiting now")
+        _log("bridge exiting now (Inno [Run] entry will relaunch the new bridge)")
         # Hard-exit — graceful shutdown would let other threads block
         # the installer's overwrite of SignalRGBBridge.exe.
         os._exit(0)
@@ -689,7 +651,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.7.2-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
