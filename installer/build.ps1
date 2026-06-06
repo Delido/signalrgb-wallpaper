@@ -1,4 +1,4 @@
-# One-shot installer build.
+﻿# One-shot installer build.
 #
 # Re-generates the icon, rebuilds SignalRGBBridge.exe via PyInstaller,
 # rebuilds the 3 per-screen Lively zips, then compiles the Inno Setup

@@ -1,4 +1,4 @@
-# Push a manifest update for Delido.SignalRGBWallpaper to
+﻿# Push a manifest update for Delido.SignalRGBWallpaper to
 # microsoft/winget-pkgs via wingetcreate.
 #
 # Run AFTER `gh release create vX.Y.Z` has published a stable build.

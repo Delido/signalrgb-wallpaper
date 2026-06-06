@@ -1,4 +1,4 @@
-# Maintainer-only helper: re-injects the Steam Workshop ID into the
+﻿# Maintainer-only helper: re-injects the Steam Workshop ID into the
 # locally-deployed Wallpaper Engine project.json so the next
 # "Share on Workshop" submit from WE's editor UPDATES the existing
 # Workshop item instead of creating a new one.

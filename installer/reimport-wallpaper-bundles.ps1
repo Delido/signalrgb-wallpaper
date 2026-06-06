@@ -1,4 +1,4 @@
-# Re-import the SignalRGB Glow wallpaper bundles into Lively (and
+﻿# Re-import the SignalRGB Glow wallpaper bundles into Lively (and
 # touch the WE project to nudge Wallpaper Engine into re-loading).
 #
 # Background — the installer drops fresh ZIPs into

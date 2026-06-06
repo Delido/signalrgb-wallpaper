@@ -1,4 +1,4 @@
-# Grant MSIX-Lively a loopback (127.0.0.1) exemption so its WebView2
+﻿# Grant MSIX-Lively a loopback (127.0.0.1) exemption so its WebView2
 # wallpaper page can reach the SignalRGB Wallpaper Bridge.
 #
 # Background — MSIX apps run inside a Windows AppContainer sandbox. The

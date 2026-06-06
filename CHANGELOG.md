@@ -4,6 +4,38 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-06-06
+
+The **encoding hotfix** patch. First fresh-install report from a
+German Windows user surfaced a regression in the installer-bundled
+PowerShell scripts.
+
+### Fixed — installer PS1 scripts unparseable on cp1252 systems
+
+`reimport-wallpaper-bundles.ps1` (and every other `.ps1` in the
+installer) had been saved as UTF-8 *without* BOM. Windows
+PowerShell 5.1 — still the default on Windows 10 / 11 — reads
+BOM-less files using the system codepage. On a German install
+that's cp1252, so any multi-byte UTF-8 sequence (em-dashes,
+bullets, …) gets mangled into mojibake. The mangled bytes broke
+quote / parenthesis balance and the script failed at parse time:
+
+```text
+Schließende ")" fehlt in einem Ausdruck.
++ ... ely CLI: $livelyExe (process detected ƒ?" running re-import)" "Green"
+```
+
+User saw a tray notification with exit code 1, no fallback,
+wallpaper bundles never reached Lively / Wallpaper Engine.
+
+Fixed by prepending a UTF-8 BOM (`EF BB BF`) to all six
+installer scripts. With a BOM present PowerShell 5.1 picks UTF-8
+reliably regardless of system locale, so the same script binary
+now parses cleanly on de-DE / en-US / fr-FR / any other Windows
+codepage. Verified against the actual PowerShell parser
+(`[System.Management.Automation.Language.Parser]::ParseFile`)
+on each script — zero errors.
+
 ## [1.7.0] - 2026-06-03
 
 The **stable cut** of everything that landed between v1.3.0 (last
