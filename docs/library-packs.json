@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "min_app": "1.7.5-beta",
+  "packs": [
+    {
+      "id": "aurora-nature",
+      "version": 1,
+      "label": {
+        "en": "Aurora & Nature Pack",
+        "de": "Aurora & Natur"
+      },
+      "description": "Aurora skies, mushroom groves and deep-sea jellies — 6 atmospheric nature wallpapers that pair well with cool SignalRGB palettes.",
+      "image_count": 6,
+      "size_bytes": 6349288,
+      "sha256": "5abab90228928fd1e79061b6b37143ba7fa530024b73c3e91fb0c6cb612618f1",
+      "filename": "aurora-nature-pack-v1.zip",
+      "preview_thumbs": [
+        "aurora-horizon.thumb.webp",
+        "aurora-pines.thumb.webp",
+        "aurora-sky.thumb.webp",
+        "deep-sea-jellies.thumb.webp"
+      ],
+      "slugs": [
+        "aurora-horizon",
+        "aurora-pines",
+        "aurora-sky",
+        "deep-sea-jellies",
+        "mushroom-forest",
+        "underwater-jellies"
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/aurora-nature-pack-v1.zip"
+    },
+    {
+      "id": "cyberpunk",
+      "version": 1,
+      "label": {
+        "en": "Cyberpunk Pack",
+        "de": "Cyberpunk-Pack"
+      },
+      "description": "Neon cityscapes, holographic streets, magenta alleys and Tokyo rain — 17 photoreal cyberpunk wallpapers.",
+      "image_count": 17,
+      "size_bytes": 22319401,
+      "sha256": "8bd9cc15025251acae0a5991b3f5cda446a6945a8d4c97cc0fea587fc7019441",
+      "filename": "cyberpunk-pack-v1.zip",
+      "preview_thumbs": [
+        "cyan-cyberpunk-highway.thumb.webp",
+        "cyan-skyline.thumb.webp",
+        "cyberpunk-bridge-vista.thumb.webp",
+        "cyberpunk-holo-street.thumb.webp"
+      ],
+      "slugs": [
+        "cyan-cyberpunk-highway",
+        "cyan-skyline",
+        "cyberpunk-bridge-vista",
+        "cyberpunk-holo-street",
+        "foggy-neon-street",
+        "magenta-alley",
+        "magenta-cyberpunk",
+        "neon-backstreet",
+        "neon-boulevard",
+        "neon-magenta-alley",
+        "neon-storefront",
+        "neon-street-pink",
+        "night-city-vista",
+        "tokyo-bridge-vista",
+        "tokyo-neon-alley",
+        "tokyo-vista",
+        "wet-neon-alley"
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/cyberpunk-pack-v1.zip"
+    },
+    {
+      "id": "synthwave-abstract",
+      "version": 1,
+      "label": {
+        "en": "Synthwave & Abstract Pack",
+        "de": "Synthwave & Abstrakt"
+      },
+      "description": "Retro synthwave horizons, plasma webs and RGB studios — 9 abstract / scene wallpapers for the geometric mood.",
+      "image_count": 9,
+      "size_bytes": 7969706,
+      "sha256": "3b7f1075cd418bf75578d0a10038f05f1a701088aa525872f62bd6c18a290f64",
+      "filename": "synthwave-abstract-pack-v1.zip",
+      "preview_thumbs": [
+        "plasma-web.thumb.webp",
+        "quantum-wave.thumb.webp",
+        "rgb-abstract.thumb.webp",
+        "rgb-curve.thumb.webp"
+      ],
+      "slugs": [
+        "plasma-web",
+        "quantum-wave",
+        "rgb-abstract",
+        "rgb-curve",
+        "rgb-setup-arch",
+        "rgb-studio",
+        "stellar-burst",
+        "synthwave-horizon",
+        "synthwave-sun"
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/synthwave-abstract-pack-v1.zip"
+    }
+  ]
+}
