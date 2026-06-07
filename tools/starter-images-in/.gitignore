@@ -1,0 +1,12 @@
+# Raw source images dropped here for processing. We don't ship
+# these; only the saliency-processed outputs in
+# wallpaper_bridge/library/ go in the installer bundle. Keep your
+# downloaded Unsplash / Pexels / Pixabay sources locally.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.bmp
+*.meta
+!.gitignore
+!.gitkeep

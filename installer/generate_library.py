@@ -35,6 +35,13 @@ W, H = 1920, 1080
 TW, TH = 320, 180   # thumbnail
 HERE = Path(__file__).resolve().parent
 OUT_DIR = HERE.parent / "wallpaper_bridge" / "library"
+# v1.7.5: curated WebP assets the build script copies into the library
+# alongside the procedural set. These are git-tracked (unlike OUT_DIR
+# which is gitignored as build output). Drop new <slug>.webp +
+# <slug>.thumb.webp pairs into here to ship them with the installer;
+# tools/process_starter_images.py generates them, tools/README.md
+# documents the workflow.
+CURATED_DIR = HERE / "assets" / "library"
 
 
 def soft_window(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
@@ -162,32 +169,187 @@ WALLPAPERS = [
 ]
 
 
+def _slug_to_label(slug: str) -> str:
+    """Curated WebPs are filename-keyed; derive a human label from the
+    slug. e.g. `cyberpunk-holo-street` -> `Cyberpunk Holo Street`."""
+    return slug.replace("-", " ").replace("_", " ").title()
+
+
+# v1.7.5: keyword -> tag map. Each curated slug gets every tag whose
+# keyword appears in it. Designed for the Library tab's chip filter:
+# the chips are sorted by frequency so the most useful filters bubble
+# to the top automatically. Keep keywords lowercase + slug-friendly.
+_TAG_RULES = {
+    "cyberpunk":      ["cyberpunk", "neon", "night"],
+    "neon":           ["neon", "night"],
+    "aurora":         ["aurora", "nature", "night"],
+    "synthwave":      ["synthwave", "retro"],
+    "tokyo":          ["cyberpunk", "neon", "night", "asian"],
+    "rgb":            ["rgb", "gaming", "interior"],
+    "skyline":        ["skyline", "city"],
+    "city":           ["city"],
+    "street":         ["street", "city"],
+    "alley":          ["street", "city"],
+    "boulevard":      ["street", "city"],
+    "backstreet":     ["street", "city"],
+    "highway":        ["street", "city"],
+    "storefront":     ["street", "city"],
+    "vista":          ["city"],
+    "holo":           ["cyberpunk", "futuristic"],
+    "setup":          ["rgb", "gaming"],
+    "studio":         ["rgb", "gaming"],
+    "abstract":       ["abstract"],
+    "curve":          ["abstract"],
+    "geometric":      ["abstract"],
+    "panels":         ["abstract"],
+    "grid":           ["synthwave", "abstract"],
+    "anime":          ["anime"],
+    "window":         ["abstract"],
+    "mountains":      ["synthwave", "nature"],
+    "horizon":        ["synthwave"],
+    "sun":            ["synthwave"],
+    "pines":          ["nature"],
+    "sky":            ["nature"],
+    "night":          ["night"],
+    "wet":            ["street", "city"],
+    "pink":           ["neon"],
+    # v1.7.5 part 2 themes:
+    "underwater":     ["underwater", "nature"],
+    "jellies":        ["underwater", "nature"],
+    "sea":            ["underwater", "nature"],
+    "bioluminescent": ["bioluminescent", "nature"],
+    "mushroom":       ["bioluminescent", "nature"],
+    "forest":         ["nature"],
+    "grove":          ["nature"],
+    "spaceship":      ["scifi", "futuristic", "interior"],
+    "stellar":        ["scifi", "abstract"],
+    "quantum":        ["abstract"],
+    "plasma":         ["abstract"],
+    "web":            ["abstract"],
+    "burst":          ["abstract"],
+    "wave":           ["abstract"],
+    "twin":           ["cyberpunk", "city"],
+    "towers":         ["cyberpunk", "city"],
+    "cyan":           ["cyberpunk"],
+    "magenta":        ["neon"],
+    "foggy":          ["night"],
+    "bridge":         ["scifi"],   # spaceship-bridge; cyberpunk-bridge-vista already picks up cyberpunk
+    # v1.7.5 enrichment for Juggernaut-generated set:
+    "curtain":        ["aurora", "nature"],
+    "rainy":          ["street"],
+    "futuristic":     ["futuristic", "scifi"],
+}
+
+
+def _tags_for_slug(slug: str) -> list[str]:
+    """Derive a tag list from the slug's components. Order-preserving
+    dedup; never returns duplicates. Returns [] for slugs that match
+    no keywords (caller may still ship — tag chips just won't surface
+    those items unless the user searches their label/id)."""
+    parts = set(slug.lower().split("-"))
+    tags: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        for keyword, tag_list in _TAG_RULES.items():
+            if keyword == part:
+                for tg in tag_list:
+                    if tg not in seen:
+                        seen.add(tg)
+                        tags.append(tg)
+    return tags
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # v1.7.5: clean the output dir before regen so leftover files from a
+    # previous build (different image set, or .png from before the WebP
+    # switch) don't survive into the installer payload.
+    for old in OUT_DIR.iterdir():
+        if old.is_file():
+            try: old.unlink()
+            except OSError: pass
+
     catalogue = []
+    # ── Procedural set ───────────────────────────────────────────
+    # WebP at quality 88 — for our flat-colour geometric shapes this is
+    # visually identical to lossless PNG at ~10 % the size.
     for slug, label, factory in WALLPAPERS:
-        print(f"  generating {slug}…")
+        print(f"  generating {slug}...")
         img = factory()
         # Soften ragged transparency edges so the glow blur looks clean.
         # Tiny radius keeps shapes readable.
         img = img.filter(ImageFilter.GaussianBlur(radius=0.6))
-        out_path  = OUT_DIR / f"{slug}.png"
-        thumb_path = OUT_DIR / f"{slug}.thumb.png"
-        img.save(out_path, "PNG", optimize=True)
-        img.copy().resize((TW, TH), Image.LANCZOS).save(thumb_path, "PNG", optimize=True)
+        out_path  = OUT_DIR / f"{slug}.webp"
+        thumb_path = OUT_DIR / f"{slug}.thumb.webp"
+        img.save(out_path, "WEBP", quality=88, method=6)
+        img.copy().resize((TW, TH), Image.LANCZOS).save(
+            thumb_path, "WEBP", quality=80, method=6)
         catalogue.append({
-            "id":    slug,
-            "label": label,
-            "file":  f"{slug}.png",
-            "thumb": f"{slug}.thumb.png",
-            "w":     W,
-            "h":     H,
+            "id":       slug,
+            "label":    label,
+            "file":     f"{slug}.webp",
+            "thumb":    f"{slug}.thumb.webp",
+            "w":        W,
+            "h":        H,
+            "category": "background",
+            "tags":     _tags_for_slug(slug),
         })
+    # ── Curated set ──────────────────────────────────────────────
+    # Hand-picked images staged in installer/assets/library/. The build
+    # copies them straight through — they're already saliency-processed
+    # by tools/process_starter_images.py (or equivalent) so the alpha
+    # mask is baked in. Pair each <slug>.webp with its <slug>.thumb.webp
+    # if present, else fall back to the main file as its own thumb.
+    if CURATED_DIR.exists():
+        seen_stems = set()
+        curated_files = sorted(CURATED_DIR.glob("*.webp"))
+        all_names = {p.name for p in curated_files}
+        # v1.7.5: skip thumb + 4K siblings in the main pass; they're
+        # picked up as paired files for their parent slug below.
+        for src in curated_files:
+            if src.stem.endswith(".thumb") or src.stem.endswith(".4k"):
+                continue
+            slug = src.stem
+            if slug in seen_stems:
+                continue
+            seen_stems.add(slug)
+            dst = OUT_DIR / src.name
+            dst.write_bytes(src.read_bytes())
+            thumb_name = f"{slug}.thumb.webp"
+            if thumb_name in all_names:
+                (OUT_DIR / thumb_name).write_bytes(
+                    (CURATED_DIR / thumb_name).read_bytes())
+            else:
+                thumb_name = src.name
+            # v1.7.5: 4K sibling. Optional — if missing, library.json
+            # entry just omits file4k and the Configurator falls back
+            # to the FHD file for "Apply 4K" picks.
+            file4k_name = f"{slug}.4k.webp"
+            has_4k = file4k_name in all_names
+            if has_4k:
+                (OUT_DIR / file4k_name).write_bytes(
+                    (CURATED_DIR / file4k_name).read_bytes())
+            entry = {
+                "id":       slug,
+                "label":    _slug_to_label(slug),
+                "file":     src.name,
+                "thumb":    thumb_name,
+                "w":        W,
+                "h":        H,
+                "category": "background",
+                "tags":     _tags_for_slug(slug),
+            }
+            if has_4k:
+                entry["file4k"] = file4k_name
+            catalogue.append(entry)
+        print(f"  copied {len(seen_stems)} curated WebP(s) from "
+              f"{CURATED_DIR.relative_to(HERE.parent)}/")
+
     cat_path = OUT_DIR / "library.json"
     cat_path.write_text(json.dumps({"version": 1, "items": catalogue}, indent=2),
                          encoding="utf-8")
     total = sum(p.stat().st_size for p in OUT_DIR.iterdir())
-    print(f"  wrote {len(WALLPAPERS)} wallpapers + thumbnails + library.json "
+    print(f"  wrote {len(catalogue)} wallpapers + thumbnails + library.json "
           f"({total // 1024} KB total)")
 
 

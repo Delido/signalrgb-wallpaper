@@ -651,7 +651,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "1.7.4-beta"
+APP_VERSION = "1.7.5-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1277,6 +1277,83 @@ def _library_slug(label: str, lib: Path) -> str:
     return base
 
 
+# v1.7.5: runtime fallback for tag-less entries. Mirrors the build-time
+# `_TAG_RULES` in installer/generate_library.py — kept here so an
+# upgrade install (where library.json carries `onlyifdoesntexist` and
+# the shipped catalogue is never written) still surfaces meaningful
+# tag chips on bundled items.
+_BRIDGE_TAG_RULES = {
+    "cyberpunk":      ["cyberpunk", "neon", "night"],
+    "neon":           ["neon", "night"],
+    "aurora":         ["aurora", "nature", "night"],
+    "synthwave":      ["synthwave", "retro"],
+    "tokyo":          ["cyberpunk", "neon", "night", "asian"],
+    "rgb":            ["rgb", "gaming", "interior"],
+    "skyline":        ["skyline", "city"],
+    "city":           ["city"],
+    "street":         ["street", "city"],
+    "alley":          ["street", "city"],
+    "boulevard":      ["street", "city"],
+    "backstreet":     ["street", "city"],
+    "highway":        ["street", "city"],
+    "storefront":     ["street", "city"],
+    "vista":          ["city"],
+    "holo":           ["cyberpunk", "futuristic"],
+    "setup":          ["rgb", "gaming"],
+    "studio":         ["rgb", "gaming"],
+    "abstract":       ["abstract"],
+    "curve":          ["abstract"],
+    "geometric":      ["abstract"],
+    "panels":         ["abstract"],
+    "grid":           ["synthwave", "abstract"],
+    "anime":          ["anime"],
+    "window":         ["abstract"],
+    "mountains":      ["synthwave", "nature"],
+    "horizon":        ["synthwave"],
+    "sun":            ["synthwave"],
+    "pines":          ["nature"],
+    "sky":            ["nature"],
+    "night":          ["night"],
+    "wet":            ["street", "city"],
+    "pink":           ["neon"],
+    "underwater":     ["underwater", "nature"],
+    "jellies":        ["underwater", "nature"],
+    "sea":            ["underwater", "nature"],
+    "bioluminescent": ["bioluminescent", "nature"],
+    "mushroom":       ["bioluminescent", "nature"],
+    "forest":         ["nature"],
+    "grove":          ["nature"],
+    "spaceship":      ["scifi", "futuristic", "interior"],
+    "stellar":        ["scifi", "abstract"],
+    "quantum":        ["abstract"],
+    "plasma":         ["abstract"],
+    "web":            ["abstract"],
+    "burst":          ["abstract"],
+    "wave":           ["abstract"],
+    "twin":           ["cyberpunk", "city"],
+    "towers":         ["cyberpunk", "city"],
+    "cyan":           ["cyberpunk"],
+    "magenta":        ["neon"],
+    "foggy":          ["night"],
+    "bridge":         ["scifi"],
+    "curtain":        ["aurora", "nature"],
+    "rainy":          ["street"],
+    "futuristic":     ["futuristic", "scifi"],
+}
+
+
+def _tags_for_slug_bridge(slug: str) -> list[str]:
+    parts = set(slug.lower().split("-"))
+    tags: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        for taglist in _BRIDGE_TAG_RULES.get(part, ()):
+            if taglist not in seen:
+                seen.add(taglist)
+                tags.append(taglist)
+    return tags
+
+
 def _library_rebuild_catalogue(lib: Path) -> None:
     """Rescan the library folder and rewrite library.json with one entry
     per image. Files matching `<stem>.thumb.png` are paired as thumbs
@@ -1311,39 +1388,117 @@ def _library_rebuild_catalogue(lib: Path) -> None:
                     (".png", ".jpg", ".jpeg", ".webp", ".gif",
                      ".mp4", ".webm", ".mov", ".m4v", ".mkv")])
     stems = {p.name for p in files}
+    # v1.7.5: dedup by stem so a stem present as both `<stem>.png` and
+    # `<stem>.webp` (typical upgrade path: v1.7.4 shipped PNGs, v1.7.5
+    # ships WebP — Inno only adds files so both linger on disk until
+    # the user manually cleans) collapses into ONE entry. Preference:
+    # webp > avif > png > jpg > jpeg > everything else. The
+    # [InstallDelete] block in the .iss also wipes the known legacy
+    # PNG slugs on install so the duplicates disappear on first
+    # upgrade — this is the defence-in-depth path for any future
+    # extension change.
+    _ext_priority = {".webp": 0, ".avif": 1, ".png": 2, ".jpg": 3,
+                     ".jpeg": 3, ".gif": 4}
+    _by_stem: dict[str, Path] = {}
     for fp in files:
         stem = fp.stem
-        # Skip thumbnail siblings — they'll be linked from their parent.
-        if stem.endswith(".thumb"):
+        # v1.7.5: skip thumb + 4K siblings — they're paired with
+        # their parent slug later.
+        if stem.endswith(".thumb") or stem.endswith(".4k"):
+            continue
+        current = _by_stem.get(stem)
+        if current is None:
+            _by_stem[stem] = fp
+            continue
+        cur_prio = _ext_priority.get(current.suffix.lower(), 99)
+        new_prio = _ext_priority.get(fp.suffix.lower(), 99)
+        if new_prio < cur_prio:
+            _by_stem[stem] = fp
+    files = sorted(_by_stem.values())
+    stems = {p.name for p in lib.iterdir() if p.is_file()}
+    for fp in files:
+        stem = fp.stem
+        if stem.endswith(".thumb") or stem.endswith(".4k"):
             continue
         thumb = None
         for cand in (stem + ".thumb.png", stem + ".thumb.jpg", stem + ".thumb.webp"):
             if cand in stems:
                 thumb = cand
                 break
+        # v1.7.5: 4K sibling — same logic as thumb. Optional; if
+        # absent, library.json entry omits `file4k` and the
+        # Configurator falls back to the FHD file.
+        file4k = None
+        for cand in (stem + ".4k.webp", stem + ".4k.png", stem + ".4k.jpg"):
+            if cand in stems:
+                file4k = cand
+                break
         prev_it = prev_by_file.get(fp.name) or {}
         try:
             added_at_default = int(fp.stat().st_mtime * 1000)
         except OSError:
             added_at_default = int(time.time() * 1000)
+        # v1.7.5: mtime per file (main + thumb) so the configurator
+        # can append ?v=<mtime> to the URL it renders. Without this
+        # the CEF cache happily reuses old thumb bytes after a
+        # bundle regen — the same file path returns different
+        # content but the URL is identical, so the browser never
+        # re-fetches. With ?v= different, the cache key differs.
+        try:
+            mtime_main = int(fp.stat().st_mtime * 1000)
+        except OSError:
+            mtime_main = added_at_default
+        mtime_thumb = mtime_main
+        if thumb:
+            try:
+                mtime_thumb = int((lib / thumb).stat().st_mtime * 1000)
+            except OSError:
+                pass
         # v1.6.1-beta library categories: "background" (suitable for
         # the wallpaper / auto-cycle pool), "template" (Builder
         # source material — not meant to be shown raw), "both".
-        # Existing entries default to "both" so the upgrade is a
-        # visual no-op.
-        category = prev_it.get("category") or "both"
+        # v1.7.5: default changed from "both" to "background". Real-
+        # world: ~95 % of user uploads + every bundled / generated
+        # image is a finished wallpaper, not a Builder source. The
+        # old default surfaced every uncategorised image in BOTH
+        # filter chips ("Hintergründe" + "Vorlagen"), which made
+        # the Vorlagen chip useless. "background" is the safer
+        # default; users who actually edit images in the Builder
+        # set "template" explicitly via the per-entry right-click.
+        category = prev_it.get("category") or "background"
         if category not in ("background", "template", "both"):
-            category = "both"
+            category = "background"
         entry = {
             "id":       stem,
             "label":    stem.replace("-", " ").replace("_", " ").title(),
             "file":     fp.name,
             "thumb":    thumb or fp.name,
+            "mtime":    mtime_main,
+            "mtimeThumb": mtime_thumb,
             "pinned":   bool(prev_it.get("pinned", False)),
             "category": category,
             "order":    prev_it.get("order"),
             "addedAt":  prev_it.get("addedAt", added_at_default),
         }
+        if file4k:
+            entry["file4k"] = file4k
+        # v1.7.5: preserve user-curated `tags` (string list) through
+        # the rebuild so the Library tab's chip filter stays stable
+        # across bridge restarts + uploads. Generator-produced
+        # tags for bundled items also live in this field; the
+        # rebuild keeps whatever was there.
+        prev_tags = prev_it.get("tags")
+        if isinstance(prev_tags, list) and prev_tags:
+            entry["tags"] = [str(t)[:32] for t in prev_tags
+                              if isinstance(t, str) and t.strip()]
+        else:
+            # v1.7.5: no prev tags — derive from slug so bundled items
+            # surface meaningful chips on first run AND on upgrades
+            # where the shipped library.json never overwrites the
+            # user's existing one (onlyifdoesntexist Inno flag).
+            derived = _tags_for_slug_bridge(stem)
+            if derived:
+                entry["tags"] = derived
         if entry["order"] is None:
             del entry["order"]
         items.append(entry)
@@ -3081,18 +3236,39 @@ class Broadcaster:
                 if not fp.exists() or not fp.is_file():
                     http_error(writer, 404, "library item not found")
                 else:
-                    body = fp.read_bytes()
-                    ct, _ = mimetypes.guess_type(str(fp))
-                    if not ct: ct = "application/octet-stream"
-                    head = (
-                        "HTTP/1.1 200 OK\r\n"
-                        f"Content-Type: {ct}\r\n"
-                        f"Content-Length: {len(body)}\r\n"
-                        "Cache-Control: public, max-age=86400\r\n"
-                        f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
-                        "Connection: close\r\n\r\n"
-                    ).encode()
-                    writer.write(head + body)
+                    # v1.7.5: mtime+size ETag with 304 short-circuit.
+                    # Previous 24 h Cache-Control kept stale thumbs in
+                    # the CEF cache after a regen of the bundle. Now
+                    # the browser revalidates on every request — when
+                    # the bytes haven't changed we answer 304 (~70 B,
+                    # no body); when they have, the full image flows.
+                    st = fp.stat()
+                    etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+                    if_none = headers.get(b"if-none-match", b"").decode(
+                        "latin-1", "ignore").strip()
+                    if if_none and if_none == etag:
+                        head = (
+                            "HTTP/1.1 304 Not Modified\r\n"
+                            f"ETag: {etag}\r\n"
+                            "Cache-Control: no-cache\r\n"
+                            f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                            "Connection: close\r\n\r\n"
+                        ).encode()
+                        writer.write(head)
+                    else:
+                        body = fp.read_bytes()
+                        ct, _ = mimetypes.guess_type(str(fp))
+                        if not ct: ct = "application/octet-stream"
+                        head = (
+                            "HTTP/1.1 200 OK\r\n"
+                            f"Content-Type: {ct}\r\n"
+                            f"Content-Length: {len(body)}\r\n"
+                            f"ETag: {etag}\r\n"
+                            "Cache-Control: no-cache\r\n"
+                            f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                            "Connection: close\r\n\r\n"
+                        ).encode()
+                        writer.write(head + body)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
             try: await writer.drain()
@@ -3408,6 +3584,81 @@ class Broadcaster:
                 http_error(writer, 400, "incomplete body")
             except Exception as e:
                 http_error(writer, 500, f"category update failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v1.7.5: POST /library/tags — body is JSON
+        # {"file": "...", "tags": ["cyberpunk", "neon", ...]}. Mirrors
+        # the /library/category and /library/pin patterns. Tags get
+        # length-capped (32 chars each) + count-capped (24 per item)
+        # so a runaway client can't bloat library.json.
+        if method == "POST" and target.split("?", 1)[0] == "/library/tags":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 8192):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                file = str(req.get("file", ""))
+                raw_tags = req.get("tags") or []
+                if not isinstance(raw_tags, list):
+                    raw_tags = []
+                # Normalise: trim, lowercase, dedup, cap length + count.
+                seen: set[str] = set()
+                tags: list[str] = []
+                for tg in raw_tags:
+                    if not isinstance(tg, str):
+                        continue
+                    norm = tg.strip().lower()[:32]
+                    if norm and norm not in seen:
+                        seen.add(norm)
+                        tags.append(norm)
+                        if len(tags) >= 24:
+                            break
+                if not file or "/" in file or "\\" in file or ".." in file:
+                    http_error(writer, 400, "bad file name")
+                    try: await writer.drain()
+                    except Exception: pass
+                    try: writer.close()
+                    except Exception: pass
+                    return
+                def _apply_tags(it, _tags=tags):
+                    if _tags:
+                        it["tags"] = _tags
+                    else:
+                        # Empty list = remove the field entirely. Cleaner
+                        # library.json + matches "no tag info" semantics.
+                        it.pop("tags", None)
+                updated = _library_update_item(
+                    library_dir(), file, _apply_tags
+                )
+                if updated is None:
+                    http_error(writer, 404, f"library entry not found: {file}")
+                else:
+                    payload = json.dumps({"ok": True, "item": updated}).encode("utf-8")
+                    head = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json\r\n"
+                        f"Content-Length: {len(payload)}\r\n"
+                        "Cache-Control: no-store\r\n"
+                        "Connection: close\r\n\r\n"
+                    ).encode()
+                    writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 500, f"tags update failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()

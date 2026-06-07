@@ -43,6 +43,50 @@ under which each ships is below.
   bundle as `interact.LICENSE.txt`.
   <https://github.com/taye/interact.js>
 
+## Bundled wallpaper library (`installer/assets/library/`)
+
+The 38 cyberpunk / synthwave / aurora / underwater / sci-fi wallpapers
+shipped under `installer/assets/library/` are generated locally with
+**Juggernaut XL v9 (RunDiffusion Photo v2 variant)** — a photorealistic
+fine-tune of **Stable Diffusion XL Base 1.0** (Stability AI). Both are
+released under **CreativeML Open RAIL++-M**. Per Section IV/V of that
+licence:
+
+> *"… you bear sole liability for any use of the Model and you agree
+> not to use the Model for the use cases listed in Section II … The
+> License is not intended to restrict you from using the Output …"*
+
+The licence covers the *model weights*; Output is **not** subject to
+the licence as long as it is not produced for the prohibited use
+cases (defamation, illegal content, etc.) listed in Section II. None
+of our prompts touch those categories — they generate landscape /
+abstract / cityscape backgrounds — so the bundled WebPs ship
+unencumbered under our MIT umbrella.
+
+- **SDXL Base 1.0** weights — CreativeML Open RAIL++-M.
+  <https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0>
+- **Model: Juggernaut XL** (v9 RunDiffusion Photo v2) by **KandooAI**
+  — fine-tune of SDXL Base 1.0, released under CreativeML Open
+  RAIL++-M with an addendum (linked below). Per the addendum,
+  Section III: *"Licensor claims no rights in the Output you
+  generate"* — we ship the generated WebPs unencumbered under
+  this project's MIT umbrella. The addendum requires creator
+  attribution (this block), which we satisfy here.
+  - Model: <https://civitai.com/models/133005/juggernaut-xl>
+  - License addendum: <https://civitai.com/models/license/1759168>
+- Generation script (in-tree): `tools/generate_via_forge.py` — calls
+  Forge WebUI's `/sdapi/v1/txt2img` endpoint at `127.0.0.1:7860`
+  with the 38-slug prompt table from `tools/generate_via_gradio.py`
+  (the original SDXL-Lightning runner; the prompt list is shared).
+- Post-processing (in-tree): `tools/process_starter_images.py` — runs
+  Achanta-2009 frequency-tuned saliency (see *Builder Auto-cut
+  algorithms* below) to give each image a soft alpha mask where the
+  bright neon / aurora / bioluminescent regions blend with the
+  SignalRGB underlay, then encodes two WebP variants per slug:
+  `<slug>.webp` (1920×1080) and `<slug>.4k.webp` (3840×2160). The
+  Configurator picks the right one based on each screen's reported
+  viewport size at apply time.
+
 ## Web services queried at runtime (not bundled)
 
 - **Open-Meteo** — free weather API. Data is CC-BY 4.0; the widget shows an

@@ -29,6 +29,34 @@ Runs on top of [Lively Wallpaper](https://www.rocksdanister.com/lively/)
 Steam). The one-click installer sets everything up — no Python, no
 manual file copies, no terminal.
 
+<div align="center">
+
+![Library showcase — Aurora to Tokyo Neon](docs/assets/v1.7.5-hero.webp)
+
+*42 ready-to-go wallpapers in the bundled library, both 1080p and 4K
+— see the v1.7.5-beta highlights below.*
+
+</div>
+
+## v1.7.5-beta highlights
+
+- **38 new bundled wallpapers** — cyberpunk, synthwave, aurora,
+  underwater, sci-fi. Each ships in **1080p AND 4K** with
+  saliency-cut alpha so the SignalRGB glow shines through neon
+  zones. Generated locally with Juggernaut XL v9 (CreativeML Open
+  RAIL++-M — output is unencumbered, see [docs/credits.md](docs/credits.md)).
+- **Library tab redesign** — search, sort, tag chips, category
+  filter (background / template / both), one-click apply, right-
+  click context menu with Tag-Picker dialog, per-screen apply, per-
+  span-tile apply ("links / rechts"), "Apply in 4K" override.
+- **ETag-based cache busting** — regenerated thumbs propagate to
+  the Configurator on the next render, no hard refresh needed.
+- **Builder Apply Wall fallback** — leaving a tile empty no longer
+  wipes the existing background underneath; the untouched half
+  survives.
+- **Smaller installer per-image** — saliency-cut WebP at quality 88
+  saves ~85 % over PNG with the soft-mask gradients intact.
+
 > 🎯 **v1.3.0 is the current stable.** v1.4 + v1.5 betas open the
 > bridge up to other lighting ecosystems — your wallpaper, your
 > OpenRGB hardware, and your DMX/sACN gear can now all run off the
@@ -81,8 +109,10 @@ manual file copies, no terminal.
 - 🖌️ **In-browser image editor** — pick any wallpaper, click out
   transparent regions, Auto-Cut for one-click bright-region detection,
   reference-image colour picker, full keyboard nav
-- 🎨 **Starter wallpaper library** — Cyberpunk Skyline, Neon Grid,
-  Anime Window, Geometric Panels, … (more via *Add image…*)
+- 🎨 **Starter wallpaper library** — 42 bundled, AI-generated
+  wallpapers spanning cyberpunk, synthwave, aurora, underwater
+  and sci-fi (1080p + 4K variants per slug). Add your own via
+  *Add image…* or carve cut-outs in the Builder.
 - 🎬 **Video backgrounds** — MP4 / WebM / MOV / M4V routed through
   a `<video>` element so animated wallpapers work out of the box
 - ⚙️ **Browser-based Configurator** — change background, glow,

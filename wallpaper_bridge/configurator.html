@@ -196,6 +196,7 @@
   /* Filter: only the cards belonging to the active tab render. */
   main[data-active-tab] section.card[data-section-tab] { display: none; }
   main[data-active-tab="look"]         section.card[data-section-tab="look"],
+  main[data-active-tab="library"]      section.card[data-section-tab="library"],
   main[data-active-tab="effects"]      section.card[data-section-tab="effects"],
   main[data-active-tab="widgets"]      section.card[data-section-tab="widgets"],
   main[data-active-tab="integrations"] section.card[data-section-tab="integrations"],
@@ -1081,6 +1082,61 @@
     grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
     gap: 8px;
   }
+  /* v1.7.5: bigger tiles for the dedicated Library tab. The
+     Background-card strip kept the dense 118px grid (now retired,
+     but kept as the base class for any future inline usage); the
+     stand-alone Library tab uses 180px minmax tiles + a slightly
+     larger gap so the page reads as a gallery, not a strip. */
+  .lib-grid-large {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .lib-toolbar {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .lib-search {
+    flex: 1 1 240px; min-width: 160px;
+    padding: 6px 10px;
+    background: var(--panel-2, #1c1f27);
+    border: 1px solid var(--border, #333);
+    border-radius: 6px;
+    color: var(--text, #e0e4ec);
+    font: inherit;
+  }
+  .lib-search:focus { outline: none; border-color: #3a6ba8; }
+  .lib-sort {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    background: var(--panel-2, #1c1f27);
+    border: 1px solid var(--border, #333);
+    border-radius: 6px;
+    color: var(--text, #e0e4ec);
+    font: inherit;
+  }
+  .lib-tag-row {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .lib-tag-chip {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 11px;
+    border: 1px solid var(--border, #333);
+    background: transparent;
+    color: var(--text-dim, #888);
+    cursor: pointer; font-family: inherit;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .lib-tag-chip:hover {
+    color: var(--text, #e0e4ec);
+    border-color: var(--accent, #5588cc);
+  }
+  .lib-tag-chip.active {
+    background: var(--accent, #5588cc);
+    color: #fff;
+    border-color: transparent;
+  }
   .lib-tile {
     width: 100%;
     aspect-ratio: 16 / 10;
@@ -1290,6 +1346,80 @@
     height: 1px; background: var(--border); margin: 4px 0;
   }
 
+  /* v1.7.5: tag editor modal. Lightweight — no need for the heavier
+     framework modal pattern other features use, this is a one-shot
+     picker. */
+  .lib-tags-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 9200;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lib-tags-dialog {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+    padding: 16px 18px 14px;
+    width: min(560px, 92vw);
+    max-height: 84vh;
+    display: flex; flex-direction: column;
+  }
+  .lib-tags-dialog header {
+    font-size: 14px; font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .lib-tags-dialog .hint {
+    font-size: 11.5px; opacity: 0.7;
+    margin: 0 0 10px;
+  }
+  .lib-tags-grid {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    overflow-y: auto;
+    padding: 6px 4px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    max-height: 42vh;
+    margin-bottom: 12px;
+  }
+  .lib-tags-grid:empty::after {
+    content: attr(data-empty);
+    font-size: 11.5px; opacity: 0.5;
+    padding: 8px;
+  }
+  .lib-tags-chip {
+    display: inline-flex; align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .lib-tags-chip input { display: none; }
+  .lib-tags-chip.on {
+    background: rgba(58, 107, 168, 0.4);
+    border-color: rgba(58, 107, 168, 0.9);
+  }
+  .lib-tags-extra {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 12px; margin-bottom: 12px;
+  }
+  .lib-tags-extra input {
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: inherit;
+  }
+  .lib-tags-dialog footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+
   /* Preset slot rows — one per saved combo. Filled slots show a short
      summary (counts of widgets + active effects); empty slots hide
      Apply/Clear so only Save is offered. */
@@ -1494,19 +1624,21 @@
       <h2 data-i18n="section.bg">Background</h2>
     </header>
     <div class="body">
+      <!-- v1.7.5: the in-line library strip moved to its own tab
+           (#card-library, data-section-tab="library"). Background
+           card now keeps a one-line shortcut so the discoverability
+           path is still here for first-time users. -->
       <div class="row">
         <label data-i18n="bg.library">Library</label>
-        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
-          <!-- v1.6.1-beta R2.1: filter chips moved out of the strip so
-               they don't compete with tiles inside one flex-wrap row.
-               Strip itself is now a CSS grid with an "Add image" tile
-               as its first cell (no more orphan button below). -->
-          <div id="library-filter-row" class="lib-filter-row"></div>
-          <div id="library-strip" class="lib-grid"></div>
-          <input id="lib-upload" type="file"
-                 accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
-                 style="display:none">
-        </div>
+        <button type="button" class="btn" id="bg-goto-library"
+                data-i18n="bg.goto_library"
+                style="flex: 0 0 auto;">
+          Browse library...
+        </button>
+        <span class="hint" style="flex:1; padding-left:8px;"
+              data-i18n="bg.goto_library_hint">
+          Browse, search and apply bundled + your own wallpapers.
+        </span>
       </div>
       <!-- v1.2.13: the legacy "Image path" text input was confusing —
            users almost never paste a Windows path, the bg image lands
@@ -1669,6 +1801,44 @@
         <input type="range" id="stripes-blur" min="0" max="200" step="1">
         <span class="val" id="stripes-blur-val">60 px</span>
       </div>
+    </div>
+  </section>
+
+  <!-- ── Library (v1.7.5) ──────────────────────────────────────────────
+       Dedicated tab for browsing / searching / applying wallpapers.
+       Moved out of the Background card's strip when the bundled set
+       crossed ~20 items and the strip became unusable. Tag-aware
+       search, sort dropdown, double-click apply, larger tiles. -->
+  <section class="card" id="card-library" data-section-tab="library">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.library">Library</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="library.hint">
+        Bundled wallpapers + your own uploads. Click a tile to preview,
+        double-click to apply. Right-click for category / pin / delete.
+      </div>
+      <!-- Toolbar: search + sort + category filter chips. The filter
+           chips moved here from the old Background-strip; the search
+           input + sort dropdown are new in v1.7.5. -->
+      <div class="lib-toolbar">
+        <input type="search" id="library-search" class="lib-search"
+               data-i18n-attr="placeholder"
+               data-i18n="library.search_placeholder"
+               placeholder="Search by name or tag...">
+        <select id="library-sort" class="lib-sort">
+          <option value="newest"    data-i18n="library.sort.newest">Newest first</option>
+          <option value="name"      data-i18n="library.sort.name">Name (A-Z)</option>
+          <option value="addedAt"   data-i18n="library.sort.oldest">Oldest first</option>
+        </select>
+      </div>
+      <div id="library-filter-row" class="lib-filter-row"></div>
+      <div id="library-tag-row" class="lib-tag-row"></div>
+      <div id="library-strip" class="lib-grid lib-grid-large"></div>
+      <input id="lib-upload" type="file"
+             accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
+             style="display:none">
     </div>
   </section>
 
@@ -2597,12 +2767,40 @@ const TRANSLATIONS = {
   "bg.library.undo":        { en: "Undo",                 de: "Rückgängig" },
   "bg.library.undone":      { en: "Reverted",             de: "Zurückgesetzt" },
   "bg.library.ctx.apply":     { en: "Apply",              de: "Anwenden" },
+  "bg.library.ctx.apply_4k":  { en: "Apply in 4K",        de: "Anwenden in 4K" },
   "bg.library.ctx.edit":      { en: "Edit in Builder…",   de: "Im Builder öffnen…" },
   "bg.library.ctx.pin":       { en: "Pin to top",         de: "Oben anheften" },
   "bg.library.ctx.unpin":     { en: "Unpin",              de: "Lösen" },
   "bg.library.ctx.rename":    { en: "Rename…",            de: "Umbenennen…" },
   "bg.library.ctx.duplicate": { en: "Duplicate",          de: "Duplizieren" },
   "bg.library.ctx.delete":    { en: "Delete…",            de: "Löschen…" },
+  // v1.7.5: tags + per-screen apply.
+  "bg.library.ctx.tags":           { en: "Edit tags…",         de: "Tags bearbeiten…" },
+  "bg.library.ctx.apply_to_screen":{ en: "Apply to Screen {n}",
+                                     de: "Auf Bildschirm {n} anwenden" },
+  "bg.library.tags_prompt":        { en: "Tags (comma-separated):",
+                                     de: "Tags (komma-getrennt):" },
+  "bg.library.tags_saved":         { en: "Tags updated",
+                                     de: "Tags aktualisiert" },
+  "bg.library.tags_dialog.title":  { en: "Edit tags",
+                                     de: "Tags bearbeiten" },
+  "bg.library.tags_dialog.hint":   { en: "Pick from existing tags below, or add new ones — separate multiple with commas.",
+                                     de: "Wähle aus den vorhandenen Tags, oder ergänze neue — mehrere mit Komma trennen." },
+  "bg.library.tags_dialog.new_label":      { en: "Add new tags",
+                                             de: "Neue Tags hinzufügen" },
+  "bg.library.tags_dialog.new_placeholder":{ en: "e.g. dark, minimal",
+                                             de: "z.B. dunkel, minimal" },
+  "bg.library.tags_dialog.save":   { en: "Save",
+                                     de: "Speichern" },
+  // v1.7.5: per-span-tile apply.
+  "bg.library.ctx.span.left":      { en: "left half",   de: "linke Hälfte" },
+  "bg.library.ctx.span.right":     { en: "right half",  de: "rechte Hälfte" },
+  "bg.library.ctx.span.top":       { en: "top half",    de: "obere Hälfte" },
+  "bg.library.ctx.span.bottom":    { en: "bottom half", de: "untere Hälfte" },
+  "bg.library.ctx.tile_prefix_multi":  { en: "Screen {n}",  de: "Bildschirm {n}" },
+  "bg.library.ctx.tile_prefix_single": { en: "Tile",        de: "Hälfte" },
+  "bg.library.applied_to_tile":    { en: "{label} → Screen {screen} tile {n}",
+                                     de: "{label} → Bildschirm {screen} Hälfte {n}" },
   "bg.library.pinned_toast":  { en: "Pinned {label}",     de: "{label} angeheftet" },
   "bg.library.unpinned_toast":{ en: "Unpinned {label}",   de: "{label} gelöst" },
   // v1.6.1-beta: library category labels.
@@ -2699,6 +2897,21 @@ const TRANSLATIONS = {
   "tour.section_tabs.body":  { en: "Five tabs split the settings: Look (background + glow + quick looks), Effects, Widgets, Integrations (OpenRGB / sACN / MQTT / API / plugins), System (presets + profiles + backup).",
                                de: "Fünf Tabs teilen die Einstellungen: Look (Hintergrund + Glow + Quick Looks), Effekte, Widgets, Integrationen (OpenRGB / sACN / MQTT / API / Plugins), System (Voreinstellungen + Profile + Backup)." },
   "tab.look":               { en: "Look",                 de: "Look" },
+  "tab.library":            { en: "Library",              de: "Bibliothek" },
+  // v1.7.5: Library tab-specific strings.
+  "section.library":        { en: "Library",              de: "Bibliothek" },
+  "library.hint":           { en: "Bundled wallpapers + your own uploads. Click a tile to preview, double-click to apply. Right-click for category / pin / delete.",
+                              de: "Mitgelieferte Wallpaper + deine Uploads. Klick zum Vorschauen, Doppelklick zum Anwenden. Rechtsklick für Kategorie / Anheften / Löschen." },
+  "library.search_placeholder": { en: "Search by name or tag...",
+                                  de: "Suche nach Name oder Tag..." },
+  "library.sort.newest":    { en: "Newest first",         de: "Neueste zuerst" },
+  "library.sort.name":      { en: "Name (A-Z)",           de: "Name (A-Z)" },
+  "library.sort.oldest":    { en: "Oldest first",         de: "Älteste zuerst" },
+  "library.tags.all":       { en: "All tags",             de: "Alle Tags" },
+  "library.empty_search":   { en: "No matches.",          de: "Keine Treffer." },
+  "bg.goto_library":        { en: "Browse library...",    de: "Bibliothek öffnen..." },
+  "bg.goto_library_hint":   { en: "Browse, search and apply bundled + your own wallpapers.",
+                              de: "Stöbern, suchen und anwenden — mitgelieferte und eigene." },
   "tab.effects":            { en: "Effects",              de: "Effekte" },
   "tab.widgets":            { en: "Widgets",              de: "Widgets" },
   "tab.integrations":       { en: "Integrations",         de: "Integrationen" },
@@ -4024,17 +4237,33 @@ let libraryCatalogue = null;
 // uploads bubble to the top, finally by label alphabetical as a
 // stable tie-break. Pure function; takes and returns an array.
 function sortLibraryItems(items) {
+  // v1.7.5: respect the user-picked sort mode from the Library tab's
+  // dropdown. Pinned items always float to the top within whichever
+  // sort axis is active — the pin is meant to override the natural
+  // order.
+  const mode = _librarySort;
   return items.slice().sort((a, b) => {
     const ap = a.pinned ? 1 : 0;
     const bp = b.pinned ? 1 : 0;
     if (ap !== bp) return bp - ap;
+    if (mode === "name") {
+      return (a.label || a.id || "")
+        .localeCompare(b.label || b.id || "");
+    }
+    const aA = typeof a.addedAt === "number" ? a.addedAt : 0;
+    const bA = typeof b.addedAt === "number" ? b.addedAt : 0;
+    if (mode === "addedAt") {
+      // Explicit oldest-first.
+      if (aA !== bA) return aA - bA;
+      return (a.label || a.id || "").localeCompare(b.label || b.id || "");
+    }
+    // Default mode "newest" — also the legacy behaviour:
+    //   user-set order > addedAt desc > label.
     const aHasOrder = typeof a.order === "number";
     const bHasOrder = typeof b.order === "number";
     if (aHasOrder && bHasOrder) return a.order - b.order;
     if (aHasOrder) return -1;
     if (bHasOrder) return 1;
-    const aA = typeof a.addedAt === "number" ? a.addedAt : 0;
-    const bA = typeof b.addedAt === "number" ? b.addedAt : 0;
     if (aA !== bA) return bA - aA;
     return (a.label || a.id || "").localeCompare(b.label || b.id || "");
   });
@@ -4049,19 +4278,60 @@ let _libraryFilter = (function () {
   try { return localStorage.getItem("cfg.libraryFilter") || "all"; }
   catch (_) { return "all"; }
 })();
+// v1.7.5: sort mode, search query, active tag — all persisted to
+// localStorage so the user's view survives a page reload.
+let _librarySort = (function () {
+  try { return localStorage.getItem("cfg.librarySort") || "newest"; }
+  catch (_) { return "newest"; }
+})();
+let _librarySearch = "";
+let _libraryTag = "";   // empty string = no tag filter
 function setLibraryFilter(f) {
   _libraryFilter = f;
   try { localStorage.setItem("cfg.libraryFilter", f); } catch (_) {}
   renderLibraryStrip();
 }
+function setLibrarySort(mode) {
+  _librarySort = mode;
+  try { localStorage.setItem("cfg.librarySort", mode); } catch (_) {}
+  renderLibraryStrip();
+}
+function setLibrarySearch(q) {
+  _librarySearch = (q || "").trim().toLowerCase();
+  renderLibraryStrip();
+}
+function setLibraryTag(tag) {
+  _libraryTag = (_libraryTag === tag) ? "" : tag;
+  renderLibraryStrip();
+}
 function _itemPassesFilter(item) {
   const cat = item.category || "both";
   switch (_libraryFilter) {
-    case "background": return cat === "background" || cat === "both";
-    case "template":   return cat === "template"   || cat === "both";
-    case "pinned":     return !!item.pinned;
-    default:           return true;
+    case "background":
+      if (!(cat === "background" || cat === "both")) return false;
+      break;
+    case "template":
+      if (!(cat === "template" || cat === "both")) return false;
+      break;
+    case "pinned":
+      if (!item.pinned) return false;
+      break;
   }
+  // v1.7.5: substring search over label + id + tags.
+  if (_librarySearch) {
+    const hay = (item.label || "").toLowerCase()
+              + " " + (item.id || "").toLowerCase()
+              + " " + (Array.isArray(item.tags)
+                       ? item.tags.join(" ").toLowerCase() : "");
+    if (!hay.includes(_librarySearch)) return false;
+  }
+  // v1.7.5: active tag chip — strict equality against the item's
+  // tag list. Empty `_libraryTag` means "no tag filter".
+  if (_libraryTag) {
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    if (!tags.includes(_libraryTag)) return false;
+  }
+  return true;
 }
 
 function renderLibraryStrip() {
@@ -4082,6 +4352,37 @@ function renderLibraryStrip() {
       c.textContent = t("bg.library.filter." + f);
       c.addEventListener("click", () => setLibraryFilter(f));
       filterRow.appendChild(c);
+    }
+  }
+  // v1.7.5: tag chips. Collected from every catalogue entry's `tags`
+  // array. Sorted alphabetically + capped at 20 chips so the row
+  // doesn't blow up on libraries with hundreds of tags.
+  const tagRow = document.getElementById("library-tag-row");
+  if (tagRow) {
+    tagRow.innerHTML = "";
+    const tagCounts = new Map();
+    for (const it of (libraryCatalogue || [])) {
+      if (!Array.isArray(it.tags)) continue;
+      for (const tg of it.tags) {
+        if (!tg) continue;
+        tagCounts.set(tg, (tagCounts.get(tg) || 0) + 1);
+      }
+    }
+    if (tagCounts.size > 0) {
+      const tags = Array.from(tagCounts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 20)
+        .map(e => e[0])
+        .sort((a, b) => a.localeCompare(b));
+      for (const tag of tags) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lib-tag-chip"
+          + (_libraryTag === tag ? " active" : "");
+        chip.textContent = tag;
+        chip.addEventListener("click", () => setLibraryTag(tag));
+        tagRow.appendChild(chip);
+      }
     }
   }
 
@@ -4146,7 +4447,15 @@ function renderLibraryStrip() {
       v.disablePictureInPicture = true;
       btn.appendChild(v);
     } else {
-      btn.style.backgroundImage = "url(/library/" + encodeURIComponent(item.thumb || item.file) + ")";
+      // v1.7.5: ?v=<mtime> cache buster. CEF + Chromium honour the
+      // ETag added in the same release, but only AFTER they've
+      // revalidated once. Folding mtime into the URL changes the
+      // cache key so a regenerated thumb is fetched fresh on the
+      // next library refresh without waiting for a hard reload.
+      const _thumb = item.thumb || item.file;
+      const _v = item.mtimeThumb || item.mtime || item.addedAt || 0;
+      btn.style.backgroundImage = "url(/library/"
+        + encodeURIComponent(_thumb) + "?v=" + _v + ")";
     }
     const lbl = document.createElement("span");
     lbl.className = "label";
@@ -4186,6 +4495,13 @@ function renderLibraryStrip() {
         clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
       }
       showLibraryPreview(item, btn.getBoundingClientRect(), true);
+    });
+    // v1.7.5: double-click = apply immediately. Skips the
+    // preview-then-Apply two-step the single-click path uses.
+    btn.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      hideLibraryPreview();
+      applyLibraryItem(item);
     });
     btn.addEventListener("mouseenter", () => {
       if (_libPreviewPinned) return;
@@ -4421,6 +4737,65 @@ function showLibraryContextMenu(item, x, y) {
   };
 
   el.appendChild(make(t("bg.library.ctx.apply"),     () => applyLibraryItem(item)));
+  // v1.7.5: explicit 4K row. Only shown if the item ships a 4K
+  // sibling. The default "Anwenden" path still picks 4K on a 4K
+  // monitor automatically — this row is for users who want to push
+  // 4K to an FHD monitor (sharper text on hi-DPI scaling) or vice
+  // versa.
+  if (item.file4k) {
+    el.appendChild(make(t("bg.library.ctx.apply_4k"),
+      () => applyLibraryItem(item, undefined, "4k")));
+  }
+
+  // v1.7.5: Per-screen apply. Indices below are 0-based to match
+  // `activeScreen` + the bridge's /screen/<n>/ endpoints; only the
+  // human-facing label gets +1 so Screen 1 reads as "Screen 1".
+  const screenN = Math.max(1, screenCount | 0);
+  if (screenN > 1) {
+    for (let i = 0; i < screenN; i++) {
+      const i0 = i;
+      const label = t("bg.library.ctx.apply_to_screen", { n: i0 + 1 })
+                  + (i0 === activeScreen ? "  •" : "");
+      el.appendChild(make(label, () => applyLibraryItem(item, i0)));
+    }
+  }
+
+  // v1.7.5: Per-tile apply in span mode. For each screen that's set
+  // to span-h / span-v, the user gets two extra rows ("links / rechts"
+  // or "oben / unten") that route the image into a specific half via
+  // canvas composite. Skipped for video items.
+  const itemIsVid = /\.(mp4|webm|mov|m4v|mkv)$/i.test(item.file || "");
+  if (!itemIsVid) {
+    const screens = (_lastConfigSnapshot && Array.isArray(_lastConfigSnapshot.screens))
+      ? _lastConfigSnapshot.screens : [];
+    let emittedSpanHeader = false;
+    for (let i = 0; i < screenN; i++) {
+      const s = screens[i] || {};
+      const mode = (s.monitorSetup && s.monitorSetup.mode)
+                || (i === activeScreen
+                    && settings.monitorSetup && settings.monitorSetup.mode)
+                || "single";
+      if (mode !== "span-h" && mode !== "span-v") continue;
+      if (!emittedSpanHeader) {
+        el.appendChild(sep());
+        emittedSpanHeader = true;
+      }
+      const [a, b] = mode === "span-h"
+        ? [t("bg.library.ctx.span.left"),  t("bg.library.ctx.span.right")]
+        : [t("bg.library.ctx.span.top"),   t("bg.library.ctx.span.bottom")];
+      const labelA = (screenN > 1
+        ? t("bg.library.ctx.tile_prefix_multi", { n: i + 1 }) + " — " + a
+        : a);
+      const labelB = (screenN > 1
+        ? t("bg.library.ctx.tile_prefix_multi", { n: i + 1 }) + " — " + b
+        : b);
+      el.appendChild(make(labelA,
+        () => applyLibraryItemToSpanTile(item, i, 0, mode)));
+      el.appendChild(make(labelB,
+        () => applyLibraryItemToSpanTile(item, i, 1, mode)));
+    }
+  }
+
   el.appendChild(make(t("bg.library.ctx.edit"),      () => editLibraryItemInBuilder(item)));
   el.appendChild(sep());
   const pinLabel = item.pinned
@@ -4446,6 +4821,9 @@ function showLibraryContextMenu(item, x, y) {
   el.appendChild(catEntry("template",   t("bg.library.ctx.cat.template")));
   el.appendChild(catEntry("both",       t("bg.library.ctx.cat.both")));
   el.appendChild(sep());
+  // v1.7.5: tag editor — comma-separated prompt. Cheap UI, the bridge
+  // normalises (lowercase + dedup + length-cap) so we don't have to.
+  el.appendChild(make(t("bg.library.ctx.tags"),      () => editLibraryTags(item)));
   el.appendChild(make(t("bg.library.ctx.rename"),    () => renameLibraryItem(item)));
   el.appendChild(make(t("bg.library.ctx.duplicate"), () => duplicateLibraryItem(item)));
   el.appendChild(sep());
@@ -4475,6 +4853,225 @@ function editLibraryItemInBuilder(item) {
   // The Builder reads ?library=<file> on load and pre-fills the canvas
   // with that PNG. See builder.html init.
   window.open("/builder?library=" + encodeURIComponent(item.file), "_blank");
+}
+
+// v1.7.5: composite-in-place per-span-tile apply. The bridge stores
+// one background per screen; in span-h / span-v mode that single
+// image is split visually into 2 tiles by the wallpaper. To "apply
+// to monitor 1 of a span" we:
+//   1. fetch the current screen background bytes
+//   2. draw them onto a canvas sized to the screen's full viewport
+//   3. cover-fit the new library image into the target tile rect,
+//      leaving the other tile area untouched
+//   4. POST the composite as the new screen background
+// This intentionally diverges from the Builder Wall slot tracking
+// (which keeps separate blobs per tile in localStorage). The user
+// can still open Builder Wall later for structured editing — the
+// composite just shows up as the screen bg there.
+async function applyLibraryItemToSpanTile(item, screenIdx, tileIdx, spanMode) {
+  // screenIdx is 0-based — matches activeScreen + the bridge's
+  // /screen/<n>/background URL convention.
+  try {
+    const snap = _lastConfigSnapshot && Array.isArray(_lastConfigSnapshot.screens)
+      ? _lastConfigSnapshot.screens[screenIdx] : null;
+    const W = (snap && snap.viewportW) || settings.viewportW || 1920;
+    const H = (snap && snap.viewportH) || settings.viewportH || 1080;
+
+    let tx = 0, ty = 0, tw = W, th = H;
+    if (spanMode === "span-h") {
+      tw = Math.floor(W / 2);
+      tx = tileIdx * tw;
+    } else if (spanMode === "span-v") {
+      th = Math.floor(H / 2);
+      ty = tileIdx * th;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width  = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+
+    // v1.7.5: preserve the OTHER tile's pixels — but ONLY in that
+    // tile's region, never under the target tile. The library WebPs
+    // ship with saliency-cut alpha (bright neon -> transparent so
+    // SignalRGB underlay shows through). If we drew prev_bg as a
+    // full-canvas opaque base, the target tile's transparent neon
+    // areas would show prev_bg pixels instead of the underlay.
+    // Clip prev_bg to the inverse rect, library to the target rect.
+    const prevPath = (snap && snap.bgImage) || settings.bgImage || "";
+    if (prevPath) {
+      try {
+        const r = await fetch("/image?path=" + encodeURIComponent(prevPath),
+                              { cache: "no-store" });
+        if (r.ok) {
+          const prevImg = await blobToImageBitmap(await r.blob());
+          ctx.save();
+          ctx.beginPath();
+          if (spanMode === "span-h") {
+            const ox = tileIdx === 0 ? tw : 0;
+            ctx.rect(ox, 0, tw, H);
+          } else { // span-v
+            const oy = tileIdx === 0 ? th : 0;
+            ctx.rect(0, oy, W, th);
+          }
+          ctx.clip();
+          ctx.drawImage(prevImg, 0, 0, W, H);
+          ctx.restore();
+        }
+      } catch (_) { /* no prev bg — other tile stays transparent */ }
+    }
+
+    // Cover-fit the library image into the target tile rect with
+    // alpha preserved.
+    const srcFile = _libraryFileFor(item, snap, "auto");
+    const libR = await fetch("/library/" + encodeURIComponent(srcFile));
+    if (!libR.ok) throw new Error("library HTTP " + libR.status);
+    const lib = await blobToImageBitmap(await libR.blob());
+    const scale = Math.max(tw / lib.width, th / lib.height);
+    const dw = lib.width * scale;
+    const dh = lib.height * scale;
+    const dx = tx + (tw - dw) / 2;
+    const dy = ty + (th - dh) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(tx, ty, tw, th);
+    ctx.clip();
+    ctx.drawImage(lib, dx, dy, dw, dh);
+    ctx.restore();
+
+    const composite = await new Promise((res) =>
+      canvas.toBlob(res, "image/png"));
+    const up = await fetch("/screen/" + screenIdx + "/background", {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: composite,
+    });
+    if (!up.ok) throw new Error("upload HTTP " + up.status);
+
+    toast(t("bg.library.applied_to_tile",
+            { label: item.label || item.id, n: tileIdx + 1,
+              screen: screenIdx + 1 }), "good");
+  } catch (e) {
+    toast("Tile apply failed: " + e.message, "bad");
+  }
+}
+
+async function blobToImageBitmap(blob) {
+  // createImageBitmap is the modern fast path; fall back to <img>
+  // for environments where it's missing (none we ship to, but cheap).
+  if (typeof createImageBitmap === "function") {
+    try { return await createImageBitmap(blob); } catch (_) {}
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => {
+      img.onload = res; img.onerror = rej; img.src = url;
+    });
+    return img;
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+}
+
+// v1.7.5: tag editor. Modal with two parts:
+//   1. checkbox list of every tag that already exists in the
+//      library — fast pick from the curated set without typing
+//   2. free-text field for one-off new tags
+// Bridge normalises (trim + lowercase + dedup + length/count cap)
+// so the dialog can stay dumb. Empty submission wipes tags.
+async function editLibraryTags(item) {
+  const current = Array.isArray(item.tags)
+    ? item.tags.map((s) => String(s).toLowerCase()) : [];
+  // Collect every distinct tag the catalogue carries so the picker
+  // shows the actual vocabulary the user has been using. Sort by
+  // frequency desc so the most-used tags show up first.
+  const counts = new Map();
+  for (const it of libraryCatalogue || []) {
+    if (!Array.isArray(it.tags)) continue;
+    for (const tg of it.tags) {
+      const t0 = String(tg).toLowerCase();
+      if (t0) counts.set(t0, (counts.get(t0) || 0) + 1);
+    }
+  }
+  const known = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([t0]) => t0);
+  // Make sure current tags appear in the picker even if no other
+  // item uses them (rare — the catalogue rebuild keeps user tags).
+  for (const tg of current) if (!known.includes(tg)) known.push(tg);
+
+  const picked = new Set(current);
+  const overlay = document.createElement("div");
+  overlay.className = "lib-tags-overlay";
+  overlay.innerHTML = `
+    <div class="lib-tags-dialog">
+      <header>${t("bg.library.tags_dialog.title")}</header>
+      <p class="hint">${t("bg.library.tags_dialog.hint")}</p>
+      <div class="lib-tags-grid"></div>
+      <label class="lib-tags-extra">
+        <span>${t("bg.library.tags_dialog.new_label")}</span>
+        <input type="text" placeholder="${t("bg.library.tags_dialog.new_placeholder")}" />
+      </label>
+      <footer>
+        <button type="button" class="btn-secondary">${t("modal.btn.cancel")}</button>
+        <button type="button" class="btn-primary">${t("bg.library.tags_dialog.save")}</button>
+      </footer>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const grid = overlay.querySelector(".lib-tags-grid");
+  const extraInput = overlay.querySelector(".lib-tags-extra input");
+  for (const tg of known) {
+    const lbl = document.createElement("label");
+    lbl.className = "lib-tags-chip";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = tg;
+    cb.checked = picked.has(tg);
+    cb.addEventListener("change", () => {
+      if (cb.checked) picked.add(tg); else picked.delete(tg);
+      lbl.classList.toggle("on", cb.checked);
+    });
+    if (cb.checked) lbl.classList.add("on");
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(tg));
+    grid.appendChild(lbl);
+  }
+
+  const cleanup = () => overlay.remove();
+  const [btnCancel, btnSave] = overlay.querySelectorAll("footer button");
+  btnCancel.addEventListener("click", cleanup);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) cleanup();
+  });
+  document.addEventListener("keydown", function onEsc(e) {
+    if (e.key === "Escape") {
+      document.removeEventListener("keydown", onEsc);
+      cleanup();
+    }
+  });
+
+  btnSave.addEventListener("click", async () => {
+    const extra = (extraInput.value || "").split(",")
+      .map((s) => s.trim()).filter((s) => s.length > 0);
+    const tags = [...picked, ...extra];
+    cleanup();
+    try {
+      const up = await fetch("/library/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: item.file, tags }),
+      });
+      if (!up.ok) throw new Error("HTTP " + up.status);
+      toast(t("bg.library.tags_saved"), "good");
+      await refreshLibrary();
+    } catch (e) {
+      toast("Tags update failed: " + e.message, "bad");
+    }
+  });
+
+  setTimeout(() => extraInput.focus(), 0);
 }
 
 async function renameLibraryItem(item) {
@@ -4701,16 +5298,41 @@ function askSpanLibraryChoice(item) {
   });
 }
 
-async function applyLibraryItem(item) {
+// v1.7.5: pick the right library URL for the screen's actual viewport.
+// "auto" (default) -> file4k when the target screen reports >= 1.5x
+// the FHD width, FHD otherwise. "fhd"/"4k" let the context-menu force
+// a choice. Items without file4k always fall through to the FHD file.
+function _libraryFileFor(item, screen, mode) {
+  const has4k = !!item.file4k;
+  if (mode === "4k" && has4k) return item.file4k;
+  if (mode === "fhd")        return item.file;
+  if (has4k) {
+    const w = (screen && screen.viewportW) || settings.viewportW || 1920;
+    if (w >= 2880) return item.file4k;   // 4K range covers 1440p+ too
+  }
+  return item.file;
+}
+
+async function applyLibraryItem(item, screenOverride, resMode) {
   // Pull the full-res PNG and POST it to the bridge as the screen's
   // background. Same endpoint Builder uses; bridge then echoes the new
   // bgImage path back over WS so the wallpaper page refreshes.
+  //
+  // v1.7.5: screenOverride lets the library context-menu route the
+  // image to a specific screen (1-based index) instead of the
+  // currently-focused tab. When passed we also skip the span chooser
+  // because the user has already picked a concrete monitor.
   //
   // Before overwriting, we snapshot the current background bytes via
   // the /image proxy so a 5-second Undo toast can POST them back if the
   // user changes their mind. The bridge deletes the previous screen-N-*
   // file on each apply, so the snapshot must happen *before* the new
   // POST — there is no other way to recover the bytes afterwards.
+
+  // v1.7.5: 0-based — matches activeScreen + the bridge's
+  // /screen/<n>/background URL convention.
+  const targetScreen = (typeof screenOverride === "number"
+    && screenOverride >= 0) ? screenOverride : activeScreen;
 
   // v1.2.13: span-mode UX. If this screen drives multiple physical
   // monitors via a span, ask the user how to apply rather than
@@ -4721,15 +5343,17 @@ async function applyLibraryItem(item) {
   //     could do with an MP4, and span-stretching a video usually
   //     looks fine because the motion masks distortion. Videos fall
   //     straight through to the normal apply path.
+  //   • explicit screenOverride → user already picked a target.
   const monitorMode = (settings && settings.monitorSetup
     && settings.monitorSetup.mode) || "single";
   const itemIsVideo = /\.(mp4|webm|mov|m4v|mkv)$/i.test(item.file || "");
-  if (monitorMode !== "single" && !itemIsVideo) {
+  if (monitorMode !== "single" && !itemIsVideo
+      && typeof screenOverride !== "number") {
     const choice = await askSpanLibraryChoice(item);
     if (choice === "cancel") return;
     if (choice === "builder") {
       window.open(
-        "/builder?screen=" + activeScreen
+        "/builder?screen=" + targetScreen
           + "&library=" + encodeURIComponent(item.file),
         "_blank"
       );
@@ -4751,10 +5375,13 @@ async function applyLibraryItem(item) {
       } catch (_) { /* undo just won't be offered */ }
     }
 
-    const resp = await fetch("/library/" + encodeURIComponent(item.file));
+    const snap = _lastConfigSnapshot && Array.isArray(_lastConfigSnapshot.screens)
+      ? _lastConfigSnapshot.screens[targetScreen] : null;
+    const srcFile = _libraryFileFor(item, snap, resMode || "auto");
+    const resp = await fetch("/library/" + encodeURIComponent(srcFile));
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const blob = await resp.blob();
-    const up = await fetch("/screen/" + activeScreen + "/background", {
+    const up = await fetch("/screen/" + targetScreen + "/background", {
       method: "POST",
       headers: { "Content-Type": "image/png" },
       body: blob,
@@ -4763,7 +5390,7 @@ async function applyLibraryItem(item) {
 
     const msg = t("bg.library.applied", { label: item.label || item.id });
     if (undoBlob && undoBlob.size > 0) {
-      const screenAtApply = activeScreen;
+      const screenAtApply = targetScreen;
       toast(msg, "good", async () => {
         try {
           const undoResp = await fetch(
@@ -4814,6 +5441,12 @@ document.querySelectorAll("section.card > header.section-head[data-toggle]").for
 const SECTION_TABS = [
   { key: "look", i18n: "tab.look",
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4-4 3 3 4-5 3 4"/>' },
+  // v1.7.5: dedicated Library tab. Used to live as a strip inside
+  // the Background card in the Look tab; with the bundle growing
+  // past ~20 items the strip was unusable. The new tab gives it
+  // search + sort + tags + a proper grid.
+  { key: "library", i18n: "tab.library",
+    icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
   { key: "effects", i18n: "tab.effects",
     icon: '<path d="M5 12l3-3 3 3 3-6 3 6 2-2"/><circle cx="18" cy="6" r="1.4"/>' },
   { key: "widgets", i18n: "tab.widgets",
@@ -4889,6 +5522,36 @@ window.activateSectionTab = activateSectionTab;
 // in the DOM by the time we build the nav. translateUI() runs at
 // page load to populate t() — buildSectionTabs reads that table.
 setTimeout(buildSectionTabs, 0);
+
+// v1.7.5: wire up the new Library-tab controls. Search box,
+// sort dropdown, and the Background-card "Browse library..." shortcut
+// all live on the same Configurator page and are inert until the
+// catalogue has loaded — renderLibraryStrip() picks up _librarySearch
+// / _librarySort / _libraryTag on every render.
+setTimeout(() => {
+  const search = document.getElementById("library-search");
+  if (search) {
+    // Debounce so a fast typer doesn't trigger a re-render per
+    // keystroke. 120 ms is short enough that the chip feels live.
+    let _searchT = null;
+    search.addEventListener("input", () => {
+      if (_searchT) clearTimeout(_searchT);
+      _searchT = setTimeout(() => setLibrarySearch(search.value),
+                            120);
+    });
+  }
+  const sort = document.getElementById("library-sort");
+  if (sort) {
+    sort.value = _librarySort;
+    sort.addEventListener("change", () => setLibrarySort(sort.value));
+  }
+  const gotoBtn = document.getElementById("bg-goto-library");
+  if (gotoBtn && typeof window.activateSectionTab === "function") {
+    gotoBtn.addEventListener("click", () => {
+      window.activateSectionTab("library");
+    });
+  }
+}, 0);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Apply to all screens — per-section button in each card header. Each

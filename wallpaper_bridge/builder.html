@@ -5717,6 +5717,56 @@ async function applyWall() {
       composite.width  = first.bridgeW;
       composite.height = first.bridgeH;
       const cctx = composite.getContext("2d");
+      // v1.7.5: if some tiles in this bridge are empty, draw the
+      // bridge's current background as a base layer so those tiles
+      // keep their existing content instead of going transparent.
+      // The user's "Apply Wall" with only one half filled used to
+      // wipe the other half — now the untouched half survives.
+      const filledIdx = new Set(tileIndices.filter((i) => wallSlots[i] && wallSlots[i].img));
+      const anyEmpty = tileIndices.some((i) => !filledIdx.has(i));
+      if (anyEmpty) {
+        try {
+          const bgPath = (typeof bridgeScreens !== "undefined"
+            && bridgeScreens[bridgeIdx] && bridgeScreens[bridgeIdx].bgImage) || "";
+          if (bgPath) {
+            const resp = await fetch("/image?path=" + encodeURIComponent(bgPath),
+                                     { cache: "no-store" });
+            if (resp.ok) {
+              const blob = await resp.blob();
+              const prevBg = (typeof createImageBitmap === "function")
+                ? await createImageBitmap(blob).catch(() => null)
+                : null;
+              if (prevBg) {
+                cctx.drawImage(prevBg, 0, 0, composite.width, composite.height);
+              } else {
+                // Fallback for environments without createImageBitmap.
+                const url = URL.createObjectURL(blob);
+                await new Promise((res) => {
+                  const img = new Image();
+                  img.onload = () => {
+                    cctx.drawImage(img, 0, 0, composite.width, composite.height);
+                    URL.revokeObjectURL(url);
+                    res();
+                  };
+                  img.onerror = () => { URL.revokeObjectURL(url); res(); };
+                  img.src = url;
+                });
+              }
+            }
+          }
+        } catch (_) { /* no prev bg available — empty tiles stay clear */ }
+        // Clear the tile rects we're about to redraw so the new tile
+        // image lands on the canvas-default transparent state, not on
+        // top of the prev bg (which would otherwise show through any
+        // saliency-cut alpha in the new tile).
+        for (const i of filledIdx) {
+          const tile = wallScreens[i];
+          if (!tile) continue;
+          const sw = tile.slotW || tile.w;
+          const sh = tile.slotH || tile.h;
+          cctx.clearRect(tile.xOffset, tile.yOffset, sw, sh);
+        }
+      }
       // v1.2.13: cover-fit each tile into its bridge slot — the
       // wallpaper page treats backgrounds as "cover" by default, so
       // doing the equivalent at composite time avoids the

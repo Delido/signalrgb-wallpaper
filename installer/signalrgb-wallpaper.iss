@@ -201,7 +201,11 @@ Source: "install_lively.ps1"; Flags: dontcopy
 ;     and on every upload/delete, so overwriting it loses per-entry
 ;     pinned/order state and hides user-uploaded PNGs until the next
 ;     upload triggers a rebuild.
-Source: "..\wallpaper_bridge\library\*.png"; \
+; v1.7.5: library switched from PNG to WebP — 7x smaller payload, same
+; visual quality on the soft-blur wallpaper content. Bridge already
+; supports any extension the catalogue rebuilder lists (.png .jpg .webp
+; .gif .mp4 etc) so end-user PNG uploads still work.
+Source: "..\wallpaper_bridge\library\*.webp"; \
   DestDir: "{localappdata}\SignalRGBWallpaper\library"; \
   Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\wallpaper_bridge\library\library.json"; \
@@ -232,6 +236,65 @@ Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Sc
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
 Type: filesandordirs; Name: "{code:GetWallpaperEngineProjects}\SignalRGB_Glow_Screen4"; \
   Tasks: installwallpaperengine; Check: WallpaperEngineDetected
+
+; v1.7.5: legacy PNG library files. v1.7.4 and earlier shipped 4
+; procedural PNGs (cyberpunk-skyline / neon-grid / anime-window /
+; geometric-panels). The aborted v1.7.4-internal beta also shipped
+; 19 hand-curated PNGs (aurora-* / cyberpunk-* / neon-* / rgb-* /
+; synthwave-* / tokyo-* / wet-neon-* / night-city-* / wp1902208 etc).
+; v1.7.5 ships the same content as WebP. Inno never deletes files on
+; its own — without these directives both sets coexist in the user's
+; library folder, the bridge sees `<slug>.png` AND `<slug>.webp` as
+; separate entries, and every wallpaper shows up twice in the picker.
+; Wildcard match keeps us safe across future filename changes within
+; the bundled set; user-uploaded PNGs survive (they live alongside,
+; the patterns below are pinned to the exact slugs we ever shipped).
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\cyberpunk-skyline.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\cyberpunk-skyline.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-grid.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-grid.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\anime-window.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\anime-window.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\geometric-panels.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\geometric-panels.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-curtain.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-curtain.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-horizon.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-horizon.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-pines.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-pines.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-sky.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\aurora-sky.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\cyberpunk-holo-street.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\cyberpunk-holo-street.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-backstreet.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-backstreet.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-boulevard.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-boulevard.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-street-pink.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\neon-street-pink.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\night-city-vista.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\night-city-vista.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-abstract.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-abstract.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-curve.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-curve.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-setup-arch.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-setup-arch.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-studio.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\rgb-studio.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\synthwave-horizon.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\synthwave-horizon.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\synthwave-mountains.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\synthwave-mountains.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\synthwave-sun.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\synthwave-sun.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\tokyo-neon-alley.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\tokyo-neon-alley.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\tokyo-vista.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\tokyo-vista.thumb.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\wet-neon-alley.png"
+Type: files; Name: "{localappdata}\SignalRGBWallpaper\library\wet-neon-alley.thumb.png"
 
 [Icons]
 Name: "{group}\SignalRGB Wallpaper Bridge"; Filename: "{app}\{#MyAppExeName}"
