@@ -31,10 +31,13 @@ manual file copies, no terminal.
 
 <div align="center">
 
-![Library showcase — Aurora to Tokyo Neon](docs/assets/v1.7.5-hero.webp)
+| Tokyo neon alley | Cyberpunk towers | Bioluminescent grove |
+| :---: | :---: | :---: |
+| ![Tokyo neon alley with SignalRGB glow cycling through vertical signs](docs/assets/v1.7.5-hero.webp) | ![Cyberpunk skyscrapers with SignalRGB glow cycling through windows](docs/assets/v1.7.5-hero-city.webp) | ![Bioluminescent mushroom grove with SignalRGB glow through the caps](docs/assets/v1.7.5-hero-grove.webp) |
 
-*42 ready-to-go wallpapers in the bundled library, both 1080p and 4K
-— see the v1.7.5-beta highlights below.*
+*Bundled wallpapers with saliency-cut alpha — the live SignalRGB glow
+shines through the transparent neon zones. 42 ready-to-go images in
+the library, both 1080p and 4K — see the v1.7.5-beta highlights below.*
 
 </div>
 
