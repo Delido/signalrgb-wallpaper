@@ -210,10 +210,13 @@ def build_pack(pack_id: str, src_dir: Path) -> dict:
 DISCOVERY_MANIFEST = HERE.parent / "docs" / "library-packs.json"
 # Where the bridge expects to find downloadable packs. Each pack's
 # `url` field is built from this base + the pack ZIP filename. The
-# v2.0.0 release is the carrier release; future packs can ship in
-# their own dedicated `library-packs-vN` releases without bumping
-# the app.
-RELEASE_TAG = "v2.0.0"
+# pack ZIPs + per-pack preview thumbnails live in a dedicated
+# `library-packs-vN` release so the application release tags
+# (v2.0.0, v2.0.1, …) stay clean — only the installer goes there.
+# Bump the suffix when shipping pack content changes; the bridge's
+# update checker filters by tag-as-semver so library-packs-* tags
+# never offer the user a (non-existent) app update.
+RELEASE_TAG = "library-packs-v1"
 RELEASE_BASE = (
     "https://github.com/Delido/signalrgb-wallpaper/releases/download/"
     + RELEASE_TAG + "/"
