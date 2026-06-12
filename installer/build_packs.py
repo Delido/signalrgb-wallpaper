@@ -160,6 +160,21 @@ def build_pack(pack_id: str, src_dir: Path) -> dict:
         zf.writestr("manifest.json",
                     json.dumps(manifest, indent=2, ensure_ascii=False))
 
+    # v1.7.5 wave 2: copy the first 4 thumb WebPs out as flat preview
+    # assets so the Configurator can show real thumbnails on
+    # not-yet-installed packs. Names are flat + pack-prefixed because
+    # they all share one release-assets bucket.
+    preview_dir = OUT / "previews"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    preview_assets: list[str] = []
+    for i, main in enumerate(mains[:4]):
+        thumb_src = src_dir / f"{main.stem}.thumb.webp"
+        if not thumb_src.exists():
+            continue
+        asset_name = f"{pack_id}-preview-{i}.webp"
+        (preview_dir / asset_name).write_bytes(thumb_src.read_bytes())
+        preview_assets.append(asset_name)
+
     size = zip_path.stat().st_size
     sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
     print(f"  [{pack_id}] {len(items)} images, {size // 1024} KB, sha256={sha[:12]}…")
@@ -174,6 +189,11 @@ def build_pack(pack_id: str, src_dir: Path) -> dict:
         "filename":     zip_path.name,
         "preview_thumbs": [it.get("thumb") or it["file"]
                            for it in items[:4]],
+        # v1.7.5 wave 2: absolute URLs for the preview WebPs we just
+        # extracted. The bridge passes these through to the
+        # Configurator, which loads them directly from GitHub release
+        # assets — no install-step required.
+        "preview_urls":   [RELEASE_BASE + a for a in preview_assets],
         # v1.7.5: slug list so the bridge can detect "installed"
         # state from file presence alone — handles upgrade-from-
         # pre-pack-split installs where the WebPs are already in

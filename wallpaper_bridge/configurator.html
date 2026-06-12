@@ -1151,6 +1151,21 @@
   .lib-pack-chip.active {
     border-style: solid;
   }
+  /* v1.7.5 wave 2: per-source section header inside the library grid.
+     Spans the full row, no background, subtle divider. Renders only
+     when "All sources" is active and multiple groups exist. */
+  .lib-group-head {
+    grid-column: 1 / -1;
+    margin: 14px 0 4px;
+    padding: 0 2px 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim, #9aa3b2);
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+  }
+  .lib-group-head:first-child { margin-top: 4px; }
   .lib-tile {
     width: 100%;
     aspect-ratio: 16 / 10;
@@ -4614,8 +4629,49 @@ function renderLibraryStrip() {
     return;
   }
   let renderedCount = 0;
-  for (const item of sortLibraryItems(libraryCatalogue)) {
-    if (!_itemPassesFilter(item)) continue;
+  // v1.7.5 wave 2: when "All sources" is the active pack filter AND
+  // there are at least two distinct sources, render the grid in
+  // sub-sections (Bundled / pack ids / Your uploads) separated by
+  // small <h4> headers — keeps pack content from melting into the
+  // user's own uploads. Otherwise (specific pack chip selected, or
+  // single source) the grid stays a flat list.
+  const _passing = sortLibraryItems(libraryCatalogue)
+    .filter(_itemPassesFilter);
+  let _groups;
+  if (_libraryPack === "" && _passing.length > 0) {
+    const _m = new Map();
+    for (const _it of _passing) {
+      const _k = _it.pack || "user";
+      if (!_m.has(_k)) _m.set(_k, []);
+      _m.get(_k).push(_it);
+    }
+    if (_m.size >= 2) {
+      const _ord = (a, b) => {
+        if (a === "bundled") return -1;
+        if (b === "bundled") return 1;
+        if (a === "user")    return 1;
+        if (b === "user")    return -1;
+        return a.localeCompare(b);
+      };
+      _groups = Array.from(_m.entries())
+        .sort((a, b) => _ord(a[0], b[0]));
+    } else {
+      _groups = [["", _passing]];
+    }
+  } else {
+    _groups = [["", _passing]];
+  }
+  for (const [_groupKey, _groupItems] of _groups) {
+    if (_groupKey) {
+      const _h = document.createElement("h4");
+      _h.className = "lib-group-head";
+      const _lbl = _groupKey === "bundled" ? t("bg.library.pack.bundled")
+                 : _groupKey === "user"    ? t("bg.library.pack.user")
+                 : _groupKey;
+      _h.textContent = _lbl + " · " + _groupItems.length;
+      els.libraryStrip.appendChild(_h);
+    }
+  for (const item of _groupItems) {
     renderedCount++;
     const btn = document.createElement("button");
     btn.className = "lib-tile" + (item.pinned ? " pinned" : "");
@@ -4755,6 +4811,7 @@ function renderLibraryStrip() {
     });
     els.libraryStrip.appendChild(btn);
   }
+  }   // end group iteration
   // v1.6.1-beta R2.1: empty-state hint when an active filter (chip
   // other than "all") matches nothing — without it the grid just
   // shows the add-tile and looks broken.
@@ -5457,11 +5514,22 @@ function renderPacksGrid(packs) {
     for (let i = 0; i < 4; i++) {
       const cell = document.createElement("div");
       const thumb = pack.preview_thumbs && pack.preview_thumbs[i];
+      const previewUrl = pack.preview_urls && pack.preview_urls[i];
       if (pack.installed && thumb) {
+        // Pack already extracted — use the local copy (offline,
+        // ETag-cached). Cache buster keeps it fresh after a
+        // re-install with new content.
         cell.style.backgroundImage = "url(/library/"
           + encodeURIComponent(thumb) + ")";
+      } else if (previewUrl) {
+        // Not installed yet — load the preview WebP straight from
+        // the GitHub release assets bucket. Tiny payload (~15 KB
+        // per thumb), so this is cheap even on slow links.
+        cell.style.backgroundImage = "url(" + previewUrl + ")";
       } else {
-        // Stable per-pack tint so users recognise packs by colour.
+        // Discovery manifest from a build before preview_urls existed
+        // — fall back to a per-pack tinted gradient so the row still
+        // looks visually distinct.
         const hue = pack.id.split("")
           .reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 0) % 360;
         cell.style.background =
