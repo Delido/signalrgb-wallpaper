@@ -74,18 +74,26 @@ unencumbered under our MIT umbrella.
   attribution (this block), which we satisfy here.
   - Model: <https://civitai.com/models/133005/juggernaut-xl>
   - License addendum: <https://civitai.com/models/license/1759168>
-- Generation script (in-tree): `tools/generate_via_forge.py` — calls
-  Forge WebUI's `/sdapi/v1/txt2img` endpoint at `127.0.0.1:7860`
-  with the 38-slug prompt table from `tools/generate_via_gradio.py`
-  (the original SDXL-Lightning runner; the prompt list is shared).
-- Post-processing (in-tree): `tools/process_starter_images.py` — runs
-  Achanta-2009 frequency-tuned saliency (see *Builder Auto-cut
-  algorithms* below) to give each image a soft alpha mask where the
-  bright neon / aurora / bioluminescent regions blend with the
-  SignalRGB underlay, then encodes two WebP variants per slug:
-  `<slug>.webp` (1920×1080) and `<slug>.4k.webp` (3840×2160). The
-  Configurator picks the right one based on each screen's reported
-  viewport size at apply time.
+- **Upscaler: 4xNomos8kDAT** by **Philip Hofmann (Phips)** —
+  CC-BY-4.0. Used to take each Juggernaut 1024-grade output up to
+  3840×2160 cleanly. Attribution required by the licence: this
+  block satisfies it. Earlier wave-1 packs used 4x-UltraSharp; we
+  replaced that with 4xNomos8kDAT because UltraSharp is
+  CC-BY-NC-SA 4.0 (non-commercial) which would have tainted the
+  MIT redistribution chain.
+  - <https://huggingface.co/Phips/4xNomos8kDAT>
+- Generation script (in-tree, ComfyUI batch): not committed because
+  the ComfyUI workflow lives outside the repo. Provenance for every
+  shipped image is documented in
+  [`installer/assets/library/IMAGES_NOTICE.md`](../installer/assets/library/IMAGES_NOTICE.md)
+  alongside the bundled assets.
+- Post-processing (in-tree): `tools/import_repo_clean.py` ingests
+  the ComfyUI batch (3840×2160 RGBA with luminance-alpha already
+  baked in), then emits three WebP variants per slug:
+  `<slug>.webp` (1920×1080), `<slug>.thumb.webp` (320×180), and
+  `<slug>.4k.webp` (3840×2160). The Configurator picks the right
+  one based on each screen's reported viewport size at apply
+  time.
 
 ## Web services queried at runtime (not bundled)
 

@@ -1137,6 +1137,20 @@
     color: #fff;
     border-color: transparent;
   }
+  /* v1.7.5 wave 2: pack-source chips share lib-tag-chip styling
+     but get a slight visual separation (dashed border) so the row
+     reads as a distinct filter dimension from tags. */
+  .lib-pack-row {
+    margin-top: -2px;
+    padding-top: 4px;
+    border-top: 1px dashed rgba(255,255,255,0.08);
+  }
+  .lib-pack-chip {
+    border-style: dashed;
+  }
+  .lib-pack-chip.active {
+    border-style: solid;
+  }
   .lib-tile {
     width: 100%;
     aspect-ratio: 16 / 10;
@@ -1925,6 +1939,10 @@
       </div>
       <div id="library-filter-row" class="lib-filter-row"></div>
       <div id="library-tag-row" class="lib-tag-row"></div>
+      <!-- v1.7.5 wave 2: source-pack chips (bundled / per-pack / your
+           uploads). Renders only when 2+ distinct packs exist so a
+           fresh install doesn't see a one-chip row. -->
+      <div id="library-pack-row" class="lib-tag-row lib-pack-row"></div>
       <div id="library-strip" class="lib-grid lib-grid-large"></div>
       <input id="lib-upload" type="file"
              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
@@ -2913,6 +2931,10 @@ const TRANSLATIONS = {
   "bg.library.cat_set_toast":      { en: "{label} → {cat}",
                                      de: "{label} → {cat}" },
   "bg.library.filter.all":         { en: "All",         de: "Alle" },
+  // v1.7.5 wave 2: source-pack chip labels.
+  "bg.library.pack.all":           { en: "All sources", de: "Alle Quellen" },
+  "bg.library.pack.bundled":       { en: "Bundled",     de: "Mitgeliefert" },
+  "bg.library.pack.user":          { en: "Your uploads", de: "Eigene Uploads" },
   "bg.library.filter.background":  { en: "🖼 Backgrounds", de: "🖼 Hintergründe" },
   "bg.library.filter.template":    { en: "🎨 Templates",   de: "🎨 Vorlagen" },
   "bg.library.filter.pinned":      { en: "📌 Pinned",      de: "📌 Angeheftet" },
@@ -4400,6 +4422,11 @@ let _librarySort = (function () {
 })();
 let _librarySearch = "";
 let _libraryTag = "";   // empty string = no tag filter
+// v1.7.5 wave 2: per-pack filter chip. Empty = "All sources".
+let _libraryPack = (function () {
+  try { return localStorage.getItem("cfg.libraryPack") || ""; }
+  catch (_) { return ""; }
+})();
 function setLibraryFilter(f) {
   _libraryFilter = f;
   try { localStorage.setItem("cfg.libraryFilter", f); } catch (_) {}
@@ -4416,6 +4443,11 @@ function setLibrarySearch(q) {
 }
 function setLibraryTag(tag) {
   _libraryTag = (_libraryTag === tag) ? "" : tag;
+  renderLibraryStrip();
+}
+function setLibraryPack(pack) {
+  _libraryPack = (_libraryPack === pack) ? "" : pack;
+  try { localStorage.setItem("cfg.libraryPack", _libraryPack); } catch (_) {}
   renderLibraryStrip();
 }
 function _itemPassesFilter(item) {
@@ -4444,6 +4476,13 @@ function _itemPassesFilter(item) {
   if (_libraryTag) {
     const tags = Array.isArray(item.tags) ? item.tags : [];
     if (!tags.includes(_libraryTag)) return false;
+  }
+  // v1.7.5 wave 2: pack source chip. "user" matches items without a
+  // pack field (own uploads); any other value is a strict equality
+  // check against item.pack.
+  if (_libraryPack) {
+    const itemPack = item.pack || "user";
+    if (itemPack !== _libraryPack) return false;
   }
   return true;
 }
@@ -4496,6 +4535,54 @@ function renderLibraryStrip() {
         chip.textContent = tag;
         chip.addEventListener("click", () => setLibraryTag(tag));
         tagRow.appendChild(chip);
+      }
+    }
+  }
+  // v1.7.5 wave 2: source-pack chips. Each library entry carries an
+  // optional `pack` field (set by the installer for essentials, set
+  // by the bridge after a pack download, absent for user uploads).
+  // We aggregate counts per pack and emit one chip per source so the
+  // user can filter the grid by "where this image came from". The
+  // row only renders when there are ≥ 2 distinct sources — a fresh
+  // install with only the 6 bundled tiles + 0 packs doesn't need
+  // the row.
+  const packRow = document.getElementById("library-pack-row");
+  if (packRow) {
+    packRow.innerHTML = "";
+    const packCounts = new Map();
+    for (const it of (libraryCatalogue || [])) {
+      const key = it.pack || "user";
+      packCounts.set(key, (packCounts.get(key) || 0) + 1);
+    }
+    if (packCounts.size >= 2) {
+      // Stable order: bundled first, then alphabetical pack ids,
+      // user uploads last. Matches the natural reading order.
+      const keys = Array.from(packCounts.keys()).sort((a, b) => {
+        if (a === "bundled") return -1;
+        if (b === "bundled") return 1;
+        if (a === "user") return 1;
+        if (b === "user") return -1;
+        return a.localeCompare(b);
+      });
+      // "All sources" reset chip leads the row.
+      const allChip = document.createElement("button");
+      allChip.type = "button";
+      allChip.className = "lib-tag-chip"
+        + (_libraryPack === "" ? " active" : "");
+      allChip.textContent = t("bg.library.pack.all");
+      allChip.addEventListener("click", () => setLibraryPack(""));
+      packRow.appendChild(allChip);
+      for (const key of keys) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "lib-tag-chip lib-pack-chip"
+          + (_libraryPack === key ? " active" : "");
+        const label = key === "bundled" ? t("bg.library.pack.bundled")
+                    : key === "user"    ? t("bg.library.pack.user")
+                    : key;
+        chip.textContent = `${label} · ${packCounts.get(key)}`;
+        chip.addEventListener("click", () => setLibraryPack(key));
+        packRow.appendChild(chip);
       }
     }
   }

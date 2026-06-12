@@ -1500,6 +1500,14 @@ def _library_rebuild_catalogue(lib: Path) -> None:
             derived = _tags_for_slug_bridge(stem)
             if derived:
                 entry["tags"] = derived
+        # v1.7.5 wave 2: preserve `pack` so per-pack filter chips
+        # in the Library tab survive a catalogue rebuild (uploads,
+        # rename, app restart). Bundled essentials get `pack:
+        # "bundled"` written by generate_library.py; pack installs
+        # tag their slugs in install_library_pack.
+        prev_pack = prev_it.get("pack")
+        if isinstance(prev_pack, str) and prev_pack.strip():
+            entry["pack"] = prev_pack.strip()[:32]
         if entry["order"] is None:
             del entry["order"]
         items.append(entry)
@@ -1696,6 +1704,7 @@ def install_library_pack(pack_id: str, pack_meta: dict) -> None:
                 f"sha256 mismatch: expected {expected_sha[:12]}…, "
                 f"got {got_sha[:12]}…")
         _packs_set_state(pack_id, state="extracting", progress=0.9)
+        slugs_in_pack: list[str] = []
         with zipfile.ZipFile(BytesIO(body), "r") as zf:
             names = zf.namelist()
             for n in names:
@@ -1704,8 +1713,34 @@ def install_library_pack(pack_id: str, pack_meta: dict) -> None:
                 if "/" in n or "\\" in n or n.startswith("."):
                     if n != "manifest.json":
                         raise ValueError(f"suspicious zip entry: {n}")
+            # Read the inner manifest first so we know which slugs
+            # belong to this pack — used below to tag library.json
+            # entries with `pack: <id>`, which feeds the Library
+            # tab's per-pack filter chip row.
+            try:
+                inner = json.loads(zf.read("manifest.json").decode("utf-8"))
+                slugs_in_pack = [str(it.get("id"))
+                                  for it in (inner.get("items") or [])
+                                  if it.get("id")]
+            except (KeyError, json.JSONDecodeError):
+                slugs_in_pack = []
             zf.extractall(lib)
         _library_rebuild_catalogue(lib)
+        # Tag each freshly-extracted slug with its source pack so the
+        # Configurator can group by pack. Idempotent — re-installs
+        # just overwrite the same field with the same value.
+        if slugs_in_pack:
+            for slug in slugs_in_pack:
+                # Match the catalogue entry by file name patterns the
+                # rebuild emits (<slug>.webp regardless of extension
+                # priority outcome).
+                for ext in (".webp", ".png", ".jpg", ".jpeg"):
+                    candidate = f"{slug}{ext}"
+                    if (lib / candidate).exists():
+                        _library_update_item(
+                            lib, candidate,
+                            lambda it, _p=pack_id: it.update({"pack": _p}))
+                        break
         _packs_set_state(pack_id, state="done", progress=1.0)
     except Exception as e:
         print(f"[pack-install] {pack_id}: {e}")

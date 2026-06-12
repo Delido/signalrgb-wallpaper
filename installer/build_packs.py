@@ -31,24 +31,61 @@ PACK_VERSION = 1
 WALLPAPER_W = 1920
 WALLPAPER_H = 1080
 
-# Pack metadata: id -> (label EN, label DE, description)
+# Pack metadata: id -> (label EN, label DE, description). v1.7.5
+# wave 2 uses one pack per source category (13 packs) instead of
+# bundled themes — discoverability over consolidation.
 PACK_META = {
-    "cyberpunk": (
-        "Cyberpunk Pack",
-        "Cyberpunk-Pack",
-        "Neon cityscapes, holographic streets, magenta alleys "
-        "and Tokyo rain — 17 photoreal cyberpunk wallpapers."),
-    "aurora-nature": (
-        "Aurora & Nature Pack",
-        "Aurora & Natur",
-        "Aurora skies, mushroom groves and deep-sea jellies — 6 "
-        "atmospheric nature wallpapers that pair well with cool "
-        "SignalRGB palettes."),
-    "synthwave-abstract": (
-        "Synthwave & Abstract Pack",
-        "Synthwave & Abstrakt",
-        "Retro synthwave horizons, plasma webs and RGB studios — "
-        "9 abstract / scene wallpapers for the geometric mood."),
+    "aurora":      ("Aurora",     "Aurora",
+                    "Northern lights over mountains, lakes and snow — atmospheric sky wallpapers."),
+    "blockbuster": ("Blockbuster", "Blockbuster",
+                    "Cinematic blockbuster-style hero scenes."),
+    "crystal":     ("Crystal",    "Kristall",
+                    "Crystalline structures, gem facets and mineral light refractions."),
+    "cyberpunk":   ("Cyberpunk",  "Cyberpunk",
+                    "Neon megacities, holographic streets and rain-soaked alleys."),
+    "energy":      ("Energy",     "Energie",
+                    "Electric arcs, plasma fields and high-voltage abstract glow."),
+    "film":        ("Film",       "Film",
+                    "Cinematic stills and atmospheric movie-style compositions."),
+    "fireworks":   ("Fireworks",  "Feuerwerk",
+                    "Burst, sparkle and trail patterns of pyrotechnic light."),
+    "forest":      ("Forest",     "Wald",
+                    "Mystical woodlands, glowing canopies and atmospheric forest light."),
+    "magic":       ("Magic",      "Magie",
+                    "Fantasy arcane glow, magical runes and mystical light fields."),
+    "space":       ("Space",      "Weltraum",
+                    "Deep-space nebulae, stellar bursts and distant cosmic vistas."),
+    "synthwave":   ("Synthwave",  "Synthwave",
+                    "Retro 80s grid sunsets, neon mountains and chrome horizons."),
+    "underwater":  ("Underwater", "Unterwasser",
+                    "Bioluminescent deep-sea creatures, kelp forests and abyssal light."),
+    "videospiele": ("Video Games", "Videospiele",
+                    "Iconic game-style scenes — fantasy castles, sci-fi vistas, dungeons."),
+}
+
+# v1.7.5: license + generator metadata travels with each pack so the
+# Configurator can surface "Generated with X (License Y)" in the
+# pack browser. All current packs share the same chain — Juggernaut
+# XL v9 image gen + Phips' 4xNomos8kDAT for the 4K upscale.
+PACK_LICENSE_META = {
+    "license":            "CreativeML Open RAIL-M",
+    "license_url":        "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+    "commercial_use":     True,
+    "redistribution":     "MIT-compatible",
+    "generators": [
+        {
+            "name":    "Juggernaut XL v9 (RunDiffusion Photo v2)",
+            "role":    "Image generation",
+            "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+            "url":     "https://civitai.com/models/133005/juggernaut-xl",
+        },
+        {
+            "name":    "4xNomos8kDAT by Philip Hofmann (Phips)",
+            "role":    "4K upscale",
+            "license": "CC-BY-4.0",
+            "url":     "https://huggingface.co/Phips/4xNomos8kDAT",
+        },
+    ],
 }
 
 # Reuse generate_library.py's tag derivation rules for consistency.
@@ -143,6 +180,10 @@ def build_pack(pack_id: str, src_dir: Path) -> dict:
         # library_dir but no marker file marks them as belonging
         # to a pack.
         "slugs":        [it["id"] for it in items],
+        # v1.7.5 wave 2: license metadata travels per pack so the
+        # Configurator can surface generator + license info in the
+        # pack browser without a separate lookup.
+        **PACK_LICENSE_META,
     }
 
 

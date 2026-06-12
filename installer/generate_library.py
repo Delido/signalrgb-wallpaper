@@ -338,6 +338,11 @@ def main() -> None:
                 "h":        H,
                 "category": "background",
                 "tags":     _tags_for_slug(slug),
+                # v1.7.5 wave 2: source-pack tag. Essentials shipped
+                # with the installer get the "bundled" marker so the
+                # Library tab's pack-filter chip row can distinguish
+                # them from packs the user downloaded later.
+                "pack":     "bundled",
             }
             if has_4k:
                 entry["file4k"] = file4k_name

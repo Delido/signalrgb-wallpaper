@@ -3,102 +3,630 @@
   "min_app": "1.7.5-beta",
   "packs": [
     {
-      "id": "aurora-nature",
+      "id": "aurora",
       "version": 1,
       "label": {
-        "en": "Aurora & Nature Pack",
-        "de": "Aurora & Natur"
+        "en": "Aurora",
+        "de": "Aurora"
       },
-      "description": "Aurora skies, mushroom groves and deep-sea jellies — 6 atmospheric nature wallpapers that pair well with cool SignalRGB palettes.",
-      "image_count": 6,
-      "size_bytes": 6349288,
-      "sha256": "5abab90228928fd1e79061b6b37143ba7fa530024b73c3e91fb0c6cb612618f1",
-      "filename": "aurora-nature-pack-v1.zip",
+      "description": "Northern lights over mountains, lakes and snow — atmospheric sky wallpapers.",
+      "image_count": 9,
+      "size_bytes": 29469060,
+      "sha256": "ee0db815dbc47c8f798b0ef282ce04778f5c9623eaa8dd278d13f4a64e31885c",
+      "filename": "aurora-pack-v1.zip",
       "preview_thumbs": [
-        "aurora-horizon.thumb.webp",
-        "aurora-pines.thumb.webp",
-        "aurora-sky.thumb.webp",
-        "deep-sea-jellies.thumb.webp"
+        "aurora-02.thumb.webp",
+        "aurora-03.thumb.webp",
+        "aurora-04.thumb.webp",
+        "aurora-05.thumb.webp"
       ],
       "slugs": [
-        "aurora-horizon",
-        "aurora-pines",
-        "aurora-sky",
-        "deep-sea-jellies",
-        "mushroom-forest",
-        "underwater-jellies"
+        "aurora-02",
+        "aurora-03",
+        "aurora-04",
+        "aurora-05",
+        "aurora-06",
+        "aurora-07",
+        "aurora-08",
+        "aurora-09",
+        "aurora-10"
       ],
-      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/aurora-nature-pack-v1.zip"
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/aurora-pack-v1.zip"
+    },
+    {
+      "id": "blockbuster",
+      "version": 1,
+      "label": {
+        "en": "Blockbuster",
+        "de": "Blockbuster"
+      },
+      "description": "Cinematic blockbuster-style hero scenes.",
+      "image_count": 4,
+      "size_bytes": 18884187,
+      "sha256": "bf93daf5907a75b7e36c71e5c75178490b1240028085c7b1867b11b79140af44",
+      "filename": "blockbuster-pack-v1.zip",
+      "preview_thumbs": [
+        "blockbuster-01.thumb.webp",
+        "blockbuster-02.thumb.webp",
+        "blockbuster-03.thumb.webp",
+        "blockbuster-04.thumb.webp"
+      ],
+      "slugs": [
+        "blockbuster-01",
+        "blockbuster-02",
+        "blockbuster-03",
+        "blockbuster-04"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/blockbuster-pack-v1.zip"
+    },
+    {
+      "id": "crystal",
+      "version": 1,
+      "label": {
+        "en": "Crystal",
+        "de": "Kristall"
+      },
+      "description": "Crystalline structures, gem facets and mineral light refractions.",
+      "image_count": 9,
+      "size_bytes": 39786324,
+      "sha256": "607bb45857a7fd023cc44eda2ba9c7f40804473c3f6e8831fd218ffde41a2eff",
+      "filename": "crystal-pack-v1.zip",
+      "preview_thumbs": [
+        "crystal-02.thumb.webp",
+        "crystal-03.thumb.webp",
+        "crystal-04.thumb.webp",
+        "crystal-05.thumb.webp"
+      ],
+      "slugs": [
+        "crystal-02",
+        "crystal-03",
+        "crystal-04",
+        "crystal-05",
+        "crystal-06",
+        "crystal-07",
+        "crystal-08",
+        "crystal-09",
+        "crystal-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/crystal-pack-v1.zip"
     },
     {
       "id": "cyberpunk",
       "version": 1,
       "label": {
-        "en": "Cyberpunk Pack",
-        "de": "Cyberpunk-Pack"
+        "en": "Cyberpunk",
+        "de": "Cyberpunk"
       },
-      "description": "Neon cityscapes, holographic streets, magenta alleys and Tokyo rain — 17 photoreal cyberpunk wallpapers.",
-      "image_count": 17,
-      "size_bytes": 22319401,
-      "sha256": "8bd9cc15025251acae0a5991b3f5cda446a6945a8d4c97cc0fea587fc7019441",
+      "description": "Neon megacities, holographic streets and rain-soaked alleys.",
+      "image_count": 9,
+      "size_bytes": 41301774,
+      "sha256": "42526b289dcb71c89407d4d2be9ec302117a46c046ae406b3840aea74bf3bc00",
       "filename": "cyberpunk-pack-v1.zip",
       "preview_thumbs": [
-        "cyan-cyberpunk-highway.thumb.webp",
-        "cyan-skyline.thumb.webp",
-        "cyberpunk-bridge-vista.thumb.webp",
-        "cyberpunk-holo-street.thumb.webp"
+        "cyberpunk-02.thumb.webp",
+        "cyberpunk-03.thumb.webp",
+        "cyberpunk-04.thumb.webp",
+        "cyberpunk-05.thumb.webp"
       ],
       "slugs": [
-        "cyan-cyberpunk-highway",
-        "cyan-skyline",
-        "cyberpunk-bridge-vista",
-        "cyberpunk-holo-street",
-        "foggy-neon-street",
-        "magenta-alley",
-        "magenta-cyberpunk",
-        "neon-backstreet",
-        "neon-boulevard",
-        "neon-magenta-alley",
-        "neon-storefront",
-        "neon-street-pink",
-        "night-city-vista",
-        "tokyo-bridge-vista",
-        "tokyo-neon-alley",
-        "tokyo-vista",
-        "wet-neon-alley"
+        "cyberpunk-02",
+        "cyberpunk-03",
+        "cyberpunk-04",
+        "cyberpunk-05",
+        "cyberpunk-06",
+        "cyberpunk-07",
+        "cyberpunk-08",
+        "cyberpunk-09",
+        "cyberpunk-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
       ],
       "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/cyberpunk-pack-v1.zip"
     },
     {
-      "id": "synthwave-abstract",
+      "id": "energy",
       "version": 1,
       "label": {
-        "en": "Synthwave & Abstract Pack",
-        "de": "Synthwave & Abstrakt"
+        "en": "Energy",
+        "de": "Energie"
       },
-      "description": "Retro synthwave horizons, plasma webs and RGB studios — 9 abstract / scene wallpapers for the geometric mood.",
-      "image_count": 9,
-      "size_bytes": 7969706,
-      "sha256": "3b7f1075cd418bf75578d0a10038f05f1a701088aa525872f62bd6c18a290f64",
-      "filename": "synthwave-abstract-pack-v1.zip",
+      "description": "Electric arcs, plasma fields and high-voltage abstract glow.",
+      "image_count": 10,
+      "size_bytes": 33728940,
+      "sha256": "0656734094f700ba5f4a465af6208bd80a82305e3aa073d732a491919eff027b",
+      "filename": "energy-pack-v1.zip",
       "preview_thumbs": [
-        "plasma-web.thumb.webp",
-        "quantum-wave.thumb.webp",
-        "rgb-abstract.thumb.webp",
-        "rgb-curve.thumb.webp"
+        "energy-01.thumb.webp",
+        "energy-02.thumb.webp",
+        "energy-03.thumb.webp",
+        "energy-04.thumb.webp"
       ],
       "slugs": [
-        "plasma-web",
-        "quantum-wave",
-        "rgb-abstract",
-        "rgb-curve",
-        "rgb-setup-arch",
-        "rgb-studio",
-        "stellar-burst",
-        "synthwave-horizon",
-        "synthwave-sun"
+        "energy-01",
+        "energy-02",
+        "energy-03",
+        "energy-04",
+        "energy-05",
+        "energy-06",
+        "energy-07",
+        "energy-08",
+        "energy-09",
+        "energy-10"
       ],
-      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/synthwave-abstract-pack-v1.zip"
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/energy-pack-v1.zip"
+    },
+    {
+      "id": "film",
+      "version": 1,
+      "label": {
+        "en": "Film",
+        "de": "Film"
+      },
+      "description": "Cinematic stills and atmospheric movie-style compositions.",
+      "image_count": 4,
+      "size_bytes": 10420764,
+      "sha256": "c8048c807f2bfeba4e144a69573f59e00398e3dde60867429080ea0b86fe063a",
+      "filename": "film-pack-v1.zip",
+      "preview_thumbs": [
+        "film-01.thumb.webp",
+        "film-02.thumb.webp",
+        "film-03.thumb.webp",
+        "film-04.thumb.webp"
+      ],
+      "slugs": [
+        "film-01",
+        "film-02",
+        "film-03",
+        "film-04"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/film-pack-v1.zip"
+    },
+    {
+      "id": "fireworks",
+      "version": 1,
+      "label": {
+        "en": "Fireworks",
+        "de": "Feuerwerk"
+      },
+      "description": "Burst, sparkle and trail patterns of pyrotechnic light.",
+      "image_count": 10,
+      "size_bytes": 55085762,
+      "sha256": "ef8bf13b9c49d340735f5dec9d94a74d2046c941e07bbf49e47921ef597a0dd9",
+      "filename": "fireworks-pack-v1.zip",
+      "preview_thumbs": [
+        "fireworks-01.thumb.webp",
+        "fireworks-02.thumb.webp",
+        "fireworks-03.thumb.webp",
+        "fireworks-04.thumb.webp"
+      ],
+      "slugs": [
+        "fireworks-01",
+        "fireworks-02",
+        "fireworks-03",
+        "fireworks-04",
+        "fireworks-05",
+        "fireworks-06",
+        "fireworks-07",
+        "fireworks-08",
+        "fireworks-09",
+        "fireworks-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/fireworks-pack-v1.zip"
+    },
+    {
+      "id": "forest",
+      "version": 1,
+      "label": {
+        "en": "Forest",
+        "de": "Wald"
+      },
+      "description": "Mystical woodlands, glowing canopies and atmospheric forest light.",
+      "image_count": 9,
+      "size_bytes": 33285031,
+      "sha256": "9a560546b490edc086fa35628713f180722c08b52c30f56dc77f3c25b280278d",
+      "filename": "forest-pack-v1.zip",
+      "preview_thumbs": [
+        "forest-02.thumb.webp",
+        "forest-03.thumb.webp",
+        "forest-04.thumb.webp",
+        "forest-05.thumb.webp"
+      ],
+      "slugs": [
+        "forest-02",
+        "forest-03",
+        "forest-04",
+        "forest-05",
+        "forest-06",
+        "forest-07",
+        "forest-08",
+        "forest-09",
+        "forest-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/forest-pack-v1.zip"
+    },
+    {
+      "id": "magic",
+      "version": 1,
+      "label": {
+        "en": "Magic",
+        "de": "Magie"
+      },
+      "description": "Fantasy arcane glow, magical runes and mystical light fields.",
+      "image_count": 10,
+      "size_bytes": 43670291,
+      "sha256": "5279de21cafb33c049269dcb669229f4463836d725df0f8e9706015b35a146b4",
+      "filename": "magic-pack-v1.zip",
+      "preview_thumbs": [
+        "magic-01.thumb.webp",
+        "magic-02.thumb.webp",
+        "magic-03.thumb.webp",
+        "magic-04.thumb.webp"
+      ],
+      "slugs": [
+        "magic-01",
+        "magic-02",
+        "magic-03",
+        "magic-04",
+        "magic-05",
+        "magic-06",
+        "magic-07",
+        "magic-08",
+        "magic-09",
+        "magic-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/magic-pack-v1.zip"
+    },
+    {
+      "id": "space",
+      "version": 1,
+      "label": {
+        "en": "Space",
+        "de": "Weltraum"
+      },
+      "description": "Deep-space nebulae, stellar bursts and distant cosmic vistas.",
+      "image_count": 9,
+      "size_bytes": 41601727,
+      "sha256": "7311b8a13f8eb3ffd95377ce851341e8f14b8bcc3ba4efa40c667d91bb0b0a30",
+      "filename": "space-pack-v1.zip",
+      "preview_thumbs": [
+        "space-02.thumb.webp",
+        "space-03.thumb.webp",
+        "space-04.thumb.webp",
+        "space-05.thumb.webp"
+      ],
+      "slugs": [
+        "space-02",
+        "space-03",
+        "space-04",
+        "space-05",
+        "space-06",
+        "space-07",
+        "space-08",
+        "space-09",
+        "space-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/space-pack-v1.zip"
+    },
+    {
+      "id": "synthwave",
+      "version": 1,
+      "label": {
+        "en": "Synthwave",
+        "de": "Synthwave"
+      },
+      "description": "Retro 80s grid sunsets, neon mountains and chrome horizons.",
+      "image_count": 9,
+      "size_bytes": 35915203,
+      "sha256": "9b889bb8b9b62577842a3b3a4e01fee7ea4e6a23582c09056d30c5623f33e382",
+      "filename": "synthwave-pack-v1.zip",
+      "preview_thumbs": [
+        "synthwave-02.thumb.webp",
+        "synthwave-03.thumb.webp",
+        "synthwave-04.thumb.webp",
+        "synthwave-05.thumb.webp"
+      ],
+      "slugs": [
+        "synthwave-02",
+        "synthwave-03",
+        "synthwave-04",
+        "synthwave-05",
+        "synthwave-06",
+        "synthwave-07",
+        "synthwave-08",
+        "synthwave-09",
+        "synthwave-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/synthwave-pack-v1.zip"
+    },
+    {
+      "id": "underwater",
+      "version": 1,
+      "label": {
+        "en": "Underwater",
+        "de": "Unterwasser"
+      },
+      "description": "Bioluminescent deep-sea creatures, kelp forests and abyssal light.",
+      "image_count": 10,
+      "size_bytes": 32983297,
+      "sha256": "b060ed89cb66feedf23f48df50ca1a08eb14f67f108753858ed277794885e8a8",
+      "filename": "underwater-pack-v1.zip",
+      "preview_thumbs": [
+        "underwater-01.thumb.webp",
+        "underwater-02.thumb.webp",
+        "underwater-03.thumb.webp",
+        "underwater-04.thumb.webp"
+      ],
+      "slugs": [
+        "underwater-01",
+        "underwater-02",
+        "underwater-03",
+        "underwater-04",
+        "underwater-05",
+        "underwater-06",
+        "underwater-07",
+        "underwater-08",
+        "underwater-09",
+        "underwater-10"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/underwater-pack-v1.zip"
+    },
+    {
+      "id": "videospiele",
+      "version": 1,
+      "label": {
+        "en": "Video Games",
+        "de": "Videospiele"
+      },
+      "description": "Iconic game-style scenes — fantasy castles, sci-fi vistas, dungeons.",
+      "image_count": 4,
+      "size_bytes": 15713196,
+      "sha256": "48e6cc444a7491b77d0ce0d6e7cd4bb1d0ff9ab6aedd941d8d79ca7f25f9b97b",
+      "filename": "videospiele-pack-v1.zip",
+      "preview_thumbs": [
+        "videospiele-01.thumb.webp",
+        "videospiele-02.thumb.webp",
+        "videospiele-03.thumb.webp",
+        "videospiele-04.thumb.webp"
+      ],
+      "slugs": [
+        "videospiele-01",
+        "videospiele-02",
+        "videospiele-03",
+        "videospiele-04"
+      ],
+      "license": "CreativeML Open RAIL-M",
+      "license_url": "https://huggingface.co/spaces/CompVis/stable-diffusion-license",
+      "commercial_use": true,
+      "redistribution": "MIT-compatible",
+      "generators": [
+        {
+          "name": "Juggernaut XL v9 (RunDiffusion Photo v2)",
+          "role": "Image generation",
+          "license": "CreativeML Open RAIL-M (+ RunDiffusion addendum)",
+          "url": "https://civitai.com/models/133005/juggernaut-xl"
+        },
+        {
+          "name": "4xNomos8kDAT by Philip Hofmann (Phips)",
+          "role": "4K upscale",
+          "license": "CC-BY-4.0",
+          "url": "https://huggingface.co/Phips/4xNomos8kDAT"
+        }
+      ],
+      "url": "https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.7.5-beta/videospiele-pack-v1.zip"
     }
   ]
 }
