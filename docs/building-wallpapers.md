@@ -281,12 +281,15 @@ magick input.jpg -alpha set -channel A `
   section if your glow feels weak. 150% gives a more dramatic look on
   dark backgrounds; 80–100% is more subtle.
 
-## Example: the bundled cyberpunk skyline
+## Example: the bundled essentials
 
-The default background in `wallpaper_bridge/wallpaper/images/cyberpunk_skyline.svg`
-is an SVG with hand-placed transparent rectangles for windows. Open it
-in GIMP or Inkscape and you'll see how the windows are arranged. Use
-it as a template if you want to author SVG-based wallpapers directly.
+The installer ships six AI-generated cyberpunk / aurora / forest /
+space / synthwave / crystal wallpapers under
+`installer/assets/library/` (4K WebP with luminance-based alpha).
+They were produced via Juggernaut XL v9 + 4xNomos8kDAT under a
+ComfyUI workflow — see `installer/assets/library/IMAGES_NOTICE.md`
+for the full provenance + licence chain. Open one in any image
+editor that handles RGBA WebP to see how the alpha mask was baked.
 
 ## Sharing your wallpapers
 

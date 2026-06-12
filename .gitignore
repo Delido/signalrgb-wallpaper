@@ -1,3 +1,16 @@
+# v2.0.0: Defend against scripts / source files sneaking into the
+# wallpaper bundle. Wallpaper Engine's auto-moderation scans
+# uploaded ZIPs for executable / source code and *hides* items that
+# contain .py/.exe/.bat/.ps1 — even harmless build artifacts. Block
+# the patterns at the source so they can never be copied into the
+# bundle staging folders.
+wallpaper_bridge/wallpaper/**/*.py
+wallpaper_bridge/wallpaper/**/*.pyc
+wallpaper_bridge/wallpaper/**/*.exe
+wallpaper_bridge/wallpaper/**/*.bat
+wallpaper_bridge/wallpaper/**/*.ps1
+wallpaper_bridge/wallpaper/**/*.cmd
+
 # PyInstaller scratch / output — release artifacts are published via gh release
 wallpaper_bridge/build_bridge/
 wallpaper_bridge/dist_bridge/
