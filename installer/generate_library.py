@@ -270,30 +270,13 @@ def main() -> None:
             except OSError: pass
 
     catalogue = []
-    # ── Procedural set ───────────────────────────────────────────
-    # WebP at quality 88 — for our flat-colour geometric shapes this is
-    # visually identical to lossless PNG at ~10 % the size.
-    for slug, label, factory in WALLPAPERS:
-        print(f"  generating {slug}...")
-        img = factory()
-        # Soften ragged transparency edges so the glow blur looks clean.
-        # Tiny radius keeps shapes readable.
-        img = img.filter(ImageFilter.GaussianBlur(radius=0.6))
-        out_path  = OUT_DIR / f"{slug}.webp"
-        thumb_path = OUT_DIR / f"{slug}.thumb.webp"
-        img.save(out_path, "WEBP", quality=88, method=6)
-        img.copy().resize((TW, TH), Image.LANCZOS).save(
-            thumb_path, "WEBP", quality=80, method=6)
-        catalogue.append({
-            "id":       slug,
-            "label":    label,
-            "file":     f"{slug}.webp",
-            "thumb":    f"{slug}.thumb.webp",
-            "w":        W,
-            "h":        H,
-            "category": "background",
-            "tags":     _tags_for_slug(slug),
-        })
+    # v1.7.5 wave 2: procedural placeholder set retired. Wave-2
+    # shipped 6 hand-picked Juggernaut essentials (cyberpunk-01 etc.)
+    # which cover the "shows something out of the box" role with
+    # much better visual quality. The procedural set (cyberpunk-
+    # skyline, neon-grid, anime-window, geometric-panels) is now
+    # redundant — kept the WALLPAPERS table + factory functions
+    # in-source as a reference / fallback only.
     # ── Curated set ──────────────────────────────────────────────
     # Hand-picked images staged in installer/assets/library/. The build
     # copies them straight through — they're already saliency-processed

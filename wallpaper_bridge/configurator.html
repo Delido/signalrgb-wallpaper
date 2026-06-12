@@ -3135,6 +3135,11 @@ const TRANSLATIONS = {
   "bg.library.span.stretch":{ en: "Stretch across", de: "Beide spannen" },
   "bg.library.span.builder":{ en: "Open in Builder…",
                               de: "Im Builder öffnen…" },
+  // v1.7.5 wave 2: per-tile Apply buttons in the span-screen dialog.
+  "bg.library.span.left":   { en: "Left half",   de: "Linke Hälfte" },
+  "bg.library.span.right":  { en: "Right half",  de: "Rechte Hälfte" },
+  "bg.library.span.top":    { en: "Top half",    de: "Obere Hälfte" },
+  "bg.library.span.bottom": { en: "Bottom half", de: "Untere Hälfte" },
   "glow.stripes_blur":      { en: "Stripes blur",         de: "Streifen-Unschärfe" },
 
   "effects.ambient":        { en: "Ambient preset",       de: "Umgebungseffekt" },
@@ -5715,26 +5720,35 @@ if (_libUpload) {
 //               so the user can compose per-tile via the Monitor
 //               Wall workflow that already supports library imports
 //   "cancel"  → close, do nothing
-function askSpanLibraryChoice(item) {
+function askSpanLibraryChoice(item, spanMode) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop on";
     overlay.style.zIndex = "200";
-    // v1.2.13: routed through TRANSLATIONS so EN locales see English.
     const label = escapeHtml(item.label || item.id);
+    // v1.7.5 wave 2: lead with the two per-tile options (left/right
+    // or top/bottom) — that's the common case the dialog is for.
+    // Stretch + Builder demoted to secondary actions.
+    const [tile0Label, tile1Label] = spanMode === "span-v"
+      ? [t("bg.library.span.top"),  t("bg.library.span.bottom")]
+      : [t("bg.library.span.left"), t("bg.library.span.right")];
     overlay.innerHTML =
       '<div class="modal">' +
         '<header><h2>' + t("bg.library.span.title") + '</h2></header>' +
         '<div class="body" style="font-size:13px; line-height:1.5;">' +
           t("bg.library.span.body", { label: label }) +
         '</div>' +
-        '<div class="actions">' +
+        '<div class="actions" style="flex-wrap:wrap; gap:6px;">' +
           '<button class="btn" data-choice="cancel">' +
             t("bg.library.span.cancel") + '</button>' +
           '<button class="btn" data-choice="stretch">' +
             t("bg.library.span.stretch") + '</button>' +
-          '<button class="btn btn-primary" data-choice="builder">' +
+          '<button class="btn" data-choice="builder">' +
             t("bg.library.span.builder") + '</button>' +
+          '<button class="btn btn-primary" data-choice="tile0">' +
+            tile0Label + '</button>' +
+          '<button class="btn btn-primary" data-choice="tile1">' +
+            tile1Label + '</button>' +
         '</div>' +
       '</div>';
     function finish(choice) {
@@ -5806,7 +5820,7 @@ async function applyLibraryItem(item, screenOverride, resMode) {
   const itemIsVideo = /\.(mp4|webm|mov|m4v|mkv)$/i.test(item.file || "");
   if (monitorMode !== "single" && !itemIsVideo
       && typeof screenOverride !== "number") {
-    const choice = await askSpanLibraryChoice(item);
+    const choice = await askSpanLibraryChoice(item, monitorMode);
     if (choice === "cancel") return;
     if (choice === "builder") {
       window.open(
@@ -5814,6 +5828,16 @@ async function applyLibraryItem(item, screenOverride, resMode) {
           + "&library=" + encodeURIComponent(item.file),
         "_blank"
       );
+      return;
+    }
+    // v1.7.5 wave 2: tile0/tile1 → composite-in-place on the chosen
+    // half. Returns immediately so we don't fall through to the
+    // full-screen apply path below.
+    if (choice === "tile0" || choice === "tile1") {
+      await applyLibraryItemToSpanTile(
+        item, targetScreen,
+        choice === "tile0" ? 0 : 1,
+        monitorMode);
       return;
     }
     // "stretch" → fall through to the normal apply path.

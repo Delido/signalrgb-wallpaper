@@ -1,5 +1,5 @@
 PackageIdentifier: Delido.SignalRGBWallpaper
-PackageVersion: 1.1.0
+PackageVersion: 2.0.0
 InstallerType: inno
 Scope: user
 InstallerSwitches:
@@ -7,8 +7,8 @@ InstallerSwitches:
   SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART /MERGETASKS=installplugin,installlively,installlively\autoimport,installwallpaperengine,autostart
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Delido/signalrgb-wallpaper/releases/download/v1.1.0/SignalRGBWallpaperSetup-1.1.0.exe
-    InstallerSha256: CD7DE4DF8AC06B2A41B9E7821D2B691F04E727BED6A017F9018B458D775DF6E9
-ReleaseDate: 2026-05-23
+    InstallerUrl: https://github.com/Delido/signalrgb-wallpaper/releases/download/v2.0.0/SignalRGBWallpaperSetup-2.0.0.exe
+    InstallerSha256: F6ABA7DCCF560946AA6D02A0B7A60DC0A777F6775750EB96251743A3CE750FC1
+ReleaseDate: 2026-06-12
 ManifestType: installer
 ManifestVersion: 1.6.0

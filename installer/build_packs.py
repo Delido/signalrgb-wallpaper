@@ -210,10 +210,10 @@ def build_pack(pack_id: str, src_dir: Path) -> dict:
 DISCOVERY_MANIFEST = HERE.parent / "docs" / "library-packs.json"
 # Where the bridge expects to find downloadable packs. Each pack's
 # `url` field is built from this base + the pack ZIP filename. The
-# v1.7.5-beta release is the carrier release; future packs can ship
-# in their own dedicated `library-packs-vN` releases without bumping
+# v2.0.0 release is the carrier release; future packs can ship in
+# their own dedicated `library-packs-vN` releases without bumping
 # the app.
-RELEASE_TAG = "v1.7.5-beta"
+RELEASE_TAG = "v2.0.0"
 RELEASE_BASE = (
     "https://github.com/Delido/signalrgb-wallpaper/releases/download/"
     + RELEASE_TAG + "/"
@@ -242,7 +242,7 @@ def main() -> int:
     DISCOVERY_MANIFEST.write_text(
         json.dumps({
             "schema":      1,
-            "min_app":     "1.7.5-beta",
+            "min_app":     "2.0.0",
             "packs":       catalogue,
         }, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8")
