@@ -219,18 +219,47 @@ including ultrawide / non-16:9 panels and spanned configurations
 - **[Changelog](CHANGELOG.md)** — version-by-version notes
 - **[Roadmap](docs/roadmap.md)** — long-form planning
 
-## Latest beta — v1.7.5
+## Latest release — v2.0.1
 
-- **38 new bundled wallpapers** — cyberpunk, synthwave, aurora,
-  underwater, sci-fi. 1080p + 4K per slug. Locally generated with
-  Juggernaut XL v9 (CreativeML Open RAIL++-M, output unencumbered).
+- **6 essentials in the installer + 13 themed wallpaper packs** on
+  GitHub release `library-packs-v1` (cyberpunk, synthwave, aurora,
+  underwater, magic, fireworks, crystal, forest, energy, space,
+  blockbuster, film, video games). 1080p + 4K per slug. Locally
+  generated with Juggernaut XL v9 + Phips' 4xNomos8kDAT — clean
+  redistribution chain, attribution in
+  [docs/credits.md](docs/credits.md) and
+  [installer/assets/library/IMAGES_NOTICE.md](installer/assets/library/IMAGES_NOTICE.md).
 - **Library tab redesign** — search, sort, tag chips, category
-  filter, one-click apply, larger grid
-- **Tag-Picker dialog** — multi-select existing tags + free-text field
+  filter, per-source filter row + section headers (Bundled / pack
+  ids / Your uploads), one-click apply, larger grid.
+- **Tag-Picker dialog** — multi-select existing tags + free-text
+  field.
 - **Per-screen + per-tile apply** — route an image to a specific
-  monitor or one half of a span layout from the right-click menu
+  monitor or one half of a span layout. The span dialog now leads
+  with the two tile buttons (left/right or top/bottom).
 - **Builder Apply Wall fallback** — leaving a tile empty keeps the
-  existing background underneath instead of wiping it
+  existing background underneath instead of wiping it.
+
+### Heads up — Windows Defender false positive
+
+In v2.0.0 the bridge briefly included an in-app downloader for the
+themed wallpaper packs. The combination of unsigned binary +
+network download + ZIP extraction triggered **Windows Defender's
+heuristic** (Wacatac.B!ml) on some systems. **v2.0.1 removes the
+in-app downloader** so the bridge stops hitting that pattern; the
+themed packs are still available — you grab the ZIPs straight off
+the [`library-packs-v1`](https://github.com/Delido/signalrgb-wallpaper/releases/tag/library-packs-v1)
+release and extract them into
+`%LOCALAPPDATA%\SignalRGBWallpaper\library\`. The Library tab has a
+direct link.
+
+We're evaluating code-signing + a separate small downloader so the
+in-app flow can come back without the false-positive risk. If
+Defender still flags `SignalRGBBridge.exe` for you, please
+[submit it as a false positive](https://www.microsoft.com/en-us/wdsi/filesubmission)
+and (optionally) add the install folder to Defender's exclusion
+list — your local copy is safe, the binary is built from this
+repo's source.
 
 Full beta-line history in [CHANGELOG.md](CHANGELOG.md).
 

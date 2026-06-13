@@ -116,7 +116,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
-import zipfile
 from io import BytesIO
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -652,7 +651,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.0.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1597,154 +1596,14 @@ def library_dir() -> Path:
     return user_dir
 
 
-# v1.7.5: optional Wallpaper Packs. The discovery manifest lives on
-# the main branch at docs/library-packs.json; the actual pack ZIPs
-# are GitHub release assets so they don't bloat the git tree.
-# Bridge fetches the manifest, augments each entry with `installed`
-# state by checking the library dir, and offers /library/packs/install
-# to download + extract a pack.
-LIBRARY_PACKS_MANIFEST_URL = (
-    "https://raw.githubusercontent.com/Delido/signalrgb-wallpaper/"
-    "main/docs/library-packs.json"
-)
-_packs_lock = threading.Lock()
-_pack_installs: dict[str, dict] = {}   # pack_id -> {state, progress, error}
-_packs_manifest_cache: dict | None = None
-_packs_manifest_fetched_at: float = 0.0
+# v2.0.1: in-bridge Wallpaper-Pack downloader removed. The
+# urlopen + zipfile.extractall pattern triggered Defender's
+# Wacatac.B!ml heuristic on unsigned binaries. The packs still
+# exist as GitHub release assets — users download the ZIPs
+# manually from the URL the Configurator surfaces and drop
+# the contents into %LOCALAPPDATA%\SignalRGBWallpaper\library\.
+# The bridge's rebuild picks them up on the next /library/list.
 
-
-def _packs_install_state(pack_id: str) -> dict:
-    """Snapshot of the current install task for pack_id. States:
-    'idle' (default), 'downloading', 'extracting', 'done', 'error'."""
-    with _packs_lock:
-        info = _pack_installs.get(pack_id)
-        return dict(info) if info else {"state": "idle"}
-
-
-def _packs_set_state(pack_id: str, **fields) -> None:
-    with _packs_lock:
-        cur = _pack_installs.setdefault(pack_id, {"state": "idle"})
-        cur.update(fields)
-
-
-def _pack_files_in_library(pack_meta: dict, lib: Path) -> tuple[int, int]:
-    """Return (installed_count, total_count) for items in pack_meta.
-
-    Discovery-manifest entries carry a `slugs` list (v1.7.5+); each
-    slug maps to <slug>.webp on disk. Pre-v1.7.5 fallback: count
-    preview_thumbs presence — coarse, but at least non-zero for an
-    already-extracted pack."""
-    slugs = pack_meta.get("slugs") or []
-    if slugs:
-        installed = sum(1 for s in slugs
-                        if (lib / f"{s}.webp").exists())
-        return installed, len(slugs)
-    # Fallback path for old manifests.
-    items = pack_meta.get("items") or []
-    if not items and "image_count" in pack_meta:
-        return 0, int(pack_meta["image_count"])
-    total = len(items)
-    installed = sum(1 for it in items
-                    if (lib / it.get("file", "")).exists())
-    return installed, total
-
-
-def fetch_library_packs_manifest(force: bool = False) -> dict:
-    """Pull the discovery manifest from GitHub. Cached for 10 min so
-    rapid Configurator reloads don't hammer raw.githubusercontent.com
-    — `force=True` bypasses the cache."""
-    global _packs_manifest_cache, _packs_manifest_fetched_at
-    now = time.monotonic()
-    if (not force and _packs_manifest_cache is not None
-            and now - _packs_manifest_fetched_at < 600):
-        return _packs_manifest_cache
-    req = urllib.request.Request(
-        LIBRARY_PACKS_MANIFEST_URL,
-        headers={"User-Agent": f"SignalRGBBridge/{APP_VERSION}"},
-    )
-    with urllib.request.urlopen(req, timeout=15) as r:
-        data = json.loads(r.read().decode("utf-8"))
-    _packs_manifest_cache = data
-    _packs_manifest_fetched_at = now
-    return data
-
-
-def install_library_pack(pack_id: str, pack_meta: dict) -> None:
-    """Background worker that downloads a pack ZIP, verifies its
-    sha256, extracts the WebPs into the library dir, then triggers
-    a catalogue rebuild. Updates `_pack_installs[pack_id]` so the
-    Configurator can poll progress."""
-    lib = library_dir()
-    try:
-        url = pack_meta.get("url") or ""
-        expected_sha = (pack_meta.get("sha256") or "").lower()
-        if not url or not expected_sha:
-            raise ValueError("pack manifest missing url/sha256")
-        _packs_set_state(pack_id, state="downloading",
-                          progress=0.0, error=None)
-        req = urllib.request.Request(
-            url, headers={"User-Agent": f"SignalRGBBridge/{APP_VERSION}"})
-        buf = BytesIO()
-        with urllib.request.urlopen(req, timeout=30) as r:
-            total = int(r.getheader("Content-Length") or 0)
-            read = 0
-            while True:
-                chunk = r.read(64 * 1024)
-                if not chunk:
-                    break
-                buf.write(chunk)
-                read += len(chunk)
-                if total:
-                    _packs_set_state(pack_id, state="downloading",
-                                      progress=min(0.9, read / total * 0.9))
-        body = buf.getvalue()
-        got_sha = hashlib.sha256(body).hexdigest()
-        if got_sha.lower() != expected_sha:
-            raise ValueError(
-                f"sha256 mismatch: expected {expected_sha[:12]}…, "
-                f"got {got_sha[:12]}…")
-        _packs_set_state(pack_id, state="extracting", progress=0.9)
-        slugs_in_pack: list[str] = []
-        with zipfile.ZipFile(BytesIO(body), "r") as zf:
-            names = zf.namelist()
-            for n in names:
-                # Path-traversal guard: pack ZIPs should only carry
-                # flat <slug>.webp names, never subdirs or ..
-                if "/" in n or "\\" in n or n.startswith("."):
-                    if n != "manifest.json":
-                        raise ValueError(f"suspicious zip entry: {n}")
-            # Read the inner manifest first so we know which slugs
-            # belong to this pack — used below to tag library.json
-            # entries with `pack: <id>`, which feeds the Library
-            # tab's per-pack filter chip row.
-            try:
-                inner = json.loads(zf.read("manifest.json").decode("utf-8"))
-                slugs_in_pack = [str(it.get("id"))
-                                  for it in (inner.get("items") or [])
-                                  if it.get("id")]
-            except (KeyError, json.JSONDecodeError):
-                slugs_in_pack = []
-            zf.extractall(lib)
-        _library_rebuild_catalogue(lib)
-        # Tag each freshly-extracted slug with its source pack so the
-        # Configurator can group by pack. Idempotent — re-installs
-        # just overwrite the same field with the same value.
-        if slugs_in_pack:
-            for slug in slugs_in_pack:
-                # Match the catalogue entry by file name patterns the
-                # rebuild emits (<slug>.webp regardless of extension
-                # priority outcome).
-                for ext in (".webp", ".png", ".jpg", ".jpeg"):
-                    candidate = f"{slug}{ext}"
-                    if (lib / candidate).exists():
-                        _library_update_item(
-                            lib, candidate,
-                            lambda it, _p=pack_id: it.update({"pack": _p}))
-                        break
-        _packs_set_state(pack_id, state="done", progress=1.0)
-    except Exception as e:
-        print(f"[pack-install] {pack_id}: {e}")
-        _packs_set_state(pack_id, state="error", error=str(e))
 
 
 def default_config() -> dict:
@@ -3328,164 +3187,8 @@ class Broadcaster:
             except Exception: pass
             return
 
-        # v1.7.5: optional downloadable wallpaper packs. List + install
-        # + uninstall live under /library/packs/.
-        if method == "GET" and target.split("?", 1)[0] == "/library/packs/list":
-            try:
-                force = "force=1" in (target.split("?", 1)[1] if "?" in target else "")
-                manifest = fetch_library_packs_manifest(force=force)
-                lib = library_dir()
-                augmented = []
-                for pack in (manifest.get("packs") or []):
-                    inst, total = _pack_files_in_library(pack, lib)
-                    pid = pack.get("id") or ""
-                    state_info = _packs_install_state(pid)
-                    augmented.append({
-                        **pack,
-                        "installed_count": inst,
-                        "installed":       inst > 0 and inst == total,
-                        "state":           state_info.get("state", "idle"),
-                        "progress":        state_info.get("progress", 0.0),
-                        "error":           state_info.get("error"),
-                    })
-                payload = json.dumps({
-                    "schema": manifest.get("schema", 1),
-                    "packs":  augmented,
-                }).encode("utf-8")
-                head = (
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: application/json\r\n"
-                    f"Content-Length: {len(payload)}\r\n"
-                    "Cache-Control: no-store\r\n"
-                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
-                    "Connection: close\r\n\r\n"
-                ).encode()
-                writer.write(head + payload)
-            except Exception as e:
-                http_error(writer, 502, f"pack manifest fetch failed: {e}")
-            try: await writer.drain()
-            except Exception: pass
-            try: writer.close()
-            except Exception: pass
-            return
-
-        if method == "POST" and target.split("?", 1)[0] == "/library/packs/install":
-            try:
-                content_length = int(headers.get(b"content-length", b"0") or 0)
-            except ValueError:
-                content_length = 0
-            if not (0 < content_length <= 2048):
-                http_error(writer, 400, f"bad content-length: {content_length}")
-                try: await writer.drain()
-                except Exception: pass
-                try: writer.close()
-                except Exception: pass
-                return
-            try:
-                body = await reader.readexactly(content_length)
-                req = json.loads(body.decode("utf-8"))
-                pack_id = str(req.get("id", "")).strip()
-                if not pack_id or "/" in pack_id or "\\" in pack_id:
-                    raise ValueError("bad pack id")
-                manifest = fetch_library_packs_manifest(force=False)
-                pack_meta = next(
-                    (p for p in (manifest.get("packs") or [])
-                     if p.get("id") == pack_id), None)
-                if pack_meta is None:
-                    raise ValueError(f"unknown pack: {pack_id}")
-                cur_state = _packs_install_state(pack_id).get("state")
-                if cur_state in ("downloading", "extracting"):
-                    payload = json.dumps({"ok": True,
-                                           "already_in_progress": True}).encode("utf-8")
-                else:
-                    threading.Thread(
-                        target=install_library_pack,
-                        args=(pack_id, pack_meta),
-                        daemon=True, name=f"pack-install-{pack_id}",
-                    ).start()
-                    payload = json.dumps({"ok": True}).encode("utf-8")
-                head = (
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: application/json\r\n"
-                    f"Content-Length: {len(payload)}\r\n"
-                    "Cache-Control: no-store\r\n"
-                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
-                    "Connection: close\r\n\r\n"
-                ).encode()
-                writer.write(head + payload)
-            except asyncio.IncompleteReadError:
-                http_error(writer, 400, "incomplete body")
-            except Exception as e:
-                http_error(writer, 400, f"install failed: {e}")
-            try: await writer.drain()
-            except Exception: pass
-            try: writer.close()
-            except Exception: pass
-            return
-
-        if method == "POST" and target.split("?", 1)[0] == "/library/packs/uninstall":
-            try:
-                content_length = int(headers.get(b"content-length", b"0") or 0)
-            except ValueError:
-                content_length = 0
-            if not (0 < content_length <= 2048):
-                http_error(writer, 400, f"bad content-length: {content_length}")
-                try: await writer.drain()
-                except Exception: pass
-                try: writer.close()
-                except Exception: pass
-                return
-            try:
-                body = await reader.readexactly(content_length)
-                req = json.loads(body.decode("utf-8"))
-                pack_id = str(req.get("id", "")).strip()
-                if not pack_id or "/" in pack_id or "\\" in pack_id:
-                    raise ValueError("bad pack id")
-                manifest = fetch_library_packs_manifest(force=False)
-                pack_meta = next(
-                    (p for p in (manifest.get("packs") or [])
-                     if p.get("id") == pack_id), None)
-                if pack_meta is None:
-                    raise ValueError(f"unknown pack: {pack_id}")
-                # v1.7.5: discovery manifest carries a `slugs` list per
-                # pack so we know exactly which files to delete. For
-                # each slug remove all three variants (main / thumb /
-                # 4K). Fallback to preview_thumbs for older manifests.
-                lib = library_dir()
-                removed = 0
-                slugs = pack_meta.get("slugs") or []
-                if not slugs:
-                    for hint in (pack_meta.get("preview_thumbs") or []):
-                        slugs.append(re.sub(r"\.thumb\.webp$|\.webp$", "",
-                                             str(hint)))
-                for slug in slugs:
-                    for sib in (slug + ".webp", slug + ".thumb.webp",
-                                slug + ".4k.webp"):
-                        p = lib / sib
-                        if p.exists():
-                            try: p.unlink(); removed += 1
-                            except OSError: pass
-                _library_rebuild_catalogue(lib)
-                _packs_set_state(pack_id, state="idle", progress=0.0)
-                payload = json.dumps({"ok": True, "removed": removed}).encode("utf-8")
-                head = (
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: application/json\r\n"
-                    f"Content-Length: {len(payload)}\r\n"
-                    "Cache-Control: no-store\r\n"
-                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
-                    "Connection: close\r\n\r\n"
-                ).encode()
-                writer.write(head + payload)
-            except asyncio.IncompleteReadError:
-                http_error(writer, 400, "incomplete body")
-            except Exception as e:
-                http_error(writer, 400, f"uninstall failed: {e}")
-            try: await writer.drain()
-            except Exception: pass
-            try: writer.close()
-            except Exception: pass
-            return
+        # v2.0.1: /library/packs/* HTTP endpoints removed (see
+        # the note above library_dir() for why).
 
         if method == "GET" and target.split("?", 1)[0] == "/library/list":
             try:

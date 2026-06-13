@@ -1468,75 +1468,37 @@
     opacity: 1; font-weight: 600;
     margin-bottom: 10px;
   }
-  .lib-packs-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 12px;
+  .lib-packs-hint {
+    font-size: 12px;
+    opacity: 0.85;
+    line-height: 1.5;
+    margin-bottom: 10px;
   }
-  .lib-pack {
-    display: flex; flex-direction: column;
+  .lib-packs-hint code {
+    font-size: 11.5px;
+    padding: 1px 4px;
     background: var(--panel-2);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px;
-    gap: 8px;
+    border-radius: 3px;
   }
-  .lib-pack .thumb-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 3px;
-    border-radius: 6px;
-    overflow: hidden;
-    aspect-ratio: 16 / 9 * 4;
-  }
-  .lib-pack .thumb-row > div {
-    background: #222 center/cover no-repeat;
-    aspect-ratio: 16 / 9;
-  }
-  .lib-pack h3 {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .lib-pack .meta {
-    font-size: 11px;
-    opacity: 0.65;
-  }
-  .lib-pack .desc {
-    font-size: 11.5px;
-    opacity: 0.8;
-    line-height: 1.35;
-    min-height: 28px;
-  }
-  .lib-pack .actions {
-    display: flex; align-items: center; gap: 8px;
-    margin-top: auto;
-  }
-  .lib-pack .actions button {
-    flex: 1 1 auto;
-    padding: 6px 10px;
-    font-size: 12px;
-    background: var(--panel);
-    border: 1px solid var(--border);
+  .lib-packs-link {
+    display: inline-block;
+    padding: 6px 12px;
+    background: rgba(58, 107, 168, 0.45);
+    border: 1px solid rgba(58, 107, 168, 0.9);
     border-radius: 6px;
     color: inherit;
-    cursor: pointer;
+    font-size: 12px;
+    text-decoration: none;
+    margin-bottom: 12px;
   }
-  .lib-pack .actions button.primary {
-    background: rgba(58, 107, 168, 0.45);
-    border-color: rgba(58, 107, 168, 0.9);
-  }
-  .lib-pack .actions button:disabled { cursor: default; opacity: 0.6; }
-  .lib-pack progress {
-    width: 100%;
-    height: 6px;
-  }
-  .lib-pack.installing { opacity: 0.85; }
-  .lib-pack.error .actions::after {
-    content: attr(data-err);
-    color: #ffbcbc;
-    font-size: 10.5px;
-    flex-basis: 100%;
+  .lib-packs-link:hover { background: rgba(58, 107, 168, 0.65); }
+  .lib-packs-note {
+    font-size: 11px;
+    opacity: 0.55;
+    line-height: 1.5;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255,255,255,0.08);
   }
 
   /* Preset slot rows — one per saved combo. Filled slots show a short
@@ -1962,12 +1924,31 @@
       <input id="lib-upload" type="file"
              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
              style="display:none">
-      <!-- v1.7.5: optional wallpaper packs. Collapsed by default so
-           the regular library browser stays primary; users with the
-           appetite click in. Each pack tile is a download-once-click. -->
+      <!-- v2.0.1: in-app pack downloader removed (Defender flagged the
+           urlopen + zipfile.extractall pattern as Wacatac.B!ml on
+           unsigned binaries). Replaced with a hint pointing at the
+           same GitHub release where the pack ZIPs live — user
+           extracts the contents into %LOCALAPPDATA%\…\library\ by
+           hand, the bridge picks them up on next render. -->
       <details id="library-packs-section" class="lib-packs-details">
-        <summary data-i18n="packs.section">More wallpapers — downloadable packs</summary>
-        <div id="library-packs-grid" class="lib-packs-grid"></div>
+        <summary data-i18n="packs.section">More wallpapers — themed packs on GitHub</summary>
+        <div class="lib-packs-hint" data-i18n="packs.manual_hint">
+          We host 13 themed wallpaper packs (~9–52 MB each) as GitHub
+          release assets. Download the ZIPs you want and extract the
+          contents directly into
+          <code>%LOCALAPPDATA%\SignalRGBWallpaper\library\</code> —
+          the bridge picks them up automatically.
+        </div>
+        <a class="lib-packs-link" target="_blank" rel="noopener"
+           href="https://github.com/Delido/signalrgb-wallpaper/releases/tag/library-packs-v1"
+           data-i18n="packs.manual_link">Browse packs on GitHub →</a>
+        <div class="lib-packs-note" data-i18n="packs.defender_note">
+          The previous in-app download flow was removed in v2.0.1
+          because Windows Defender flagged the unsigned download +
+          extract code as suspicious. We're evaluating code-signing
+          + a separate small downloader so the in-app flow can come
+          back without the false-positive risk.
+        </div>
       </details>
     </div>
   </section>
@@ -3043,23 +3024,15 @@ const TRANSLATIONS = {
   "library.sort.oldest":    { en: "Oldest first",         de: "Älteste zuerst" },
   "library.tags.all":       { en: "All tags",             de: "Alle Tags" },
   "library.empty_search":   { en: "No matches.",          de: "Keine Treffer." },
-  // v1.7.5: downloadable wallpaper packs.
-  "packs.section":          { en: "More wallpapers — downloadable packs",
-                              de: "Mehr Wallpaper — Download-Packs" },
-  "packs.install":          { en: "Install",   de: "Installieren" },
-  "packs.installed":        { en: "Installed", de: "Installiert" },
-  "packs.uninstall":        { en: "Remove",    de: "Entfernen" },
-  "packs.installing":       { en: "Installing…", de: "Wird installiert…" },
-  "packs.size_meta":        { en: "{n} images · {mb} MB",
-                              de: "{n} Bilder · {mb} MB" },
-  "packs.fetch_failed":     { en: "Couldn't reach the pack server. Check your connection.",
-                              de: "Pack-Server nicht erreichbar. Verbindung prüfen." },
-  "packs.empty":            { en: "No packs available.",
-                              de: "Keine Packs verfügbar." },
-  "packs.install_toast":    { en: "{label} installed — {n} new wallpapers in the library.",
-                              de: "{label} installiert — {n} neue Wallpaper in der Bibliothek." },
-  "packs.uninstall_toast":  { en: "{label} removed.",
-                              de: "{label} entfernt." },
+  // v2.0.1: manual pack browse hint (in-app downloader removed).
+  "packs.section":          { en: "More wallpapers — themed packs on GitHub",
+                              de: "Mehr Wallpaper — Themen-Packs auf GitHub" },
+  "packs.manual_hint":      { en: "We host 13 themed wallpaper packs (~9–52 MB each) as GitHub release assets. Download the ZIPs you want and extract the contents directly into <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\library\\</code> — the bridge picks them up automatically.",
+                              de: "13 Themen-Packs (je ~9–52 MB) liegen als GitHub-Release-Assets bereit. Lade die ZIPs runter und entpacke den Inhalt direkt nach <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\library\\</code> — die Bridge erkennt sie automatisch." },
+  "packs.manual_link":      { en: "Browse packs on GitHub →",
+                              de: "Packs auf GitHub öffnen →" },
+  "packs.defender_note":    { en: "The previous in-app download flow was removed in v2.0.1 because Windows Defender flagged the unsigned download + extract code as suspicious. We're evaluating code-signing + a separate small downloader so the in-app flow can come back without the false-positive risk.",
+                              de: "Der eingebaute Download-Flow wurde in v2.0.1 entfernt, weil Windows Defender den unsignierten Download- + Extract-Code als verdächtig markiert hat. Wir prüfen Code-Signing + einen separaten kleinen Downloader, damit der In-App-Ablauf ohne False-Positive-Risiko zurückkommen kann." },
   "bg.goto_library":        { en: "Browse library...",    de: "Bibliothek öffnen..." },
   "bg.goto_library_hint":   { en: "Browse, search and apply bundled + your own wallpapers.",
                               de: "Stöbern, suchen und anwenden — mitgelieferte und eigene." },
@@ -5462,204 +5435,11 @@ async function refreshLibrary() {
   renderLibraryStrip();
 }
 
-// v1.7.5: downloadable Wallpaper Packs — see /library/packs/list +
-// install + uninstall on the bridge side. We only fetch the
-// discovery manifest when the user expands the <details> section
-// so first-paint of the Library tab stays fast + offline-safe.
-let _packsLoaded = false;
-let _packsPollTimer = 0;
+// v2.0.1: in-app Wallpaper-Pack downloader removed. The matching
+// <details> block in the Library tab now points at the GitHub
+// release where the pack ZIPs live; the user extracts the
+// contents into %LOCALAPPDATA%\SignalRGBWallpaper\library\n// and the bridge picks them up on the next refreshLibrary().
 
-async function fetchAndRenderPacks(force) {
-  const grid = document.getElementById("library-packs-grid");
-  if (!grid) return;
-  if (!force && _packsLoaded) return;
-  grid.innerHTML = "<div class='hint' style='opacity:.6'>"
-                 + (t("library.empty_search") || "…") + "</div>";
-  try {
-    const r = await fetch("/library/packs/list"
-                          + (force ? "?force=1" : ""),
-                          { cache: "no-store" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const data = await r.json();
-    renderPacksGrid(data.packs || []);
-    _packsLoaded = true;
-  } catch (e) {
-    grid.innerHTML = "<div class='hint' style='opacity:.7'>"
-                     + t("packs.fetch_failed") + "</div>";
-  }
-}
-
-function renderPacksGrid(packs) {
-  const grid = document.getElementById("library-packs-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
-  if (!packs.length) {
-    grid.innerHTML = "<div class='hint' style='opacity:.7'>"
-                     + t("packs.empty") + "</div>";
-    return;
-  }
-  const lang = (typeof _lang === "string" && _lang) ? _lang : "en";
-  for (const pack of packs) {
-    const tile = document.createElement("div");
-    tile.className = "lib-pack";
-    if (pack.state === "downloading" || pack.state === "extracting") {
-      tile.classList.add("installing");
-    }
-    if (pack.state === "error" && pack.error) {
-      tile.classList.add("error");
-      tile.dataset.err = pack.error;
-    }
-
-    const thumbRow = document.createElement("div");
-    thumbRow.className = "thumb-row";
-    // The preview_thumbs are filenames inside the pack ZIP; since
-    // they may not be on disk yet, we render coloured placeholders
-    // until the pack is installed. Once installed, the regular
-    // library tiles take over so a per-pack preview is moot.
-    for (let i = 0; i < 4; i++) {
-      const cell = document.createElement("div");
-      const thumb = pack.preview_thumbs && pack.preview_thumbs[i];
-      const previewUrl = pack.preview_urls && pack.preview_urls[i];
-      if (pack.installed && thumb) {
-        // Pack already extracted — use the local copy (offline,
-        // ETag-cached). Cache buster keeps it fresh after a
-        // re-install with new content.
-        cell.style.backgroundImage = "url(/library/"
-          + encodeURIComponent(thumb) + ")";
-      } else if (previewUrl) {
-        // Not installed yet — load the preview WebP straight from
-        // the GitHub release assets bucket. Tiny payload (~15 KB
-        // per thumb), so this is cheap even on slow links.
-        cell.style.backgroundImage = "url(" + previewUrl + ")";
-      } else {
-        // Discovery manifest from a build before preview_urls existed
-        // — fall back to a per-pack tinted gradient so the row still
-        // looks visually distinct.
-        const hue = pack.id.split("")
-          .reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 0) % 360;
-        cell.style.background =
-          `linear-gradient(135deg, hsl(${hue},45%,30%), hsl(${(hue + 40) % 360},55%,18%))`;
-      }
-      thumbRow.appendChild(cell);
-    }
-
-    const title = document.createElement("h3");
-    title.textContent = (pack.label && (pack.label[lang] || pack.label.en))
-                      || pack.id;
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    const mb = (pack.size_bytes / (1024 * 1024)).toFixed(1);
-    meta.textContent = t("packs.size_meta",
-                         { n: pack.image_count, mb });
-    const desc = document.createElement("div");
-    desc.className = "desc";
-    desc.textContent = pack.description || "";
-
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    const btn = document.createElement("button");
-    if (pack.installed) {
-      btn.textContent = t("packs.installed") + " ✓";
-      btn.disabled = true;
-      const rm = document.createElement("button");
-      rm.textContent = t("packs.uninstall");
-      rm.addEventListener("click",
-        () => uninstallPack(pack.id, pack.label));
-      actions.appendChild(btn);
-      actions.appendChild(rm);
-    } else if (pack.state === "downloading" || pack.state === "extracting") {
-      btn.textContent = t("packs.installing");
-      btn.disabled = true;
-      const bar = document.createElement("progress");
-      bar.max = 1.0;
-      bar.value = pack.progress || 0;
-      actions.appendChild(btn);
-      actions.appendChild(bar);
-    } else {
-      btn.textContent = t("packs.install");
-      btn.classList.add("primary");
-      btn.addEventListener("click",
-        () => installPack(pack.id, pack.label));
-      actions.appendChild(btn);
-    }
-
-    tile.appendChild(thumbRow);
-    tile.appendChild(title);
-    tile.appendChild(meta);
-    tile.appendChild(desc);
-    tile.appendChild(actions);
-    grid.appendChild(tile);
-  }
-}
-
-async function installPack(id, label) {
-  try {
-    const r = await fetch("/library/packs/install", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    startPackPoll(id, label);
-  } catch (e) {
-    toast("Install failed: " + e.message, "bad");
-  }
-}
-
-async function uninstallPack(id, label) {
-  try {
-    const r = await fetch("/library/packs/uninstall", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const lang = (typeof _lang === "string" && _lang) ? _lang : "en";
-    const labelStr = (label && (label[lang] || label.en)) || id;
-    toast(t("packs.uninstall_toast", { label: labelStr }), "good");
-    await fetchAndRenderPacks(true);
-    await refreshLibrary();
-  } catch (e) {
-    toast("Uninstall failed: " + e.message, "bad");
-  }
-}
-
-function startPackPoll(id, label) {
-  if (_packsPollTimer) clearInterval(_packsPollTimer);
-  _packsPollTimer = setInterval(async () => {
-    try {
-      const r = await fetch("/library/packs/list", { cache: "no-store" });
-      if (!r.ok) return;
-      const data = await r.json();
-      renderPacksGrid(data.packs || []);
-      const pack = (data.packs || []).find((p) => p.id === id);
-      if (!pack) return;
-      if (pack.state === "done" || pack.installed) {
-        clearInterval(_packsPollTimer);
-        _packsPollTimer = 0;
-        const lang = (typeof _lang === "string" && _lang) ? _lang : "en";
-        const labelStr = (label && (label[lang] || label.en)) || id;
-        toast(t("packs.install_toast",
-                 { label: labelStr, n: pack.image_count }), "good");
-        await refreshLibrary();
-        // Re-render packs so the "Installed" state shows immediately.
-        await fetchAndRenderPacks(true);
-      } else if (pack.state === "error") {
-        clearInterval(_packsPollTimer);
-        _packsPollTimer = 0;
-        toast("Pack install failed: " + (pack.error || "?"), "bad");
-      }
-    } catch (_) { /* keep polling */ }
-  }, 800);
-}
-
-// Lazy-load the packs section the first time the user expands it.
-document.addEventListener("DOMContentLoaded", () => {
-  const det = document.getElementById("library-packs-section");
-  if (det) det.addEventListener("toggle", () => {
-    if (det.open) fetchAndRenderPacks(false);
-  });
-});
 
 async function deleteLibraryItem(item) {
   const label = item.label || item.id;
