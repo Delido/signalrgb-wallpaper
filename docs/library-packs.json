@@ -12,20 +12,8 @@
       "description": "Northern lights over mountains, lakes and snow — atmospheric sky wallpapers.",
       "image_count": 9,
       "size_bytes": 29469060,
-      "sha256": "cad2d80509d25de8c1d186befc2e126ae6075bbcd597bd66abf288f1448bc4bd",
+      "sha256": "4b55e6c2238000468eb0381f3bcb9d2c2f6d3bcf8742a406afc14ab66ca04840",
       "filename": "aurora-pack-v1.zip",
-      "preview_thumbs": [
-        "aurora-02.thumb.webp",
-        "aurora-03.thumb.webp",
-        "aurora-04.thumb.webp",
-        "aurora-05.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/aurora-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/aurora-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/aurora-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/aurora-preview-3.webp"
-      ],
       "slugs": [
         "aurora-02",
         "aurora-03",
@@ -67,20 +55,8 @@
       "description": "Cinematic blockbuster-style hero scenes.",
       "image_count": 4,
       "size_bytes": 18884187,
-      "sha256": "a52eff6b9f1e8b8add48321abe3120bc93f823c39ed5cc79884ba1baa5a09799",
+      "sha256": "49f50932989037de5b0b8b9de76253a579c905f7085b2226c85e5d9449ddad72",
       "filename": "blockbuster-pack-v1.zip",
-      "preview_thumbs": [
-        "blockbuster-01.thumb.webp",
-        "blockbuster-02.thumb.webp",
-        "blockbuster-03.thumb.webp",
-        "blockbuster-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/blockbuster-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/blockbuster-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/blockbuster-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/blockbuster-preview-3.webp"
-      ],
       "slugs": [
         "blockbuster-01",
         "blockbuster-02",
@@ -117,20 +93,8 @@
       "description": "Crystalline structures, gem facets and mineral light refractions.",
       "image_count": 9,
       "size_bytes": 39786324,
-      "sha256": "726f3a8609b0ffe27d1e667eaa1a1951d9601b7e2a57c5418763bf4ee49ead6b",
+      "sha256": "132407da1a33e19b0b0a4962dfb20cbbf78ba5726681660f1eeba5a81a03e96f",
       "filename": "crystal-pack-v1.zip",
-      "preview_thumbs": [
-        "crystal-02.thumb.webp",
-        "crystal-03.thumb.webp",
-        "crystal-04.thumb.webp",
-        "crystal-05.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/crystal-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/crystal-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/crystal-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/crystal-preview-3.webp"
-      ],
       "slugs": [
         "crystal-02",
         "crystal-03",
@@ -172,20 +136,8 @@
       "description": "Neon megacities, holographic streets and rain-soaked alleys.",
       "image_count": 9,
       "size_bytes": 41301774,
-      "sha256": "2ff2e519c1dece2d8162d91004c490bd5c88944d056bb73f3093a942d95a91f1",
+      "sha256": "6d9a148d9cfee8900f652a042d16d9191a85387bfd76e53be9f4c3191a6482da",
       "filename": "cyberpunk-pack-v1.zip",
-      "preview_thumbs": [
-        "cyberpunk-02.thumb.webp",
-        "cyberpunk-03.thumb.webp",
-        "cyberpunk-04.thumb.webp",
-        "cyberpunk-05.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/cyberpunk-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/cyberpunk-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/cyberpunk-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/cyberpunk-preview-3.webp"
-      ],
       "slugs": [
         "cyberpunk-02",
         "cyberpunk-03",
@@ -227,20 +179,8 @@
       "description": "Electric arcs, plasma fields and high-voltage abstract glow.",
       "image_count": 10,
       "size_bytes": 33728940,
-      "sha256": "8235f1974745a7dab717170b7ec9e7c164788fecce7b01c5e8cc26a587257e13",
+      "sha256": "bbda502bf9b27b2213a6e928a62684221ec0aa1e3669ee1c9870cd02fffed548",
       "filename": "energy-pack-v1.zip",
-      "preview_thumbs": [
-        "energy-01.thumb.webp",
-        "energy-02.thumb.webp",
-        "energy-03.thumb.webp",
-        "energy-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/energy-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/energy-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/energy-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/energy-preview-3.webp"
-      ],
       "slugs": [
         "energy-01",
         "energy-02",
@@ -283,20 +223,8 @@
       "description": "Cinematic stills and atmospheric movie-style compositions.",
       "image_count": 4,
       "size_bytes": 10420764,
-      "sha256": "414c34ea4028ce188bad399c8adbd2972c5a36d5354544c75e0f78b0be187008",
+      "sha256": "95a184cb2c7e9a86eeea1418ae91908dc71e9bbdce46181b43454825a0e928df",
       "filename": "film-pack-v1.zip",
-      "preview_thumbs": [
-        "film-01.thumb.webp",
-        "film-02.thumb.webp",
-        "film-03.thumb.webp",
-        "film-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/film-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/film-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/film-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/film-preview-3.webp"
-      ],
       "slugs": [
         "film-01",
         "film-02",
@@ -333,20 +261,8 @@
       "description": "Burst, sparkle and trail patterns of pyrotechnic light.",
       "image_count": 10,
       "size_bytes": 55085762,
-      "sha256": "911651aff95407dd299c19dbe4bc1f3eb241ff432e880bc2e8f7ef20cda32c04",
+      "sha256": "ac7313fc924313c04a773edd74e2c539643edd1c581948f464441eae45be07a9",
       "filename": "fireworks-pack-v1.zip",
-      "preview_thumbs": [
-        "fireworks-01.thumb.webp",
-        "fireworks-02.thumb.webp",
-        "fireworks-03.thumb.webp",
-        "fireworks-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/fireworks-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/fireworks-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/fireworks-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/fireworks-preview-3.webp"
-      ],
       "slugs": [
         "fireworks-01",
         "fireworks-02",
@@ -389,20 +305,8 @@
       "description": "Mystical woodlands, glowing canopies and atmospheric forest light.",
       "image_count": 9,
       "size_bytes": 33285031,
-      "sha256": "640a942a457c834644c00258c55ba517e291b635b4493cf5ed915f42b5a6ed65",
+      "sha256": "c974bdba922ac382a804a81aa48aea345ea23094509ec448410ac9e43241119d",
       "filename": "forest-pack-v1.zip",
-      "preview_thumbs": [
-        "forest-02.thumb.webp",
-        "forest-03.thumb.webp",
-        "forest-04.thumb.webp",
-        "forest-05.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/forest-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/forest-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/forest-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/forest-preview-3.webp"
-      ],
       "slugs": [
         "forest-02",
         "forest-03",
@@ -444,20 +348,8 @@
       "description": "Fantasy arcane glow, magical runes and mystical light fields.",
       "image_count": 10,
       "size_bytes": 43670291,
-      "sha256": "7277ef40ddd81e89ece0f08d41333ca4d3ae05e437812e00cd77d8910024b570",
+      "sha256": "3ff4a26edbb8c0c3333ed9cba078f2f9b7b1c562995286cdf27d0b023008b247",
       "filename": "magic-pack-v1.zip",
-      "preview_thumbs": [
-        "magic-01.thumb.webp",
-        "magic-02.thumb.webp",
-        "magic-03.thumb.webp",
-        "magic-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/magic-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/magic-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/magic-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/magic-preview-3.webp"
-      ],
       "slugs": [
         "magic-01",
         "magic-02",
@@ -500,20 +392,8 @@
       "description": "Deep-space nebulae, stellar bursts and distant cosmic vistas.",
       "image_count": 9,
       "size_bytes": 41601727,
-      "sha256": "f4d0a5a2b6a9a9a104f661c289936748512322a309cb22be1f9725dc5f61c1e4",
+      "sha256": "f1f63867abb9061359e78dc54f7f6693d243264645fc6b407c396caadb5588df",
       "filename": "space-pack-v1.zip",
-      "preview_thumbs": [
-        "space-02.thumb.webp",
-        "space-03.thumb.webp",
-        "space-04.thumb.webp",
-        "space-05.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/space-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/space-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/space-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/space-preview-3.webp"
-      ],
       "slugs": [
         "space-02",
         "space-03",
@@ -555,20 +435,8 @@
       "description": "Retro 80s grid sunsets, neon mountains and chrome horizons.",
       "image_count": 9,
       "size_bytes": 35915203,
-      "sha256": "28241e99df9057b58f89c59f532af66639beb73aba225223326037ccb1d0a2e1",
+      "sha256": "e1a9477b92da6e4e3400606cf6968da7965bc95a999ecbd62bc2456ac81dd4af",
       "filename": "synthwave-pack-v1.zip",
-      "preview_thumbs": [
-        "synthwave-02.thumb.webp",
-        "synthwave-03.thumb.webp",
-        "synthwave-04.thumb.webp",
-        "synthwave-05.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/synthwave-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/synthwave-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/synthwave-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/synthwave-preview-3.webp"
-      ],
       "slugs": [
         "synthwave-02",
         "synthwave-03",
@@ -610,20 +478,8 @@
       "description": "Bioluminescent deep-sea creatures, kelp forests and abyssal light.",
       "image_count": 10,
       "size_bytes": 32983297,
-      "sha256": "40841f1255055dd2df4fdab4a423083f1e5e574b77345d8cf640dd466f832cbf",
+      "sha256": "69cadef7a381cc5e40d9de95933d20d65db8f98bf39da8c65ba78e27798ce334",
       "filename": "underwater-pack-v1.zip",
-      "preview_thumbs": [
-        "underwater-01.thumb.webp",
-        "underwater-02.thumb.webp",
-        "underwater-03.thumb.webp",
-        "underwater-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/underwater-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/underwater-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/underwater-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/underwater-preview-3.webp"
-      ],
       "slugs": [
         "underwater-01",
         "underwater-02",
@@ -666,20 +522,8 @@
       "description": "Iconic game-style scenes — fantasy castles, sci-fi vistas, dungeons.",
       "image_count": 4,
       "size_bytes": 15713196,
-      "sha256": "a2b6e1bd4e1b0d141c5cd66634c29e5ce9db0b3fa4b9c7b1610144a362624d22",
+      "sha256": "441b511baae19a042ba472c0a4a0fdfc6d9da1cc4637e7ac2ac9272bc8a0ae07",
       "filename": "videospiele-pack-v1.zip",
-      "preview_thumbs": [
-        "videospiele-01.thumb.webp",
-        "videospiele-02.thumb.webp",
-        "videospiele-03.thumb.webp",
-        "videospiele-04.thumb.webp"
-      ],
-      "preview_urls": [
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/videospiele-preview-0.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/videospiele-preview-1.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/videospiele-preview-2.webp",
-        "https://github.com/Delido/signalrgb-wallpaper/releases/download/library-packs-v1/videospiele-preview-3.webp"
-      ],
       "slugs": [
         "videospiele-01",
         "videospiele-02",
