@@ -1193,15 +1193,18 @@
       <div class="tool-options-group" data-tools="ai">
         <div class="hint" data-i18n="hint.ai">
           One-click detection of the brightest / most salient regions —
-          ideal for neon panels, UI overlays, glowing edges. Both modes
-          run instantly and offline. Saliency combines colour distance
-          from the image's mean colour with brightness, and usually
-          handles structured / textured backgrounds better than pure
-          brightness thresholding.
+          ideal for neon panels, UI overlays, glowing edges. All modes
+          run instantly and offline. <b>Luminance alpha</b> is the
+          smooth ramp that matches the bundled v2.0 wallpapers (great
+          for any neon-on-dark photo). <b>Saliency</b> combines colour
+          distance from the image's mean colour with brightness, and
+          usually handles structured / textured backgrounds better
+          than pure brightness thresholding.
         </div>
         <div class="row">
           <label for="ai-mode" data-i18n="ai.mode">Mode</label>
           <select id="ai-mode">
+            <option value="luminance" data-i18n="ai.mode.luminance">Luminance alpha (smooth, instant)</option>
             <option value="saliency" data-i18n="ai.mode.saliency">Auto saliency (instant)</option>
             <option value="otsu"     data-i18n="ai.mode.otsu">Brightness (Otsu, instant)</option>
           </select>
@@ -1743,9 +1746,11 @@ const TRANSLATIONS = {
   "tool.ai.name":       { en: "Auto cut",         de: "Auto-Zuschnitt" },
   "tool.ai.tip":        { en: "Auto cut — detect bright / salient regions and cut them in one click",
                           de: "Auto-Zuschnitt — helle / markante Bereiche erkennen und in einem Klick freischneiden" },
-  "hint.ai":            { en: "One-click detection of the brightest / most salient regions — ideal for neon panels, UI overlays, glowing edges. Both modes run instantly and offline. Saliency combines colour distance from the image's mean colour with brightness, and usually handles structured / textured backgrounds better than pure brightness thresholding.",
-                          de: "Erkennt mit einem Klick die hellsten / markantesten Bereiche — ideal für Neon-Panels, UI-Overlays, glühende Kanten. Beide Modi laufen sofort und offline. Saliency kombiniert den Farbabstand zum Mittelwert mit Helligkeit und kommt mit strukturierten / gemusterten Hintergründen meist besser klar als reines Helligkeits-Thresholding." },
+  "hint.ai":            { en: "One-click detection of the brightest / most salient regions — ideal for neon panels, UI overlays, glowing edges. All modes run instantly and offline. <b>Luminance alpha</b> is the smooth ramp that matches the bundled v2.0 wallpapers (great for any neon-on-dark photo). <b>Saliency</b> combines colour distance from the image's mean colour with brightness, and usually handles structured / textured backgrounds better than pure brightness thresholding.",
+                          de: "Erkennt mit einem Klick die hellsten / markantesten Bereiche — ideal für Neon-Panels, UI-Overlays, glühende Kanten. Alle Modi laufen sofort und offline. <b>Luminanz-Alpha</b> ist der weiche Verlauf, der die mitgelieferten v2.0-Wallpaper produziert hat (gut für jedes Neon-auf-Dunkel-Foto). <b>Saliency</b> kombiniert den Farbabstand zum Mittelwert mit Helligkeit und kommt mit strukturierten / gemusterten Hintergründen meist besser klar als reines Helligkeits-Thresholding." },
   "ai.mode":            { en: "Mode",             de: "Modus" },
+  "ai.mode.luminance":  { en: "Luminance alpha (smooth, instant)",
+                          de: "Luminanz-Alpha (weich, sofort)" },
   "ai.mode.saliency":   { en: "Auto saliency (instant)",
                           de: "Auto-Saliency (sofort)" },
   "ai.mode.otsu":       { en: "Brightness (Otsu, instant)",
@@ -1758,6 +1763,8 @@ const TRANSLATIONS = {
   "ai.run":             { en: "Run auto cut",     de: "Auto-Zuschnitt starten" },
   "ai.no_canvas":       { en: "Load an image first.",
                           de: "Erst ein Bild laden." },
+  "ai.running.luminance": { en: "Mapping luminance to alpha…",
+                            de: "Luminanz-Alpha wird berechnet…" },
   "ai.running.saliency": { en: "Computing saliency map…",
                            de: "Saliency-Karte wird berechnet…" },
   "ai.running.otsu":    { en: "Computing histogram…",
@@ -2851,6 +2858,40 @@ async function canvasToModelInput(canvas, SIDE) {
 //   • No licence — public-domain mathematics.
 //   • No model file — zero install / download size.
 //   • Fast — one O(N) histogram pass + one O(N) mask pass.
+// v2.0.2: luminance-alpha auto-cut. Mirrors the ComfyUI workflow
+// that produced the bundled v2.0 wallpapers — per-pixel BT.601
+// luminance with a soft ramp around an adjustable midpoint. Bright
+// pixels become transparent (alpha 0), dark pixels stay opaque
+// (alpha 255), and the band in between gets a linear gradient so
+// the SignalRGB glow blends in cleanly instead of a hard cutout
+// edge. Threshold slider biases the midpoint between 64 and 192:
+//
+//   slider 50  → midpoint 128 (default — neutral)
+//   slider 0   → midpoint 192 (only very bright pixels go transparent)
+//   slider 100 → midpoint 64  (a much bigger chunk goes transparent)
+//
+// The ±32-level ramp half-width is the same value the ComfyUI
+// luminance node uses by default. Fully synchronous, no model,
+// no network.
+function computeLuminanceAlpha(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const px = canvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const N = px.length >> 2;
+  const slider = parseInt(els.aiThreshold.value, 10);
+  const midpoint = 128 + (50 - slider) * 1.28;   // 64..192
+  const halfRamp = 32;
+  const lo = midpoint - halfRamp;
+  const span = 2 * halfRamp;
+  const mask = new Uint8Array(N);
+  for (let i = 0, m = 0; i < px.length; i += 4, m++) {
+    const lum = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+    let t = (lum - lo) / span;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    mask[m] = (t * 255) | 0;
+  }
+  return { mask, w, h };
+}
+
 function computeAutoSaliency(canvas) {
   const w = canvas.width, h = canvas.height;
   const px = canvas.getContext("2d").getImageData(0, 0, w, h).data;
@@ -2942,7 +2983,9 @@ async function runAiCutout() {
   els.aiStat.textContent = t("ai.running." + mode);
   try {
     let payload;
-    if (mode === "saliency") {
+    if (mode === "luminance") {
+      payload = computeLuminanceAlpha(els.canvas);
+    } else if (mode === "saliency") {
       payload = computeAutoSaliency(els.canvas);
     } else if (mode === "otsu") {
       payload = computeOtsuMask(els.canvas);
@@ -3804,15 +3847,18 @@ function applyMask() {
             }
           } else if (c.kind === "aimask") {
             // Nearest-neighbour upsample from mask resolution to canvas
-            // resolution. Mask byte is the predicted saliency (0..255);
-            // an alpha threshold of 128 keeps the cut crisp while the
-            // user's threshold slider has already biased the mask
-            // values when the op was created.
+            // resolution. Mask byte is the predicted "cut me" intensity
+            // (0..255). v2.0.2: multiplicative blend instead of a hard
+            // threshold so smooth ramps from luminance + ONNX modes
+            // carry their gradient straight into the canvas alpha
+            // channel — that's what gives the ComfyUI-style "neon
+            // glows through" look. Binary masks (saliency / otsu)
+            // emit only 0 or 255, so the result is unchanged for them.
             const mx = (x * c.sx) | 0;
             const my = (y * c.sy) | 0;
             let v = c.mask[my * c.maskW + mx];
             if (c.invert) v = 255 - v;
-            if (v >= 128) alpha = 0;
+            alpha = (alpha * (255 - v)) >>> 8;
           } else if (c.kind === "restore" || c.kind === "erase" || c.kind === "pattern") {
             if (x < c.bbox.xMin || x > c.bbox.xMax ||
                 y < c.bbox.yMin || y > c.bbox.yMax) continue;
