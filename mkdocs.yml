@@ -1,0 +1,91 @@
+site_name: SignalRGB Desktop Wallpaper
+site_description: Live RGB glow on your desktop, driven by your SignalRGB effect.
+site_url: https://delido.github.io/signalrgb-wallpaper/
+repo_url: https://github.com/Delido/signalrgb-wallpaper
+repo_name: Delido/signalrgb-wallpaper
+edit_uri: edit/main/docs/
+copyright: MIT-licensed tooling · bundled imagery under its own notices
+
+docs_dir: docs
+
+theme:
+  name: material
+  logo: images/banner.png
+  favicon: images/banner.png
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Delido/signalrgb-wallpaper
+
+# Files in docs/ that are not part of the rendered site.
+exclude_docs: |
+  library-packs.json
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Multi-screen setup: multi-screen-setup.md
+      - Troubleshooting: troubleshooting.md
+  - Using the app:
+      - Building glow wallpapers: building-wallpapers.md
+      - Tray reference: tray-settings.md
+      - OpenRGB SDK server: openrgb-sdk-server.md
+  - Reference:
+      - Architecture: architecture.md
+      - REST API: api.md
+      - Plugin API: plugin-api.md
+      - Publishing to Workshop: workshop-publishing.md
+      - Building from source: building-from-source.md
+  - Project:
+      - Roadmap: roadmap.md
+      - Credits: credits.md
+      - Changelog archive: CHANGELOG-archive.md

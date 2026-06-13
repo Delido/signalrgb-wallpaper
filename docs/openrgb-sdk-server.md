@@ -187,7 +187,7 @@ scripts:
 For implementers who want to talk to the bridge directly (custom
 clients, automation), the server speaks the standard OpenRGB SDK
 protocol — same wire format the official GUI uses. See
-[wallpaper_bridge/openrgb_server.py](../wallpaper_bridge/openrgb_server.py)
+[wallpaper_bridge/openrgb_server.py](https://github.com/Delido/signalrgb-wallpaper/blob/main/wallpaper_bridge/openrgb_server.py)
 for the byte-level packet builders and the
 [OpenRGB SDK reference](https://gitlab.com/CalcProgrammer1/OpenRGB/-/blob/master/Documentation/OpenRGBSDK.md)
 for the protocol definition.

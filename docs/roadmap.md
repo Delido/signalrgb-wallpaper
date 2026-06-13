@@ -1,6 +1,6 @@
 # Roadmap (dev-side, detailed)
 
-Long-form version of the roadmap section in [README.md](../README.md).
+Long-form version of the roadmap section in [README.md](https://github.com/Delido/signalrgb-wallpaper/blob/main/README.md).
 Items are grouped by impact-to-effort ratio. Each entry has an
 effort estimate (maintainer's order-of-magnitude — not a contract),
 status, and any notes on architecture / dependencies.

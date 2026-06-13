@@ -1,6 +1,6 @@
 # Installation
 
-The long version of the [README quick start](../README.md#quick-start),
+The long version of the [README quick start](https://github.com/Delido/signalrgb-wallpaper/blob/main/README.md#quick-start),
 with exact paths and the Windows things that trip people up.
 
 ## Prerequisites

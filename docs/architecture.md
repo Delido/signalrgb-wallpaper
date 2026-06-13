@@ -3,7 +3,7 @@
 How the pieces fit together, and why they're split the way they are.
 
 For the chronological design history (what we tried, what failed, why we
-landed here), see [HANDOFF.md](../HANDOFF.md) in the repo root.
+landed here), see [HANDOFF.md](https://github.com/Delido/signalrgb-wallpaper/blob/main/HANDOFF.md) in the repo root.
 
 ## Components
 

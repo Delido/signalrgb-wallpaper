@@ -1,7 +1,7 @@
 # Changelog archive — v0.x and earlier
 
 Detailed beta entries from before the v1.0.0 stable release. Kept for
-forensic detail; the active [CHANGELOG.md](../CHANGELOG.md) keeps
+forensic detail; the active [CHANGELOG.md](https://github.com/Delido/signalrgb-wallpaper/blob/main/CHANGELOG.md) keeps
 v1.x and later.
 
 ---
@@ -2219,7 +2219,7 @@ enabled — flagged in the tray menu entry's label.
   Two opt-in tasks: "Start bridge automatically on logon" and "Install
   the SignalRGB plugin into the WhirlwindFX Plugins folder". Build via
   `installer/build.ps1` (one-shot icon + exe + zips + Inno Setup
-  compile). See [docs/building-from-source.md](docs/building-from-source.md)
+  compile). See [building-from-source.md](building-from-source.md)
   for the manual build path.
 - **Builder: polygon tool.** New "Polygon" radio in the tool list.
   Click corners on the canvas to build the polygon outline; drag any
@@ -2290,7 +2290,7 @@ enabled — flagged in the tray menu entry's label.
     the two halves to two screens at once. Optional yellow split-guide
     overlay on the canvas.
   - Toast notifications confirm save / apply success or failure.
-  - See [docs/building-wallpapers.md](docs/building-wallpapers.md#built-in-builder-the-quick-path)
+  - See [building-wallpapers.md](building-wallpapers.md#built-in-builder-the-quick-path)
     for the workflow.
 - **`POST /screen/<N>/background`** bridge endpoint accepts a PNG body,
   writes it to
@@ -2409,7 +2409,7 @@ First public release.
 - Lively's own "Customise wallpaper" panel is intentionally disabled for
   these wallpapers (no `LivelyProperties.json` shipped). All settings live
   in the bridge's tray dialog. See
-  [docs/architecture.md](docs/architecture.md#why-not-lively-properties)
+  [architecture.md](architecture.md#why-not-lively-properties)
   for the reasoning.
 - Lively non-MSIX (GitHub installer) is supported. Lively Microsoft Store
   (MSIX) version cannot load `.exe`-type wallpapers — irrelevant for this

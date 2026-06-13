@@ -85,7 +85,7 @@ unencumbered under our MIT umbrella.
 - Generation script (in-tree, ComfyUI batch): not committed because
   the ComfyUI workflow lives outside the repo. Provenance for every
   shipped image is documented in
-  [`installer/assets/library/IMAGES_NOTICE.md`](../installer/assets/library/IMAGES_NOTICE.md)
+  [`installer/assets/library/IMAGES_NOTICE.md`](https://github.com/Delido/signalrgb-wallpaper/blob/main/installer/assets/library/IMAGES_NOTICE.md)
   alongside the bundled assets.
 - Post-processing (in-tree): `tools/import_repo_clean.py` ingests
   the ComfyUI batch (3840×2160 RGBA with luminance-alpha already
