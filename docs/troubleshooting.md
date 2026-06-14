@@ -316,6 +316,39 @@ re-trigger the `viewport` push.
 If you'd rather not rely on Auto, pick a fixed aspect (*16:9* /
 *21:9* / *32:9* / *9:16*) or *Custom* + type the cols × rows.
 
+## Windows Defender flags `SignalRGBBridge.exe` as Trojan:Win32/Wacatac.C!ml
+
+This is a false positive on the PyInstaller `--onedir` build. `Wacatac.C!ml`
+is a machine-learning heuristic detection — it fires on lots of
+PyInstaller-packed Python applications because the bootloader pattern
+(small native EXE that unpacks a Python interpreter + bytecode into
+`_internal/` at startup) overlaps with common malware packers.
+
+**The bridge does nothing malicious.** Source is at
+[github.com/Delido/signalrgb-wallpaper](https://github.com/Delido/signalrgb-wallpaper)
+and the build is reproducible (`pwsh installer\build.ps1`).
+
+### Recovery
+
+1. Open *Windows Security → Virus & threat protection → Protection
+   history* → click the Wacatac entry → **Actions → Allow**.
+2. If the file was quarantined: click **Actions → Restore**. If
+   Restore is greyed out, re-run the installer — it'll drop a fresh
+   copy at the original path.
+3. (Optional, only if it keeps re-flagging) *Windows Security →
+   Virus & threat protection → Manage settings → Exclusions →
+   Add an exclusion → Folder*, pick
+   `%LOCALAPPDATA%\Programs\SignalRGBWallpaper`.
+
+### Help reduce false positives for everyone
+
+The Microsoft Defender team accepts false-positive reports at
+[microsoft.com/wdsi/filesubmission](https://www.microsoft.com/en-us/wdsi/filesubmission).
+A submission with the installer or `SignalRGBBridge.exe` typically
+clears the specific build's hash within 24-72 hours and trains the
+ML model away from this signature for future builds. Free, takes
+~2 minutes, requires a free Microsoft account.
+
 ## "Address already in use" on bridge startup
 
 Port 17320 is occupied by an old bridge process that didn't exit
