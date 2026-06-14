@@ -3588,7 +3588,10 @@ function applyMouseEffects(arr) {
 function setWidgetsLocked(locked) {
   widgetsLocked = !!locked;
   widgetsContainer.classList.toggle("edit-mode", !locked);
-  widgetPicker.classList.toggle("on", !locked);
+  // v2.2.0-beta wave 2: in-wallpaper Add-Widget picker removed. It
+  // could add a widget but not configure it — net negative UX.
+  // Widgets are added + configured via the Configurator instead.
+  if (widgetPicker) widgetPicker.classList.remove("on");
 }
 
 function setWidgets(list) {

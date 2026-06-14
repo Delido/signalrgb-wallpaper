@@ -651,7 +651,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.1.0-beta"
+APP_VERSION = "2.2.0"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -674,7 +674,7 @@ APP_VERSION = "2.1.0-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "1.7.3-beta"
+WALLPAPER_VERSION = "2.2.0"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -1755,6 +1755,8 @@ TRANSLATIONS = {
     "tray.help":                {"en": "Help…",                   "de": "Hilfe…"},
     "tray.export_diagnostics":  {"en": "Export diagnostics bundle…",
                                  "de": "Diagnose-Paket exportieren…"},
+    "tray.open_library_folder": {"en": "Open library folder…",
+                                 "de": "Bibliotheksordner öffnen…"},
     "diagnostics.done":         {"en": "Diagnostics bundle saved to {path}",
                                  "de": "Diagnose-Paket gespeichert: {path}"},
     "diagnostics.failed":       {"en": "Diagnostics export failed: {msg}",
@@ -3428,7 +3430,41 @@ class Broadcaster:
                 slug = _library_slug(label, library_dir())
                 fp = library_dir() / (slug + ext)
                 fp.write_bytes(body)
-                _library_rebuild_catalogue(library_dir())
+                # v2.2.0-beta hotfix: optional Luminance-Alpha auto-cut
+                # + the catalogue rebuild that follows are CPU-heavy
+                # and used to run synchronously inside this async
+                # handler — a 4K upload would freeze the whole bridge
+                # for ~30-60 s while the event loop blocked. Push both
+                # into the default executor so other Configurator /
+                # WebSocket / wallpaper requests keep flowing. Also
+                # drop WebP method=6 → 4: ~5× faster at near-identical
+                # quality for wallpapers.
+                want_autocut = (params.get("autocut") == "1"
+                        and ext in (".png", ".jpg", ".jpeg", ".bmp", ".webp"))
+                def _post_upload_work(initial_fp, do_autocut, slug_name):
+                    final_fp = initial_fp
+                    if do_autocut:
+                        try:
+                            im = Image.open(initial_fp).convert("RGB")
+                            gray = im.convert("L")
+                            # alpha = 255 − lum so bright pixels go
+                            # transparent. Linear curve, no thresholds.
+                            alpha = gray.point(lambda v: 255 - v)
+                            rgba = im.convert("RGBA")
+                            rgba.putalpha(alpha)
+                            # Always WebP-encode the auto-cut output so the
+                            # alpha channel is honoured by the catalogue.
+                            initial_fp.unlink(missing_ok=True)
+                            final_fp = library_dir() / (slug_name + ".webp")
+                            rgba.save(final_fp, format="WebP",
+                                      quality=88, method=4)
+                        except Exception as e:
+                            print(f"[upload-autocut] {slug_name}: {e}")
+                    _library_rebuild_catalogue(library_dir())
+                    return final_fp
+                loop = asyncio.get_event_loop()
+                fp = await loop.run_in_executor(
+                    None, _post_upload_work, fp, want_autocut, slug)
                 # Apply the uploader-specified category to the
                 # freshly-catalogued entry. Done AFTER rebuild so the
                 # entry exists in library.json.
@@ -3605,6 +3641,128 @@ class Broadcaster:
                 http_error(writer, 400, "incomplete body")
             except Exception as e:
                 http_error(writer, 500, f"category update failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v2.2.0-beta: POST /library/transform — body is JSON
+        # {"file": "...", "op": "rotate90cw|rotate90ccw|rotate180|flipH|flipV"}.
+        # In-place rotates / flips the WebP (and its .thumb / .4k
+        # siblings if present) via Pillow's transpose primitives —
+        # no quality loss because we keep the original colour mode +
+        # quality setting. Pinned / category / tag state survive
+        # because the file name doesn't change.
+        if method == "POST" and target.split("?", 1)[0] == "/library/transform":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 1024):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                file = str(req.get("file", ""))
+                op = str(req.get("op", ""))
+                if not file or "/" in file or "\\" in file or ".." in file:
+                    raise ValueError("bad file name")
+                op_map = {
+                    "rotate90cw":  Image.Transpose.ROTATE_270,
+                    "rotate90ccw": Image.Transpose.ROTATE_90,
+                    "rotate180":   Image.Transpose.ROTATE_180,
+                    "flipH":       Image.Transpose.FLIP_LEFT_RIGHT,
+                    "flipV":       Image.Transpose.FLIP_TOP_BOTTOM,
+                }
+                if op not in op_map:
+                    raise ValueError(f"unknown op: {op}")
+                lib = library_dir()
+                fp = lib / file
+                if not fp.exists() or not fp.is_file():
+                    raise FileNotFoundError(file)
+                # Apply the transpose to the main file + any sibling
+                # variants the bundled wallpapers carry (thumb + 4K).
+                stem = fp.stem
+                ext = fp.suffix
+                targets = [fp]
+                for sib in (lib / f"{stem}.thumb{ext}",
+                            lib / f"{stem}.4k{ext}"):
+                    if sib.exists():
+                        targets.append(sib)
+                # v2.2.0-beta hotfix: the PIL transpose + WebP re-
+                # encode (×3 variants for bundled wallpapers) used to
+                # run synchronously inside this async handler — a 4K
+                # bundled WebP at method=6 froze the bridge for tens
+                # of seconds and tripped the client-side fetch timeout.
+                # Move into the executor and drop method=6 → 4 (~5×
+                # faster, near-identical quality).
+                def _do_transform(targets_, op_kind):
+                    for tgt in targets_:
+                        im = Image.open(tgt)
+                        mode = im.mode
+                        im2 = im.transpose(op_kind)
+                        save_kwargs = {}
+                        if tgt.suffix.lower() == ".webp":
+                            save_kwargs["quality"] = 88
+                            save_kwargs["method"] = 4
+                        im2.save(tgt, **save_kwargs)
+                    # Refreshing the catalogue updates mtime fields
+                    # the configurator uses for cache-buster URL
+                    # parameters.
+                    _library_rebuild_catalogue(lib)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None, _do_transform, targets, op_map[op])
+                payload = json.dumps({"ok": True}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 400, f"transform failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v2.2.0-beta: POST /library/openfolder — opens the user's
+        # library directory in Explorer. Tray menu + Library-tab hint
+        # both call this. Pure os.startfile, no payload needed.
+        if method == "POST" and target.split("?", 1)[0] == "/library/openfolder":
+            try:
+                lib = library_dir()
+                lib.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.startfile(str(lib))   # type: ignore[attr-defined]
+                except AttributeError:
+                    # Non-Windows dev fallback — bridge always runs on
+                    # Windows in production, but keep the dev path alive.
+                    pass
+                payload = json.dumps({"ok": True,
+                                      "path": str(lib)}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"open failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -10140,6 +10298,10 @@ class TrayApp:
             pystray.MenuItem(tr("tray.advanced"), pystray.Menu(
                 pystray.MenuItem(tr("tray.quick_add_widget"), pystray.Menu(self._widget_menu_items)),
                 pystray.MenuItem(tr("tray.quick_effects"),    pystray.Menu(self._effects_menu_items)),
+                # v2.2.0-beta: shortcut into %LOCALAPPDATA%\…\library\
+                # — the path the manual pack-extract instructions tell
+                # users to drop ZIP contents into.
+                pystray.MenuItem(tr("tray.open_library_folder"), self._open_library_folder),
                 pystray.MenuItem(tr("tray.export_diagnostics"), self._export_diagnostics),
             )),
             pystray.MenuItem(tr("tray.updates"), pystray.Menu(self._update_menu_items)),
@@ -10153,6 +10315,16 @@ class TrayApp:
         url = f"http://{WS_HOST}:{WS_PORT}/configurator"
         try: webbrowser.open(url, new=2)
         except Exception as e: print(f"[tray] open configurator failed: {e}")
+
+    def _open_library_folder(self, icon, item):
+        # v2.2.0-beta: opens %LOCALAPPDATA%\…\library\ in Explorer.
+        # Same as POST /library/openfolder but tray-driven.
+        try:
+            lib = library_dir()
+            lib.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(lib))   # type: ignore[attr-defined]
+        except Exception as e:
+            print(f"[tray] open library folder failed: {e}")
 
     # ── Top-level Lock / Unlock toggle ─────────────────────────────────
     # Picks the dominant state across all active screens — if any screen

@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <title>SignalRGB Wallpaper Configurator</title>
+<!-- v2.2.0-beta wave 3: inline SVG favicon (monitor + 5 RGB pads),
+     mirrors the tray icon + header logo. Inline data: URI so no
+     extra request to the bridge. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 56'><rect x='6' y='8' width='52' height='34' rx='3' fill='%231b1f2a' stroke='%234a5160' stroke-width='2'/><rect x='10' y='12' width='44' height='26' fill='%23050608'/><rect x='26' y='46' width='12' height='3' fill='%234a5160'/><rect x='20' y='50' width='24' height='2' fill='%234a5160'/><circle cx='17' cy='28' r='3' fill='%23ff2d6a'/><circle cx='25' cy='28' r='3' fill='%23ff8f2d'/><circle cx='33' cy='28' r='3' fill='%23ffe92d'/><circle cx='41' cy='28' r='3' fill='%2342ff85'/><circle cx='49' cy='28' r='3' fill='%232db4ff'/></svg>">
 <style>
   :root {
     --bg: #14171c;
@@ -33,6 +37,15 @@
   }
   header h1 { margin: 0; font-size: 18px; font-weight: 600; }
   header .spacer { flex: 1; }
+  /* v2.2.0-beta wave 3: top-left header logo. Inline SVG mirrors the
+     tray-icon look (monitor + 5 RGB pads) so the Configurator carries
+     the app brand without a separate raster asset. */
+  header .brand-logo {
+    flex: 0 0 auto;
+    height: 28px;
+    width: auto;
+    margin-right: -4px;
+  }
   header .conn {
     font-size: 12px; padding: 3px 9px;
     border-radius: 999px; border: 1px solid var(--border);
@@ -82,6 +95,34 @@
   }
   .tab.inactive { display: none; }
   .tab .tab-text { display: inline; }
+  /* v2.2.0-beta: visual feedback while a library tile hovers over
+     a screen tab. Same accent ring the rest of the UI uses for
+     active state. */
+  .tab.drop-target {
+    background: rgba(58, 107, 168, 0.35);
+    box-shadow: inset 0 0 0 2px rgba(85, 136, 204, 0.9);
+    color: var(--text);
+  }
+  /* v2.2.0-beta: window-wide drag-and-drop overlay. Body class is
+     toggled by the dnd listener; the overlay sits in front of the
+     UI so the user can drop anywhere. */
+  body.dnd-active::after {
+    content: "📥  Drop image to add to library";
+    position: fixed;
+    inset: 12px;
+    z-index: 10000;
+    background: rgba(11, 15, 25, 0.78);
+    border: 3px dashed rgba(85, 136, 204, 0.9);
+    border-radius: 12px;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  html[lang="de"] body.dnd-active::after {
+    content: "📥  Bild fallen lassen, um es zur Bibliothek hinzuzufügen";
+  }
   /* v1.2.10: per-tab settings gear — sibling to .tab so each monitor
      has its own clearly-belonging settings entry instead of one
      shared trigger. */
@@ -114,6 +155,7 @@
     background: var(--accent-bg);
     border-color: #3a6ba8;
   }
+
 
   .screencount-pick {
     margin-left: auto;
@@ -946,6 +988,35 @@
     border-radius: 4px;
     overflow: hidden;
   }
+  /* v2.2.0-beta: maximize button + fullscreen state. */
+  .live-preview-maximize {
+    position: absolute; top: 6px; right: 6px;
+    width: 28px; height: 28px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px; line-height: 24px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .live-preview-frame:hover .live-preview-maximize,
+  .live-preview-frame.maximized .live-preview-maximize { opacity: 1; }
+  .live-preview-maximize:hover { background: rgba(58, 107, 168, 0.7); }
+  .live-preview-frame.maximized {
+    position: fixed;
+    inset: 16px;
+    z-index: 9500;
+    background: #000;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.85);
+    aspect-ratio: auto;
+    /* Centre the maintained aspect within the fixed inset. */
+    margin: auto;
+    max-width: calc((100vh - 32px) * var(--live-preview-ar, 16 / 9));
+    max-height: calc((100vw - 32px) / var(--live-preview-ar, 16 / 9));
+  }
   .live-preview-frame iframe {
     position: absolute; left: 0; top: 0;
     /* width / height / transform set in JS from the screen's
@@ -1114,6 +1185,20 @@
     color: var(--text, #e0e4ec);
     font: inherit;
   }
+  /* v2.2.0-beta: auto-cut toggle in the library toolbar. */
+  .lib-autocut-toggle {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    background: var(--panel-2, #1c1f27);
+    border: 1px solid var(--border, #333);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .lib-autocut-toggle input { margin: 0; }
   .lib-tag-row {
     display: flex; gap: 6px; flex-wrap: wrap;
     margin-bottom: 6px;
@@ -1231,6 +1316,33 @@
     opacity: 0; transition: opacity 0.12s;
   }
   .lib-tile:hover .del { opacity: 1; }
+  /* v2.2.0-beta: span-mode quick-apply overlays. Two half-tile
+     buttons revealed on hover when the active screen is span-h or
+     span-v. Click → applyLibraryItemToSpanTile, no modal in the way. */
+  .lib-tile-span-half {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1.5px solid rgba(85, 136, 204, 0.85);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, background 0.12s;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto;
+    z-index: 2;
+  }
+  .lib-tile:hover .lib-tile-span-half { opacity: 1; }
+  .lib-tile-span-half:hover {
+    background: rgba(58, 107, 168, 0.6);
+  }
+  .lib-tile-span-half.left   { top: 22px; left: 4px;  right: 50%; bottom: 22px; margin-right: 2px; }
+  .lib-tile-span-half.right  { top: 22px; left: 50%; right: 4px;  bottom: 22px; margin-left: 2px; }
+  .lib-tile-span-half.top    { top: 4px;  left: 22px; right: 22px; bottom: 50%; margin-bottom: 2px; }
+  .lib-tile-span-half.bottom { top: 50%; left: 22px; right: 22px; bottom: 4px;  margin-top: 2px; }
   .lib-tile.pinned::before {
     content: "★";
     position: absolute;
@@ -1493,6 +1605,11 @@
     margin-bottom: 12px;
   }
   .lib-packs-link:hover { background: rgba(58, 107, 168, 0.65); }
+  .lib-packs-link-secondary {
+    margin-left: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border);
+  }
   .lib-packs-note {
     font-size: 11px;
     opacity: 0.55;
@@ -1566,14 +1683,461 @@
     vertical-align: middle;
   }
   #toast .toast-undo-btn:hover { background: rgba(255,255,255,0.08); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     v2.2.0-beta · Configurator v3 visual overhaul
+     ───────────────────────────────────────────────────────────────
+     • horizontal section-tabs → vertical sidebar in .app-shell flex
+     • tighter card / row styling, fewer borders, cleaner type
+     • section heads are small uppercase eyebrows, not bordered bars
+     ═══════════════════════════════════════════════════════════════ */
+
+  .app-shell {
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+    max-width: 1240px;
+    margin: 14px auto 0;
+    padding: 0 22px;
+  }
+  .app-shell > main {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Sidebar — replaces the horizontal section-tabs band. The sticky
+     `top` has to clear every sticky element rendered above the
+     app-shell: header (~46 px) + #tabs screen-picker (~50 px) plus
+     a small breathing gap. Using 100 px mirrors what the legacy
+     horizontal band was already doing pre-redesign. */
+  #section-tabs {
+    flex: 0 0 196px;
+    position: sticky;
+    top: 100px;
+    margin: 0;
+    padding: 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: none;
+    border: none;
+    background: transparent;
+  }
+  #section-tabs .stab {
+    width: 100%;
+    text-align: left;
+    justify-content: flex-start;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    padding: 9px 12px;
+    margin: 0;
+    font-size: 13px;
+  }
+  #section-tabs .stab.active {
+    border: 1px solid var(--border);
+    background: var(--accent-bg);
+    color: #d8e6fc;
+  }
+  #section-tabs .stab svg {
+    width: 15px; height: 15px;
+    opacity: 0.85;
+  }
+  #section-tabs .stab.active svg { opacity: 1; }
+
+  /* Cards lose the heavy borders; rely on whitespace + bg tone. */
+  main section.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    padding: 14px 16px 6px;
+  }
+  main section.card > header.section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0 10px;
+    margin-bottom: 4px;
+    border-bottom: none;
+    cursor: pointer;
+    position: relative;
+  }
+  main section.card > header.section-head::before {
+    content: "";
+    width: 3px;
+    height: 14px;
+    background: var(--accent);
+    border-radius: 2px;
+    flex: 0 0 auto;
+    opacity: 0.85;
+  }
+  main section.card > header.section-head h2 {
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.005em;
+    text-transform: none;
+    color: var(--text);
+    margin: 0;
+    flex: 1 1 auto;
+  }
+  main section.card > header.section-head .chev {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin: 0;
+    order: 2;
+    opacity: 0.6;
+    transition: transform 0.15s;
+  }
+  main section.card.collapsed > header.section-head .chev {
+    transform: rotate(-90deg);
+  }
+  main section.card.collapsed > .body { display: none; }
+  main section.card .body { padding: 4px 0 8px; }
+
+  /* v2.2.0-beta wave 3: collapsible sub-blocks inside the Integrations
+     System card (OpenRGB output / OpenRGB SDK / sACN / MQTT / API /
+     Plugins / per-screen colour source). Each is its own <details>
+     so the Integrations tab opens with only the always-relevant
+     System block expanded; everything else is one click away but
+     doesn't dominate the scroll on first open. */
+  details.integration-block {
+    border-top: 1px solid var(--border, #2a2a2a);
+    padding: 12px 0 4px;
+    margin-top: 4px;
+  }
+  details.integration-block > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    user-select: none;
+  }
+  details.integration-block > summary::-webkit-details-marker { display: none; }
+  details.integration-block > summary::before {
+    content: "▸";
+    font-size: 11px;
+    opacity: 0.55;
+    transition: transform 0.15s;
+    display: inline-block;
+    width: 12px;
+  }
+  details.integration-block[open] > summary::before {
+    transform: rotate(90deg);
+  }
+  details.integration-block > summary h3 {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+  details.integration-block > *:not(summary) {
+    margin-top: 8px;
+  }
+  details.integration-block > .hint:first-of-type {
+    margin-top: 10px;
+  }
+
+  /* Tighter rows. */
+  main section.card .row {
+    margin: 4px 0;
+    padding: 3px 0;
+  }
+  main section.card .row > label {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  main section.card .hint {
+    font-size: 11.5px;
+    line-height: 1.55;
+    opacity: 0.7;
+    padding: 0 0 4px;
+    margin: 0 0 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+  }
+  /* Inline summary text next to a row's button — no fixed narrow
+     column, just sits where it sits without weird wrapping. */
+  main section.card .row .val {
+    flex: 0 1 auto;
+    text-align: left;
+    color: var(--text-dim);
+    font-size: 12px;
+    padding-left: 4px;
+    white-space: nowrap;
+  }
+  /* v2.2.0-beta wave 2: Library filter section — unified grid with
+     consistent chip styling across category / source / tags rows. */
+  .lib-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 14px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .lib-filters-row {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    align-items: center;
+    gap: 10px;
+  }
+  .lib-filters-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .lib-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 0;
+    border: none !important;
+    padding: 0 !important;
+  }
+  .lib-chips > button,
+  .lib-chips > .lib-tag-chip,
+  .lib-chips > .lib-filter-chip,
+  .lib-chips > .lib-pack-chip {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    background: var(--panel-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border) !important;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    margin: 0;
+  }
+  .lib-chips > button:hover,
+  .lib-chips > .lib-tag-chip:hover,
+  .lib-chips > .lib-filter-chip:hover,
+  .lib-chips > .lib-pack-chip:hover {
+    color: var(--text);
+    border-color: rgba(85, 136, 204, 0.6) !important;
+  }
+  .lib-chips > button.active,
+  .lib-chips > .lib-tag-chip.active,
+  .lib-chips > .lib-filter-chip.active,
+  .lib-chips > .lib-pack-chip.active {
+    background: rgba(58, 107, 168, 0.45);
+    border-color: rgba(85, 136, 204, 0.9) !important;
+    color: #fff;
+  }
+  /* Hide rows that have no chips so we don't see empty label rows. */
+  .lib-filters-row:has(.lib-chips:empty) { display: none; }
+
+  /* v2.2.0-beta: declutter the screen-tabs row. Gear icons + mirror
+     badges + count-picker were visually noisy and unclear at first
+     glance. Per-screen settings (Span/Mirror/Reset) reach the same
+     popover via right-click on the tab — tooltip hints at it. The
+     screen-count picker moves into the System tab as a regular row. */
+  .tab-gear { display: none !important; }
+  .tab .tab-mirror-badge { display: none !important; }
+  .screencount-pick { display: none !important; }
+  /* v2.2.0-beta: maximize button removed — floating preview mode
+     covers the same use-case now and the maximize CSS broke when
+     the wrap was already DOM-moved to body level. */
+  .live-preview-maximize { display: none !important; }
+  /* Overview thumbnails strip was inconsistent: hidden at 1 screen,
+     visible at 2+. With the floating preview + BG thumbnail in the
+     Look tab the strip is redundant. */
+  #overview-card { display: none !important; }
+  /* …except the System-card mirror — that one stays visible. */
+  .screencount-pick.screencount-pick-in-card {
+    display: inline-flex !important;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 0;
+    color: var(--text);
+  }
+  .tab[title]:not([title=""]):hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: -20px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 100;
+  }
+
+  /* Slim down the header. Smaller h1, less vertical padding, tighter
+     button row. Keeps everything functional but reads as a chrome
+     bar instead of a page banner. */
+  header {
+    padding: 10px 22px;
+    gap: 10px;
+  }
+  header h1 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  header .btn { padding: 5px 10px; font-size: 12.5px; }
+  header .conn { font-size: 11.5px; padding: 2px 8px; }
+
+  /* v2.2.0-beta: dedicated floating preview window — its own iframe,
+     completely independent from the Widgets-tab inline preview. */
+  #header-toggle-preview.active {
+    background: var(--accent-bg);
+    color: #d8e6fc;
+  }
+  .floating-preview {
+    display: none;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    width: 520px;
+    max-width: calc(100vw - 32px);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
+    z-index: 9300;
+    overflow: hidden;
+  }
+  .floating-preview.show { display: block; }
+  .floating-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .floating-preview-title { flex: 1; }
+  .floating-preview-close {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .floating-preview-close:hover {
+    background: rgba(180, 50, 50, 0.6);
+    color: #fff;
+  }
+  .floating-preview-frame {
+    position: relative;
+    width: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+  .floating-preview-frame iframe {
+    position: absolute; left: 0; top: 0;
+    transform-origin: 0 0;
+    border: none;
+    background: #000;
+  }
+
+  /* Current-background preview tile in the Look tab. */
+  .bg-current-row {
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
+    margin: 6px 0 14px;
+  }
+  .bg-current-thumb {
+    flex: 0 0 200px;
+    aspect-ratio: 16 / 9;
+    background: #0c0e13 center/cover no-repeat;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.12s, transform 0.12s;
+  }
+  .bg-current-thumb:hover {
+    border-color: rgba(85, 136, 204, 0.9);
+    transform: translateY(-1px);
+  }
+  .bg-current-thumb-label {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 4px 8px;
+    background: linear-gradient(to top,
+                  rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.3;
+    text-align: left;
+  }
+  .bg-current-meta {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+  }
+  .bg-current-cta { align-self: flex-start; }
+
+  /* Narrow viewport — collapse sidebar to a horizontal pill row. */
+  @media (max-width: 760px) {
+    .app-shell {
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 10px;
+    }
+    #section-tabs {
+      position: sticky;
+      top: 60px;
+      flex: 0 0 auto;
+      flex-direction: row;
+      flex-wrap: wrap;
+      padding: 4px 0;
+      background: var(--bg);
+      z-index: 8;
+    }
+    #section-tabs .stab {
+      flex: 0 0 auto;
+      width: auto;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+  }
 </style>
 </head>
 <body>
 
 <header>
+  <svg class="brand-logo" viewBox="0 0 64 56" aria-hidden="true">
+    <rect x="6" y="8" width="52" height="34" rx="3" fill="#1b1f2a" stroke="#4a5160" stroke-width="2"/>
+    <rect x="10" y="12" width="44" height="26" fill="#050608"/>
+    <rect x="26" y="46" width="12" height="3" fill="#4a5160"/>
+    <rect x="20" y="50" width="24" height="2" fill="#4a5160"/>
+    <circle cx="17" cy="28" r="3" fill="#ff2d6a"/>
+    <circle cx="25" cy="28" r="3" fill="#ff8f2d"/>
+    <circle cx="33" cy="28" r="3" fill="#ffe92d"/>
+    <circle cx="41" cy="28" r="3" fill="#42ff85"/>
+    <circle cx="49" cy="28" r="3" fill="#2db4ff"/>
+  </svg>
   <h1 data-i18n="header.title">SignalRGB Wallpaper Configurator</h1>
   <span class="spacer"></span>
   <span class="conn bad" id="conn" data-i18n="conn.connecting">connecting…</span>
+  <button class="btn" id="header-toggle-preview" type="button"
+          title="Live preview"
+          data-i18n="header.toggle_preview">📺 Vorschau</button>
   <button class="btn" id="header-replay-tour" type="button"
           title="Show the first-run tour again"
           data-i18n="header.replay_tour">Tour</button>
@@ -1657,11 +2221,33 @@
      (Look / Effects / Widgets / Integrations / System) filter the
      <section.card> elements below by their data-section-tab
      attribute. Replaces the v1.2.1 left-rail aside. -->
+<div class="app-shell">
 <nav id="section-tabs" aria-label="Section tabs"></nav>
 
 <main data-active-tab="look">
 
   <!-- ── Presets ───────────────────────────────────────────────────── -->
+  <!-- v2.2.0-beta: per-bridge screen-count moved out of the noisy
+       top toolbar and into the System tab where it belongs (rare
+       one-shot setting, not a daily knob). -->
+  <section class="card" id="card-screens" data-section-tab="system">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.screens">Screens</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="screens.card_hint">
+        How many monitors the bridge should drive. Each screen gets
+        its own independent settings — wallpaper, glow, effects,
+        widgets. Most users keep this at 1.
+      </div>
+      <div class="row">
+        <label data-i18n="bridge.screens">Screens</label>
+        <div id="screencount-host" class="screencount-host"></div>
+      </div>
+    </div>
+  </section>
+
   <section class="card" id="card-presets" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
@@ -1683,6 +2269,29 @@
        config with the bundle — the new-user shortcut past the
        "intimidating amount of options" hump. Cards generated client-
        side from LOOK_BUNDLES (see configurator.html JS section). -->
+  <!-- v2.2.0-beta: Screen-setup card — discoverable replacement for
+       the right-click-on-tab popover trigger. Click "Layout
+       configure…" opens the same popover anchored under this
+       button, so users without the tooltip discovery still find
+       span / mirror / reset. -->
+  <section class="card" id="card-screen-setup" data-section-tab="look">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="setup.card_head">Screen layout</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="setup.card_hint">
+        Configure how this bridge screen maps to physical monitors.
+      </div>
+      <div class="row">
+        <label data-i18n="setup.label">Layout</label>
+        <button type="button" class="btn" id="screen-setup-open"
+                data-i18n="setup.open_btn">⚙ Configure layout…</button>
+        <span class="val" id="screen-setup-summary"></span>
+      </div>
+    </div>
+  </section>
+
   <section class="card" id="card-looks" data-section-tab="look">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
@@ -1705,21 +2314,25 @@
       <h2 data-i18n="section.bg">Background</h2>
     </header>
     <div class="body">
-      <!-- v1.7.5: the in-line library strip moved to its own tab
-           (#card-library, data-section-tab="library"). Background
-           card now keeps a one-line shortcut so the discoverability
-           path is still here for first-time users. -->
-      <div class="row">
-        <label data-i18n="bg.library">Library</label>
-        <button type="button" class="btn" id="bg-goto-library"
-                data-i18n="bg.goto_library"
-                style="flex: 0 0 auto;">
-          Browse library...
+      <!-- v2.2.0-beta: prominent current-background preview tile +
+           Library entry point. Replaces the v1.7.5 plain-row link so
+           the user sees WHAT is set and HOW to change it at a glance.
+           Thumbnail itself acts as a button to the Library tab; the
+           explicit button + hint sit on its right. -->
+      <div class="bg-current-row">
+        <button type="button" class="bg-current-thumb" id="bg-current-thumb"
+                title="Open library">
+          <span class="bg-current-thumb-label" data-i18n="bg.current_thumb">No background</span>
         </button>
-        <span class="hint" style="flex:1; padding-left:8px;"
-              data-i18n="bg.goto_library_hint">
-          Browse, search and apply bundled + your own wallpapers.
-        </span>
+        <div class="bg-current-meta">
+          <button type="button" class="btn bg-current-cta" id="bg-goto-library"
+                  data-i18n="bg.goto_library">
+            Browse library...
+          </button>
+          <span class="hint" data-i18n="bg.goto_library_hint">
+            Browse, search and apply bundled + your own wallpapers.
+          </span>
+        </div>
       </div>
       <!-- v1.2.13: the legacy "Image path" text input was confusing —
            users almost never paste a Windows path, the bg image lands
@@ -1896,13 +2509,9 @@
       <h2 data-i18n="section.library">Library</h2>
     </header>
     <div class="body">
-      <div class="hint" data-i18n="library.hint">
-        Bundled wallpapers + your own uploads. Click a tile to preview,
-        double-click to apply. Right-click for category / pin / delete.
-      </div>
-      <!-- Toolbar: search + sort + category filter chips. The filter
-           chips moved here from the old Background-strip; the search
-           input + sort dropdown are new in v1.7.5. -->
+      <!-- v2.2.0-beta wave 2: stripped the bordered hint box (visual
+           noise). The Library tab name + section head already tell
+           the user what they're looking at. -->
       <div class="lib-toolbar">
         <input type="search" id="library-search" class="lib-search"
                data-i18n-attr="placeholder"
@@ -1913,13 +2522,30 @@
           <option value="name"      data-i18n="library.sort.name">Name (A-Z)</option>
           <option value="addedAt"   data-i18n="library.sort.oldest">Oldest first</option>
         </select>
+        <label class="lib-autocut-toggle" id="library-autocut-toggle"
+               title="Auto-cut bright zones to transparent on upload (Luminance-Alpha, same effect as the bundled v2.0 wallpapers)">
+          <input type="checkbox" id="library-autocut">
+          <span data-i18n="library.autocut_label">✨ Auto-cut on upload</span>
+        </label>
       </div>
-      <div id="library-filter-row" class="lib-filter-row"></div>
-      <div id="library-tag-row" class="lib-tag-row"></div>
-      <!-- v1.7.5 wave 2: source-pack chips (bundled / per-pack / your
-           uploads). Renders only when 2+ distinct packs exist so a
-           fresh install doesn't see a one-chip row. -->
-      <div id="library-pack-row" class="lib-tag-row lib-pack-row"></div>
+      <!-- v2.2.0-beta wave 2: unified filter grid. Each row has a
+           consistent label + same chip style (no more dashed-border
+           outlier for source). Renders inside a panel so the whole
+           filter area reads as a single grouped control. -->
+      <div class="lib-filters">
+        <div class="lib-filters-row">
+          <span class="lib-filters-label" data-i18n="library.filter_label">Category</span>
+          <div id="library-filter-row" class="lib-filter-row lib-chips"></div>
+        </div>
+        <div class="lib-filters-row" id="library-pack-row-wrap">
+          <span class="lib-filters-label" data-i18n="library.source_label">Source</span>
+          <div id="library-pack-row" class="lib-tag-row lib-pack-row lib-chips"></div>
+        </div>
+        <div class="lib-filters-row" id="library-tag-row-wrap">
+          <span class="lib-filters-label" data-i18n="library.tags_label">Tags</span>
+          <div id="library-tag-row" class="lib-tag-row lib-chips"></div>
+        </div>
+      </div>
       <div id="library-strip" class="lib-grid lib-grid-large"></div>
       <input id="lib-upload" type="file"
              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
@@ -1942,6 +2568,9 @@
         <a class="lib-packs-link" target="_blank" rel="noopener"
            href="https://github.com/Delido/signalrgb-wallpaper/releases/tag/library-packs-v1"
            data-i18n="packs.manual_link">Browse packs on GitHub →</a>
+        <button type="button" class="lib-packs-link lib-packs-link-secondary"
+                id="lib-open-folder-btn"
+                data-i18n="packs.open_folder">📂 Open library folder</button>
         <div class="lib-packs-note" data-i18n="packs.defender_note">
           The previous in-app download flow was removed in v2.0.1
           because Windows Defender flagged the unsigned download +
@@ -2162,6 +2791,14 @@
                   title="Live wallpaper preview"
                   loading="lazy"
                   sandbox="allow-scripts allow-same-origin"></iframe>
+          <!-- v2.2.0-beta: maximize toggle. Click to blow the preview
+               up to a viewport-sized overlay; click again or hit ESC
+               to restore. Useful for seeing widget placement /
+               ambient effects at full scale without leaving the
+               Configurator. -->
+          <button type="button" id="live-preview-maximize"
+                  class="live-preview-maximize"
+                  title="Maximize preview">⛶</button>
         </div>
       </div>
 
@@ -2269,11 +2906,8 @@
            network SDK (Settings → SDK Server in OpenRGB must be
            switched on) and pushes the source-screen's averaged glow
            colour to every enumerated device at 30 Hz. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="openrgb.header" style="margin: 0; flex: 1 1 100%;">
-          OpenRGB output (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="openrgb.header">OpenRGB output (beta)</h3></summary>
       <div class="hint" data-i18n="openrgb.hint">
         Mirror the wallpaper's live glow colour onto your OpenRGB-
         controlled hardware (RAM, fans, keyboards, …). Requires
@@ -2322,6 +2956,8 @@
              style="margin-top:6px; font-size:0.85em; opacity:0.7;"></div>
       </div>
 
+      </details>
+
       <!-- v1.6.2-beta: OpenRGB-SDK SERVER (inverse of the OpenRGB
            output above). Exposes the bridge to the OpenRGB GUI as
            virtual matrix devices, one per screen. Any OpenRGB effect
@@ -2330,11 +2966,8 @@
            in the loop. Off by default. The per-screen source picker
            below gets a new "OpenRGB SDK" option that routes that
            screen's wallpaper to the SDK-driven colours. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="openrgb_sdk.header" style="margin: 0; flex: 1 1 100%;">
-          OpenRGB SDK server (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="openrgb_sdk.header">OpenRGB SDK server (beta)</h3></summary>
       <div class="hint" data-i18n="openrgb_sdk.hint">
         Exposes the bridge to the OpenRGB GUI as virtual matrix
         devices (one per screen). Open OpenRGB → you'll see
@@ -2359,17 +2992,16 @@
       <div id="openrgb-sdk-devices" class="hint"
            style="margin-top: 8px; font-size:0.85em;"></div>
 
+      </details>
+
       <!-- v1.5.0-beta: per-screen colour source picker. Each screen
            can independently take its glow colour from SignalRGB UDP
            (default), an OpenRGB device, or an incoming sACN/E1.31
            universe. The bridge enforces the routing — only frames
            from the configured source for a given screen are forwarded
            to the wallpaper page. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="sources.header" style="margin: 0; flex: 1 1 100%;">
-          Colour source per screen (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="sources.header">Colour source per screen (beta)</h3></summary>
       <div class="hint" data-i18n="sources.hint">
         Picks where each screen's live glow colour comes from.
         SignalRGB is the default — the wallpaper follows whatever
@@ -2379,16 +3011,15 @@
       </div>
       <div id="sources-list" style="margin-top: 10px;"></div>
 
+      </details>
+
       <!-- v1.5.0-beta: sACN/E1.31 output. Hooks the broadcaster's
            frame-tap and emits one universe per screen on the standard
            multicast group (port 5568). Receivers: xLights, QLC+,
            Hyperion, any hardware ArtNet/sACN node, etc. Disabled by
            default — costs nothing for users who don't need it. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="sacn.header" style="margin: 0; flex: 1 1 100%;">
-          sACN / E1.31 output (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="sacn.header">sACN / E1.31 output (beta)</h3></summary>
       <div class="hint" data-i18n="sacn.hint">
         Streams the per-screen averaged glow colour as DMX over IP
         (E1.31 / sACN) on the standard multicast group. Pick this
@@ -2417,15 +3048,14 @@
       </div>
       <div id="sacn-universes" style="margin-top: 8px;"></div>
 
+      </details>
+
       <!-- v1.5.0-beta: HA / MQTT bridge. Publishes per-screen state
            (active preset, manual-pause, glow colour, current
            background) to a configurable topic prefix; subscribes to
            `*/set` topics for control. Disabled by default. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="mqtt.header" style="margin: 0; flex: 1 1 100%;">
-          Home Assistant / MQTT bridge (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="mqtt.header">Home Assistant / MQTT bridge (beta)</h3></summary>
       <div class="hint" data-i18n="mqtt.hint">
         Publishes per-screen state to your MQTT broker and accepts
         control commands on the matching `*/set` topics. Drop-in
@@ -2469,14 +3099,13 @@
       </div>
       <div id="mqtt-topics-hint" class="hint sub" style="margin-top:6px;"></div>
 
+      </details>
+
       <!-- v1.5.0-beta: REST API token (auto-generated). Loopback
            requests bypass auth; remote integrations (future LAN-bind
            opt-in) must supply this as `Authorization: Bearer <token>`. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="api.header" style="margin: 0; flex: 1 1 100%;">
-          REST API token (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="api.header">REST API token (beta)</h3></summary>
       <div class="hint" data-i18n="api.hint">
         Auto-generated per install. Loopback requests bypass auth so
         the Configurator + same-host integrations work without
@@ -2505,15 +3134,14 @@
            data-i18n="api.spec_link">View OpenAPI spec</a>
       </div>
 
+      </details>
+
       <!-- v1.5.0-beta: Plugins. Bridge scans
            %LOCALAPPDATA%\SignalRGBWallpaper\plugins\ at startup +
            on demand. Each discovered manifest.json becomes a new
            `plugin/<name>` widget type in the picker. -->
-      <div class="pop-divider" style="margin: 14px 0;"></div>
-      <div class="row" style="flex-wrap: wrap;">
-        <h3 data-i18n="plugins.header" style="margin: 0; flex: 1 1 100%;">
-          3rd-party widget plugins (beta)</h3>
-      </div>
+      <details class="integration-block">
+      <summary><h3 data-i18n="plugins.header">3rd-party widget plugins (beta)</h3></summary>
       <div class="hint" data-i18n="plugins.hint">
         Drop a folder with a <code>manifest.json</code> under
         <code>%LOCALAPPDATA%\SignalRGBWallpaper\plugins\</code> and
@@ -2529,6 +3157,7 @@
                 style="margin-left:6px;">Open plugins folder…</button>
       </div>
       <div id="plugins-list" class="hint" style="margin-top: 8px;"></div>
+      </details>
     </div>
   </section>
 
@@ -2581,6 +3210,7 @@
   </section>
 
 </main>
+</div><!-- /.app-shell -->
 
 <div class="modal-backdrop" id="modal">
   <div class="modal">
@@ -2883,6 +3513,13 @@ const TRANSLATIONS = {
   "bg.library.ctx.pin":       { en: "Pin to top",         de: "Oben anheften" },
   "bg.library.ctx.unpin":     { en: "Unpin",              de: "Lösen" },
   "bg.library.ctx.rename":    { en: "Rename…",            de: "Umbenennen…" },
+  // v2.2.0-beta: in-place rotate / flip on the library WebP.
+  "bg.library.ctx.rotate90cw":  { en: "↻ Rotate 90° clockwise",     de: "↻ 90° rechts drehen" },
+  "bg.library.ctx.rotate90ccw": { en: "↺ Rotate 90° counter-clockwise", de: "↺ 90° links drehen" },
+  "bg.library.ctx.rotate180":   { en: "↕ Rotate 180°",              de: "↕ 180° drehen" },
+  "bg.library.ctx.flipH":       { en: "⇆ Flip horizontally",        de: "⇆ Horizontal spiegeln" },
+  "bg.library.ctx.flipV":       { en: "⇅ Flip vertically",          de: "⇅ Vertikal spiegeln" },
+  "bg.library.transform_ok":    { en: "Image transformed.",         de: "Bild bearbeitet." },
   "bg.library.ctx.duplicate": { en: "Duplicate",          de: "Duplizieren" },
   "bg.library.ctx.delete":    { en: "Delete…",            de: "Löschen…" },
   // v1.7.5: tags + per-screen apply.
@@ -2975,6 +3612,15 @@ const TRANSLATIONS = {
   "cycle.off":              { en: "Auto-cycle off",       de: "Auto-Wechsel aus" },
   "bridge.screens":         { en: "Screens:",             de: "Bildschirme:" },
   "screens.label_simple":   { en: "Screen {n}",           de: "Bildschirm {n}" },
+  "screens.tab_tooltip":    { en: "Click to switch · Right-click for span / mirror / reset",
+                              de: "Klick zum Wechseln · Rechtsklick für Span / Spiegel / Zurücksetzen" },
+  "section.screens":        { en: "Screens",                 de: "Bildschirme" },
+  "screens.card_hint":      { en: "How many monitors the bridge should drive. Each screen gets its own independent settings — wallpaper, glow, effects, widgets. Most users keep this at 1.",
+                              de: "Wie viele Monitore die Bridge ansteuern soll. Jeder Bildschirm hat eigene Einstellungen — Wallpaper, Glow, Effekte, Widgets. Bei den meisten User bleibt das auf 1." },
+  "setup.card_head":        { en: "Screen layout",           de: "Bildschirm-Layout" },
+  "setup.card_hint":        { en: "Configure how this bridge screen maps to physical monitors. Span if one canvas covers two monitors; mirror to clone another screen.",
+                              de: "Wie dieser Bridge-Bildschirm auf die physischen Monitore abgebildet wird. Span wenn ein Canvas zwei Monitore deckt; Mirror um einen anderen Bildschirm zu klonen." },
+  "setup.open_btn":         { en: "⚙ Configure layout…",     de: "⚙ Layout konfigurieren…" },
   "screens.label_with_res": { en: "Screen {n} — {w}×{h}", de: "Bildschirm {n} — {w}×{h}" },
   "overview.label":         { en: "Overview",             de: "Übersicht" },
   "mirror.label":           { en: "Mirror",               de: "Spiegeln" },
@@ -2994,6 +3640,7 @@ const TRANSLATIONS = {
   "redo.applied":           { en: "Redid change",
                               de: "Änderung wiederholt" },
   "header.replay_tour":     { en: "Tour",                 de: "Tour" },
+  "header.toggle_preview":  { en: "📺 Preview",           de: "📺 Vorschau" },
   "tour.skip":              { en: "Skip",                 de: "Überspringen" },
   "tour.next":              { en: "Next",                 de: "Weiter" },
   "tour.done":              { en: "Got it",               de: "Verstanden" },
@@ -3005,12 +3652,19 @@ const TRANSLATIONS = {
   "tour.tabs.title":        { en: "Screens",              de: "Bildschirme" },
   "tour.tabs.body":         { en: "One tab per monitor. Each has independent settings — background, glow, widgets, effects.",
                               de: "Ein Tab pro Monitor. Jeder hat unabhängige Einstellungen — Hintergrund, Glow, Widgets, Effekte." },
-  "tour.tab_gear.title":    { en: "Per-screen settings",   de: "Pro-Bildschirm-Einstellungen" },
-  "tour.tab_gear.body":     { en: "Each tab has its own gear button. Opens a popover with the Monitor-Setup picker (declare span layouts for ultrawides that are really two monitors), Mirror mode, and Reset this screen.",
-                              de: "Jeder Tab hat ein eigenes Zahnrad-Icon. Öffnet ein Popover mit Monitor-Setup (Span-Layouts für Ultrawides die in Wahrheit 2 Monitore sind), Spiegel-Modus und Bildschirm-Reset." },
+  // v2.2.0-beta: gear button hidden in favour of the Bildschirm-Layout
+  // card directly in the Look tab; tour points at that card now.
+  "tour.tab_gear.title":    { en: "Per-screen layout",   de: "Pro-Bildschirm-Layout" },
+  "tour.tab_gear.body":     { en: "The Look tab has a Screen-Layout card — declare span layouts for ultrawides that are really two monitors, switch a screen to Mirror, or Reset this screen from there.",
+                              de: "Im Look-Tab gibt's eine „Bildschirm-Layout\"-Karte — Span-Layouts für Ultrawides die in Wahrheit 2 Monitore sind, Spiegel-Modus, oder Bildschirm zurücksetzen kommen da rein." },
+  // v2.2.0-beta wave 2: floating preview toggle in the header — own
+  // tour stop so users notice the new global preview path.
+  "tour.preview_toggle.title": { en: "Live preview",          de: "Live-Vorschau" },
+  "tour.preview_toggle.body":  { en: "Toggles a floating preview of the wallpaper while you tweak settings — independent of which tab you're on. Survives scroll, follows the active screen.",
+                                 de: "Schaltet eine schwebende Vorschau des Wallpapers an während du Einstellungen änderst — unabhängig vom Tab. Bleibt beim Scrollen, folgt dem aktiven Bildschirm." },
   "tour.section_tabs.title": { en: "Section tabs",         de: "Bereichs-Tabs" },
-  "tour.section_tabs.body":  { en: "Five tabs split the settings: Look (background + glow + quick looks), Effects, Widgets, Integrations (OpenRGB / sACN / MQTT / API / plugins), System (presets + profiles + backup).",
-                               de: "Fünf Tabs teilen die Einstellungen: Look (Hintergrund + Glow + Quick Looks), Effekte, Widgets, Integrationen (OpenRGB / sACN / MQTT / API / Plugins), System (Voreinstellungen + Profile + Backup)." },
+  "tour.section_tabs.body":  { en: "Six tabs split the settings: Look (background + glow + screen layout), Library (wallpaper picker), Effects, Widgets, Integrations (OpenRGB / sACN / MQTT / API / plugins), System (presets + profiles + backup).",
+                               de: "Sechs Tabs teilen die Einstellungen: Look (Hintergrund + Glow + Layout), Library (Wallpaper-Auswahl), Effekte, Widgets, Integrationen (OpenRGB / sACN / MQTT / API / Plugins), System (Voreinstellungen + Profile + Backup)." },
   "tab.look":               { en: "Look",                 de: "Look" },
   "tab.library":            { en: "Library",              de: "Bibliothek" },
   // v1.7.5: Library tab-specific strings.
@@ -3024,6 +3678,13 @@ const TRANSLATIONS = {
   "library.sort.oldest":    { en: "Oldest first",         de: "Älteste zuerst" },
   "library.tags.all":       { en: "All tags",             de: "Alle Tags" },
   "library.empty_search":   { en: "No matches.",          de: "Keine Treffer." },
+  "library.filter_label":   { en: "Category",             de: "Kategorie" },
+  "library.source_label":   { en: "Source",               de: "Quelle" },
+  "library.tags_label":     { en: "Tags",                 de: "Tags" },
+  "library.autocut_label":  { en: "✨ Auto-cut on upload",
+                              de: "✨ Auto-Cut beim Upload" },
+  "library.autocut_title":  { en: "Apply Luminance-Alpha auto-cut to incoming images (same effect as the bundled v2.0 wallpapers — bright pixels become transparent, dark backdrop stays opaque).",
+                              de: "Wendet Luminanz-Alpha Auto-Cut auf neue Bilder an (gleicher Effekt wie die mitgelieferten v2.0-Wallpaper — helle Pixel werden transparent, dunkler Hintergrund bleibt deckend)." },
   // v2.0.1: manual pack browse hint (in-app downloader removed).
   "packs.section":          { en: "More wallpapers — themed packs on GitHub",
                               de: "Mehr Wallpaper — Themen-Packs auf GitHub" },
@@ -3031,9 +3692,12 @@ const TRANSLATIONS = {
                               de: "13 Themen-Packs (je ~9–52 MB) liegen als GitHub-Release-Assets bereit. Lade die ZIPs runter und entpacke den Inhalt direkt nach <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\library\\</code> — die Bridge erkennt sie automatisch." },
   "packs.manual_link":      { en: "Browse packs on GitHub →",
                               de: "Packs auf GitHub öffnen →" },
+  "packs.open_folder":      { en: "📂 Open library folder",
+                              de: "📂 Bibliotheksordner öffnen" },
   "packs.defender_note":    { en: "The previous in-app download flow was removed in v2.0.1 because Windows Defender flagged the unsigned download + extract code as suspicious. We're evaluating code-signing + a separate small downloader so the in-app flow can come back without the false-positive risk.",
                               de: "Der eingebaute Download-Flow wurde in v2.0.1 entfernt, weil Windows Defender den unsignierten Download- + Extract-Code als verdächtig markiert hat. Wir prüfen Code-Signing + einen separaten kleinen Downloader, damit der In-App-Ablauf ohne False-Positive-Risiko zurückkommen kann." },
   "bg.goto_library":        { en: "Browse library...",    de: "Bibliothek öffnen..." },
+  "bg.current_thumb":       { en: "No background",        de: "Kein Hintergrund" },
   "bg.goto_library_hint":   { en: "Browse, search and apply bundled + your own wallpapers.",
                               de: "Stöbern, suchen und anwenden — mitgelieferte und eigene." },
   "tab.effects":            { en: "Effects",              de: "Effekte" },
@@ -3184,6 +3848,12 @@ const TRANSLATIONS = {
                                     de: "Live-Vorschau · WYSIWYG-iframe der echten Wallpaper-Page" },
   "widgets.preview.live_refresh": { en: "Reload preview",  de: "Vorschau neu laden" },
   "widgets.preview.live_toggle":  { en: "Show live preview", de: "Live-Vorschau anzeigen" },
+  "widgets.preview.maximize":     { en: "Maximize preview (Esc to exit)",
+                                    de: "Vorschau vergrößern (Esc zum Schließen)" },
+  "widgets.preview.floating_hint": { en: "Live preview is floating — close it to bring back here.",
+                                     de: "Live-Vorschau schwebt rechts unten — schließen, um sie hier einzubinden." },
+  "widgets.preview.floating_restore": { en: "Bring back inline",
+                                        de: "Zurück hier einbinden" },
   "section.looks":          { en: "Quick Looks",                de: "Quick Looks" },
   "looks.hint":             { en: "Pre-built combinations — background + effects + widgets — for the most common desktop archetypes. Pick one to replace the current screen's configuration with the bundle.",
                               de: "Vorgebaute Kombinationen — Hintergrund + Effekte + Widgets — für die häufigsten Desktop-Archetypen. Pick einen aus, ersetzt die aktuelle Bildschirm-Konfiguration mit dem Bundle." },
@@ -3217,6 +3887,116 @@ function t(key, params) {
   }
   return text;
 }
+// v2.2.0-beta: Configurator v3 — dedicated floating preview window
+// with its own iframe instance. The inline preview in the Widgets
+// tab stays where it is — the two now operate completely
+// independently, no DOM swapping. The header "Vorschau" toggle just
+// shows / hides the floating wrap.
+(function setupFloatingPreview() {
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("header-toggle-preview");
+    if (!btn) return;
+
+    function ensureFloatingHost() {
+      let host = document.getElementById("floating-preview");
+      if (host) return host;
+      host = document.createElement("div");
+      host.id = "floating-preview";
+      host.className = "floating-preview";
+      host.innerHTML =
+        '<div class="floating-preview-head">' +
+          '<span class="floating-preview-title">Live preview</span>' +
+          '<button type="button" class="floating-preview-close" ' +
+          'title="Close (Esc)">✕</button>' +
+        '</div>' +
+        '<div class="floating-preview-frame">' +
+          '<iframe id="floating-preview-iframe" ' +
+            'title="Live wallpaper preview (floating)" ' +
+            'sandbox="allow-scripts allow-same-origin"></iframe>' +
+        '</div>';
+      document.body.appendChild(host);
+      host.querySelector(".floating-preview-close")
+          .addEventListener("click", close);
+      return host;
+    }
+
+    function syncFloatingIframe() {
+      const ifr = document.getElementById("floating-preview-iframe");
+      const frame = document.querySelector(
+        "#floating-preview .floating-preview-frame");
+      if (!ifr || !frame) return;
+      if (typeof _liveIframeSrc === "function") {
+        const src = _liveIframeSrc();
+        if (ifr.src !== src) ifr.src = src;
+      }
+      const nativeW = (settings && settings.viewportW) || 1920;
+      const nativeH = (settings && settings.viewportH) || 1080;
+      // The frame is initially height-less because the iframe is
+      // position:absolute. Don't bail on rect.height — compute scale
+      // from width and *set* the height ourselves so the frame
+      // visibly inflates.
+      const rect = frame.getBoundingClientRect();
+      if (!rect.width) return;
+      const scale = rect.width / nativeW;
+      ifr.style.width  = nativeW + "px";
+      ifr.style.height = nativeH + "px";
+      ifr.style.transform = "scale(" + scale + ")";
+      frame.style.height = (nativeH * scale) + "px";
+    }
+
+    function open() {
+      const host = ensureFloatingHost();
+      host.classList.add("show");
+      document.body.classList.add("preview-floating");
+      btn.classList.add("active");
+      try { localStorage.setItem("cfg.previewFloating", "1"); } catch (_) {}
+      requestAnimationFrame(syncFloatingIframe);
+    }
+    function close() {
+      const host = document.getElementById("floating-preview");
+      if (host) host.classList.remove("show");
+      document.body.classList.remove("preview-floating");
+      btn.classList.remove("active");
+      try { localStorage.setItem("cfg.previewFloating", "0"); } catch (_) {}
+    }
+
+    let want = false;
+    try { want = localStorage.getItem("cfg.previewFloating") === "1"; }
+    catch (_) {}
+    if (want) open();
+
+    btn.addEventListener("click", () => {
+      if (document.body.classList.contains("preview-floating")) close();
+      else open();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape"
+          && document.body.classList.contains("preview-floating")) {
+        close();
+      }
+    });
+    // Re-sync the floating iframe whenever settings change (active
+    // screen switch, bgImage update, …). Cheap: just calls
+    // syncFloatingIframe which no-ops when host isn't visible.
+    window._syncFloatingPreviewSrc = () => {
+      if (document.body.classList.contains("preview-floating")) {
+        syncFloatingIframe();
+      }
+    };
+  });
+})();
+
+// v2.2.0-beta: tooltips set via JS at element-creation time (because
+// the legacy applyI18n() unconditionally clobbers textContent on any
+// element carrying data-i18n, which would nuke SVG / input children).
+// This hook re-applies them on language switch.
+function _refreshV220Tooltips() {
+  const max = document.getElementById("live-preview-maximize");
+  if (max) max.title = t("widgets.preview.maximize");
+  const ac = document.getElementById("library-autocut-toggle");
+  if (ac) ac.title = t("library.autocut_title");
+}
+
 function applyI18n() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const key = el.getAttribute("data-i18n");
@@ -3235,6 +4015,7 @@ function applyI18n() {
     if (html) el.innerHTML = txt; else el.textContent = txt;
   }
   document.title = t("header.title");
+  _refreshV220Tooltips();
 }
 function setLanguage(lang) {
   if (lang === _lang) return;
@@ -3955,7 +4736,37 @@ for (let i = 0; i < N_SCREENS; i++) {
   textSpan.className = "tab-text";
   textSpan.textContent = t("screens.label_simple", { n: i + 1 });
   tab.appendChild(textSpan);
+  // v2.2.0-beta: discoverable per-screen popover via right-click.
+  // Replaces the dedicated gear icon next to the tab.
+  tab.title = t("screens.tab_tooltip");
+  tab.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (i !== activeScreen) switchScreen(i);
+    showScreenPopover(tab);
+  });
   tab.addEventListener("click", () => switchScreen(i));
+  // v2.2.0-beta: tabs accept a library-tile drag. Dropping a tile
+  // on tab N applies that image to screen N without switching
+  // active-screen focus first.
+  tab.addEventListener("dragover", (e) => {
+    if (!_libDragFile) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    tab.classList.add("drop-target");
+  });
+  tab.addEventListener("dragleave", () => {
+    tab.classList.remove("drop-target");
+  });
+  tab.addEventListener("drop", (e) => {
+    tab.classList.remove("drop-target");
+    if (!_libDragFile) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const file = _libDragFile;
+    const item = (libraryCatalogue || []).find((it) => it.file === file);
+    if (!item) return;
+    applyLibraryItem(item, i);
+  });
   els.tabs.appendChild(tab);
 
   // Per-tab settings gear. Rendered inline next to the tab so each
@@ -4138,6 +4949,25 @@ function renderOverviewCard(screens) {
   }
   els.tabs.appendChild(wrap);
   els.scPick = wrap;
+  // v2.2.0-beta: also mirror the picker into the System tab card so
+  // the user can change screen count from there now that the top
+  // toolbar version is hidden.
+  document.addEventListener("DOMContentLoaded", () => {
+    const host = document.getElementById("screencount-host");
+    if (!host) return;
+    const sysWrap = document.createElement("div");
+    sysWrap.className = "screencount-pick screencount-pick-in-card";
+    for (let n = 1; n <= N_SCREENS; n++) {
+      const b = document.createElement("button");
+      b.className = "sc-btn";
+      b.dataset.n = String(n);
+      b.textContent = String(n);
+      b.addEventListener("click", () => setScreenCount(n));
+      sysWrap.appendChild(b);
+    }
+    host.appendChild(sysWrap);
+    els.scPickInCard = sysWrap;
+  });
 })();
 
 function setScreenCount(n) {
@@ -4190,6 +5020,11 @@ function switchScreen(n) {
   // Re-source the live-preview iframe so it points at the newly
   // active screen's wallpaper page.
   if (typeof refreshLivePreview === "function") refreshLivePreview();
+  // v2.2.0-beta: keep the per-tab mini layout toolbar highlight in
+  // sync with the freshly-selected screen.
+  if (typeof renderMonitorSetupPopover === "function") {
+    renderMonitorSetupPopover();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4721,40 +5556,36 @@ function renderLibraryStrip() {
       deleteLibraryItem(item);
     });
     btn.appendChild(del);
-    // Click pins the preview (no auto-dismiss on mouseleave). Apply
-    // happens only via the dedicated button inside the preview — that
-    // way a stray click can't replace the user's wallpaper.
+    // v2.2.0-beta wave 2: span hover-overlays removed — they
+    // cluttered every tile in span mode and the right-click /
+    // Apply-dialog routes already cover the same use-case.
+    // v2.2.0-beta wave 2: simplified interaction model.
+    //   click  → opens the context menu at the click position
+    //   dblclick → still applies immediately for power users
+    //   hover  → posts the image url to the live-preview iframe so
+    //            the wallpaper canvas previews the image in place
+    //   leave  → restore the iframe to the real bg
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      if (_libPreviewHideTimer) {
-        clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
-      }
-      showLibraryPreview(item, btn.getBoundingClientRect(), true);
+      _restoreLivePreviewBg();
+      showLibraryContextMenu(item, e.clientX, e.clientY);
     });
-    // v1.7.5: double-click = apply immediately. Skips the
-    // preview-then-Apply two-step the single-click path uses.
     btn.addEventListener("dblclick", (e) => {
       e.preventDefault();
-      hideLibraryPreview();
+      _restoreLivePreviewBg();
       applyLibraryItem(item);
     });
-    btn.addEventListener("mouseenter", () => {
-      if (_libPreviewPinned) return;
-      if (_libPreviewHideTimer) {
-        clearTimeout(_libPreviewHideTimer); _libPreviewHideTimer = null;
-      }
-      showLibraryPreview(item, btn.getBoundingClientRect(), false);
-    });
-    btn.addEventListener("mouseleave", () => scheduleHideLibraryPreview(180));
+    btn.addEventListener("mouseenter", () => _previewLibraryItemInLive(item));
+    btn.addEventListener("mouseleave", () => _restoreLivePreviewBg());
     btn.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      hideLibraryPreview();
+      _restoreLivePreviewBg();
       showLibraryContextMenu(item, e.clientX, e.clientY);
     });
     btn.addEventListener("dragstart", (e) => {
       _libDragFile = item.file;
       btn.classList.add("dragging");
-      hideLibraryPreview();
+      _restoreLivePreviewBg();
       hideLibraryContextMenu();
       try {
         e.dataTransfer.effectAllowed = "move";
@@ -5057,6 +5888,22 @@ function showLibraryContextMenu(item, x, y) {
   el.appendChild(catEntry("template",   t("bg.library.ctx.cat.template")));
   el.appendChild(catEntry("both",       t("bg.library.ctx.cat.both")));
   el.appendChild(sep());
+  // v2.2.0-beta: in-place rotate / flip. Server side rewrites the
+  // WebP (+ thumb + 4K siblings) via Pillow. No Builder roundtrip
+  // for what's mostly a "this photo loaded sideways" moment.
+  if (!itemIsVid) {
+    el.appendChild(make(t("bg.library.ctx.rotate90cw"),
+      () => transformLibraryItem(item, "rotate90cw")));
+    el.appendChild(make(t("bg.library.ctx.rotate90ccw"),
+      () => transformLibraryItem(item, "rotate90ccw")));
+    el.appendChild(make(t("bg.library.ctx.rotate180"),
+      () => transformLibraryItem(item, "rotate180")));
+    el.appendChild(make(t("bg.library.ctx.flipH"),
+      () => transformLibraryItem(item, "flipH")));
+    el.appendChild(make(t("bg.library.ctx.flipV"),
+      () => transformLibraryItem(item, "flipV")));
+    el.appendChild(sep());
+  }
   // v1.7.5: tag editor — comma-separated prompt. Cheap UI, the bridge
   // normalises (lowercase + dedup + length-cap) so we don't have to.
   el.appendChild(make(t("bg.library.ctx.tags"),      () => editLibraryTags(item)));
@@ -5216,6 +6063,25 @@ async function blobToImageBitmap(blob) {
 //   2. free-text field for one-off new tags
 // Bridge normalises (trim + lowercase + dedup + length/count cap)
 // so the dialog can stay dumb. Empty submission wipes tags.
+// v2.2.0-beta: in-place rotate / flip via the bridge's PIL pipeline.
+// Saves the user from the Library -> Builder -> Apply roundtrip
+// for what's usually a one-click correction. Server handles main +
+// thumb + 4K siblings together so they stay consistent.
+async function transformLibraryItem(item, op) {
+  try {
+    const r = await fetch("/library/transform", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: item.file, op }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    toast(t("bg.library.transform_ok"), "good");
+    await refreshLibrary();
+  } catch (e) {
+    toast("Transform failed: " + e.message, "bad");
+  }
+}
+
 async function editLibraryTags(item) {
   const current = Array.isArray(item.tags)
     ? item.tags.map((s) => String(s).toLowerCase()) : [];
@@ -5464,27 +6330,99 @@ if (_libUpload) {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";   // allow re-uploading the same name in one session
     if (!file) return;
-    const label = file.name.replace(/\.(png|jpe?g|webp|gif|bmp)$/i, "");
-    try {
-      const buf = await file.arrayBuffer();
-      // v1.6.1-beta: explicit Background category — the Configurator's
-      // "Upload" button is the user's intent path for backgrounds. Source
-      // images for the Builder can be re-categorised via right-click.
-      const url = "/library/upload?name=" + encodeURIComponent(label)
-                + "&category=background";
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: buf,
-      });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      toast(t("bg.library.uploaded", { label }), "good");
-      await refreshLibrary();
-    } catch (err) {
-      toast("Upload failed: " + err.message, "bad");
-    }
+    await uploadFileToLibrary(file);
   });
 }
+
+// v2.2.0-beta: Library hint "Open folder" button + auto-cut toggle
+// persistence wire-up.
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("lib-open-folder-btn");
+  if (btn) btn.addEventListener("click", async () => {
+    try {
+      const r = await fetch("/library/openfolder", { method: "POST" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+    } catch (e) {
+      toast("Open folder failed: " + e.message, "bad");
+    }
+  });
+  const autocut = document.getElementById("library-autocut");
+  if (autocut) {
+    try {
+      autocut.checked = localStorage.getItem("cfg.libraryAutoCut") === "1";
+    } catch (_) {}
+    autocut.addEventListener("change", () => {
+      try {
+        localStorage.setItem("cfg.libraryAutoCut",
+                             autocut.checked ? "1" : "0");
+      } catch (_) {}
+    });
+  }
+});
+
+// v2.2.0-beta: shared file → library uploader. Used by the explicit
+// "Add image…" picker and by the document-wide drag-and-drop handler.
+// Always tags the new entry as a background — the right-click "Use
+// as Template" toggle is still one click away if the user wanted it
+// for the Builder instead.
+async function uploadFileToLibrary(file) {
+  const label = file.name.replace(/\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v)$/i, "");
+  const autocut = !!(document.getElementById("library-autocut")
+                     && document.getElementById("library-autocut").checked);
+  try {
+    const buf = await file.arrayBuffer();
+    const url = "/library/upload?name=" + encodeURIComponent(label)
+              + "&category=background"
+              + (autocut ? "&autocut=1" : "");
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: buf,
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    toast(t("bg.library.uploaded", { label }), "good");
+    await refreshLibrary();
+  } catch (err) {
+    toast("Upload failed: " + err.message, "bad");
+  }
+}
+
+// v2.2.0-beta: document-wide drag-and-drop. Drop an image / video
+// file anywhere on the Configurator and it lands in the library.
+// We mark the active drag-area with a body class so we can fade
+// in an overlay hint without re-rendering anything.
+(function setupDocumentDragDrop() {
+  let dragDepth = 0;
+  document.addEventListener("dragenter", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types.includes("Files")) return;
+    dragDepth++;
+    document.body.classList.add("dnd-active");
+  });
+  document.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) document.body.classList.remove("dnd-active");
+  });
+  document.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  document.addEventListener("drop", async (e) => {
+    dragDepth = 0;
+    document.body.classList.remove("dnd-active");
+    if (!e.dataTransfer || !e.dataTransfer.files
+        || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    // Filter to image / video extensions — any other dropped file
+    // type would just fail on the bridge side with a confusing
+    // 400 error.
+    const accepted = /\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v)$/i;
+    for (const f of e.dataTransfer.files) {
+      if (!accepted.test(f.name)) continue;
+      await uploadFileToLibrary(f);
+    }
+  });
+})();
 
 // v1.2.13: dialog the user gets when they hit Apply on a STILL-image
 // library item while the active screen is in a span layout (one
@@ -5812,7 +6750,95 @@ setTimeout(() => {
       window.activateSectionTab("library");
     });
   }
+  // v2.2.0-beta: the BG thumbnail in the Look tab also routes to the
+  // Library tab so users have a second prominent entry point.
+  const thumbBtn = document.getElementById("bg-current-thumb");
+  if (thumbBtn && typeof window.activateSectionTab === "function") {
+    thumbBtn.addEventListener("click", () => {
+      window.activateSectionTab("library");
+    });
+  }
 }, 0);
+
+// v2.2.0-beta: keep the BG preview thumbnail in the Look tab in sync
+// with whatever's on settings.bgImage. Called from the WS-settings
+// handler.
+// v2.2.0-beta: Screen-setup button in the Look tab opens the same
+// popover the (now hidden) gear icon used to. Plus a small summary
+// next to the button so the user sees "Single" / "Span" / "Stacked"
+// at a glance without opening the popover.
+document.addEventListener("DOMContentLoaded", () => {
+  const setupBtn = document.getElementById("screen-setup-open");
+  if (setupBtn) setupBtn.addEventListener("click", (e) => {
+    // Stop the global click handler at line ~8212 from immediately
+    // closing the popover we're about to open.
+    e.stopPropagation();
+    if (typeof showScreenPopover === "function") showScreenPopover(setupBtn);
+  });
+});
+function refreshScreenSetupSummary() {
+  const el = document.getElementById("screen-setup-summary");
+  if (!el) return;
+  const setup = (settings && settings.monitorSetup) || { mode: "single" };
+  const mode = setup.mode || "single";
+  const labelKey = mode === "span-h" ? "setup.layout.side_by_side"
+                 : mode === "span-v" ? "setup.layout.stacked"
+                 : "setup.layout.single";
+  el.textContent = t(labelKey);
+}
+
+// v2.2.0-beta wave 2: hover a library tile → temporarily preview
+// its image in the live-preview iframe + the floating preview iframe.
+// Uses postMessage so the wallpaper page can swap the bg image
+// client-side without writing to settings; mouseleave clears it.
+// If the wallpaper page doesn't handle the message, the hover just
+// has no visible effect — safe fallback.
+function _previewLibraryItemInLive(item) {
+  const file = item && item.file;
+  if (!file) return;
+  const url = "/library/" + encodeURIComponent(file);
+  const msg = { type: "previewBg", url };
+  try {
+    const ifr1 = document.getElementById("live-preview-iframe");
+    if (ifr1 && ifr1.contentWindow) {
+      ifr1.contentWindow.postMessage(msg, "*");
+    }
+    const ifr2 = document.getElementById("floating-preview-iframe");
+    if (ifr2 && ifr2.contentWindow) {
+      ifr2.contentWindow.postMessage(msg, "*");
+    }
+  } catch (_) {}
+}
+function _restoreLivePreviewBg() {
+  const msg = { type: "previewBgClear" };
+  try {
+    const ifr1 = document.getElementById("live-preview-iframe");
+    if (ifr1 && ifr1.contentWindow) {
+      ifr1.contentWindow.postMessage(msg, "*");
+    }
+    const ifr2 = document.getElementById("floating-preview-iframe");
+    if (ifr2 && ifr2.contentWindow) {
+      ifr2.contentWindow.postMessage(msg, "*");
+    }
+  } catch (_) {}
+}
+
+function refreshLookBgThumb() {
+  const thumb = document.getElementById("bg-current-thumb");
+  if (!thumb) return;
+  const lbl = thumb.querySelector(".bg-current-thumb-label");
+  const path = (settings && settings.bgImage) || "";
+  if (path) {
+    const url = "/image?path=" + encodeURIComponent(path)
+              + "&v=" + ((settings && settings.bgMtime) || Date.now());
+    thumb.style.backgroundImage = "url(\"" + url + "\")";
+    if (lbl) lbl.textContent =
+      (path.split(/[/\\]/).pop() || "").replace(/\.[^.]+$/, "");
+  } else {
+    thumb.style.backgroundImage = "";
+    if (lbl) lbl.textContent = t("bg.current_thumb");
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Apply to all screens — per-section button in each card header. Each
@@ -7531,6 +8557,14 @@ function connect() {
           renderSystemSection();
         }
         renderAll();
+        // v2.2.0-beta: re-light the per-tab mini layout toolbar after
+        // every settings push so multi-tab edits + initial sync both
+        // land on the right active button.
+        if (typeof renderMonitorSetupPopover === "function") {
+          renderMonitorSetupPopover();
+        }
+        if (typeof refreshLookBgThumb === "function") refreshLookBgThumb();
+        if (typeof refreshScreenSetupSummary === "function") refreshScreenSetupSummary();
         // Deep-link from a wallpaper-page gear icon: open the matching
         // widget's options modal once its settings are in. Handled here
         // (after the renderAll) so the modal can pick the widget out
@@ -7654,7 +8688,10 @@ let _tourStep = 0;
 const TOUR_STEPS = [
   { selector: null,                  i18n: "welcome" },
   { selector: "#tabs",               i18n: "tabs" },
-  { selector: ".tab-gear",           i18n: "tab_gear", optional: true },
+  // v2.2.0-beta: gear button hidden; tour now points at the
+  // Bildschirm-Layout card (lives in the Look tab) directly.
+  { selector: "#card-screen-setup",  i18n: "tab_gear", optional: true, tab: "look" },
+  { selector: "#header-toggle-preview", i18n: "preview_toggle", optional: true },
   { selector: "#section-tabs",       i18n: "section_tabs", optional: true },
   { selector: "#card-looks",         i18n: "looks",   tab: "look" },
   { selector: "#card-bg",            i18n: "bg",      tab: "look" },
@@ -8987,6 +10024,28 @@ function refreshLivePreview() {
   };
   els.livePreviewIframe.addEventListener("load", onLoad);
 }
+// v2.2.0-beta: maximize toggle for the live preview iframe.
+// Re-fires syncLivePreviewScale so the iframe re-down-scales to fit
+// the new container size.
+function _toggleLivePreviewMaximize() {
+  const frame = els.livePreviewFrame;
+  if (!frame) return;
+  frame.classList.toggle("maximized");
+  // Allow CSS to settle before re-measuring the container width.
+  requestAnimationFrame(() => syncLivePreviewScale());
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("live-preview-maximize");
+  if (btn) btn.addEventListener("click", _toggleLivePreviewMaximize);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const frame = els.livePreviewFrame;
+  if (frame && frame.classList.contains("maximized")) {
+    _toggleLivePreviewMaximize();
+  }
+});
+
 function syncLivePreviewAspect() {
   if (!els.livePreviewFrame) return;
   const w = settings.viewportW || 1920;

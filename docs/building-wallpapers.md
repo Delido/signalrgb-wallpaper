@@ -41,10 +41,11 @@ needed.
    through.
 8. Click **Undo** to remove the last click, or **Reset** to start over.
 9. Click **Save as PNG** to download via your browser as
-   `<original-name>-glow.png`, or click one of the **Apply to screen
-   → 1 / 2 / 3 / 4** buttons to push the PNG straight to the bridge's
-   `POST /screen/N/background` endpoint — the wallpaper picks it up
-   instantly without a download-and-pick step.
+   `<original-name>-glow.png`, or click the **Apply ▾** button in the
+   canvas toolbar (top-right) to push straight to a chosen bridge
+   screen — stretched onto a single screen, or split across a span if
+   the source aspect matches. Apply also drops a copy into your
+   library so you can re-apply later without re-editing.
 10. (Download route only) Open the tray icon → **Configurator…** →
     pick the screen tab → *Background* → *Choose image…* → pick your
     new PNG. The bridge stores it under
@@ -53,6 +54,23 @@ needed.
 
 That's it. The wallpaper updates live across all monitors displaying
 that screen index — no host reload.
+
+### Monitor-Wall mode (multi-tile)
+
+The right-side **Monitor Wall** section turns the Builder into a
+tile-based composer instead of a single canvas:
+
+- Each bridge screen becomes one or more tiles (a span layout produces
+  one tile per physical monitor — each tile shows the half / quarter
+  of the image that screen would actually render).
+- Click an empty tile to load an image into just that tile (file
+  picker / library / current canvas / current screen background).
+- Click a filled tile and pick *Edit in main canvas* to open the slot
+  in the editor; **Save back to slot** drops the edits in place.
+- Drop a panorama onto a span tile and the Builder offers to **split
+  it across the span** — one slice per monitor, properly cropped.
+- Click **Apply Wall to screens** to composite every staged tile into
+  one PNG per bridge screen and push them to the bridge.
 
 ### Tips for the builder
 

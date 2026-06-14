@@ -192,28 +192,36 @@ enable **SignalRGBBridge**. If the process isn't running at all, see
 
 Right-click the tray icon → **Configurator…** (default action).
 A browser tab opens at `http://127.0.0.1:17320/configurator`. Per-screen
-tabs at the top.
+tabs at the top, **vertical section sidebar** on the left, and a
+**📺 Vorschau** toggle in the header that pops a floating live
+preview of the wallpaper (independent of the open tab).
 
-For each active screen, the page has four collapsible sections:
+The sidebar splits the settings into six tabs:
 
-- **Background** — image path field + file-picker (uploads via PNG-via-canvas
-  to the bridge's `POST /screen/N/background` endpoint, same path the
-  builder uses), Fit dropdown, Dim slider.
-- **Glow** — layout (pixel grid / vertical / horizontal stripes / centered
-  pills / hidden), strength %, grid blur, stripes blur, show-bars toggle.
-- **Effects** — ambient preset tiles (snow / rain / sparks / aurora with
-  live mini-canvas previews), tint toggle, density, pixelfx mode (mouse
-  trail / hover glow / click ripple / all), 3D parallax slider.
+- **Look** — Quick Looks, Background (with current-bg thumbnail),
+  Glow, and a **Screen-Layout** card that declares span / mirror
+  setups for ultrawides that are actually two monitors.
+- **Library** — searchable / sortable / tag-filtered wallpaper grid
+  with right-click context menu (apply / rotate / mirror / pin /
+  delete) and a live-preview-on-hover.
+- **Effects** — ambient preset tiles (snow / rain / sparks / aurora
+  with live mini-canvas previews), tint toggle, density, pixelfx mode
+  (mouse trail / hover glow / click ripple / all), 3D parallax.
 - **Widgets** — prominent lock-bar at the top, drag-and-resize layout
   preview underneath (snap-to-grid optional), widget list with per-type
   *Configure* + *Remove* buttons, add-widget picker grid.
+- **Integrations** — System (bridge toggles + maintenance) stays open;
+  OpenRGB output, OpenRGB SDK server, per-screen colour source, sACN /
+  E1.31, MQTT, REST API, plugins each collapse into their own block.
+- **System** — presets, per-app profiles, backup / restore, screen
+  count picker.
 
 Settings push to the live wallpaper over WebSocket immediately — no
 Lively reload needed.
 
-For the screen count itself: in the Configurator, top-right of the
-tab bar there's a *Screens:* picker — click **1**, **2**, **3**, or
-**4**. The SignalRGB plugin polls the bridge every tick and adjusts
+For the screen count itself: open the **System** tab in the
+Configurator — the *Bildschirme / Screens* card has a **1 / 2 / 3 / 4**
+picker. The SignalRGB plugin polls the bridge every tick and adjusts
 its device list accordingly.
 
 ### 4. Place the SignalRGB devices on the canvas

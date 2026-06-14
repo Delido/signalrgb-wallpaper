@@ -4,6 +4,80 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-06-14
+
+Big UX pass on the Configurator + Builder, plus a hotfix for a
+freeze that hit Library uploads / rotate-flip on multi-MB images.
+
+### Added — Configurator vertical sidebar + floating preview
+
+The section nav moved from a horizontal tab row above the cards
+into a sticky vertical sidebar. A new **📺 Vorschau** toggle in the
+header pops a floating live preview of the wallpaper (its own
+iframe instance — no DOM moves, doesn't fight the Widgets-tab
+inline preview).
+
+Look-tab additions:
+
+- **Bildschirm-Layout** card replaces the per-tab ⚙ gear popover
+  (gear hidden). Span / mirror / reset live in the card directly.
+- Current-background thumbnail tile with click → Library tab.
+
+### Added — Library tab context menu
+
+Right-click on any library tile now shows apply / rotate / mirror /
+pin / rename / duplicate / delete. Rotate + flip operations run
+server-side via PIL (`POST /library/transform`), apply to the
+main file + thumb + 4K siblings together, and survive bridge
+restarts.
+
+### Added — Integrations sub-blocks
+
+The big System card on the Integrations tab now keeps `System`
+expanded by default and collapses each integration (OpenRGB
+output, OpenRGB SDK server, per-screen colour source, sACN /
+E1.31, MQTT, REST API, plugins) into its own `<details>` block.
+
+### Added — Builder: Apply ▾ from the canvas + Wall sub-region crop
+
+- New **Apply ▾** button in the canvas toolbar opens a dialog
+  with one entry per bridge screen (stretch or span-split). Skips
+  the full Monitor-Wall flow when you just have one image.
+- Wall tiles for span screens now render their actual sub-region
+  of the bridge background (`background-position` + `-size` crop)
+  instead of repeating the full image in every tile.
+- Drag-into-canvas always lands in the editor (the
+  *Editor / split-across-span* popup is gone).
+- "Bild auswählen…" button is visible in Simple mode too.
+
+### Added — Header logo + favicon
+
+Inline SVG (monitor + 5 RGB pads, mirroring the tray icon) in
+both the Configurator + Builder header bars, plus the same image
+as inline-data-URI favicon for both pages.
+
+### Fixed — Configurator froze for ~1 min on Library uploads with Auto-Cut
+
+The PIL alpha-cut + WebP encode + `_library_rebuild_catalogue`
+all ran synchronously inside the async HTTP handler — a 4K
+upload blocked every other Configurator / WebSocket / wallpaper
+request for the duration. Pushed both into the default executor
+and dropped the WebP encoder from `method=6` → `method=4`
+(~5× faster, near-identical quality for wallpapers).
+
+### Fixed — Library rotate / flip silently failed
+
+Same root cause as the Auto-Cut freeze, multiplied by three
+because rotate/flip re-encodes Main + Thumb + 4K variants per
+click. The bridge eventually answered, but the CEF fetch timed
+out first → JS toast surfaced as `Transform failed`. Same fix:
+move into executor, drop WebP method.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.2.0
+
+Wallpaper bundle re-import IS required (`wallpaper/index.html`
+shipped the in-page widget picker removal in this release).
+
 ## [1.7.4-beta] - 2026-06-06
 
 ### Fixed — library filter chips stayed English on first paint

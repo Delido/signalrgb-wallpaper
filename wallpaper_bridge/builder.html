@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>SignalRGB Wallpaper Builder</title>
+<!-- v2.2.0-beta wave 3: inline SVG favicon (matches Configurator). -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 56'><rect x='6' y='8' width='52' height='34' rx='3' fill='%231b1f2a' stroke='%234a5160' stroke-width='2'/><rect x='10' y='12' width='44' height='26' fill='%23050608'/><rect x='26' y='46' width='12' height='3' fill='%234a5160'/><rect x='20' y='50' width='24' height='2' fill='%234a5160'/><circle cx='17' cy='28' r='3' fill='%23ff2d6a'/><circle cx='25' cy='28' r='3' fill='%23ff8f2d'/><circle cx='33' cy='28' r='3' fill='%23ffe92d'/><circle cx='41' cy='28' r='3' fill='%2342ff85'/><circle cx='49' cy='28' r='3' fill='%232db4ff'/></svg>">
 <style>
   :root {
     --bg: #14171c;
@@ -31,11 +33,18 @@
   header {
     padding: 14px 18px;
     border-bottom: 1px solid var(--border);
-    display: flex; align-items: baseline; gap: 14px;
+    display: flex; align-items: center; gap: 14px;
   }
   header h1 { margin: 0; font-size: 17px; font-weight: 600; }
   header .sub { color: var(--text-dim); font-size: 12px; }
   header .spacer { flex: 1; }
+  /* v2.2.0-beta wave 3: top-left header logo (matches Configurator). */
+  header .brand-logo {
+    flex: 0 0 auto;
+    height: 28px;
+    width: auto;
+    margin-right: -4px;
+  }
   /* ── Simple / Advanced mode toggle (v1.2.3) ── */
   .mode-pick {
     display: inline-flex; align-items: center; gap: 0;
@@ -976,6 +985,17 @@
 <body>
 
 <header>
+  <svg class="brand-logo" viewBox="0 0 64 56" aria-hidden="true">
+    <rect x="6" y="8" width="52" height="34" rx="3" fill="#1b1f2a" stroke="#4a5160" stroke-width="2"/>
+    <rect x="10" y="12" width="44" height="26" fill="#050608"/>
+    <rect x="26" y="46" width="12" height="3" fill="#4a5160"/>
+    <rect x="20" y="50" width="24" height="2" fill="#4a5160"/>
+    <circle cx="17" cy="28" r="3" fill="#ff2d6a"/>
+    <circle cx="25" cy="28" r="3" fill="#ff8f2d"/>
+    <circle cx="33" cy="28" r="3" fill="#ffe92d"/>
+    <circle cx="41" cy="28" r="3" fill="#42ff85"/>
+    <circle cx="49" cy="28" r="3" fill="#2db4ff"/>
+  </svg>
   <h1 data-i18n="header.title">SignalRGB Wallpaper Builder</h1>
   <span class="sub" data-i18n="header.sub">Click bright areas to make them transparent, then apply to a screen.</span>
   <span class="spacer"></span>
@@ -1267,7 +1287,13 @@
         <input type="checkbox" id="glow-preview">
         <span data-i18n="glow.preview_label">Show glow preview</span>
       </label>
-      <span class="stat" id="canvas-stat"></span>
+      <span class="stat" id="canvas-stat" style="margin-right: 12px;"></span>
+      <!-- v2.2.0-beta wave 3: prominent Apply-from-editor entry point.
+           Opens a small dialog where the user picks how the current
+           canvas should land on the wall (single screen, span split,
+           per-tile composite). Disabled until a source image is loaded. -->
+      <button class="btn primary" id="canvas-apply-btn" type="button" disabled
+              data-i18n="canvas.apply">Apply ▾</button>
     </div>
     <div class="canvas-scroll" id="canvas-scroll">
       <div class="canvas-host" id="canvas-host" style="display: none;">
@@ -1311,7 +1337,12 @@
          loads + edits the image in one click. Advanced mode keeps the
          classic Load / Rotate workflow for the file → single-canvas
          flow the user already had muscle memory for. -->
-    <section class="simple-hide">
+    <!-- v2.2.0-beta wave 3: source/load section is no longer
+         simple-hidden. Simple-mode users still need a way to load a
+         single image without going through a tile click — drag-in
+         landed in the editor too — and they need the explicit
+         "Bild auswählen…" button. -->
+    <section>
       <h2 data-i18n="section.load">Load</h2>
       <div class="btn-row">
         <label class="btn primary" for="file-input" data-i18n="btn.choose_image">Choose image…</label>
@@ -1600,6 +1631,7 @@ const els = {
   activeRegion: $("active-region"),
   splitLine:    $("split-line"),
   canvasStat:   $("canvas-stat"),
+  canvasApplyBtn: $("canvas-apply-btn"),
 
   shapeOverlay: $("shape-overlay"),
   shapeToolbar: $("shape-toolbar"),
@@ -2016,6 +2048,20 @@ const TRANSLATIONS = {
   "section.split":  { en: "Multi-monitor split",  de: "Multi-Monitor-Aufteilung" },
   "split.show_guide": { en: "Show split guide",   de: "Aufteilungs-Hilfslinie anzeigen" },
 
+  // v2.2.0-beta wave 3: in-editor Apply button + its choose-how dialog.
+  "canvas.apply":         { en: "Apply ▾",       de: "Anwenden ▾" },
+  "canvas.apply.title":   { en: "Apply current canvas",
+                            de: "Aktuelle Leinwand anwenden" },
+  "canvas.apply.body":    { en: "Pick how the edited image should land on the wall:",
+                            de: "Wähle, wie das bearbeitete Bild auf die Wand soll:" },
+  "canvas.apply.span":    { en: "Span across {n} monitors of bridge {b}",
+                            de: "Über {n} Monitore von Bildschirm {b} spannen" },
+  "canvas.apply.single":  { en: "Stretch onto bridge screen {b} ({w}×{h})",
+                            de: "Auf Bildschirm {b} strecken ({w}×{h})" },
+  "canvas.apply.cancel":  { en: "Cancel",         de: "Abbrechen" },
+  "canvas.apply.no_screens": { en: "No bridge screens detected.",
+                               de: "Keine Bridge-Bildschirme erkannt." },
+
   // Toast templates — formatted at runtime via {placeholders}.
   "toast.decode_failed":  { en: "Failed to decode {name}",          de: "{name} konnte nicht dekodiert werden" },
   // v1.2.2: Builder first-run tour. Sibling to the Configurator
@@ -2046,6 +2092,13 @@ const TRANSLATIONS = {
   "tour.save.title":      { en: "Save back to slot",   de: "In Slot speichern" },
   "tour.save.body":       { en: "When you're done editing, the banner above the canvas has a Save button. Writes the edited image back to its wall tile — slot then shows the new preview.",
                             de: "Beim Editieren: Banner über der Leinwand hat einen Speichern-Button. Schreibt das Bild zurück in die Kachel — Slot zeigt die neue Vorschau." },
+  // v2.2.0-beta wave 3: in-editor Apply ▾ button. Independent from
+  // the Wall apply path — works on the single canvas, picks a bridge
+  // screen + lets you decide stretch vs. span split.
+  "tour.canvas_apply.title": { en: "Apply ▾ (in editor)",
+                               de: "Anwenden ▾ (im Editor)" },
+  "tour.canvas_apply.body":  { en: "Once you've loaded + edited an image in the canvas, this button lands it on a chosen bridge screen — stretched or split across a span. Skips the full Monitor-Wall flow when you just have one image.",
+                               de: "Wenn du ein Bild geladen + im Canvas bearbeitet hast, schickt dieser Knopf es direkt auf einen gewählten Bridge-Bildschirm — gestreckt oder über Span verteilt. Spart den ganzen Monitor-Wand-Flow wenn du nur ein Bild hast." },
   "tour.apply.title":     { en: "Apply Wall",          de: "Wand anwenden" },
   "tour.apply.body":      { en: "Composites every staged tile into one PNG per bridge screen (size = bridge resolution), with portrait tiles rotated and the rest cover-fitted. Posts to the bridge — wallpaper page repaints.",
                             de: "Baut pro Bridge-Schirm ein Composite-PNG (Größe = Bridge-Auflösung) — Portrait-Kacheln rotiert, Rest cover-fitted. Wird zur Bridge gepostet — Wallpaper-Seite repaintet." },
@@ -2166,24 +2219,12 @@ els.canvasArea.addEventListener("drop", (e) => {
 });
 
 async function loadFile(file) {
-  // v1.2.13: drag-onto-editor span-split offer. The editor drop loads
-  // the image as the editing source (current behaviour); when the
-  // wall has a span screen AND the image is visibly span-sized, we
-  // first ask whether the user wants to skip the editor and split
-  // directly across the span. The dialog adds an "Open in editor"
-  // option so the editing workflow is still one click away.
+  // v2.2.0-beta wave 3: drag-into-canvas always lands in the editor.
+  // The earlier "Open in editor / split across span" prompt got in the
+  // way — users wanted to edit first, then decide how to apply via
+  // the new "Anwenden" button in the editor.
   try {
     const img = await fileToImage(file);
-    const target = await _maybeOfferSpanSplitForEditor(img, file.name);
-    if (target === "cancel") return;
-    if (typeof target === "number") {
-      // _maybeOfferSpanSplitForEditor returns the anchor tile index
-      // for the chosen span — feed it into the existing split path.
-      await loadWallSlotsSpanSplit(target, file);
-      return;
-    }
-    // target === "editor" (or null on no-prompt path) → load as
-    // editor source the same way the pre-v1.2.13 flow did.
     applySourceImage(file.name, img);
   } catch (_) {
     els.imgStat.textContent = "Failed to decode image.";
@@ -2460,6 +2501,7 @@ function setControlsEnabled(on) {
   if (els.aiRunBtn) els.aiRunBtn.disabled = !on;
   els.applyBtns.forEach((b) => { b.disabled = !on; });
   els.splitBtns.forEach((b) => { b.disabled = !on; });
+  if (els.canvasApplyBtn) els.canvasApplyBtn.disabled = !on;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2858,35 +2900,36 @@ async function canvasToModelInput(canvas, SIDE) {
 //   • No licence — public-domain mathematics.
 //   • No model file — zero install / download size.
 //   • Fast — one O(N) histogram pass + one O(N) mask pass.
-// v2.0.2: luminance-alpha auto-cut. Mirrors the ComfyUI workflow
-// that produced the bundled v2.0 wallpapers — per-pixel BT.601
-// luminance with a soft ramp around an adjustable midpoint. Bright
-// pixels become transparent (alpha 0), dark pixels stay opaque
-// (alpha 255), and the band in between gets a linear gradient so
-// the SignalRGB glow blends in cleanly instead of a hard cutout
-// edge. Threshold slider biases the midpoint between 64 and 192:
+// v2.2.0-beta: luminance-alpha auto-cut. Continuous mapping from
+// BT.601 luminance to "cut-me" intensity — every pixel gets some
+// transparency, scaled by its brightness. Pure black stays fully
+// opaque, pure white becomes fully transparent, anything in between
+// gets a linearly proportional alpha cut. That matches the ComfyUI
+// default luminance → alpha node: the whole image fades through
+// instead of a hard threshold around a midpoint.
 //
-//   slider 50  → midpoint 128 (default — neutral)
-//   slider 0   → midpoint 192 (only very bright pixels go transparent)
-//   slider 100 → midpoint 64  (a much bigger chunk goes transparent)
+// Threshold slider becomes a gamma-style strength curve:
+//   slider 50  → linear (alpha cut = lum)            — default
+//   slider <50 → softer (alpha cut = lum^gamma>1)    — only the
+//                very brightest pixels show transparency
+//   slider >50 → stronger (alpha cut = lum^gamma<1)  — even mid-
+//                grey gets visibly transparent
 //
-// The ±32-level ramp half-width is the same value the ComfyUI
-// luminance node uses by default. Fully synchronous, no model,
-// no network.
+// Synchronous, no model, no network.
 function computeLuminanceAlpha(canvas) {
   const w = canvas.width, h = canvas.height;
   const px = canvas.getContext("2d").getImageData(0, 0, w, h).data;
   const N = px.length >> 2;
   const slider = parseInt(els.aiThreshold.value, 10);
-  const midpoint = 128 + (50 - slider) * 1.28;   // 64..192
-  const halfRamp = 32;
-  const lo = midpoint - halfRamp;
-  const span = 2 * halfRamp;
+  // Map slider 0..100 to gamma 2.2..0.45 with 50 → 1.0 (linear).
+  // Higher slider value = lower gamma = brighter alpha curve.
+  const gamma = slider <= 50
+    ? 1 + (50 - slider) / 50 * 1.2     // 1..2.2
+    : 1 - (slider - 50) / 50 * 0.55;   // 1..0.45
   const mask = new Uint8Array(N);
   for (let i = 0, m = 0; i < px.length; i += 4, m++) {
     const lum = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
-    let t = (lum - lo) / span;
-    if (t < 0) t = 0; else if (t > 1) t = 1;
+    const t = Math.pow(lum / 255, gamma);
     mask[m] = (t * 255) | 0;
   }
   return { mask, w, h };
@@ -4140,6 +4183,79 @@ function canvasToBlob(crop, type) {
 // Save / Apply actions
 // ─────────────────────────────────────────────────────────────────────────────
 
+// v2.2.0-beta wave 3: in-editor "Apply ▾" button. Opens a modal that
+// lists each bridge screen (with its actual resolution + span info)
+// and uploads the current canvas to the chosen one. For span screens
+// the canvas is uploaded as-is — the wallpaper handles the per-monitor
+// crop at render time, so the user just needs the source aspect to
+// match the span dimensions.
+function _showCanvasApplyDialog() {
+  if (!bridgeScreens || bridgeScreens.length === 0) {
+    toast(t("canvas.apply.no_screens"), "bad");
+    return;
+  }
+  const overlay = document.createElement("div");
+  overlay.className = "modal-backdrop on";
+  overlay.style.zIndex = "200";
+  let buttonsHtml = "";
+  for (let i = 0; i < bridgeScreens.length; i++) {
+    const bs = bridgeScreens[i];
+    const setup = (typeof monitorSetup === "object" && monitorSetup)
+      ? monitorSetup[i] : null;
+    const mode = (setup && setup.mode) || "single";
+    const isSpan = (mode === "span-h" || mode === "span-v");
+    const w = bs.reportedW || 1920, h = bs.reportedH || 1080;
+    if (isSpan) {
+      buttonsHtml +=
+        '<button class="btn btn-primary" data-idx="' + i + '" ' +
+        'style="text-align:left; margin: 4px 0; width: 100%;">' +
+        escapeHtml(t("canvas.apply.span", { n: 2, b: (i + 1) })) +
+        ' &nbsp;<small style="opacity:0.7;">(' + w + '×' + h + ')</small></button>';
+    } else {
+      buttonsHtml +=
+        '<button class="btn" data-idx="' + i + '" ' +
+        'style="text-align:left; margin: 4px 0; width: 100%;">' +
+        escapeHtml(t("canvas.apply.single", { b: (i + 1), w, h })) +
+        '</button>';
+    }
+  }
+  overlay.innerHTML =
+    '<div class="modal" style="max-width: 480px;">' +
+      '<header><h2>' + t("canvas.apply.title") + '</h2></header>' +
+      '<div class="body" style="font-size:13px; line-height:1.5;">' +
+        '<p style="margin: 0 0 12px 0;">' + t("canvas.apply.body") + '</p>' +
+        buttonsHtml +
+      '</div>' +
+      '<div class="actions">' +
+        '<button class="btn" data-choice="cancel">' +
+          t("canvas.apply.cancel") + '</button>' +
+      '</div>' +
+    '</div>';
+  function close() { overlay.remove(); }
+  overlay.addEventListener("click", (ev) => {
+    if (ev.target === overlay) close();
+  });
+  overlay.querySelector('[data-choice="cancel"]').addEventListener("click", close);
+  overlay.querySelectorAll("button[data-idx]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const idx = parseInt(b.dataset.idx, 10);
+      close();
+      try {
+        const blob = await canvasToBlob();
+        await uploadToScreen(idx, blob);
+        toast(t("toast.applied", { n: idx + 1, size: formatBytes(blob.size) }), "good");
+      } catch (e) {
+        toast(t("toast.apply_failed", { n: idx + 1, msg: e.message }), "bad");
+      }
+    });
+  });
+  document.body.appendChild(overlay);
+}
+
+if (els.canvasApplyBtn) {
+  els.canvasApplyBtn.addEventListener("click", _showCanvasApplyDialog);
+}
+
 els.saveBtn.addEventListener("click", async () => {
   try {
     const blob = await canvasToBlob();
@@ -4203,6 +4319,35 @@ async function uploadToScreen(screen, blob) {
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const json = await resp.json();
   if (!json.ok) throw new Error("bridge reported failure");
+  // v2.2.0-beta: after a successful Apply, also drop the edited
+  // PNG into the user's library so they can re-apply it later
+  // without having to re-edit. Label = source stem + " (edited)"
+  // when known, otherwise a date stamp. Best-effort — if the
+  // library save fails we still consider the apply successful.
+  try {
+    let label = "";
+    try {
+      const src = (typeof currentSourceLabel === "string"
+                    && currentSourceLabel) ? currentSourceLabel : "";
+      label = src ? (src + " (edited)") : "";
+    } catch (_) {}
+    if (!label) {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      label = "Builder " + d.getFullYear() + "-" + pad(d.getMonth() + 1)
+            + "-" + pad(d.getDate()) + " "
+            + pad(d.getHours()) + pad(d.getMinutes());
+    }
+    const libUrl = "/library/upload?name=" + encodeURIComponent(label)
+                 + "&category=background";
+    await fetch(libUrl, {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: blob,
+    });
+  } catch (e) {
+    console.warn("[builder] library save failed:", e);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4878,6 +5023,25 @@ function renderWall() {
       frame.style.backgroundImage = "url(" + slot.dataUrl + ")";
     } else if (curUrl) {
       frame.style.backgroundImage = "url(" + curUrl + ")";
+      // v2.2.0-beta wave 2: for span screens (where one bridge bg
+      // covers 2 sub-tiles), crop the visible part to this tile's
+      // slot rect using background-size + background-position. Each
+      // tile then shows the actual half / quarter the user's monitor
+      // would render, not the full image redundantly twice.
+      const bw = scr.bridgeW || scr.w;
+      const bh = scr.bridgeH || scr.h;
+      const sw = scr.slotW || bw;
+      const sh = scr.slotH || bh;
+      if (sw !== bw || sh !== bh) {
+        const scaleX = sz.w / sw;
+        const scaleY = sz.h / sh;
+        frame.style.backgroundSize =
+          (bw * scaleX) + "px " + (bh * scaleY) + "px";
+        frame.style.backgroundPosition =
+          (-(scr.xOffset || 0) * scaleX) + "px " +
+          (-(scr.yOffset || 0) * scaleY) + "px";
+        frame.style.backgroundRepeat = "no-repeat";
+      }
     }
 
     const label = document.createElement("span");
@@ -5975,6 +6139,10 @@ const BUILDER_TOUR_STEPS = [
   { selector: "#wall-canvas",         i18n: "wall" },
   { selector: ".canvas-area",         i18n: "canvas" },
   { selector: "#toolbox",             i18n: "tools" },
+  // v2.2.0-beta wave 3: in-editor Apply button (split / stretch /
+  // per-screen). Sits in the canvas toolbar — own tour stop so
+  // users find it before scrolling to the right Apply Wall panel.
+  { selector: "#canvas-apply-btn",    i18n: "canvas_apply", optional: true },
   { selector: "#files-panel",         i18n: "apply" },
   { selector: null,                   i18n: "done" },
 ];
