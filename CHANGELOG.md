@@ -4,6 +4,26 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2-beta] - 2026-06-15
+
+Targeted follow-up to v2.3.1-beta.
+
+### Fixed — library went blank after deleting the last item of an active tag / source filter
+
+`_libraryRevalidateFilters` only ran on initial page load. If the
+user filtered to a specific tag or source chip and then deleted
+every item that matched (single delete via the right-click menu OR
+the new bulk-delete), the JS-memory filter still pointed at the
+now-orphan value and `_itemPassesFilter` rejected every remaining
+item. Library tab rendered with just the "Bild hinzufügen" tile —
+the rest of the catalogue was fine on disk and on the wire, just
+invisible.
+
+The validator now runs after every `refreshLibrary()` too (which
+is the post-delete + post-pack-install / -uninstall path), so any
+orphan tag / source gets cleared immediately and the grid never
+goes blank because of an in-memory filter that survived a delete.
+
 ## [2.3.1-beta] - 2026-06-15
 
 Iteration on the v2.3.0-beta pack browser plus a stack of UX fixes

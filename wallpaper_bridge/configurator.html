@@ -5475,6 +5475,31 @@ function renderPresets() {
 
 let libraryCatalogue = null;
 
+// v2.3.1-beta.1: defensive filter reset extracted into a helper so
+// every catalogue refresh (initial load + post-delete refreshLibrary
+// + after-pack-install / -uninstall) re-validates the active
+// filters. Pre-2.3.1-beta.1 this only ran at initial load — a bulk
+// delete or right-click delete that removed the last item of a
+// chip's pack / tag silently left an orphan filter in JS memory and
+// the grid then rendered as just the "Add image" tile. Now ANY
+// catalogue refresh self-corrects.
+function _libraryRevalidateFilters() {
+  if (!Array.isArray(libraryCatalogue) || libraryCatalogue.length === 0) return;
+  if (_libraryPack) {
+    const packKeys = new Set();
+    for (const it of libraryCatalogue) packKeys.add(it.pack || "user");
+    if (!packKeys.has(_libraryPack)) {
+      _libraryPack = "";
+      try { localStorage.removeItem("cfg.libraryPack"); } catch (_) {}
+    }
+  }
+  if (_libraryTag) {
+    const hasTag = libraryCatalogue.some(
+      (it) => Array.isArray(it.tags) && it.tags.includes(_libraryTag));
+    if (!hasTag) _libraryTag = "";
+  }
+}
+
 (async function loadLibrary() {
   try {
     const resp = await fetch("/library/list");
@@ -5484,28 +5509,7 @@ let libraryCatalogue = null;
   } catch (e) {
     libraryCatalogue = [];
   }
-  // v2.3.0-beta.2: defensive filter reset. After a bulk delete the
-  // stored cfg.libraryPack / cfg.libraryTag in localStorage could
-  // point at a source / tag that no remaining item carries — the
-  // grid then renders empty even though the catalogue has plenty
-  // of items, and the user sees a blank Library page until they
-  // figure out to clear the filter manually. If we've loaded items
-  // BUT every persisted filter would drop them all, silently reset.
-  if (libraryCatalogue.length > 0) {
-    if (_libraryPack) {
-      const packKeys = new Set();
-      for (const it of libraryCatalogue) packKeys.add(it.pack || "user");
-      if (!packKeys.has(_libraryPack)) {
-        _libraryPack = "";
-        try { localStorage.removeItem("cfg.libraryPack"); } catch (_) {}
-      }
-    }
-    if (_libraryTag) {
-      const hasTag = libraryCatalogue.some(
-        (it) => Array.isArray(it.tags) && it.tags.includes(_libraryTag));
-      if (!hasTag) _libraryTag = "";
-    }
-  }
+  _libraryRevalidateFilters();
   renderLibraryStrip();
 })();
 
@@ -6664,6 +6668,11 @@ async function refreshLibrary() {
   } catch (_) {
     libraryCatalogue = [];
   }
+  // v2.3.1-beta.1: bulk-delete (or single delete via context menu)
+  // can leave _libraryTag / _libraryPack pointing at a value no
+  // remaining item carries. Re-validate every refresh so the grid
+  // never goes blank because of an orphan in-memory filter.
+  _libraryRevalidateFilters();
   renderLibraryStrip();
 }
 
