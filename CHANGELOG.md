@@ -4,6 +4,140 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1-beta] - 2026-06-15
+
+Iteration on the v2.3.0-beta pack browser plus a stack of UX fixes
+that surfaced under heavy testing. v2.3.0-beta.1 and -beta.2 tags
+were spun up during the iteration and never released; v2.3.1-beta
+folds everything together.
+
+### Added — preview thumbnail per pack
+
+Pack tiles in the Library tab's pack browser now show a 96×54
+preview of the pack's first image alongside the name + description.
+Sourced from
+`delido.github.io/signalrgb-wallpaper/library-packs-previews/<pack_id>.webp`,
+URL constructible from the pack id so no manifest bloat. Missing
+previews silently fall back to the solid placeholder.
+
+`installer/build_packs.py` now copies the preview WebPs into
+`docs/library-packs-previews/` on every build so the docs site
+stays in sync with the published ZIPs.
+
+### Added — pack uninstall
+
+Installed pack tiles show an **Uninstall** button next to Load /
+Update. Confirms first, then walks `library.json`, removes every
+file (+ thumb + 4K siblings) tagged with that pack, rebuilds the
+catalogue. User-uploaded items without pack metadata stay
+untouched. Runs in the executor.
+
+### Added — library multi-select with bulk delete
+
+New **Auswahl** toggle in the library toolbar puts the grid into
+selection mode. Tiles toggle on click, get a checkmark badge, and
+a bulk-action bar (**Select all** / **Clear** / **Delete selected**)
+appears above the grid. Bulk delete loops
+`DELETE /library/<name>` and reports counts.
+
+### Added — Bildschirme picker back in the header
+
+The screen-count picker (1/2/3/4) moved out of the System tab card
+and back into the header bar, next to **Vorschau** / **Tour** /
+**Open Builder…**. Feedback was that the screen count is changed
+often enough that it belongs at the top, not buried in System.
+
+### Changed — Voreinstellungen card moved to the Look tab
+
+The presets card lived in System through v2.3.0-beta and migrated
+through Widgets in -beta.1; final home is **Look**. That's where the
+per-screen background + glow + dim state is configured, so "save
+my current setup" naturally belongs there.
+
+Slot row redesigned: 80×45 thumb → 160×90 (the canvas's native
+render size, no down-clamp), grid layout with name + summary
+stacked next to the thumb instead of competing for flex space,
+dashed border on empty slots.
+
+### Fixed — pack browser only showed the last-installed pack as Installed
+
+The catalogue rebuild was preserving `pack_id` but stripping
+`pack_version`, and the installed-state check needed both. Now
+both round-trip through every rebuild so multiple packs can be
+installed simultaneously and the UI shows each one's badge
+correctly.
+
+### Fixed — cycle scheduler crashed on fullscreen pause edges
+
+`CycleScheduler._tick` called `bridge.get_screen_count()` (public
+name) but `BridgeRuntime` exposes `_get_screen_count()`
+(underscored). Every 30 s, if the cycle path got touched (e.g.
+during a fullscreen-pause transition), the log lit up with
+`[cycle] tick crashed: 'BridgeRuntime' object has no attribute
+'get_screen_count'`. Wired to the underscored member.
+
+### Fixed — preset thumbnails were always black
+
+`generatePresetThumbnail` fetched `/screen/{n}/background` to paint
+the BG layer, but that endpoint is POST-only (upload). 404 silently
+meant the BG was skipped and every preset thumb came out as a
+black widget grid. Now reads `settings.bgImage` directly — same
+source the wallpaper page renders from — and routes absolute paths
+through the `/image` proxy.
+
+### Fixed — assorted multi-select edges
+
+- Bulk-action bar showed `{n} ausgewählt` literally on first
+  Library open because the i18n pass painted the raw placeholder
+  before `_libUpdateBulkBar` ever ran. Removed `data-i18n` from
+  the count span; JS owns the text fully.
+- Bar was visible on initial Library open before any selection —
+  `display: flex` won against the HTML `hidden` attribute. Added
+  `.lib-bulk-bar[hidden] { display: none !important; }`.
+- Per-tile delete (×) overlapped with the new selection checkbox
+  in the top-right corner. Hidden while `body.lib-selecting` is
+  active; the bulk-delete bar handles deletion in that mode.
+- **Alle auswählen** selected every catalogue entry regardless of
+  the active filter. Now respects `_itemPassesFilter` so the
+  selection matches what's visible on screen — picking "aurora"
+  as the source then Select-all selects 9 items, not all 66.
+
+### Fixed — library appeared empty after bulk delete if a filter pointed at a deleted pack
+
+`cfg.libraryPack` in localStorage persisted across the bulk
+deletion. If the user had filtered by an installed pack
+(e.g. "aurora") then bulk-deleted everything in that pack, on
+next reload the catalogue still had ~20 entries but
+`_itemPassesFilter` dropped them all because nothing carried
+`pack=aurora` anymore. Library tab rendered with just the "Bild
+hinzufügen" tile — no broken-state hint.
+
+On load now: any persisted `_libraryPack` / `_libraryTag` that
+doesn't match anything in the freshly-loaded catalogue is
+silently reset (and the localStorage entry cleared). The grid
+shows everything; the user picks a new filter consciously.
+
+### Fixed — Bildschirme card in System tab was an empty stub
+
+After the picker moved to the header in this release, the System
+tab's old screen-count card was left rendering just the title +
+hint with no buttons underneath — looked broken. Card is now a
+hidden DOM stub: `#card-screens` still resolves for selector
+lookups but the user never sees it.
+
+### Fixed — ripples ambient preview threw IndexSizeError every frame
+
+The ripples particle's `step` callback could briefly produce a
+negative radius on the first frame after spawn (small backward `dt`
+during tab-visibility transitions). `ctx.arc` rejects negative
+radii with `IndexSizeError` and the whole render loop unwound. Now
+clamped to `Math.max(0, p.r)` at render time.
+
+### Changed — APP_VERSION → 2.3.1-beta
+
+`WALLPAPER_VERSION` unchanged (still 2.2.0). Bridge + Configurator
++ docs only. Lively / Wallpaper Engine re-import NOT required.
+
 ## [2.3.0-beta] - 2026-06-15
 
 In-app wallpaper-pack browser is back, three years (well, three releases)

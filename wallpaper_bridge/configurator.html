@@ -1355,6 +1355,11 @@
     border-radius: 6px;
     font-size: 12px;
   }
+  /* v2.3.0-beta.2 fix: the explicit `display: flex` above wins over
+     the HTML `hidden` attribute (UA stylesheet's `display: none`),
+     so the bar would render on initial Library open before
+     _libUpdateBulkBar set hidden=true. Re-assert it here. */
+  .lib-bulk-bar[hidden] { display: none !important; }
   .lib-bulk-bar .lib-bulk-count {
     font-weight: 600;
     margin-right: 4px;
@@ -1370,6 +1375,11 @@
     border-color: rgba(58, 107, 168, 0.85);
   }
   body.lib-selecting .lib-tile { cursor: pointer; }
+  /* v2.3.0-beta.1: hide the always-visible per-tile delete button
+     in multi-select mode — the new checkbox sits in the same
+     top-right corner. The bulk-delete bar at the top of the grid
+     handles the actual deletion. */
+  body.lib-selecting .lib-tile .del { display: none !important; }
   body.lib-selecting .lib-tile::after {
     content: "";
     position: absolute;
@@ -1685,7 +1695,10 @@
   .lib-packs-list { display: flex; flex-direction: column; gap: 6px; }
   .pack-tile {
     display: grid;
-    grid-template-columns: 1fr auto;
+    /* v2.3.0-beta.2: preview thumb column added. Pack tile now reads
+       as [preview] [text] [action] left-to-right, matching the
+       preset slot pattern. */
+    grid-template-columns: 96px 1fr auto;
     gap: 4px 12px;
     align-items: center;
     padding: 10px 12px;
@@ -1694,15 +1707,22 @@
     border-radius: 6px;
     font-size: 12.5px;
   }
+  .pack-tile .pack-preview {
+    grid-row: 1 / span 3;
+    width: 96px; height: 54px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #0c0e13 center/cover no-repeat;
+  }
   .pack-tile .pack-name { font-weight: 600; }
   .pack-tile .pack-meta {
-    grid-column: 1;
+    grid-column: 2;
     font-size: 11.5px;
     opacity: 0.7;
     line-height: 1.4;
   }
   .pack-tile .pack-desc {
-    grid-column: 1;
+    grid-column: 2;
     font-size: 11.5px;
     opacity: 0.78;
     line-height: 1.4;
@@ -1730,42 +1750,59 @@
     color: #ffd486;
   }
 
-  /* Preset slot rows — one per saved combo. Filled slots show a short
-     summary (counts of widgets + active effects); empty slots hide
-     Apply/Clear so only Save is offered. */
+  /* v2.3.0-beta.1: preset slot redesign. Pre-v2.3.0-beta.1 the
+     thumbnail was a tiny 80×45 chip that lost in the row layout —
+     hard to read what was saved without the text summary. Now the
+     thumb is the dominant visual element (160×90 = the canvas's
+     native render size, no down-clamp), name + summary stack to
+     the right of it, action buttons go on the far right. Empty
+     slots show a dashed border so they still read as "tap to save
+     here" without needing a real preview. */
   .preset-slot {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; margin-top: 6px;
+    display: grid;
+    grid-template-columns: 160px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    margin-top: 8px;
     background: var(--panel-2);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
   }
-  /* v1.6.1-beta R2.2: 16:9 mini-thumbnail painted client-side on Save.
-     Solid bg on empty slots so the row keeps its width without
-     jumping when a slot transitions empty → filled. */
   .preset-slot .thumb {
-    flex: 0 0 80px;
-    width: 80px; height: 45px;
+    width: 160px; height: 90px;
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: 4px;
     background: #0c0e13;
     display: block;
   }
   .preset-slot.empty .thumb {
-    opacity: 0.35;
+    opacity: 0.5;
+    border-style: dashed;
+    border-color: rgba(255,255,255,0.18);
+  }
+  .preset-slot .preset-text {
+    display: flex; flex-direction: column;
+    gap: 4px;
+    min-width: 0;
   }
   .preset-slot .name {
-    flex: 0 0 60px; font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase; letter-spacing: 0.06em;
+    font-weight: 700;
+    color: var(--text);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 11.5px;
+    opacity: 0.85;
   }
   .preset-slot .summary {
-    flex: 1 1 auto; color: var(--text-dim);
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.4;
   }
-  .preset-slot.empty .summary { font-style: italic; opacity: 0.6; }
+  .preset-slot.empty .summary { font-style: italic; opacity: 0.55; }
   .preset-slot .actions {
     display: flex; gap: 4px; flex: 0 0 auto;
+    align-self: center;
   }
   .preset-slot .actions .btn {
     padding: 4px 10px; font-size: 11px;
@@ -2379,38 +2416,25 @@
   <!-- v2.2.0-beta: per-bridge screen-count moved out of the noisy
        top toolbar and into the System tab where it belongs (rare
        one-shot setting, not a daily knob). -->
-  <section class="card" id="card-screens" data-section-tab="system">
-    <header class="section-head" data-toggle>
-      <span class="chev">▾</span>
-      <h2 data-i18n="section.screens">Screens</h2>
-    </header>
-    <div class="body">
-      <div class="hint" data-i18n="screens.card_hint">
-        How many monitors the bridge should drive. Each screen gets
-        its own independent settings — wallpaper, glow, effects,
-        widgets. Most users keep this at 1.
-      </div>
-      <div class="row">
-        <label data-i18n="bridge.screens">Screens</label>
-        <div id="screencount-host" class="screencount-host"></div>
-      </div>
-    </div>
+  <!-- v2.3.0-beta.1: this card hosted a mirror of the screen-count
+       picker while the original lived hidden in the tab strip. The
+       picker now lives in the header (next to Vorschau / Tour /
+       Open Builder), so this card has nothing left to render — keep
+       the markup as a hidden stub so older save / restore paths
+       that look up #card-screens by id don't throw, but never show
+       it to the user. -->
+  <section class="card" id="card-screens" data-section-tab="system"
+           hidden style="display:none">
+    <div id="screencount-host" class="screencount-host"></div>
   </section>
 
-  <section class="card" id="card-presets" data-section-tab="system">
-    <header class="section-head" data-toggle>
-      <span class="chev">▾</span>
-      <h2 data-i18n="section.presets">Presets</h2>
-    </header>
-    <div class="body">
-      <div class="hint" data-i18n="presets.hint">
-        Save the current background + glow + dim + blur + effects + widgets
-        as a snapshot, then switch back with one click. Slots are per
-        screen.
-      </div>
-      <div id="preset-slots"></div>
-    </div>
-  </section>
+  <!-- v2.3.0-beta.1: Presets card moved out of the System tab and
+       into the Widgets tab (right after the Widgets card, which
+       carries the Lock toggle at the top of its body). The card
+       still operates on per-screen state; the move just puts it
+       where the user actually looks for "save / restore my current
+       widget + glow + effect combo". -->
+
 
   <!-- ── Quick Looks (v1.2-dev) ────────────────────────────────────────
        Pre-built combinations of background + glow + ambient effect +
@@ -2685,9 +2709,11 @@
                 data-i18n="library.multiselect.toggle">☐ Select</button>
       </div>
       <div id="library-bulk-bar" class="lib-bulk-bar" hidden>
-        <span class="lib-bulk-count" id="library-bulk-count"
-              data-i18n="library.multiselect.count"
-              data-i18n-vars="n">0 selected</span>
+        <!-- v2.3.0-beta.2 fix: no data-i18n on the count span.
+             The i18n pass would otherwise paint the raw placeholder
+             ("{n} ausgewählt") on first load before _libUpdateBulkBar
+             ever runs. JS controls the text entirely. -->
+        <span class="lib-bulk-count" id="library-bulk-count"></span>
         <button type="button" class="btn"
                 id="library-bulk-select-all"
                 data-i18n="library.multiselect.select_all">Select all</button>
@@ -2999,6 +3025,30 @@
         Add a widget:
       </div>
       <div class="add-grid" id="add-grid"></div>
+    </div>
+  </section>
+
+  <!-- v2.3.0-beta.2: Presets card moved to the Look tab. Pre-2.3.0-beta
+       it lived in System; v2.3.0-beta.1 moved it next to Widgets; user
+       feedback was that the right home is Look — that's where the per-
+       screen state (background + glow + dim) is configured and where
+       "save my current setup" naturally belongs. DOM position stays
+       after card-widgets so the cards are grouped logically by tab via
+       data-section-tab; CSS hides anything that doesn't match the
+       active tab so the order on screen is: screen-setup → looks →
+       bg → glow → presets. -->
+  <section class="card" id="card-presets" data-section-tab="look">
+    <header class="section-head" data-toggle>
+      <span class="chev">▾</span>
+      <h2 data-i18n="section.presets">Presets</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="presets.hint">
+        Save the current background + glow + dim + blur + effects + widgets
+        as a snapshot, then switch back with one click. Slots are per
+        screen.
+      </div>
+      <div id="preset-slots"></div>
     </div>
   </section>
 
@@ -5263,8 +5313,10 @@ const PRESET_SLOTS = 4;
     row.dataset.slot = String(i);
     row.innerHTML =
       '<canvas class="thumb" width="160" height="90"></canvas>' +
-      '<span class="name" data-i18n="presets.slot_label" data-i18n-n="' + (i + 1) + '">Slot ' + (i + 1) + '</span>' +
-      '<span class="summary"></span>' +
+      '<div class="preset-text">' +
+        '<span class="name" data-i18n="presets.slot_label" data-i18n-n="' + (i + 1) + '">Slot ' + (i + 1) + '</span>' +
+        '<span class="summary"></span>' +
+      '</div>' +
       '<div class="actions">' +
         '<button class="btn apply" data-i18n="presets.apply">Apply</button>' +
         '<button class="btn save"  data-i18n="presets.save">Save</button>' +
@@ -5306,30 +5358,51 @@ async function generatePresetThumbnail() {
   ctx.fillStyle = "#0c0e13";
   ctx.fillRect(0, 0, W, H);
 
-  // Layer 1: background — fetch the active screen's current bg blob
-  // and drawImage cover-fit. Skip videos (createImageBitmap rejects).
-  try {
-    const r = await fetch("/screen/" + activeScreen + "/background", { cache: "no-store" });
-    if (r.ok) {
-      const blob = await r.blob();
-      if (blob.type && blob.type.startsWith("image/")) {
-        const bmp = await createImageBitmap(blob);
-        const ar = bmp.width / bmp.height;
-        const tar = W / H;
-        let sx = 0, sy = 0, sw = bmp.width, sh = bmp.height;
-        if (ar > tar) {
-          // wider than target → crop horizontal
-          sw = bmp.height * tar;
-          sx = (bmp.width - sw) / 2;
-        } else {
-          sh = bmp.width / tar;
-          sy = (bmp.height - sh) / 2;
-        }
-        ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, W, H);
-        try { bmp.close(); } catch (_) {}
-      }
+  // Layer 1: background. v2.3.0-beta.2 fix — the previous code
+  // fetched `/screen/{n}/background` expecting bytes, but that
+  // endpoint is POST-only (the Builder + autocut paths upload to it
+  // there). There's no GET sibling, so every fetch returned 404 and
+  // the BG layer was silently skipped → every preset thumbnail came
+  // out as a black widget grid. Use settings.bgImage instead — same
+  // source the wallpaper page renders from, routed through the
+  // /image proxy for absolute paths or fetched directly for the
+  // /library/ subset.
+  const bgPath = (settings && settings.bgImage) || "";
+  if (bgPath && !/\.(mp4|webm|mov|m4v|mkv)$/i.test(bgPath)) {
+    let bgUrl = null;
+    if (bgPath.startsWith("data:")) {
+      bgUrl = bgPath;
+    } else if (bgPath.startsWith("/library/")
+            || bgPath.startsWith("/image")) {
+      bgUrl = bgPath;
+    } else if (/^https?:\/\//i.test(bgPath)) {
+      bgUrl = bgPath;
+    } else {
+      // Absolute (or relative) filesystem path → /image proxy.
+      bgUrl = "/image?path=" + encodeURIComponent(bgPath);
     }
-  } catch (_) { /* no bg or fetch failed — keep solid */ }
+    try {
+      const r = await fetch(bgUrl, { cache: "no-store" });
+      if (r.ok) {
+        const blob = await r.blob();
+        if (blob.type && blob.type.startsWith("image/")) {
+          const bmp = await createImageBitmap(blob);
+          const ar = bmp.width / bmp.height;
+          const tar = W / H;
+          let sx = 0, sy = 0, sw = bmp.width, sh = bmp.height;
+          if (ar > tar) {
+            sw = bmp.height * tar;
+            sx = (bmp.width - sw) / 2;
+          } else {
+            sh = bmp.width / tar;
+            sy = (bmp.height - sh) / 2;
+          }
+          ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, W, H);
+          try { bmp.close(); } catch (_) {}
+        }
+      }
+    } catch (_) { /* fetch failed — keep solid */ }
+  }
 
   // Layer 2: dim overlay matching bgDim (0..100 = 0..1 alpha).
   const dim = Math.max(0, Math.min(100, settings.bgDim || 0)) / 100;
@@ -5410,6 +5483,28 @@ let libraryCatalogue = null;
     libraryCatalogue = Array.isArray(cat.items) ? cat.items : [];
   } catch (e) {
     libraryCatalogue = [];
+  }
+  // v2.3.0-beta.2: defensive filter reset. After a bulk delete the
+  // stored cfg.libraryPack / cfg.libraryTag in localStorage could
+  // point at a source / tag that no remaining item carries — the
+  // grid then renders empty even though the catalogue has plenty
+  // of items, and the user sees a blank Library page until they
+  // figure out to clear the filter manually. If we've loaded items
+  // BUT every persisted filter would drop them all, silently reset.
+  if (libraryCatalogue.length > 0) {
+    if (_libraryPack) {
+      const packKeys = new Set();
+      for (const it of libraryCatalogue) packKeys.add(it.pack || "user");
+      if (!packKeys.has(_libraryPack)) {
+        _libraryPack = "";
+        try { localStorage.removeItem("cfg.libraryPack"); } catch (_) {}
+      }
+    }
+    if (_libraryTag) {
+      const hasTag = libraryCatalogue.some(
+        (it) => Array.isArray(it.tags) && it.tags.includes(_libraryTag));
+      if (!hasTag) _libraryTag = "";
+    }
   }
   renderLibraryStrip();
 })();
@@ -6638,8 +6733,17 @@ document.addEventListener("DOMContentLoaded", () => {
   if (bSelAll) {
     bSelAll.addEventListener("click", () => {
       if (!Array.isArray(libraryCatalogue)) return;
+      // v2.3.0-beta.2 fix: only select items that pass the active
+      // category / source / tag / search filter — picking "Alle
+      // auswählen" while filtered to a single source used to pull in
+      // every catalogue entry, then the user saw 66 selected and
+      // deleted the wrong stuff. _itemPassesFilter is the same
+      // predicate the grid renderer uses, so the selection always
+      // matches what's visible on screen.
       for (const it of libraryCatalogue) {
-        if (it && it.file) _libSelected.add(it.file);
+        if (it && it.file && _itemPassesFilter(it)) {
+          _libSelected.add(it.file);
+        }
       }
       document.querySelectorAll(".lib-tile").forEach((el) => {
         if (el.dataset && el.dataset.file
@@ -6739,6 +6843,26 @@ function renderPackTile(listEl, p) {
   const label = (p.label && (p.label[lang] || p.label.en)) || p.id;
   const tile = document.createElement("div");
   tile.className = "pack-tile";
+  // v2.3.0-beta.2: preview thumbnail per pack. The image lives next to
+  // the manifest on GitHub Pages — one preview-0 WebP per pack id —
+  // so the URL is constructible from pack.id without bloating the
+  // manifest itself. onerror falls back to the dark solid bg so a
+  // missing preview (e.g. a brand-new pack added before the previews
+  // got copied to the site) doesn't show a broken-image icon.
+  const preview = document.createElement("div");
+  preview.className = "pack-preview";
+  const previewUrl =
+    "https://delido.github.io/signalrgb-wallpaper/library-packs-previews/"
+    + encodeURIComponent(p.id) + ".webp";
+  // Use an Image() to check availability before attaching as bg, so a
+  // 404 silently keeps the solid placeholder instead of triggering a
+  // broken-image background.
+  const probe = new Image();
+  probe.onload = () => {
+    preview.style.backgroundImage = "url(" + previewUrl + ")";
+  };
+  probe.src = previewUrl;
+  tile.appendChild(preview);
   const nameRow = document.createElement("div");
   nameRow.className = "pack-name";
   nameRow.textContent = label;
@@ -10286,11 +10410,18 @@ const TILE_PRESETS = {
     }),
     step: (p, dt) => { p.r += p.vr * dt; return p.r < p.maxR; },
     render: (ctx, p) => {
-      const t = 1 - p.r / p.maxR;
+      // v2.3.0-beta.2 fix: clamp radius to 0 — `p.r` can flip
+      // briefly negative on the first frame after spawn when the
+      // step callback runs with a small backward dt (clock skew /
+      // re-entry on tab visibility change). ctx.arc throws an
+      // IndexSizeError on negative radius and the whole render loop
+      // unwinds.
+      const r = Math.max(0, p.r);
+      const t = 1 - r / p.maxR;
       const a = t * t * 0.7;
       ctx.strokeStyle = "rgba(180,220,255," + a + ")";
       ctx.lineWidth = 1; ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.stroke();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
     },
   },
   // ── Flowfield tile preview ──

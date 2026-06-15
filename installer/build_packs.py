@@ -227,6 +227,30 @@ def main() -> int:
             "packs":       catalogue,
         }, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8")
+
+    # v2.3.0-beta.2: per-pack preview thumbnail. Sources are the
+    # historical preview WebPs left under installer_out/packs/previews/
+    # (each pack has a -preview-0/-1/-2/-3.webp set; we take -0). The
+    # Configurator's in-app pack browser fetches these from GitHub Pages
+    # via the deterministic URL
+    #   delido.github.io/signalrgb-wallpaper/library-packs-previews/<pack_id>.webp
+    # so no manifest field is needed — pack_id alone resolves it. Copies
+    # the file fresh on every build so the docs site stays in sync; if
+    # there's no preview-0 for a pack the UI silently falls back to a
+    # solid placeholder background.
+    src_previews = OUT / "previews"
+    docs_previews = HERE.parent / "docs" / "library-packs-previews"
+    docs_previews.mkdir(parents=True, exist_ok=True)
+    if src_previews.exists():
+        copied = 0
+        for meta in catalogue:
+            src = src_previews / f"{meta['id']}-preview-0.webp"
+            if src.exists():
+                dst = docs_previews / f"{meta['id']}.webp"
+                dst.write_bytes(src.read_bytes())
+                copied += 1
+        print(f"preview thumbs: {copied}/{len(catalogue)} → "
+              f"{docs_previews.relative_to(HERE.parent)}")
     print()
     print(f"built {len(catalogue)} pack(s)")
     print(f"discovery manifest: {DISCOVERY_MANIFEST.relative_to(HERE.parent)}")
