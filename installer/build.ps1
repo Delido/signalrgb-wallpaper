@@ -102,8 +102,24 @@ try {
     # no extraction step, no temp-path search, no race with AV's
     # file scanner. Side-effect bonus: startup is ~2x faster
     # because we skip the 8000-file extract on every launch.
+    # v2.2.1 anti-Defender-FP measures:
+    #   -d noarchive — Python bytecode lives as individual .pyc files
+    #     inside _internal\ instead of being stuffed into a single
+    #     zlib-compressed PYZ archive that gets appended to the EXE.
+    #     Stops SignalRGBBridge.exe from being ~6 MB of bootloader +
+    #     high-entropy blob (= textbook crypter/packer signature
+    #     Defender ML scores as Wacatac-class loader). Result: EXE
+    #     shrinks to ~1 MB pure bootloader; bytecode visible as
+    #     normal .pyc files on disk.
+    #   --noupx — defensive. UPX-packed binaries are the single
+    #     strongest "this is a crypter" signal across all AV
+    #     vendors. UPX isn't on our standard build env's PATH so
+    #     this is currently a no-op, but explicit guards against
+    #     future CI images.
     & python -m PyInstaller `
         --onedir --noconsole `
+        -d noarchive `
+        --noupx `
         --name SignalRGBBridge `
         --hidden-import pystray._win32 `
         --collect-all pystray `

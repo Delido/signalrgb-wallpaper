@@ -1,12 +1,18 @@
 ; SignalRGB Desktop Wallpaper — Inno Setup installer.
 ;
-; Per-user install (no admin needed). Installs:
-;   {app}                                  -- LOCALAPPDATA\Programs\SignalRGBWallpaper
+; System-wide install (admin required — v2.2.1+ to dodge Defender
+; FPs on unsigned binaries in user-writable %LOCALAPPDATA% paths).
+; Pre-2.2.1 installs lived under per-user %LOCALAPPDATA%\Programs;
+; the CurStepChanged migration code below cleans those up.
+;
+; Installs:
+;   {app}                                  -- Program Files\SignalRGBWallpaper
 ;     ├ SignalRGBBridge.exe                -- bridge + tray
 ;     ├ Lively wallpapers\Screen{1,2,3,4}.zip
 ;     ├ Wallpaper Engine wallpapers\signalrgb-glow\
 ;     ├ LICENSE, README.md, CHANGELOG.md
 ;   {userdocs}\WhirlwindFX\Plugins         -- SignalRGB plugin (.js + .qml)
+;   {localappdata}\SignalRGBWallpaper\     -- user data (config + library)
 ;   HKCU\...\Run\SignalRGBWallpaperBridge  -- optional autostart
 ;
 ; Compile with:
@@ -31,7 +37,17 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={localappdata}\Programs\SignalRGBWallpaper
+; v2.2.1: install dir moved from per-user %LOCALAPPDATA%\Programs to
+; system-wide Program Files. Defender ML heavily weights "unsigned
+; EXE writing to + executing from a user-writable %LOCALAPPDATA%
+; path" — the exact persistence pattern real malware uses to avoid
+; needing admin rights. Discord/Slack/Chrome get away with the same
+; per-user location because they're signed; until we have a code-
+; signing cert, moving to Program Files (= admin-only ACL) cuts the
+; FP score sharply. Trade-off: UAC prompt on install + update.
+; {autopf} resolves to {commonpf} (C:\Program Files) when
+; PrivilegesRequired=admin, which is what we get below.
+DefaultDirName={autopf}\SignalRGBWallpaper
 DefaultGroupName=SignalRGB Wallpaper
 DisableProgramGroupPage=yes
 DisableDirPage=auto
@@ -43,8 +59,21 @@ UninstallDisplayIcon={app}\SignalRGBBridge.exe
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequired=admin
+; v2.2.1: an existing AppId install under %LOCALAPPDATA%\Programs
+; would otherwise short-circuit DefaultDirName and reinstall to
+; the legacy location. UsePreviousAppDir=no forces the new
+; {autopf}\SignalRGBWallpaper path; the CurStepChanged migration
+; code below cleans up the legacy folder + autostart entry.
+UsePreviousAppDir=no
+; v2.2.1: keep Start Menu shortcuts under the installing user's
+; profile instead of the machine-wide ProgramData location.
+; Without this Inno follows the admin elevation → drops shortcuts
+; under {commonprograms}, which Windows 11's Start Menu cache
+; doesn't always pick up until explorer.exe restarts. Per-user
+; shortcuts get indexed live. We're a single-user desktop app
+; anyway — machine-wide Start Menu coverage isn't a real win.
+AlwaysUsePersonalGroup=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -681,8 +710,40 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
   ScriptPath: String;
+  OldDir: String;
 begin
   if CurStep = ssInstall then begin
+    // v2.2.1 migration: install dir moved
+    //   %LOCALAPPDATA%\Programs\SignalRGBWallpaper  →  Program Files
+    // Stop the running bridge from the legacy location, then wipe
+    // the old folder so we don't leave a dead SignalRGBBridge.exe
+    // behind (which a 2.2.0 autostart key would otherwise still
+    // launch on next login). The new [Registry] entry rewrites
+    // the Run key with the {autopf} path on top of the old value.
+    OldDir := ExpandConstant('{localappdata}\Programs\SignalRGBWallpaper');
+    if (CompareText(OldDir, ExpandConstant('{app}')) <> 0)
+       and DirExists(OldDir) then begin
+      Exec(ExpandConstant('{sys}\taskkill.exe'),
+           '/F /IM SignalRGBBridge.exe',
+           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      DelTree(OldDir, True, True, True);
+    end;
+    // v2.2.1 migration: scrub both Start-Menu candidate locations
+    // before the new [Icons] pass writes fresh shortcuts. Covers:
+    //   • {userprograms} → had the v2.2.0 shortcuts (per-user install)
+    //   • {commonprograms} → had the early v2.2.1 shortcuts (admin
+    //     install before AlwaysUsePersonalGroup=yes kicked in) — would
+    //     otherwise linger as dead links pointing at OldDir.
+    // Same logic for the per-user uninstall registry entry Inno wrote
+    // into HKCU during the v2.2.0 per-user install.
+    DelTree(ExpandConstant('{userprograms}\SignalRGB Wallpaper'),
+            True, True, True);
+    DelTree(ExpandConstant('{commonprograms}\SignalRGB Wallpaper'),
+            True, True, True);
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
+      '{A2F6E3C8-7B91-4D3A-9C5F-1E6A0B8D2F71}_is1');
+
     if IsTaskSelected('installlively/autoinstall') and (not LivelyDetected()) then begin
       ExtractTemporaryFile('install_lively.ps1');
       ScriptPath := ExpandConstant('{tmp}\install_lively.ps1');

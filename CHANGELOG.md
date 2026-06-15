@@ -4,6 +4,67 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-06-14
+
+Anti-Defender-FP hotfix: reshapes the binary + install location so
+Windows Defender's `Trojan:Win32/Wacatac.C!ml` ML heuristic stops
+matching on every fresh install.
+
+### Changed — install moved to `C:\Program Files\SignalRGBWallpaper`
+
+Pre-2.2.1 installed per-user into `%LOCALAPPDATA%\Programs\…`. That
+path is **the** classic "unsigned EXE + user-writable persistence
+location" malware pattern — Defender's ML weights it heavily.
+Discord/Slack/Chrome get away with it because they're signed; we're
+not, so we move to `Program Files` (admin-only ACL) instead.
+
+Trade-off: UAC prompt on install + update. Per-user data
+(`%LOCALAPPDATA%\SignalRGBWallpaper\`) is unchanged.
+
+The installer now wipes the legacy location automatically:
+
+- Stops the running `SignalRGBBridge.exe` from `%LOCALAPPDATA%\Programs`
+- Deletes the legacy install directory
+- Deletes the per-user Start-Menu folder + the early-2.2.1
+  `%PROGRAMDATA%` Start-Menu folder (Windows 11 sometimes doesn't
+  index those live — `AlwaysUsePersonalGroup=yes` keeps the new
+  shortcuts in the per-user Start Menu where Windows always sees
+  them)
+- Removes the legacy HKCU `Uninstall\…_is1` registry entry
+- Rewrites HKCU `Run\SignalRGBWallpaperBridge` autostart with the
+  new path
+
+### Changed — `SignalRGBBridge.exe`: 5.9 MB → 0.56 MB
+
+PyInstaller was packing the application bytecode into a
+zlib-compressed PYZ archive and **appending it to the EXE**. That
+made the EXE a small bootloader followed by ~5 MB of high-entropy
+compressed data — textbook crypter / packer signature, exactly
+what Defender's ML scores as a Wacatac-class loader.
+
+`-d noarchive` keeps the bytecode as individual `.pyc` files in
+`_internal/` instead. EXE shrinks to a 0.56 MB pure bootloader;
+nothing high-entropy lives inside it. `--noupx` is added defensively
+in case a future build environment has UPX on PATH (currently a
+no-op since UPX isn't installed on the standard build env).
+
+### Fixed — `reimport-wallpaper-bundles.ps1` CLI default path
+
+The script's `-AppDir` parameter defaulted to
+`%LOCALAPPDATA%\Programs\SignalRGBWallpaperBridge` — wrong location
+AND a bonus "Bridge" suffix that never matched anything. Bridge.py
+always passes the real path so this was a latent bug, but anyone
+running the script directly from a shell hit a "folder not found"
+silently. Now defaults to `%ProgramFiles%\SignalRGBWallpaper`.
+
+### Known UX regression — silent update prompts for UAC
+
+The tray's auto-update flow downloads + runs the new installer
+silently. With `PrivilegesRequired=admin`, Inno raises a UAC
+consent dialog regardless of `/SILENT`. Accept the prompt to let
+the update proceed — it then installs unattended. No way around
+this short of code-signing + EV trust reputation.
+
 ## [2.2.0] - 2026-06-14
 
 Big UX pass on the Configurator + Builder, plus a hotfix for a

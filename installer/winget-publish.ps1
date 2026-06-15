@@ -106,9 +106,15 @@ if (-not $wgc) {
 # as x86 (Inno's bootloader is 32-bit even when the payload is 64-bit,
 # which our PyInstaller --onedir Python build is). Force-match by
 # appending `|x64` so wingetcreate maps the new installer onto the
-# existing x64 row. Future bumps with multiple arch entries can use
-# `-Token` + `|x64` etc. as appropriate.
-$urlSpec = $assetUrl + "|x64"
+# existing x64 row.
+#
+# v2.2.1: the pre-2.2.1 manifest carried `Scope: user`. v2.2.1 moved
+# the install dir to Program Files and requires admin, so the manifest
+# scope must flip to `machine` — otherwise `winget upgrade` would try
+# to install with --scope user, hit the elevation requirement, and
+# either silently fail or strand users on the old version. Pipe-
+# override the scope so wingetcreate overrides the inherited value.
+$urlSpec = $assetUrl + "|x64|machine"
 # Renamed from $args to $wgcArgs — $args is a PowerShell automatic
 # variable (the unbound-positional-args collection inside a function /
 # script block); reassigning it triggers a PSScriptAnalyzer warning

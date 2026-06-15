@@ -338,7 +338,9 @@ and the build is reproducible (`pwsh installer\build.ps1`).
 3. (Optional, only if it keeps re-flagging) *Windows Security →
    Virus & threat protection → Manage settings → Exclusions →
    Add an exclusion → Folder*, pick
-   `%LOCALAPPDATA%\Programs\SignalRGBWallpaper`.
+   `C:\Program Files\SignalRGBWallpaper` (the v2.2.1+ install
+   location; older versions lived under
+   `%LOCALAPPDATA%\Programs\SignalRGBWallpaper`).
 
 ### Help reduce false positives for everyone
 

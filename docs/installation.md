@@ -27,8 +27,11 @@ Confirm these are working before you start:
 
 Grab the latest `SignalRGBWallpaperSetup-<version>.exe` from the
 [Releases page](https://github.com/Delido/signalrgb-wallpaper/releases/latest)
-and run it. No admin needed — installs per-user into
-`%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`.
+and run it. Approve the UAC prompt — the installer drops the bridge
+into `C:\Program Files\SignalRGBWallpaper\` so Windows Defender
+stops flagging unsigned binaries that live in user-writable
+`%LOCALAPPDATA%` paths. Your library + per-screen settings remain
+under `%LOCALAPPDATA%\SignalRGBWallpaper\` (user data, not code).
 
 ### Installer walkthrough
 

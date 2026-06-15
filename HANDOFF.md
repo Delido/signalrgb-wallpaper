@@ -79,7 +79,9 @@ Build-Skript ist inline in der PowerShell-History (siehe Phase-1-Turn vom
 ## End-User-Flow (geplant, nach Phase 3)
 
 Inno-Setup-Installer kopiert Plugin in Plugins-Ordner, installiert
-Bridge+Tray nach `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`, registriert
+Bridge+Tray nach `C:\Program Files\SignalRGBWallpaper\` (v2.2.1+;
+pre-2.2.1 lag's unter `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\`),
+registriert
 HKCU\Run für Autostart, öffnet am Ende Lively-Import-Dialog für die 3
 Zips. User-Interaktion: 1× Installer, 1× pro Monitor in Lively den
 passenden Zip aktivieren.

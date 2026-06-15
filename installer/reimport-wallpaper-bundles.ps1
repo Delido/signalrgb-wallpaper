@@ -32,7 +32,15 @@
 
 [CmdletBinding()]
 param(
-    [string]$AppDir = "$env:LOCALAPPDATA\Programs\SignalRGBWallpaperBridge",
+    # v2.2.1: install dir moved to Program Files (was per-user
+    # %LOCALAPPDATA%\Programs\SignalRGBWallpaperBridge — note the
+    # bonus "Bridge" suffix that never actually matched the real
+    # install path, so this default was silently broken for any
+    # manual CLI invocation before v2.2.1). Bridge.py always
+    # passes an explicit -AppDir derived from sys.executable, so
+    # the default only kicks in when a user runs this from a
+    # shell directly.
+    [string]$AppDir = "$env:ProgramFiles\SignalRGBWallpaper",
     [switch]$Quiet
 )
 
