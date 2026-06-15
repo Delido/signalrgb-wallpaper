@@ -195,7 +195,7 @@ Geräteliste erscheinen. Wenn nicht:
   starten).
 - Prüfen ob die Dateien im richtigen Ordner gelandet sind (mit oder
   ohne OneDrive).
-- Siehe [Fehlerbehebung → "Plugin erscheint nicht"](troubleshooting.md#plugin-not-appearing).
+- Siehe [Fehlerbehebung → "Plugin erscheint nicht"](troubleshooting.md#plugin-erscheint-nicht).
 
 ### 2. Bridge läuft im System-Tray
 
@@ -203,7 +203,7 @@ Wenn du das Icon nicht siehst: Windows versteckt es vielleicht.
 Rechtsklick auf die Taskleiste → Taskleisteneinstellungen → "Wählen
 Sie aus, welche Symbole in der Taskleiste angezeigt werden" →
 **SignalRGBBridge** aktivieren. Wenn der Prozess gar nicht läuft,
-siehe [Fehlerbehebung → "Bridge startet nicht"](troubleshooting.md#bridge-wont-start).
+siehe [Fehlerbehebung → "Bridge startet nicht"](troubleshooting.md#bridge-startet-nicht).
 
 ### 3. Der Configurator
 
@@ -300,7 +300,8 @@ entpacken und den `signalrgb-glow`-Ordner nach
 
 - [Tray-Einstellungen-Referenz](tray-settings.md) — was jeder Menü-Eintrag tut
 - [Multi-Monitor-Einrichtung](multi-screen-setup.md) — Leinwand-Platzierung-Walkthrough
-- [Glow-Wallpaper bauen](building-wallpapers.md) — mit dem In-Browser-Builder transparente Regionen schneiden
+- [Glow-Wallpaper bauen](building-wallpapers.md) — mit dem
+  In-Browser-Builder transparente Regionen schneiden
 - [Fehlerbehebung](troubleshooting.md) — wenn etwas nicht funktioniert
 
 ## Deinstallation
