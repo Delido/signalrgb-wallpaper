@@ -27,8 +27,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - name: Install MkDocs Material
-        run: pip install "mkdocs-material>=9.5"
+      - name: Install MkDocs Material + i18n plugin
+        run: pip install "mkdocs-material>=9.5" "mkdocs-static-i18n>=1.2"
       - name: Build site
         run: mkdocs build --strict --verbose
       - uses: actions/upload-pages-artifact@v3

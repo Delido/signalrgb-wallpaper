@@ -28,7 +28,11 @@ theme:
         icon: material/weather-night
         name: Switch to dark mode
   features:
-    - navigation.instant
+    # v2.2.1: navigation.instant DROPPED because it breaks
+    # mkdocs-static-i18n's contextual language switcher — with
+    # instant-nav active, clicking 🇩🇪 from /installation/ takes
+    # you to /de/ (German homepage) instead of /de/installation/.
+    # The page reloads now, but the switcher actually works.
     - navigation.tracking
     - navigation.sections
     - navigation.top
@@ -59,11 +63,58 @@ markdown_extensions:
 
 plugins:
   - search
+  # v2.2.1: mkdocs-static-i18n adds a language picker to the
+  # Material header. Suffix strategy — docs/installation.md is the
+  # canonical English page, docs/installation.de.md is its German
+  # sibling. Pages without a `.de.md` sibling fall back to the
+  # English version, so we don't have to translate every page at
+  # once. Start with the user-facing docs (Home + Installation),
+  # expand from there.
+  - i18n:
+      docs_structure: suffix
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: de
+          name: Deutsch
+          build: true
+          nav_translations:
+            Home: Startseite
+            Getting started: Erste Schritte
+            Multi-screen setup: Multi-Monitor-Einrichtung
+            Troubleshooting: Fehlerbehebung
+            Using the app: App-Nutzung
+            Building glow wallpapers: Glow-Wallpaper bauen
+            Tray reference: Tray-Referenz
+            OpenRGB SDK server: OpenRGB-SDK-Server
+            Reference: Referenz
+            Architecture: Architektur
+            REST API: REST-API
+            Plugin API: Plugin-API
+            Publishing to Workshop: Workshop-Veröffentlichung
+            Building from source: Aus Quellcode bauen
+            Project: Projekt
+            Changelog archive: Changelog-Archiv
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/Delido/signalrgb-wallpaper
+  # v2.2.1: declare the available languages so Material's i18n
+  # picker shows them in the header. mkdocs-static-i18n's
+  # reconfigure_material auto-injects this, but listing it here
+  # too keeps the config explicit / greppable.
+  alternate:
+    - name: English
+      link: /
+      lang: en
+    - name: Deutsch
+      link: /de/
+      lang: de
 
 # Files in docs/ that are not part of the rendered site.
 exclude_docs: |

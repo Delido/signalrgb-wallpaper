@@ -150,6 +150,14 @@ def main() -> int:
     for md in sorted(DOCS.glob("*.md")):
         if md.name in SKIP:
             continue
+        # v2.2.1: mkdocs-static-i18n adds suffixed sibling pages
+        # (installation.de.md next to installation.md). The
+        # rendered MkDocs site routes them via /de/installation/;
+        # the wiki has no language picker, so just skip the
+        # translated siblings rather than dump both English and
+        # German top-level pages into the wiki side-by-side.
+        if md.stem.endswith(".de"):
+            continue
         (out_dir / md.name).write_text(
             _transform(md.read_text(encoding="utf-8")), encoding="utf-8"
         )
