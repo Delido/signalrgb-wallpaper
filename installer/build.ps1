@@ -309,6 +309,17 @@ $out = Join-Path $outDir ("SignalRGBWallpaperSetup-{0}.exe" -f $Version)
 if (Test-Path $out) {
     $sz = (Get-Item $out).Length
     Write-Host ("[OK] {0}  ({1:N0} bytes)" -f $out, $sz) -ForegroundColor Green
+    # v2.2.2: SHA256 sidecar for the installer asset. The bridge's
+    # auto-updater (>= v2.2.2) fetches <asset>.sha256 from the same
+    # GitHub release alongside the .exe and refuses to launch on
+    # mismatch / missing sidecar — closes the silent-malware-via-
+    # compromised-release-upload path. `sha256sum`-compatible format:
+    # `<hex>  <filename>` so it's also human-checkable with the
+    # standard CLI tool.
+    $hash = (Get-FileHash -Algorithm SHA256 -Path $out).Hash.ToLower()
+    $shaPath = $out + ".sha256"
+    Set-Content -Path $shaPath -Value ("{0}  {1}" -f $hash, (Split-Path -Leaf $out)) -NoNewline -Encoding ascii
+    Write-Host ("[OK] {0}  (sha256={1})" -f $shaPath, $hash) -ForegroundColor Green
 } else {
     throw "Expected output not found: $out"
 }

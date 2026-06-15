@@ -4,6 +4,95 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-06-15
+
+Internal audit sweep. Nine items found, all nine fixed. Three classes
+of problem dominated: event-loop blockers (same shape as the v2.2.1
+auto-cut / transform hotfix, just on three more endpoints),
+data-integrity holes around `library.json`, and an open path through
+the auto-updater that could have shipped a swapped installer.
+
+### Fixed — supply-chain check on the auto-updater
+
+The tray's "Download and install update" path used to fetch the
+release asset and run it without any integrity check. A compromised
+GitHub Release upload (stolen workflow token, account hijack) could
+silently replace the installer with anything; every user who clicked
+"Update" would have run it. Now `build.ps1` emits a
+`SignalRGBWallpaperSetup-<version>.exe.sha256` sidecar alongside
+the installer, the release upload carries both, and the bridge's
+updater downloads both, SHA-256s the local file, and refuses to
+launch on mismatch or missing sidecar. Attackers now have to tamper
+the .exe AND the .sha256 together AND get both past the release
+upload — strictly more work than swapping the exe alone.
+
+### Fixed — `library.json` could be corrupted by a crash mid-write
+
+`_library_rebuild_catalogue`, `_library_update_item`, and
+`_library_apply_order` all wrote the catalogue with a direct
+`write_text(...)` — a power loss or OOM between the truncate and the
+final write would leave an empty / half-written file. Next bridge
+start would either fail to parse it or surface an empty Library tab.
+All three helpers now use the same `tmp + rename` pattern
+`save_config` already used for `config.json`; the rename is atomic
+on every modern filesystem so a concurrent reader sees either the
+old file or the new, never a torn one.
+
+### Fixed — silent data loss when uploads + pins raced (regression from v2.2.1)
+
+v2.2.0's hotfix moved the heavy auto-cut + WebP-transform work into
+a thread executor, which was the right call for unblocking the
+event loop. The unforeseen consequence: that thread and the asyncio
+main loop could now both hit `library.json` simultaneously — a user
+pinning an entry while an auto-cut upload finishes would race, and
+whichever thread wrote last would silently overwrite the other's
+mutation. Added a process-wide `threading.RLock` (`_LIBRARY_LOCK`)
+that every catalogue mutation must hold; the read-modify-write
+sequence in `_library_update_item` now runs end-to-end under the
+lock so pin / tag / category / reorder updates are serialised
+against rebuilds.
+
+### Fixed — three more endpoints blocked the event loop
+
+Same root cause and same fix as v2.2.1's autocut + transform
+endpoints. The remaining offenders surfaced during a full audit
+pass:
+
+- `POST /library/thumb` — synchronous `_library_rebuild_catalogue`
+  call after writing the thumbnail. Now offloaded to the executor.
+- `DELETE /library/<name>` — same. Plus the handler picked up
+  three validation hardenings the GET sibling already had:
+  URL-decoding of `%XX` escapes (so a delete on a filename with
+  spaces no longer 404s), the `.startswith(".")` rejection, and
+  the resolve-and-`relative_to(library_dir())` check that closes a
+  theoretical symlink-escape vector.
+- `POST /backup/restore` — ZIP extraction + per-file writes (up to
+  100 MB) + the full rebuild. Used to freeze the bridge for 5-30 s;
+  every WS ping and Configurator request stalled. Same executor
+  fix.
+
+### Fixed — slow WebSocket clients leaked memory forever
+
+`broadcast_frame`, `push_settings`, `push_pause`, `push_widgets`,
+and `push_reload_all` each contained the same backpressure check
+— if a client's `StreamWriter` buffer exceeded the 256 KiB cap,
+skip the write. Right idea, but there was no upper bound: a
+backgrounded browser tab that throttled its event loop could stay
+over the limit indefinitely and we'd keep it in
+`clients_by_screen` forever, leaking ~256 KiB per client per
+broadcast pulse. Lifted the check into
+`Broadcaster._client_should_skip()` which now tracks consecutive
+skips per writer and force-closes after 200 of them
+(≈ 6 s at 30 Hz). Healthy clients reset the counter on every
+successful write. `remove()` also drops the counter so the dict
+itself doesn't grow over a long uptime.
+
+### Changed — APP_VERSION → 2.2.2
+
+`WALLPAPER_VERSION` unchanged (still 2.2.0). No wallpaper-bundle
+code touched this release — bridge + installer + build script only.
+Lively / Wallpaper Engine re-import NOT required.
+
 ## [2.2.1] - 2026-06-14
 
 Anti-Defender-FP hotfix: reshapes the binary + install location so
