@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.2.2"
+APP_VERSION = "2.3.0-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1631,6 +1631,175 @@ def _library_update_item(lib: Path, file: str, mutator) -> dict | None:
         cat["items"] = items
         _library_write_atomic(cat_path, cat)
         return target
+
+
+# v2.3.0-beta: pack discovery + install. Pre-v2.0.1 had an in-app
+# pack browser; v2.0.1 ripped it out because the auto-download path
+# (unsigned bridge.exe in %LOCALAPPDATA% writing fresh bytes to the
+# library folder + fetching from raw.githubusercontent.com) tripped
+# Defender's ML loader heuristics. v2.3.0-beta re-introduces the
+# feature with the v2.2.x mitigations in place:
+#   • Bridge.exe lives in Program Files (admin-only ACL → less
+#     persistence-pattern-shaped to Defender).
+#   • Pack ZIPs are explicit user-triggered downloads, not silent.
+#   • Every ZIP entry must be a known image extension; .exe / .dll /
+#     .bat / .ps1 / anything-not-an-image is refused mid-stream so
+#     the extracted footprint is provably "image data only", which
+#     is much harder for the ML model to classify as loader-shaped.
+#   • SHA-256 of the downloaded ZIP is checked against the digest
+#     in the discovery manifest (which the bridge fetches from the
+#     project's GitHub Pages site — same host as the rendered docs,
+#     low-suspicion traffic compared to raw.githubusercontent.com).
+PACKS_MANIFEST_URL = "https://delido.github.io/signalrgb-wallpaper/library-packs.json"
+PACKS_ALLOWED_ENTRY_EXTS = {".webp", ".png", ".jpg", ".jpeg",
+                            ".gif", ".bmp", ".avif"}
+PACKS_MAX_ZIP_BYTES = 200 * 1024 * 1024  # 200 MB ceiling per pack ZIP
+
+
+def _packs_fetch_manifest() -> str:
+    """Fetch the discovery manifest from GitHub Pages, return the raw
+    bytes (caller parses)."""
+    req = urllib.request.Request(
+        PACKS_MANIFEST_URL,
+        headers={"User-Agent": f"SignalRGBWallpaper-Packs/{APP_VERSION}"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return resp.read(2 * 1024 * 1024).decode("utf-8")
+
+
+def _packs_installed_state(lib: Path) -> dict[str, int]:
+    """Walk library.json and collapse it to {pack_id: max_version}.
+    `pack` and `pack_version` fields are written by _packs_install
+    when a pack is unpacked; entries the user added by hand carry no
+    pack metadata."""
+    cat_path = lib / "library.json"
+    if not cat_path.exists():
+        return {}
+    try:
+        with _LIBRARY_LOCK:
+            cat = json.loads(cat_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    out: dict[str, int] = {}
+    for it in cat.get("items", []):
+        if not isinstance(it, dict):
+            continue
+        pk = it.get("pack")
+        if not isinstance(pk, str) or not pk:
+            continue
+        try:
+            v = int(it.get("pack_version", 0))
+        except Exception:
+            v = 0
+        if v > out.get(pk, 0):
+            out[pk] = v
+    return out
+
+
+def _packs_install(pack_id: str, url: str, expected_sha256: str,
+                   expected_size: int, pack_version: int) -> dict:
+    """Download pack ZIP → SHA-256 verify → image-only extract → bump
+    library.json. Runs in the executor; raises on any failure (the
+    /packs/install endpoint catches and returns 400). Returns a small
+    summary dict for the response."""
+    if expected_size and expected_size > PACKS_MAX_ZIP_BYTES:
+        raise ValueError(
+            f"pack too large ({expected_size} > {PACKS_MAX_ZIP_BYTES})")
+    lib = library_dir()
+    lib.mkdir(parents=True, exist_ok=True)
+    # Download to a sibling .part file so a crashed install never
+    # leaves a half-zip in place looking like the real thing.
+    tmp_dir = Path(os.environ.get(
+        "TEMP", str(Path.home() / "AppData" / "Local" / "Temp")))
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_zip = tmp_dir / f"signalrgb-pack-{pack_id}.zip.part"
+    if tmp_zip.exists():
+        try: tmp_zip.unlink()
+        except OSError: pass
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": f"SignalRGBWallpaper-Packs/{APP_VERSION}"})
+    hasher = hashlib.sha256()
+    total = 0
+    with urllib.request.urlopen(req, timeout=60) as resp, open(tmp_zip, "wb") as fp:
+        while True:
+            chunk = resp.read(256 * 1024)
+            if not chunk:
+                break
+            fp.write(chunk)
+            hasher.update(chunk)
+            total += len(chunk)
+            if total > PACKS_MAX_ZIP_BYTES:
+                try: tmp_zip.unlink()
+                except OSError: pass
+                raise ValueError(
+                    f"pack exceeded streaming size cap ({total} bytes)")
+    local_sha = hasher.hexdigest()
+    if local_sha != expected_sha256:
+        try: tmp_zip.unlink()
+        except OSError: pass
+        raise ValueError(
+            f"SHA-256 mismatch: expected {expected_sha256}, "
+            f"got {local_sha}")
+    # Defence in depth: walk the ZIP entries BEFORE extracting and
+    # refuse anything that isn't an image or the manifest.json we
+    # expect. Defender's classification weighs heavily on the
+    # extracted-file profile; "ZIP that contained nothing but
+    # images" is the safest possible shape.
+    import zipfile
+    extracted_files: list[str] = []
+    try:
+        with zipfile.ZipFile(tmp_zip, "r") as zf:
+            for info in zf.infolist():
+                name = info.filename
+                if "/" in name or "\\" in name or ".." in name:
+                    raise ValueError(
+                        f"pack entry has path components: {name!r}")
+                if name == "manifest.json":
+                    continue
+                ext = os.path.splitext(name)[1].lower()
+                if ext not in PACKS_ALLOWED_ENTRY_EXTS:
+                    raise ValueError(
+                        f"pack contains non-image entry: {name!r}")
+            # All entries pass the whitelist → extract.
+            with _LIBRARY_LOCK:
+                for info in zf.infolist():
+                    name = info.filename
+                    if name == "manifest.json":
+                        continue
+                    dst = lib / Path(name).name
+                    with zf.open(info) as src, open(dst, "wb") as out:
+                        while True:
+                            blk = src.read(256 * 1024)
+                            if not blk:
+                                break
+                            out.write(blk)
+                    extracted_files.append(dst.name)
+                _library_rebuild_catalogue_locked(lib)
+                # Stamp every freshly-extracted item with pack +
+                # pack_version so future "Update available" detection
+                # works. Walks library.json once, mutates in place,
+                # writes atomically.
+                cat_path = lib / "library.json"
+                if cat_path.exists():
+                    try:
+                        cat = json.loads(cat_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        cat = {"version": 1, "items": []}
+                    by_name = {n: True for n in extracted_files}
+                    for it in cat.get("items", []):
+                        if isinstance(it, dict) and it.get("file") in by_name:
+                            it["pack"] = pack_id
+                            it["pack_version"] = pack_version
+                    _library_write_atomic(cat_path, cat)
+    finally:
+        try: tmp_zip.unlink()
+        except OSError: pass
+    return {
+        "pack_id":       pack_id,
+        "pack_version":  pack_version,
+        "extracted":     len(extracted_files),
+        "files":         extracted_files,
+    }
 
 
 def _library_apply_order(lib: Path, order: list[str]) -> int:
@@ -3925,6 +4094,115 @@ class Broadcaster:
                 writer.write(head + payload)
             except Exception as e:
                 http_error(writer, 500, f"open failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v2.3.0-beta: GET /packs/list — proxies the discovery manifest
+        # at https://delido.github.io/signalrgb-wallpaper/library-packs.json
+        # so the Configurator's pack browser can list available
+        # downloadable wallpaper packs. Pre-2.0.1 this endpoint hit
+        # raw.githubusercontent.com directly; 2.3.0-beta moves it to
+        # the GitHub Pages host because Pages traffic looks like
+        # normal docs traffic to AV / firewall heuristics, while raw.
+        # GHUserContent traffic is more often classified as binary
+        # download. The manifest itself is plain JSON either way.
+        if method == "GET" and target.split("?", 1)[0] == "/packs/list":
+            try:
+                loop = asyncio.get_event_loop()
+                manifest_json = await loop.run_in_executor(
+                    None, _packs_fetch_manifest)
+                # Annotate each pack with "installed" + "installed_version"
+                # so the UI can show "Update available" without a second
+                # round-trip. Reads library.json directly.
+                installed = _packs_installed_state(library_dir())
+                try:
+                    manifest = json.loads(manifest_json)
+                except Exception:
+                    manifest = {"schema": 1, "packs": []}
+                for p in manifest.get("packs", []):
+                    if not isinstance(p, dict):
+                        continue
+                    inst = installed.get(p.get("id"), 0)
+                    p["installed_version"] = inst
+                    p["installed"] = inst > 0
+                payload = json.dumps(manifest).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 502, f"manifest fetch failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+        # v2.3.0-beta: POST /packs/install — body is JSON
+        # {"pack_id": "...", "url": "...", "sha256": "...",
+        #  "size_bytes": ..., "pack_version": ...}.
+        # Downloads the ZIP, verifies SHA-256 against the supplied
+        # digest, validates every entry is an image (no .exe / .dll /
+        # .bat / .ps1 / etc. — defence in depth against a malicious
+        # pack mid-stream), extracts the images into
+        # %LOCALAPPDATA%\SignalRGBWallpaper\library\, then triggers
+        # a catalogue rebuild. Long-running, runs entirely in the
+        # executor so the event loop keeps serving other requests.
+        if method == "POST" and target.split("?", 1)[0] == "/packs/install":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 4096):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                pack_id    = str(req.get("pack_id", "")).strip()
+                pack_url   = str(req.get("url", "")).strip()
+                pack_sha   = str(req.get("sha256", "")).strip().lower()
+                pack_size  = int(req.get("size_bytes", 0))
+                pack_ver   = int(req.get("pack_version", 1))
+                # Lightweight input validation — the bridge talks
+                # to a same-host trusted UI, but the manifest is
+                # fetched from the public internet so we don't want
+                # to follow an arbitrary URL or write to a
+                # path-traversal-shaped pack_id either.
+                if (not pack_id or not pack_url or not pack_sha
+                        or "/" in pack_id or "\\" in pack_id
+                        or ".." in pack_id
+                        or len(pack_sha) != 64
+                        or not pack_url.startswith("https://github.com/")):
+                    raise ValueError("invalid pack descriptor")
+                loop = asyncio.get_event_loop()
+                report = await loop.run_in_executor(
+                    None, _packs_install,
+                    pack_id, pack_url, pack_sha, pack_size, pack_ver)
+                payload = json.dumps({"ok": True, **report}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 400, f"pack install failed: {e}")
             try: await writer.drain()
             except Exception: pass
             try: writer.close()

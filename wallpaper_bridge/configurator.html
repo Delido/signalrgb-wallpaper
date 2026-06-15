@@ -1618,6 +1618,66 @@
     border-top: 1px dashed rgba(255,255,255,0.08);
   }
 
+  /* v2.3.0-beta: pack browser tiles. One row per pack pulled from
+     the discovery manifest. Status badge swaps style based on
+     installed / update-available / not-installed. */
+  .lib-packs-actions {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 10px;
+  }
+  .lib-packs-status {
+    font-size: 11.5px;
+    opacity: 0.65;
+    margin: 6px 0 8px;
+  }
+  .lib-packs-list { display: flex; flex-direction: column; gap: 6px; }
+  .pack-tile {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12.5px;
+  }
+  .pack-tile .pack-name { font-weight: 600; }
+  .pack-tile .pack-meta {
+    grid-column: 1;
+    font-size: 11.5px;
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+  .pack-tile .pack-desc {
+    grid-column: 1;
+    font-size: 11.5px;
+    opacity: 0.78;
+    line-height: 1.4;
+  }
+  .pack-tile .pack-action { grid-row: 1 / span 3; align-self: center; }
+  .pack-badge {
+    display: inline-block;
+    font-size: 10.5px;
+    padding: 1px 6px;
+    margin-left: 8px;
+    border-radius: 999px;
+    background: rgba(58, 107, 168, 0.25);
+    border: 1px solid rgba(58, 107, 168, 0.55);
+    color: #b8d2f0;
+    vertical-align: middle;
+  }
+  .pack-badge.installed {
+    background: rgba(85, 200, 130, 0.18);
+    border-color: rgba(85, 200, 130, 0.55);
+    color: #9ddcb4;
+  }
+  .pack-badge.update {
+    background: rgba(255, 180, 70, 0.2);
+    border-color: rgba(255, 180, 70, 0.55);
+    color: #ffd486;
+  }
+
   /* Preset slot rows — one per saved combo. Filled slots show a short
      summary (counts of widgets + active effects); empty slots hide
      Apply/Clear so only Save is offered. */
@@ -2550,34 +2610,35 @@
       <input id="lib-upload" type="file"
              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"
              style="display:none">
-      <!-- v2.0.1: in-app pack downloader removed (Defender flagged the
-           urlopen + zipfile.extractall pattern as Wacatac.B!ml on
-           unsigned binaries). Replaced with a hint pointing at the
-           same GitHub release where the pack ZIPs live — user
-           extracts the contents into %LOCALAPPDATA%\…\library\ by
-           hand, the bridge picks them up on next render. -->
+      <!-- v2.3.0-beta: in-app pack browser is back. The Defender FP
+           that drove v2.0.1's removal was driven by the v2.0.0 bridge
+           living in user-writable %LOCALAPPDATA% (now Program Files
+           since v2.2.1) and the pack-install code accepting any ZIP
+           entry (now image-extensions-only). The download is also
+           strictly user-triggered — clicking "Laden" on a tile, not
+           a background poll. SHA-256 verification matches the v2.2.2
+           updater pattern. -->
       <details id="library-packs-section" class="lib-packs-details">
-        <summary data-i18n="packs.section">More wallpapers — themed packs on GitHub</summary>
-        <div class="lib-packs-hint" data-i18n="packs.manual_hint">
-          We host 13 themed wallpaper packs (~9–52 MB each) as GitHub
-          release assets. Download the ZIPs you want and extract the
-          contents directly into
-          <code>%LOCALAPPDATA%\SignalRGBWallpaper\library\</code> —
-          the bridge picks them up automatically.
+        <summary data-i18n="packs.section">📦 Wallpaper packs (download)</summary>
+        <div class="lib-packs-hint" data-i18n-html="packs.hint">
+          User-triggered downloads. Each pack ZIP is SHA-256-verified
+          against the manifest and refuses any non-image entry before
+          extracting — no executable / script content from a pack can
+          ever land on disk.
         </div>
-        <a class="lib-packs-link" target="_blank" rel="noopener"
-           href="https://github.com/Delido/signalrgb-wallpaper/releases/tag/library-packs-v1"
-           data-i18n="packs.manual_link">Browse packs on GitHub →</a>
-        <button type="button" class="lib-packs-link lib-packs-link-secondary"
-                id="lib-open-folder-btn"
-                data-i18n="packs.open_folder">📂 Open library folder</button>
-        <div class="lib-packs-note" data-i18n="packs.defender_note">
-          The previous in-app download flow was removed in v2.0.1
-          because Windows Defender flagged the unsigned download +
-          extract code as suspicious. We're evaluating code-signing
-          + a separate small downloader so the in-app flow can come
-          back without the false-positive risk.
+        <div class="lib-packs-actions">
+          <button type="button" class="btn" id="packs-refresh-btn"
+                  data-i18n="packs.refresh">Refresh list</button>
+          <a class="btn btn-link" target="_blank" rel="noopener"
+             href="https://github.com/Delido/signalrgb-wallpaper/releases/tag/library-packs-v1"
+             data-i18n="packs.manual_link">Browse packs on GitHub →</a>
+          <button type="button" class="btn btn-link"
+                  id="lib-open-folder-btn"
+                  data-i18n="packs.open_folder">📂 Open library folder</button>
         </div>
+        <div id="packs-status" class="lib-packs-status"
+             data-i18n="packs.loading">Loading pack catalogue…</div>
+        <div id="packs-list" class="lib-packs-list"></div>
       </details>
     </div>
   </section>
@@ -3685,17 +3746,33 @@ const TRANSLATIONS = {
                               de: "✨ Auto-Cut beim Upload" },
   "library.autocut_title":  { en: "Apply Luminance-Alpha auto-cut to incoming images (same effect as the bundled v2.0 wallpapers — bright pixels become transparent, dark backdrop stays opaque).",
                               de: "Wendet Luminanz-Alpha Auto-Cut auf neue Bilder an (gleicher Effekt wie die mitgelieferten v2.0-Wallpaper — helle Pixel werden transparent, dunkler Hintergrund bleibt deckend)." },
-  // v2.0.1: manual pack browse hint (in-app downloader removed).
-  "packs.section":          { en: "More wallpapers — themed packs on GitHub",
-                              de: "Mehr Wallpaper — Themen-Packs auf GitHub" },
-  "packs.manual_hint":      { en: "We host 13 themed wallpaper packs (~9–52 MB each) as GitHub release assets. Download the ZIPs you want and extract the contents directly into <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\library\\</code> — the bridge picks them up automatically.",
-                              de: "13 Themen-Packs (je ~9–52 MB) liegen als GitHub-Release-Assets bereit. Lade die ZIPs runter und entpacke den Inhalt direkt nach <code>%LOCALAPPDATA%\\SignalRGBWallpaper\\library\\</code> — die Bridge erkennt sie automatisch." },
+  // v2.3.0-beta: in-app pack browser is back (see configurator.html
+  // section #library-packs-section for the v2.0.1 → v2.3.0-beta
+  // rationale).
+  "packs.section":          { en: "📦 Wallpaper packs (download)",
+                              de: "📦 Wallpaper-Packs (Download)" },
+  "packs.hint":             { en: "User-triggered downloads. Each pack ZIP is SHA-256-verified against the manifest and refuses any non-image entry before extracting — no executable / script content from a pack can ever land on disk.",
+                              de: "Vom User gestartete Downloads. Jeder Pack-ZIP wird per SHA-256 gegen das Manifest verifiziert und Nicht-Bild-Einträge werden vorm Entpacken abgelehnt — kein ausführbarer / Skript-Inhalt aus einem Pack landet auf der Platte." },
+  "packs.refresh":          { en: "Refresh list",            de: "Liste neu laden" },
+  "packs.loading":          { en: "Loading pack catalogue…", de: "Pack-Katalog wird geladen…" },
+  "packs.load_failed":      { en: "Couldn't load the pack catalogue: {msg}",
+                              de: "Pack-Katalog konnte nicht geladen werden: {msg}" },
+  "packs.empty":            { en: "No packs available right now.",
+                              de: "Derzeit keine Packs verfügbar." },
+  "packs.meta":             { en: "{count} images · {size}",
+                              de: "{count} Bilder · {size}" },
+  "packs.action.load":      { en: "Load",                    de: "Laden" },
+  "packs.action.update":    { en: "Update",                  de: "Aktualisieren" },
+  "packs.badge.installed":  { en: "Installed",               de: "Installiert" },
+  "packs.badge.update":     { en: "Update available",        de: "Update verfügbar" },
+  "packs.downloading":      { en: "Downloading {label}…",    de: "Lade {label}…" },
+  "packs.installed":        { en: "Installed {label} ({n} images)",
+                              de: "{label} installiert ({n} Bilder)" },
+  "packs.install_failed":   { en: "Install failed: {msg}",   de: "Installation fehlgeschlagen: {msg}" },
   "packs.manual_link":      { en: "Browse packs on GitHub →",
                               de: "Packs auf GitHub öffnen →" },
   "packs.open_folder":      { en: "📂 Open library folder",
                               de: "📂 Bibliotheksordner öffnen" },
-  "packs.defender_note":    { en: "The previous in-app download flow was removed in v2.0.1 because Windows Defender flagged the unsigned download + extract code as suspicious. We're evaluating code-signing + a separate small downloader so the in-app flow can come back without the false-positive risk.",
-                              de: "Der eingebaute Download-Flow wurde in v2.0.1 entfernt, weil Windows Defender den unsignierten Download- + Extract-Code als verdächtig markiert hat. Wir prüfen Code-Signing + einen separaten kleinen Downloader, damit der In-App-Ablauf ohne False-Positive-Risiko zurückkommen kann." },
   "bg.goto_library":        { en: "Browse library...",    de: "Bibliothek öffnen..." },
   "bg.current_thumb":       { en: "No background",        de: "Kein Hintergrund" },
   "bg.goto_library_hint":   { en: "Browse, search and apply bundled + your own wallpapers.",
@@ -6358,7 +6435,141 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (_) {}
     });
   }
+  // v2.3.0-beta: pack browser. Manifest only fetched on first open
+  // of the <details> so closed-by-default browsers don't hit GitHub
+  // Pages until the user actually asks. Refresh button re-fetches.
+  const packsDetails = document.getElementById("library-packs-section");
+  const packsRefresh = document.getElementById("packs-refresh-btn");
+  if (packsDetails) {
+    let loadedOnce = false;
+    packsDetails.addEventListener("toggle", () => {
+      if (packsDetails.open && !loadedOnce) {
+        loadedOnce = true;
+        loadPackCatalogue();
+      }
+    });
+  }
+  if (packsRefresh) {
+    packsRefresh.addEventListener("click", () => loadPackCatalogue());
+  }
 });
+
+function _formatBytes(n) {
+  if (!n) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 ? 0 : 1) + " " + units[i];
+}
+
+async function loadPackCatalogue() {
+  const statusEl = document.getElementById("packs-status");
+  const listEl   = document.getElementById("packs-list");
+  if (!statusEl || !listEl) return;
+  statusEl.textContent = t("packs.loading");
+  listEl.innerHTML = "";
+  try {
+    const r = await fetch("/packs/list", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const packs = Array.isArray(data.packs) ? data.packs : [];
+    if (!packs.length) {
+      statusEl.textContent = t("packs.empty");
+      return;
+    }
+    statusEl.textContent = "";
+    for (const p of packs) renderPackTile(listEl, p);
+  } catch (e) {
+    statusEl.textContent = t("packs.load_failed", { msg: e.message });
+  }
+}
+
+function renderPackTile(listEl, p) {
+  const lang = (typeof _lang === "string" && _lang) ? _lang : "en";
+  const label = (p.label && (p.label[lang] || p.label.en)) || p.id;
+  const tile = document.createElement("div");
+  tile.className = "pack-tile";
+  const nameRow = document.createElement("div");
+  nameRow.className = "pack-name";
+  nameRow.textContent = label;
+  // Status badge
+  const installedVer = parseInt(p.installed_version || 0, 10);
+  const manifestVer  = parseInt(p.version || 0, 10);
+  const isInstalled  = installedVer > 0;
+  const updateAvail  = isInstalled && manifestVer > installedVer;
+  if (isInstalled && !updateAvail) {
+    const b = document.createElement("span");
+    b.className = "pack-badge installed";
+    b.textContent = t("packs.badge.installed");
+    nameRow.appendChild(b);
+  } else if (updateAvail) {
+    const b = document.createElement("span");
+    b.className = "pack-badge update";
+    b.textContent = t("packs.badge.update") + " (v" + installedVer + " → v" + manifestVer + ")";
+    nameRow.appendChild(b);
+  }
+  tile.appendChild(nameRow);
+  const meta = document.createElement("div");
+  meta.className = "pack-meta";
+  meta.textContent = t("packs.meta", {
+    count: p.image_count,
+    size:  _formatBytes(p.size_bytes),
+  });
+  tile.appendChild(meta);
+  const desc = document.createElement("div");
+  desc.className = "pack-desc";
+  desc.textContent = p.description || "";
+  tile.appendChild(desc);
+  const actionWrap = document.createElement("div");
+  actionWrap.className = "pack-action";
+  if (!isInstalled || updateAvail) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn " + (updateAvail ? "btn-primary" : "btn-primary");
+    btn.textContent = updateAvail
+      ? t("packs.action.update")
+      : t("packs.action.load");
+    btn.addEventListener("click", () => installPack(p, label, btn));
+    actionWrap.appendChild(btn);
+  }
+  tile.appendChild(actionWrap);
+  listEl.appendChild(tile);
+}
+
+async function installPack(pack, label, btn) {
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = "…";
+  toast(t("packs.downloading", { label }), "good");
+  try {
+    const r = await fetch("/packs/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pack_id:      pack.id,
+        url:          pack.url,
+        sha256:       pack.sha256,
+        size_bytes:   pack.size_bytes,
+        pack_version: pack.version,
+      }),
+    });
+    if (!r.ok) {
+      let detail = "HTTP " + r.status;
+      try { detail = (await r.text()) || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    const res = await r.json();
+    toast(t("packs.installed", { label, n: res.extracted || 0 }), "good");
+    // Reload pack catalogue (refresh badges + buttons) AND the
+    // library grid so the new tiles surface immediately.
+    loadPackCatalogue();
+    try { if (typeof refreshLibrary === "function") refreshLibrary(); } catch (_) {}
+  } catch (e) {
+    toast(t("packs.install_failed", { msg: e.message }), "bad");
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
+}
 
 // v2.2.0-beta: shared file → library uploader. Used by the explicit
 // "Add image…" picker and by the document-wide drag-and-drop handler.

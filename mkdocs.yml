@@ -89,6 +89,7 @@ plugins:
             Troubleshooting: Fehlerbehebung
             Using the app: App-Nutzung
             Building glow wallpapers: Glow-Wallpaper bauen
+            Wallpaper packs: Wallpaper-Packs
             Tray reference: Tray-Referenz
             OpenRGB SDK server: OpenRGB-SDK-Server
             Reference: Referenz
@@ -117,8 +118,13 @@ extra:
       lang: de
 
 # Files in docs/ that are not part of the rendered site.
+# v2.3.0-beta: library-packs.json IS copied to the rendered site
+# now — the bridge fetches it from
+# https://delido.github.io/signalrgb-wallpaper/library-packs.json
+# to discover available wallpaper packs. Excluding it from
+# rendering happens automatically because MkDocs only renders .md.
 exclude_docs: |
-  library-packs.json
+
 
 nav:
   - Home: index.md
@@ -128,6 +134,7 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Using the app:
       - Building glow wallpapers: building-wallpapers.md
+      - Wallpaper packs: wallpaper-packs.md
       - Tray reference: tray-settings.md
       - OpenRGB SDK server: openrgb-sdk-server.md
   - Reference:

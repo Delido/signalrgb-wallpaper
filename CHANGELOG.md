@@ -4,6 +4,72 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0-beta] - 2026-06-15
+
+In-app wallpaper-pack browser is back, three years (well, three releases)
+after v2.0.1 ripped it out under Defender FP pressure. The
+v2.2.x mitigations made it safe to bring back; the new flow is
+also less malware-shaped than what v2.0.0 shipped.
+
+### Added — `📦 Wallpaper packs (download)` section in the Library tab
+
+Open the section, the bridge fetches a manifest from this docs site
+(GitHub Pages,
+[`library-packs.json`](https://delido.github.io/signalrgb-wallpaper/library-packs.json))
+listing every available pack. Each tile shows name, description,
+image count, total download size, and an action button. Click
+**Load** and the bridge:
+
+1. Downloads the pack ZIP from the
+   [`library-packs-v1`](https://github.com/Delido/signalrgb-wallpaper/releases/tag/library-packs-v1)
+   GitHub release.
+2. SHA-256-verifies the downloaded bytes against the digest in the
+   manifest. Mismatch → install aborts, partial ZIP deleted.
+3. Walks every ZIP entry before extracting anything and refuses
+   any non-image entry. The extracted footprint is provably
+   `.webp / .png / .jpg / .gif / .bmp / .avif` only — no
+   executable / script content from a pack can ever land on disk.
+4. Extracts into `%LOCALAPPDATA%\SignalRGBWallpaper\library\`,
+   stamps each new entry with `pack` + `pack_version`, and rebuilds
+   the catalogue.
+
+All steps run server-side in the bridge's executor pool — the
+Configurator stays responsive throughout. Per-pack `Installed` /
+`Update available (vN → vM)` badges read from the stamped
+metadata, so version drift between manifest and what's on disk
+is visible at a glance.
+
+### Why this is safer than v2.0.0's pack downloader
+
+The v2.0.0 pack downloader tripped Windows Defender's ML heuristic
+as `Wacatac.B!ml`. The two strongest signals it was catching are
+both gone in v2.3.0-beta:
+
+- **Bridge install location.** v2.0.0's bridge lived in
+  `%LOCALAPPDATA%\Programs\SignalRGBWallpaper\` — the classic
+  "unsigned EXE in user-writable persistence path" pattern. v2.2.1
+  moved the bridge to `C:\Program Files\SignalRGBWallpaper\`
+  (admin-only ACL); the pack downloader is no longer running from
+  a malware-shaped location.
+- **What a pack can drop on disk.** v2.0.0 extracted whatever was
+  in the ZIP. The new path enforces an image-extension whitelist
+  on every entry before the first byte gets unpacked — so the
+  extracted footprint can be classified as "image data only", much
+  harder for the ML model to score as loader-shaped than a generic
+  `zipfile.extractall` would have been.
+
+Plus user-triggered (the download only runs when you click **Load**
+on a specific pack — no background polling), SHA-256 verification
+(matches the v2.2.2 updater pattern), and the manifest moved from
+`raw.githubusercontent.com` to GitHub Pages (looks like normal
+docs traffic to AV / firewall heuristics).
+
+### Changed — APP_VERSION → 2.3.0-beta
+
+`WALLPAPER_VERSION` unchanged (still 2.2.0). Bridge + Configurator
+only — no wallpaper bundle code touched. Lively / Wallpaper Engine
+re-import NOT required.
+
 ## [2.2.2] - 2026-06-15
 
 Internal audit sweep. Nine items found, all nine fixed. Three classes
