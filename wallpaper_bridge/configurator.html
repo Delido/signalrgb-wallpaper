@@ -1343,6 +1343,58 @@
   .lib-tile-span-half.right  { top: 22px; left: 50%; right: 4px;  bottom: 22px; margin-left: 2px; }
   .lib-tile-span-half.top    { top: 4px;  left: 22px; right: 22px; bottom: 50%; margin-bottom: 2px; }
   .lib-tile-span-half.bottom { top: 50%; left: 22px; right: 22px; bottom: 4px;  margin-top: 2px; }
+  /* v2.3.0-beta.1: multi-select mode. Tiles get a checkmark badge
+     (selected) or an empty box (unselected), the whole grid gets a
+     "we're selecting now" subtle tint, and the bulk-action bar
+     appears above the grid. */
+  .lib-bulk-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; margin: 8px 0;
+    background: rgba(58, 107, 168, 0.15);
+    border: 1px solid rgba(58, 107, 168, 0.55);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .lib-bulk-bar .lib-bulk-count {
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .lib-bulk-bar .btn-danger {
+    margin-left: auto;
+    background: rgba(186, 60, 60, 0.45);
+    border-color: rgba(186, 60, 60, 0.9);
+  }
+  .lib-bulk-bar .btn-danger:hover { background: rgba(186, 60, 60, 0.65); }
+  .lib-multiselect-toggle.active {
+    background: rgba(58, 107, 168, 0.4);
+    border-color: rgba(58, 107, 168, 0.85);
+  }
+  body.lib-selecting .lib-tile { cursor: pointer; }
+  body.lib-selecting .lib-tile::after {
+    content: "";
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 22px; height: 22px;
+    border: 2px solid rgba(255,255,255,0.6);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.45);
+    z-index: 3;
+    pointer-events: none;
+  }
+  body.lib-selecting .lib-tile.lib-selected::after {
+    content: "✓";
+    background: rgba(58, 107, 168, 0.95);
+    border-color: rgba(58, 107, 168, 1);
+    color: #fff;
+    font-size: 16px;
+    line-height: 18px;
+    text-align: center;
+    font-weight: 700;
+  }
+  body.lib-selecting .lib-tile.lib-selected {
+    outline: 3px solid rgba(58, 107, 168, 0.85);
+    outline-offset: -3px;
+  }
   .lib-tile.pinned::before {
     content: "★";
     position: absolute;
@@ -2005,7 +2057,47 @@
      screen-count picker moves into the System tab as a regular row. */
   .tab-gear { display: none !important; }
   .tab .tab-mirror-badge { display: none !important; }
+  /* v2.3.0-beta.1: screen-count picker moved BACK from the System
+     tab card mirror into the header bar (next to Vorschau / Tour /
+     Builder öffnen). The .screencount-pick-in-header variant below
+     is what the header version uses; the .screencount-pick-in-card
+     System-tab mirror is now redundant and hidden. The tab-strip
+     fallback (no header anchor) also stays hidden — header is the
+     only canonical home now. */
   .screencount-pick { display: none !important; }
+  .screencount-pick.screencount-pick-in-card { display: none !important; }
+  .screencount-pick.screencount-pick-in-header {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 0 4px;
+    margin-right: 4px;
+    color: var(--text);
+  }
+  .screencount-pick.screencount-pick-in-header .lbl {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-right: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .screencount-pick.screencount-pick-in-header .sc-btn {
+    min-width: 28px; padding: 3px 8px;
+    font-size: 12px;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .screencount-pick.screencount-pick-in-header .sc-btn:hover {
+    background: var(--panel-2);
+  }
+  .screencount-pick.screencount-pick-in-header .sc-btn.active {
+    background: rgba(58, 107, 168, 0.55);
+    border-color: rgba(58, 107, 168, 0.9);
+  }
   /* v2.2.0-beta: maximize button removed — floating preview mode
      covers the same use-case now and the maximize CSS broke when
      the wrap was already DOM-moved to body level. */
@@ -2014,14 +2106,6 @@
      visible at 2+. With the floating preview + BG thumbnail in the
      Look tab the strip is redundant. */
   #overview-card { display: none !important; }
-  /* …except the System-card mirror — that one stays visible. */
-  .screencount-pick.screencount-pick-in-card {
-    display: inline-flex !important;
-    gap: 4px;
-    flex: 0 0 auto;
-    padding: 0;
-    color: var(--text);
-  }
   .tab[title]:not([title=""]):hover::after {
     content: attr(title);
     position: absolute;
@@ -2195,6 +2279,11 @@
   <h1 data-i18n="header.title">SignalRGB Wallpaper Configurator</h1>
   <span class="spacer"></span>
   <span class="conn bad" id="conn" data-i18n="conn.connecting">connecting…</span>
+  <!-- v2.3.0-beta.1: screen-count picker back in the header, next to
+       the preview / tour / builder actions. The buildScreenCountPicker
+       routine in <script> appends its DOM into this anchor instead
+       of into the tab strip. -->
+  <span id="header-screencount-anchor" class="header-screencount-anchor"></span>
   <button class="btn" id="header-toggle-preview" type="button"
           title="Live preview"
           data-i18n="header.toggle_preview">📺 Vorschau</button>
@@ -2587,6 +2676,27 @@
           <input type="checkbox" id="library-autocut">
           <span data-i18n="library.autocut_label">✨ Auto-cut on upload</span>
         </label>
+        <!-- v2.3.0-beta.1: multi-select toggle. When on, clicking a
+             tile selects it instead of opening the apply menu; the
+             bulk-action bar appears below the toolbar so the user
+             can delete in batch. -->
+        <button type="button" class="btn lib-multiselect-toggle"
+                id="library-multiselect-btn"
+                data-i18n="library.multiselect.toggle">☐ Select</button>
+      </div>
+      <div id="library-bulk-bar" class="lib-bulk-bar" hidden>
+        <span class="lib-bulk-count" id="library-bulk-count"
+              data-i18n="library.multiselect.count"
+              data-i18n-vars="n">0 selected</span>
+        <button type="button" class="btn"
+                id="library-bulk-select-all"
+                data-i18n="library.multiselect.select_all">Select all</button>
+        <button type="button" class="btn"
+                id="library-bulk-clear"
+                data-i18n="library.multiselect.clear">Clear</button>
+        <button type="button" class="btn btn-danger"
+                id="library-bulk-delete"
+                data-i18n="library.multiselect.delete">Delete selected</button>
       </div>
       <!-- v2.2.0-beta wave 2: unified filter grid. Each row has a
            consistent label + same chip style (no more dashed-border
@@ -3744,6 +3854,16 @@ const TRANSLATIONS = {
   "library.tags_label":     { en: "Tags",                 de: "Tags" },
   "library.autocut_label":  { en: "✨ Auto-cut on upload",
                               de: "✨ Auto-Cut beim Upload" },
+  "library.multiselect.toggle":      { en: "☐ Select",         de: "☐ Auswahl" },
+  "library.multiselect.exit":        { en: "✕ Exit selection", de: "✕ Auswahl beenden" },
+  "library.multiselect.count":       { en: "{n} selected",     de: "{n} ausgewählt" },
+  "library.multiselect.select_all":  { en: "Select all",       de: "Alle auswählen" },
+  "library.multiselect.clear":       { en: "Clear",            de: "Aufheben" },
+  "library.multiselect.delete":      { en: "🗑 Delete selected", de: "🗑 Auswahl löschen" },
+  "library.multiselect.delete_confirm": { en: "Delete {n} items? This can't be undone.",
+                                          de: "{n} Einträge löschen? Das kann nicht rückgängig gemacht werden." },
+  "library.multiselect.delete_done": { en: "{ok} deleted, {fail} failed",
+                                       de: "{ok} gelöscht, {fail} fehlgeschlagen" },
   "library.autocut_title":  { en: "Apply Luminance-Alpha auto-cut to incoming images (same effect as the bundled v2.0 wallpapers — bright pixels become transparent, dark backdrop stays opaque).",
                               de: "Wendet Luminanz-Alpha Auto-Cut auf neue Bilder an (gleicher Effekt wie die mitgelieferten v2.0-Wallpaper — helle Pixel werden transparent, dunkler Hintergrund bleibt deckend)." },
   // v2.3.0-beta: in-app pack browser is back (see configurator.html
@@ -3763,6 +3883,13 @@ const TRANSLATIONS = {
                               de: "{count} Bilder · {size}" },
   "packs.action.load":      { en: "Load",                    de: "Laden" },
   "packs.action.update":    { en: "Update",                  de: "Aktualisieren" },
+  "packs.action.uninstall": { en: "Uninstall",               de: "Deinstallieren" },
+  "packs.uninstall_confirm":{ en: "Remove all images from the {label} pack?",
+                              de: "Alle Bilder aus dem Pack {label} entfernen?" },
+  "packs.uninstalled":      { en: "Removed {n} images from {label}",
+                              de: "{n} Bilder aus {label} entfernt" },
+  "packs.uninstall_failed": { en: "Uninstall failed: {msg}",
+                              de: "Deinstallation fehlgeschlagen: {msg}" },
   "packs.badge.installed":  { en: "Installed",               de: "Installiert" },
   "packs.badge.update":     { en: "Update available",        de: "Update verfügbar" },
   "packs.downloading":      { en: "Downloading {label}…",    de: "Lade {label}…" },
@@ -5009,7 +5136,7 @@ function renderOverviewCard(screens) {
 // open Configurator tab stays in sync.
 (function buildScreenCountPicker() {
   const wrap = document.createElement("div");
-  wrap.className = "screencount-pick";
+  wrap.className = "screencount-pick screencount-pick-in-header";
   wrap.id = "screencount-pick";
   const lbl = document.createElement("span");
   lbl.className = "lbl";
@@ -5024,7 +5151,21 @@ function renderOverviewCard(screens) {
     b.addEventListener("click", () => setScreenCount(n));
     wrap.appendChild(b);
   }
-  els.tabs.appendChild(wrap);
+  // v2.3.0-beta.1: docked in the header next to the preview / tour
+  // / builder actions instead of into the tab strip. The
+  // <span id="header-screencount-anchor"> placeholder up in the
+  // header DOM is where we insert; we replace it with our picker so
+  // the order in the header bar matches the markup.
+  const anchor = document.getElementById("header-screencount-anchor");
+  if (anchor && anchor.parentNode) {
+    anchor.parentNode.insertBefore(wrap, anchor);
+    anchor.remove();
+  } else {
+    // Defensive: if the anchor isn't there (older configurator.html
+    // shipped without it) fall back to the legacy tab-strip slot so
+    // the picker is still visible.
+    els.tabs.appendChild(wrap);
+  }
   els.scPick = wrap;
   // v2.2.0-beta: also mirror the picker into the System tab card so
   // the user can change screen count from there now that the top
@@ -5319,6 +5460,46 @@ let _libraryFilter = (function () {
   try { return localStorage.getItem("cfg.libraryFilter") || "all"; }
   catch (_) { return "all"; }
 })();
+// v2.3.0-beta.1: library multi-select state. Off by default; the
+// "Auswahl" toolbar button toggles it. Selection set is a Map of
+// filename → true, not persisted (intentionally — leaving select mode
+// or refreshing always starts with an empty selection so the next
+// session doesn't risk an accidental bulk delete).
+let _libSelectMode = false;
+const _libSelected = new Set();
+function _libToggleSelected(file, btn) {
+  if (_libSelected.has(file)) {
+    _libSelected.delete(file);
+    if (btn) btn.classList.remove("lib-selected");
+  } else {
+    _libSelected.add(file);
+    if (btn) btn.classList.add("lib-selected");
+  }
+  _libUpdateBulkBar();
+}
+function _libUpdateBulkBar() {
+  const bar = document.getElementById("library-bulk-bar");
+  const cnt = document.getElementById("library-bulk-count");
+  if (!bar) return;
+  bar.hidden = !_libSelectMode;
+  if (cnt) {
+    cnt.textContent = t("library.multiselect.count",
+                         { n: _libSelected.size });
+  }
+}
+function _libSetSelectMode(on) {
+  _libSelectMode = !!on;
+  document.body.classList.toggle("lib-selecting", _libSelectMode);
+  const tgl = document.getElementById("library-multiselect-btn");
+  if (tgl) {
+    tgl.classList.toggle("active", _libSelectMode);
+    tgl.textContent = _libSelectMode
+      ? t("library.multiselect.exit")
+      : t("library.multiselect.toggle");
+  }
+  if (!_libSelectMode) _libSelected.clear();
+  _libUpdateBulkBar();
+}
 // v1.7.5: sort mode, search query, active tag — all persisted to
 // localStorage so the user's view survives a page reload.
 let _librarySort = (function () {
@@ -5633,6 +5814,12 @@ function renderLibraryStrip() {
       deleteLibraryItem(item);
     });
     btn.appendChild(del);
+    // v2.3.0-beta.1: apply selection styling if this file is in the
+    // multi-select set. The set survives renders; the visual state
+    // gets re-applied here for each new tile element.
+    if (_libSelectMode && _libSelected.has(item.file)) {
+      btn.classList.add("lib-selected");
+    }
     // v2.2.0-beta wave 2: span hover-overlays removed — they
     // cluttered every tile in span mode and the right-click /
     // Apply-dialog routes already cover the same use-case.
@@ -5645,10 +5832,17 @@ function renderLibraryStrip() {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       _restoreLivePreviewBg();
+      // v2.3.0-beta.1: in multi-select mode, clicks toggle the
+      // tile's selection state instead of opening the context menu.
+      if (_libSelectMode) {
+        _libToggleSelected(item.file, btn);
+        return;
+      }
       showLibraryContextMenu(item, e.clientX, e.clientY);
     });
     btn.addEventListener("dblclick", (e) => {
       e.preventDefault();
+      if (_libSelectMode) return;
       _restoreLivePreviewBg();
       applyLibraryItem(item);
     });
@@ -6435,6 +6629,62 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (_) {}
     });
   }
+  // v2.3.0-beta.1: library multi-select wiring.
+  const msBtn = document.getElementById("library-multiselect-btn");
+  if (msBtn) {
+    msBtn.addEventListener("click", () => _libSetSelectMode(!_libSelectMode));
+  }
+  const bSelAll = document.getElementById("library-bulk-select-all");
+  if (bSelAll) {
+    bSelAll.addEventListener("click", () => {
+      if (!Array.isArray(libraryCatalogue)) return;
+      for (const it of libraryCatalogue) {
+        if (it && it.file) _libSelected.add(it.file);
+      }
+      document.querySelectorAll(".lib-tile").forEach((el) => {
+        if (el.dataset && el.dataset.file
+            && _libSelected.has(el.dataset.file)) {
+          el.classList.add("lib-selected");
+        }
+      });
+      _libUpdateBulkBar();
+    });
+  }
+  const bClear = document.getElementById("library-bulk-clear");
+  if (bClear) {
+    bClear.addEventListener("click", () => {
+      _libSelected.clear();
+      document.querySelectorAll(".lib-tile.lib-selected")
+        .forEach((el) => el.classList.remove("lib-selected"));
+      _libUpdateBulkBar();
+    });
+  }
+  const bDel = document.getElementById("library-bulk-delete");
+  if (bDel) {
+    bDel.addEventListener("click", async () => {
+      const files = Array.from(_libSelected);
+      if (files.length === 0) return;
+      if (!confirm(t("library.multiselect.delete_confirm",
+                     { n: files.length }))) return;
+      bDel.disabled = true;
+      let ok = 0, fail = 0;
+      for (const f of files) {
+        try {
+          const r = await fetch("/library/" + encodeURIComponent(f),
+                                { method: "DELETE" });
+          if (r.ok) ok++; else fail++;
+        } catch (_) {
+          fail++;
+        }
+      }
+      toast(t("library.multiselect.delete_done",
+              { ok, fail }), fail ? "bad" : "good");
+      _libSelected.clear();
+      _libSetSelectMode(false);
+      bDel.disabled = false;
+      try { if (typeof refreshLibrary === "function") refreshLibrary(); } catch (_) {}
+    });
+  }
   // v2.3.0-beta: pack browser. Manifest only fetched on first open
   // of the <details> so closed-by-default browsers don't hit GitHub
   // Pages until the user actually asks. Refresh button re-fetches.
@@ -6525,15 +6775,55 @@ function renderPackTile(listEl, p) {
   if (!isInstalled || updateAvail) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "btn " + (updateAvail ? "btn-primary" : "btn-primary");
+    btn.className = "btn btn-primary";
     btn.textContent = updateAvail
       ? t("packs.action.update")
       : t("packs.action.load");
     btn.addEventListener("click", () => installPack(p, label, btn));
     actionWrap.appendChild(btn);
   }
+  // v2.3.0-beta.1: uninstall lives next to the load action so it's
+  // visible whenever the pack is installed (independent of whether
+  // an update is also offered). Confirms before nuking to dodge
+  // accidental-click data loss.
+  if (isInstalled) {
+    const unbtn = document.createElement("button");
+    unbtn.type = "button";
+    unbtn.className = "btn";
+    unbtn.style.marginLeft = "6px";
+    unbtn.textContent = t("packs.action.uninstall");
+    unbtn.addEventListener("click", () => uninstallPack(p, label, unbtn));
+    actionWrap.appendChild(unbtn);
+  }
   tile.appendChild(actionWrap);
   listEl.appendChild(tile);
+}
+
+async function uninstallPack(pack, label, btn) {
+  if (!confirm(t("packs.uninstall_confirm", { label }))) return;
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = "…";
+  try {
+    const r = await fetch("/packs/uninstall", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack_id: pack.id }),
+    });
+    if (!r.ok) {
+      let detail = "HTTP " + r.status;
+      try { detail = (await r.text()) || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    const res = await r.json();
+    toast(t("packs.uninstalled", { label, n: res.removed || 0 }), "good");
+    loadPackCatalogue();
+    try { if (typeof refreshLibrary === "function") refreshLibrary(); } catch (_) {}
+  } catch (e) {
+    toast(t("packs.uninstall_failed", { msg: e.message }), "bad");
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
 }
 
 async function installPack(pack, label, btn) {

@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.3.0-beta"
+APP_VERSION = "2.3.0-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1598,6 +1598,22 @@ def _library_rebuild_catalogue_locked(lib: Path) -> None:
         prev_pack = prev_it.get("pack")
         if isinstance(prev_pack, str) and prev_pack.strip():
             entry["pack"] = prev_pack.strip()[:32]
+            # v2.3.0-beta hotfix: pack_version was preserved INFORMALLY
+            # by only persisting it on the pack we'd most recently
+            # installed — every catalogue rebuild stripped the version
+            # off older packs. `_packs_installed_state` keys off
+            # pack_version > 0 to decide which packs are installed, so
+            # the older packs silently flipped back to "Laden" in the
+            # UI after each new install. Preserve it here so multiple
+            # packs can be installed at once and the UI keeps showing
+            # all of them as installed.
+            prev_ver = prev_it.get("pack_version")
+            try:
+                pv = int(prev_ver) if prev_ver is not None else 0
+            except Exception:
+                pv = 0
+            if pv > 0:
+                entry["pack_version"] = pv
         if entry["order"] is None:
             del entry["order"]
         items.append(entry)
@@ -1799,6 +1815,52 @@ def _packs_install(pack_id: str, url: str, expected_sha256: str,
         "pack_version":  pack_version,
         "extracted":     len(extracted_files),
         "files":         extracted_files,
+    }
+
+
+def _packs_uninstall(pack_id: str) -> dict:
+    """Delete every library file (+ .thumb / .4k siblings) tagged
+    pack == pack_id, then rebuild library.json. Items the user added
+    by hand (no pack stamp) are never touched. Returns a small summary
+    for the endpoint response."""
+    lib = library_dir()
+    with _LIBRARY_LOCK:
+        cat_path = lib / "library.json"
+        if not cat_path.exists():
+            return {"pack_id": pack_id, "removed": 0, "files": []}
+        try:
+            cat = json.loads(cat_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"pack_id": pack_id, "removed": 0, "files": []}
+        victims: list[str] = []
+        for it in cat.get("items", []):
+            if (isinstance(it, dict)
+                    and it.get("pack") == pack_id
+                    and isinstance(it.get("file"), str)):
+                victims.append(it["file"])
+        removed_files: list[str] = []
+        for name in victims:
+            stem = Path(name).stem
+            for cand in (
+                lib / name,
+                lib / f"{stem}.thumb.png",
+                lib / f"{stem}.thumb.jpg",
+                lib / f"{stem}.thumb.webp",
+                lib / f"{stem}.4k.png",
+                lib / f"{stem}.4k.jpg",
+                lib / f"{stem}.4k.webp",
+            ):
+                try:
+                    if cand.exists() and cand.is_file():
+                        cand.unlink()
+                        removed_files.append(cand.name)
+                except OSError:
+                    pass
+        _library_rebuild_catalogue_locked(lib)
+    return {
+        "pack_id": pack_id,
+        "removed": len(victims),
+        "files":   removed_files,
     }
 
 
@@ -4209,6 +4271,53 @@ class Broadcaster:
             except Exception: pass
             return
 
+        # v2.3.0-beta.1: POST /packs/uninstall — body is JSON
+        # {"pack_id": "..."}. Walks library.json, removes every
+        # file (+ siblings: .thumb.*, .4k.*) whose entry carries
+        # pack == pack_id, then rebuilds the catalogue. User-
+        # uploaded items without a pack stamp are never touched.
+        # Runs in the executor.
+        if method == "POST" and target.split("?", 1)[0] == "/packs/uninstall":
+            try:
+                content_length = int(headers.get(b"content-length", b"0") or 0)
+            except ValueError:
+                content_length = 0
+            if not (0 < content_length <= 256):
+                http_error(writer, 400, f"bad content-length: {content_length}")
+                try: await writer.drain()
+                except Exception: pass
+                try: writer.close()
+                except Exception: pass
+                return
+            try:
+                body = await reader.readexactly(content_length)
+                req = json.loads(body.decode("utf-8"))
+                pack_id = str(req.get("pack_id", "")).strip()
+                if (not pack_id or "/" in pack_id or "\\" in pack_id
+                        or ".." in pack_id):
+                    raise ValueError("invalid pack_id")
+                loop = asyncio.get_event_loop()
+                report = await loop.run_in_executor(
+                    None, _packs_uninstall, pack_id)
+                payload = json.dumps({"ok": True, **report}).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except asyncio.IncompleteReadError:
+                http_error(writer, 400, "incomplete body")
+            except Exception as e:
+                http_error(writer, 400, f"pack uninstall failed: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
         # v1.7.5: POST /library/tags — body is JSON
         # {"file": "...", "tags": ["cyberpunk", "neon", ...]}. Mirrors
         # the /library/category and /library/pin patterns. Tags get
@@ -5593,7 +5702,16 @@ class CycleScheduler:
 
     def _tick(self):
         now_ms = int(time.time() * 1000)
-        screen_count = int(self.bridge.get_screen_count())
+        # v2.3.0-beta hotfix: the BridgeRuntime API is _get_screen_count
+        # (underscored). Pre-2.3.0-beta this method was never reached
+        # because the cycle scheduler started disabled — the moment the
+        # user enabled cycle.enabled on any screen, the next 30 s tick
+        # crashed with `AttributeError: 'BridgeRuntime' object has no
+        # attribute 'get_screen_count'`. Logs in
+        # %LOCALAPPDATA%\SignalRGBWallpaper\logs surfaced the
+        # `[cycle] tick crashed` line for users who hit fullscreen
+        # pause / resume edges that touched the scheduler path.
+        screen_count = int(self.bridge._get_screen_count())
         for i in range(screen_count):
             try:
                 with self.bridge.config_lock:
