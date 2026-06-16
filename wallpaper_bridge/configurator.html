@@ -2794,6 +2794,15 @@
         <input type="checkbox" id="ambient-tint">
         <label for="ambient-tint" data-i18n="effects.tint">Tint particles with the live glow colour</label>
       </div>
+      <!-- v2.3.3-beta: weather-reactive ambient. When on, the weather
+           widget's WMO code drives which ambient preset renders —
+           rain code → rain particles, snow code → snow, thunderstorm
+           → storm. Override clears as soon as the user toggles this
+           off; their saved preset selection is never modified. -->
+      <div class="check-row">
+        <input type="checkbox" id="ambient-weather-reactive">
+        <label for="ambient-weather-reactive" data-i18n="effects.weather_reactive">Match the real weather (uses the Weather widget's location)</label>
+      </div>
       <div class="row">
         <label for="ambient-density" data-i18n="effects.density">Density</label>
         <input type="range" id="ambient-density" min="1" max="100" step="1">
@@ -4036,6 +4045,9 @@ const TRANSLATIONS = {
   "effects.ambient":        { en: "Ambient preset",       de: "Umgebungseffekt" },
   "effects.tint":           { en: "Tint particles with the live glow colour",
                               de: "Partikel mit live Glow-Farbe einfärben" },
+  // v2.3.3-beta: weather-reactive ambient overlay toggle.
+  "effects.weather_reactive": { en: "Match the real weather (uses the Weather widget's location)",
+                                de: "Auf echtes Wetter reagieren (nutzt den Standort des Wetter-Widgets)" },
   "effects.density":        { en: "Density",              de: "Dichte" },
   // v1.7.3-beta: tooltip for cursor-aware ambient tiles (Wormhole +
   // future). Surfaces on hover; the mouse-badge icon is the at-a-
@@ -4697,6 +4709,12 @@ const WIDGET_CATALOG = {
       { key: "lon",          label: "Longitude",             type: "number" },
       { key: "units",        label: "Units",                 type: "select",
         options: [{value:"metric",label:"°C"},{value:"imperial",label:"°F"}] },
+      // v2.3.4-beta: skin picker. WIDGET_SKIN_CATALOG below mirrors
+      // wallpaper/index.html's SKIN_CATALOG_MIRROR — both lists kept
+      // in sync manually for now (a future iteration can fetch via
+      // GET /widgets/skins for auto-sync).
+      { key: "skin",         label: "Skin",                  type: "select",
+        options: [{value:"default",label:"Default"},{value:"compact",label:"Compact"},{value:"hexagon",label:"Hexagon"}] },
       { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
     ],
     describe: (o) => (o.label || "—") + " (" + (o.units === "imperial" ? "°F" : "°C") + ")",
@@ -4897,6 +4915,7 @@ const els = {
   stripesBlurVal: $("stripes-blur-val"),
   ambientTiles:   $("ambient-tiles"),
   ambientTint:    $("ambient-tint"),
+  ambientWeatherReactive: $("ambient-weather-reactive"),
   ambientDensity: $("ambient-density"),
   ambientDensityVal: $("ambient-density-val"),
   effectQuality:  $("effect-quality"),
@@ -7488,6 +7507,7 @@ const SECTION_KEYS = {
                            "gridBlur",  "stripesBlur"] },
   "card-effects": { i18n: "section.effects",
                     keys: ["ambientEffect", "ambientTint", "ambientDensity",
+                           "weatherReactiveAmbient",
                            "effectQuality",
                            "pixelfx", "parallax3d",
                            "audioGlow", "audioGlowIntensity", "audioGlowTint"] },
@@ -9940,7 +9960,7 @@ if (els.effectQuality) {
 // Effects section
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AMBIENT_PRESETS = ["off", "snow", "rain", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles", "matrix", "starfield", "lightning", "waves", "ripples", "flowfield", "wormhole"];
+const AMBIENT_PRESETS = ["off", "snow", "rain", "storm", "sparks", "aurora", "constellation", "fireflies", "plasma", "vortex", "bubbles", "matrix", "starfield", "lightning", "waves", "ripples", "flowfield", "wormhole"];
 // v1.7.3-beta: presets whose particle dynamics use the live cursor
 // position as an anchor — currently just Wormhole. The tile picker
 // renders a mouse badge on these so users see at a glance that the
@@ -9951,6 +9971,12 @@ const PIXELFX_MODES   = [
   { value: "trail",  label: "Trail" },
   { value: "glow",   label: "Hover glow" },
   { value: "ripple", label: "Click ripple" },
+  // v2.3.3-beta: water mode is a viewport-spanning click ripple
+  // that looks like an actual water surface — three staggered
+  // white-blueish rings per click, max radius ≈ 65 % of the viewport
+  // diagonal. Excluded from "all" because it's too prominent to
+  // layer on top of trail+glow+ripple at the same time.
+  { value: "water",  label: "Water ripple" },
   { value: "all",    label: "All" },
 ];
 
@@ -10074,6 +10100,37 @@ const TILE_PRESETS = {
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + 1, p.y - p.length); ctx.stroke();
     },
   },
+  // v2.3.3-beta: storm tile preview = rain + periodic flash. The tile
+  // tick driver only calls `after`, not `before`, so the flash lives
+  // in an after-hook with closure-scoped state. Tick-rate-based
+  // (each call ≈ 16 ms) instead of dt-based — Configurator preview
+  // canvases run at fixed cadence, no need for dt accuracy here.
+  storm: (function () {
+    let flashA = 0;
+    let timer  = 0;
+    let next   = 50;  // ticks until first flash
+    return {
+      targetCount: (w, h) => Math.round(w * h / 400),
+      spawn:  (w, h) => TILE_PRESETS.rain.spawn(w, h),
+      step:   (p, dt, w, h) => TILE_PRESETS.rain.step(p, dt, w, h),
+      render: (ctx, p) => TILE_PRESETS.rain.render(ctx, p),
+      after: (ctx) => {
+        const w = ctx.canvas.clientWidth || 160;
+        const h = ctx.canvas.clientHeight || 100;
+        timer++;
+        if (timer >= next) {
+          timer = 0;
+          next  = 60 + Math.floor(Math.random() * 80);  // 1-2 s
+          flashA = 0.55 + Math.random() * 0.3;
+        }
+        if (flashA > 0) {
+          ctx.fillStyle = "rgba(220,235,255," + flashA + ")";
+          ctx.fillRect(0, 0, w, h);
+          flashA = Math.max(0, flashA - 0.07);
+        }
+      },
+    };
+  })(),
   sparks: {
     targetCount: (w, h) => Math.round(w * h / 2000),
     spawn: (w, h) => ({ x: Math.random()*w, y: h + 5,
@@ -10529,6 +10586,11 @@ const TILE_PRESETS = {
 };
 
 els.ambientTint.addEventListener("change", () => setSetting("ambientTint", els.ambientTint.checked));
+if (els.ambientWeatherReactive) {
+  els.ambientWeatherReactive.addEventListener("change",
+    () => setSetting("weatherReactiveAmbient",
+                     els.ambientWeatherReactive.checked));
+}
 
 // Build pixelfx segmented buttons
 function buildPixelfxRow() {
@@ -11510,6 +11572,9 @@ function renderAll() {
     t.classList.toggle("active", t.dataset.preset === ambient);
   });
   els.ambientTint.checked = !!settings.ambientTint;
+  if (els.ambientWeatherReactive) {
+    els.ambientWeatherReactive.checked = !!settings.weatherReactiveAmbient;
+  }
   els.ambientDensity.value = String(settings.ambientDensity ?? 60);
   els.ambientDensityVal.textContent = String(settings.ambientDensity ?? 60);
   if (els.effectQuality) {

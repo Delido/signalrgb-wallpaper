@@ -96,6 +96,7 @@ plugins:
             Architecture: Architektur
             REST API: REST-API
             Plugin API: Plugin-API
+            Widget skins: Widget-Skins
             Publishing to Workshop: Workshop-Veröffentlichung
             Building from source: Aus Quellcode bauen
             Project: Projekt
@@ -141,6 +142,7 @@ nav:
       - Architecture: architecture.md
       - REST API: api.md
       - Plugin API: plugin-api.md
+      - Widget skins: widget-skins.md
       - Publishing to Workshop: workshop-publishing.md
       - Building from source: building-from-source.md
   - Project:

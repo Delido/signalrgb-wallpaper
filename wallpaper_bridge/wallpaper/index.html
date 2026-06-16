@@ -1000,19 +1000,127 @@
     background: color-mix(in srgb, var(--w-tint, #6ab0ff) 35%, transparent);
   }
 
-  /* ── Weather widget ── */
-  .widget-weather .widget-body { display: flex; flex-direction: column; }
+  /* ── Weather widget (v2.3.3-beta redesign) ── */
+  .widget-weather .widget-body { display: flex; flex-direction: column; gap: 4px; }
   .widget-weather .wx-head {
-    display: flex; justify-content: space-between; align-items: baseline;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .widget-weather .wx-icon {
+    width: 40px; height: 40px;
+    flex: 0 0 40px;
+    opacity: 0.92;
+    color: rgba(255,255,255,0.92);
+  }
+  .widget-weather .wx-icon svg { width: 100%; height: 100%; display: block; }
+  .widget-weather .wx-head-text { min-width: 0; }
+  .widget-weather .wx-loc {
     font-size: 12px; color: rgba(255,255,255,0.75);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .widget-weather .wx-cond {
+    font-size: 13px; opacity: 0.88;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .widget-weather .wx-temp {
-    font-size: calc(clamp(28px, 40%, 64px) * var(--w-scale, 1));
-    font-weight: 600; letter-spacing: -0.02em;
+    font-size: calc(clamp(28px, 40%, 56px) * var(--w-scale, 1));
+    font-weight: 300; letter-spacing: -0.02em; line-height: 1;
+    text-align: right;
   }
   .widget-weather.tinted .wx-temp { color: var(--w-tint, #fff); }
-  .widget-weather .wx-cond { font-size: 13px; opacity: 0.85; }
-  .widget-weather .wx-foot { margin-top: auto; font-size: 11px; opacity: 0.55; }
+  .widget-weather .wx-feel {
+    font-size: 11.5px; opacity: 0.62;
+    margin-top: 2px;
+  }
+  .widget-weather .wx-stats {
+    display: flex; flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+    font-size: 11.5px;
+  }
+  .widget-weather .wx-hilo {
+    display: flex; gap: 14px;
+    opacity: 0.85;
+  }
+  .widget-weather .wx-hi, .widget-weather .wx-lo {
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  .widget-weather .wx-arrow { font-size: 11px; opacity: 0.7; margin-right: 1px; }
+  .widget-weather .wx-extras {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    opacity: 0.78;
+  }
+  .widget-weather .wx-extras > span { white-space: nowrap; }
+  .widget-weather .wx-foot { margin-top: auto; font-size: 10.5px; opacity: 0.5; padding-top: 4px; }
+
+  /* v2.3.4-beta: Weather widget — "compact" skin. One-line icon +
+     temp at the top, location + condition combined on the next line.
+     Designed for narrow / small widget shells. */
+  .widget-weather.widget-skin-compact .widget-body {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .widget-weather.widget-skin-compact .wx-compact-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .widget-weather.widget-skin-compact .wx-icon {
+    width: 32px; height: 32px; flex: 0 0 32px;
+    color: rgba(255,255,255,0.92);
+  }
+  .widget-weather.widget-skin-compact .wx-icon svg { width: 100%; height: 100%; display: block; }
+  .widget-weather.widget-skin-compact .wx-compact-temp {
+    font-size: calc(clamp(22px, 30%, 40px) * var(--w-scale, 1));
+    font-weight: 300; letter-spacing: -0.02em; line-height: 1;
+  }
+  .widget-weather.widget-skin-compact.tinted .wx-compact-temp { color: var(--w-tint, #fff); }
+  .widget-weather.widget-skin-compact .wx-compact-loc {
+    font-size: 12px; opacity: 0.78;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* v2.3.4-beta: Weather widget — "hexagon" skin. Bigger central
+     hexagon tile (CSS clip-path) holding icon + temp + condition.
+     Extras row sits below with three small icons. Inspired by
+     Rainmeter-style hex layouts. */
+  .widget-weather.widget-skin-hexagon .widget-body {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .widget-weather.widget-skin-hexagon .wx-hex-wrap {
+    display: flex; justify-content: center;
+    margin-top: 2px;
+  }
+  .widget-weather.widget-skin-hexagon .wx-hex {
+    width: 130px; aspect-ratio: 1 / 1;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    clip-path: polygon(25% 6%, 75% 6%, 100% 50%, 75% 94%, 25% 94%, 0 50%);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px;
+    padding: 6px 0;
+  }
+  .widget-weather.widget-skin-hexagon .wx-icon {
+    width: 32px; height: 32px;
+    color: rgba(255,255,255,0.92);
+  }
+  .widget-weather.widget-skin-hexagon .wx-icon svg { width: 100%; height: 100%; display: block; }
+  .widget-weather.widget-skin-hexagon .wx-hex-temp {
+    font-size: 24px; font-weight: 400; line-height: 1;
+  }
+  .widget-weather.widget-skin-hexagon.tinted .wx-hex-temp { color: var(--w-tint, #fff); }
+  .widget-weather.widget-skin-hexagon .wx-hex-cond {
+    font-size: 11px; opacity: 0.78; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .widget-weather.widget-skin-hexagon .wx-hex-extras {
+    display: flex; gap: 10px; justify-content: center;
+    font-size: 11px; opacity: 0.78; flex-wrap: wrap;
+  }
+  .widget-weather.widget-skin-hexagon .wx-hex-extras > span { white-space: nowrap; }
+  .widget-weather.widget-skin-hexagon .wx-foot {
+    margin-top: auto; font-size: 10.5px; opacity: 0.5; padding-top: 4px;
+    text-align: center;
+  }
 
   /* ── Sticky note widget ── */
   .widget-sticky-note {
@@ -2413,7 +2521,18 @@ function applyProperty(name, val) {
       applyMouseEffects(Array.isArray(val) ? val : []);
       break;
     case "ambientEffect":
-      ambient.setPreset(typeof val === "string" ? val : "off");
+      _userAmbient = typeof val === "string" ? val : "off";
+      ambient.setPreset(_weatherAmbient || _userAmbient);
+      break;
+    case "weatherReactiveAmbient":
+      _weatherReactive = !!val;
+      // Re-evaluate: when turning OFF, drop any weather override
+      // back to the user's stored preset; when turning ON, the next
+      // weather widget update will set _weatherAmbient.
+      if (!_weatherReactive) {
+        _weatherAmbient = "";
+        ambient.setPreset(_userAmbient);
+      }
       break;
     case "ambientTint":
       ambient.setTinted(!!val);
@@ -2775,7 +2894,33 @@ function wpAlert(message) {
 //   editOptions  (rec) -> optional UX for tweaking options. Today: prompt-
 //                driven (browser native). A nicer floating editor can drop
 //                in later without changing the contract.
+//   skins        (v2.3.4-beta) optional { id: { markup, render? } } object.
+//                When present and rec.opts.skin matches an id, the skin's
+//                markup() replaces the top-level markup() and its render
+//                (if supplied) replaces the top-level tick render path.
+//                The "default" skin id is implicit — leaving rec.opts.skin
+//                unset (or set to "default") uses the top-level markup +
+//                tick. SKIN_CATALOG_MIRROR below + the same constant in
+//                configurator.html keep the IDs / labels in sync so the
+//                widget config modal can offer a skin picker without
+//                guessing.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// v2.3.4-beta: skin catalog mirror. The wallpaper-side WIDGET_REGISTRY
+// owns the actual implementations; this object exposes a compact
+// (type → [{ id, label }]) form on `window` so the Configurator's
+// widget-config modal can pull the same list via the bridge's
+// `/widgets/skins` endpoint (which static-serves wallpaper/index.html
+// internals indirectly via the SKINS constant in bridge.py — kept in
+// sync manually for v2.3.4-beta). Adding a new skin = appending the
+// entry here PLUS implementing the skin under WIDGET_REGISTRY[type].skins.
+const SKIN_CATALOG_MIRROR = {
+  weather: [
+    { id: "default", label: "Default" },
+    { id: "compact", label: "Compact" },
+    { id: "hexagon", label: "Hexagon" },
+  ],
+};
 
 const WIDGET_REGISTRY = {
 
@@ -2886,15 +3031,50 @@ const WIDGET_REGISTRY = {
   },
 
   // ── Weather ────────────────────────────────────────────────────────────
+  // v2.3.3-beta: redesigned widget. Pre-v2.3.3-beta this rendered just
+  // the location, temperature and a textual condition. Now adds a
+  // condition-dependent SVG icon, apparent (Real Feel) temperature,
+  // daily high/low, precipitation probability, humidity, wind speed —
+  // matching the data density of a typical weather widget instead of
+  // looking like a placeholder. fetchWeather requests the extra
+  // fields; renderWeatherCache fills the new markup; the existing
+  // weather-reactive ambient hook keeps working because it still
+  // keys off the WMO `code` field unchanged.
   weather: {
     label: "Weather",
     icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="10" r="4"/>' +
           '<path d="M14 14h4a3 3 0 0 0 0-6 5 5 0 0 0-9.5-1.5"/></svg>',
-    markup: () => '<div class="wx-head"></div><div class="wx-temp">—</div>' +
-                  '<div class="wx-cond">…</div><div class="wx-foot">loading</div>',
+    markup: () =>
+      '<div class="wx-head">' +
+        '<div class="wx-icon" aria-hidden="true"></div>' +
+        '<div class="wx-head-text">' +
+          '<div class="wx-loc">…</div>' +
+          '<div class="wx-cond">loading</div>' +
+        '</div>' +
+        '<div class="wx-temp">—</div>' +
+      '</div>' +
+      '<div class="wx-feel">Real Feel —</div>' +
+      '<div class="wx-stats">' +
+        '<div class="wx-hilo">' +
+          '<span class="wx-hi"><span class="wx-arrow">↑</span>—</span>' +
+          '<span class="wx-lo"><span class="wx-arrow">↓</span>—</span>' +
+        '</div>' +
+        '<div class="wx-extras">' +
+          '<span class="wx-precip" title="Precipitation probability">☂ —</span>' +
+          '<span class="wx-humid" title="Humidity">💧 —</span>' +
+          '<span class="wx-wind" title="Wind speed">🌬 —</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="wx-foot">loading</div>',
     tick: (rec) => {
       const now = Date.now();
-      if (rec.cache) renderWeatherCache(rec);
+      // v2.3.4-beta: render via the active skin's render fn when
+      // present, else fall back to the default renderWeatherCache.
+      if (rec.cache) {
+        const skin = _widgetActiveSkin(rec);
+        if (skin && typeof skin.render === "function") skin.render(rec);
+        else renderWeatherCache(rec);
+      }
       const REFRESH = 30 * 60 * 1000;
       if (!rec.lastFetch || now - rec.lastFetch > REFRESH) {
         rec.lastFetch = now;
@@ -2902,6 +3082,66 @@ const WIDGET_REGISTRY = {
       }
     },
     editOptions: openWidgetInConfigurator,
+    // v2.3.4-beta: skin variants. Each skin owns its own markup +
+    // render path; `renderWeatherCache` (the default skin's path) is
+    // re-implemented per skin so the layout differs structurally,
+    // not just via CSS overrides. tick() above delegates to the
+    // currently-active skin via `_widgetActiveSkin(rec).render` if
+    // present.
+    skins: {
+      // "default" is implicit — the top-level markup + renderWeatherCache.
+      compact: {
+        markup: () =>
+          '<div class="wx-compact-row">' +
+            '<div class="wx-icon" aria-hidden="true"></div>' +
+            '<div class="wx-compact-temp">—</div>' +
+          '</div>' +
+          '<div class="wx-compact-loc">…</div>' +
+          '<div class="wx-foot">loading</div>',
+        render: (rec) => {
+          const c = rec.cache; if (!c) return;
+          const unitSym = c.units === "fahrenheit" ? "°F" : "°C";
+          const q = (s) => rec.el.querySelector(s);
+          if (q(".wx-icon"))         q(".wx-icon").innerHTML = _weatherIconSvg(c.code);
+          if (q(".wx-compact-temp")) q(".wx-compact-temp").textContent = (c.temp == null ? "—" : Math.round(c.temp)) + unitSym;
+          if (q(".wx-compact-loc"))  q(".wx-compact-loc").textContent = (c.label || "Weather") + " · " + (WMO_CODES[c.code] || "—");
+          const minsAgo = Math.max(0, Math.round((Date.now() - c.ts) / 60000));
+          if (q(".wx-foot")) q(".wx-foot").textContent =
+            "updated " + (minsAgo === 0 ? "just now" : minsAgo + " min ago") + " · via Open-Meteo";
+        },
+      },
+      hexagon: {
+        markup: () =>
+          '<div class="wx-hex-wrap">' +
+            '<div class="wx-hex">' +
+              '<div class="wx-icon" aria-hidden="true"></div>' +
+              '<div class="wx-hex-temp">—</div>' +
+              '<div class="wx-hex-cond">…</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="wx-hex-extras">' +
+            '<span class="wx-precip" title="Precipitation probability">☂ —</span>' +
+            '<span class="wx-humid" title="Humidity">💧 —</span>' +
+            '<span class="wx-wind" title="Wind speed">🌬 —</span>' +
+          '</div>' +
+          '<div class="wx-foot">loading</div>',
+        render: (rec) => {
+          const c = rec.cache; if (!c) return;
+          const unitSym = c.units === "fahrenheit" ? "°F" : "°C";
+          const windSym = c.windUnits === "mph" ? "mph" : "km/h";
+          const q = (s) => rec.el.querySelector(s);
+          if (q(".wx-icon"))     q(".wx-icon").innerHTML = _weatherIconSvg(c.code);
+          if (q(".wx-hex-temp")) q(".wx-hex-temp").textContent = (c.temp == null ? "—" : Math.round(c.temp)) + unitSym;
+          if (q(".wx-hex-cond")) q(".wx-hex-cond").textContent = WMO_CODES[c.code] || "—";
+          if (q(".wx-precip")) q(".wx-precip").textContent = "☂ " + (c.precip == null ? "—" : c.precip + "%");
+          if (q(".wx-humid"))  q(".wx-humid").textContent  = "💧 " + (c.humid == null ? "—" : Math.round(c.humid) + "%");
+          if (q(".wx-wind"))   q(".wx-wind").textContent   = "🌬 " + (c.wind == null ? "—" : Math.round(c.wind) + " " + windSym);
+          const minsAgo = Math.max(0, Math.round((Date.now() - c.ts) / 60000));
+          if (q(".wx-foot")) q(".wx-foot").textContent =
+            "updated " + (minsAgo === 0 ? "just now" : minsAgo + " min ago") + " · via Open-Meteo";
+        },
+      },
+    },
   },
 
   // ── Sticky note ────────────────────────────────────────────────────────
@@ -3446,10 +3686,23 @@ const MouseFx = (function () {
       if (overlay) return overlay;
       overlay = document.createElement("div");
       overlay.id = "fx-spotlight-overlay";
+      // v2.3.4-beta memory-leak fix: the gradient is baked into the
+      // overlay's static `background` once; per-tick updates poke
+      // only the CSS-var cursor position. The old path rewrote the
+      // entire `background` string every frame, which gave Chromium
+      // a fresh `radial-gradient(...)` source per unique cursor
+      // position — its paint pipeline retained internal CSSImageValue
+      // objects per unique string and only cleaned them up on layer
+      // teardown. With the user actively moving the mouse, that
+      // produced one new retained value per frame ≈ steady RAM
+      // growth. CSS-var swap reuses the same parsed gradient + just
+      // updates two numeric custom-property values.
       overlay.style.cssText =
         // v1.6.1-beta hotfix3: same z-index fix as Chromatic above.
         "position: fixed; inset: 0; pointer-events: none; z-index: 4;" +
-        " opacity: 0; transition: opacity 200ms;";
+        " opacity: 0; transition: opacity 200ms;" +
+        " background: radial-gradient(circle 180px at var(--fx-sl-x, 50%) var(--fx-sl-y, 50%)," +
+        "   transparent 100px, rgba(0,0,0,0.55) 240px);";
       document.body.appendChild(overlay);
       return overlay;
     }
@@ -3458,9 +3711,8 @@ const MouseFx = (function () {
       if (now - _lastTick < RENDER_INTERVAL_MS) return;
       _lastTick = now;
       const o = ensureOverlay();
-      o.style.background =
-        "radial-gradient(circle 180px at " + _cursorX + "px " + _cursorY + "px," +
-        " transparent 100px, rgba(0,0,0,0.55) 240px)";
+      o.style.setProperty("--fx-sl-x", _cursorX + "px");
+      o.style.setProperty("--fx-sl-y", _cursorY + "px");
     }
     return {
       enable() {
@@ -3486,6 +3738,23 @@ const MouseFx = (function () {
     // (256×256 PNG encode) + feImage href update; at native 60 Hz
     // that's the most expensive of the four mouse effects.
     let _lastTick = 0;
+    // v2.3.4-beta memory-leak mitigation: pre-fix this ran toDataURL +
+    // setAttribute every tick — Chromium's SVG filter engine cached a
+    // decoded bitmap per unique data: URL and never released them (data:
+    // URLs can't be revoked), leaking ~1 MB/s during mouse motion.
+    // The first repair attempt (toBlob + URL.createObjectURL +
+    // revokeObjectURL) eliminated the leak but introduced visible
+    // stutter because toBlob is async and stalls the rAF cadence.
+    // Final approach: stay on toDataURL (synchronous, no rAF stall),
+    // BUT skip the encode+setAttribute when the map is already at
+    // steady-state (no recent cursor motion, no fading ripple). The
+    // user's leak signature was specifically "grows while moving the
+    // mouse" — pinning updates to actual activity removes the idle
+    // accumulation entirely. `_idleFrames` counts up while nothing's
+    // happening; once it crosses a threshold we stop touching feImage
+    // until the next ripple-worthy event.
+    let _idleFrames = 0;
+    const IDLE_FRAMES_BEFORE_SKIP = 60;  // ≈ 2 s at 30 Hz
     const MAP_SIZE = 256;
     function ensureFilter() {
       if (svgFilter) return;
@@ -3535,7 +3804,19 @@ const MouseFx = (function () {
         mapCtx.fillRect(mx - 20, my - 20, 40, 40);
       }
       lastMouseX = _cursorX; lastMouseY = _cursorY;
-      feImg.setAttribute("href", mapCanvas.toDataURL());
+      // v2.3.4-beta activity-gated update. Movement OR active fade
+      // resets the idle counter; once we've been idle for the
+      // threshold we stop calling toDataURL+setAttribute, which is
+      // where the per-frame data: URL accumulation was burning RAM
+      // before. The decay loop above keeps running so the canvas
+      // converges to neutral grey on its own; we just stop poking
+      // feImage about it once the visible map matches the cached
+      // SVG paint anyway.
+      if (moved) _idleFrames = 0;
+      else       _idleFrames++;
+      if (_idleFrames < IDLE_FRAMES_BEFORE_SKIP) {
+        feImg.setAttribute("href", mapCanvas.toDataURL());
+      }
     }
     return {
       enable() {
@@ -3546,6 +3827,7 @@ const MouseFx = (function () {
       disable() {
         document.body.classList.remove("fx-ripple");
         if (raf) { cancelAnimationFrame(raf); raf = null; }
+        _idleFrames = IDLE_FRAMES_BEFORE_SKIP;
       },
     };
   })();
@@ -3623,11 +3905,28 @@ function setWidgets(list) {
   _invalidateTintedCache();
 }
 
+// v2.3.4-beta: skin lookup. Returns the active skin object (or null
+// for "default" / no skins). `_widgetActiveSkin` operates on a live
+// widget rec; `_widgetSkinForOpts` works from raw opts during create.
+function _widgetSkinForOpts(type, opts) {
+  const reg = WIDGET_REGISTRY[type];
+  if (!reg || !reg.skins) return null;
+  const id = (opts && opts.skin) ? String(opts.skin) : "default";
+  if (id === "default") return null;
+  return reg.skins[id] || null;
+}
+function _widgetActiveSkin(rec) {
+  return _widgetSkinForOpts(rec.type, rec.opts);
+}
+
 function createWidget(w) {
   const reg = WIDGET_REGISTRY[w.type];
   if (!reg) { console.warn("[widget] unknown type:", w.type); return null; }
   const el = document.createElement("div");
-  el.className = "widget widget-" + w.type;
+  // v2.3.4-beta: skin class on the widget element so per-skin CSS
+  // can target without hitting widget-type defaults.
+  const skinId = (w.opts && w.opts.skin) ? String(w.opts.skin) : "default";
+  el.className = "widget widget-" + w.type + " widget-skin-" + skinId;
   el.dataset.id = w.id;
   // ── v1.1.5+ widget shell ──
   // Optional header bar wraps every widget when the user opts into
@@ -3640,13 +3939,17 @@ function createWidget(w) {
   const headerActions =
     (reg.editOptions ? '<button type="button" class="widget-act widget-settings" title="Configure" tabindex="-1">⚙</button>' : '') +
     '<button type="button" class="widget-act widget-remove" title="Remove widget" tabindex="-1">×</button>';
+  // v2.3.4-beta: if a non-default skin is active, prefer its markup.
+  const _skin = _widgetSkinForOpts(w.type, w.opts);
+  const _body = (_skin && typeof _skin.markup === "function")
+    ? _skin.markup() : reg.markup();
   el.innerHTML =
     '<div class="widget-header">' +
       '<span class="widget-header-icon">' + (reg.icon || '') + '</span>' +
       '<span class="widget-header-title">' + escapeHtml(widgetTitle) + '</span>' +
       '<span class="widget-header-actions">' + headerActions + '</span>' +
     '</div>' +
-    '<div class="widget-body">' + reg.markup() + '</div>' +
+    '<div class="widget-body">' + _body + '</div>' +
     '<div class="widget-handle"></div>';
   el.querySelector(".widget-remove").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -3705,7 +4008,25 @@ function applyWidgetOptions(rec, w) {
   const nextSig = JSON.stringify(nextOpts);
   const changed = prevSig !== undefined && prevSig !== nextSig;
   rec._optsSig = nextSig;
+  const prevSkin = (rec.opts && rec.opts.skin) ? String(rec.opts.skin) : "default";
+  const nextSkin = nextOpts.skin ? String(nextOpts.skin) : "default";
   rec.opts = nextOpts;
+  // v2.3.4-beta: a skin change requires regenerating the widget body
+  // markup, because skins own their own DOM structure (not just CSS).
+  // Swap body content + the widget-skin-<id> class, then drop cache
+  // so the next tick repaints freshly.
+  if (changed && prevSkin !== nextSkin) {
+    const reg = WIDGET_REGISTRY[rec.type];
+    if (reg) {
+      const _skin = _widgetSkinForOpts(rec.type, nextOpts);
+      const _body = (_skin && typeof _skin.markup === "function")
+        ? _skin.markup() : (typeof reg.markup === "function" ? reg.markup() : "");
+      const bodyEl = rec.el.querySelector(".widget-body");
+      if (bodyEl) bodyEl.innerHTML = _body;
+      rec.el.classList.remove("widget-skin-" + prevSkin);
+      rec.el.classList.add("widget-skin-" + nextSkin);
+    }
+  }
   if (changed) {
     rec.cache = null;
     rec.lastFetch = 0;
@@ -3876,19 +4197,35 @@ function fetchWeather(rec) {
   const lon   = parseFloat(rec.opts.lon);
   const label = rec.opts.label || "";
   const units = rec.opts.units === "imperial" ? "fahrenheit" : "celsius";
+  const windUnits = rec.opts.units === "imperial" ? "mph" : "kmh";
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     rec.el.querySelector(".wx-foot").textContent = "no location set";
     return;
   }
+  // v2.3.3-beta: enriched data — apparent temperature, humidity,
+  // daily high/low, precipitation probability — to back the new
+  // widget layout. Open-Meteo is happy to bundle them in one call.
   const url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat +
-              "&longitude=" + lon + "&current=temperature_2m,weather_code,wind_speed_10m" +
-              "&temperature_unit=" + units + "&timezone=auto";
+              "&longitude=" + lon +
+              "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m" +
+              "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+              "&temperature_unit=" + units +
+              "&wind_speed_unit=" + windUnits +
+              "&forecast_days=1&timezone=auto";
   fetch(url).then((r) => r.json()).then((j) => {
+    const cur = (j && j.current) || {};
+    const dly = (j && j.daily) || {};
     rec.cache = {
-      label, temp: j && j.current && j.current.temperature_2m,
-      code:        j && j.current && j.current.weather_code,
-      wind:        j && j.current && j.current.wind_speed_10m,
-      units, ts: Date.now(),
+      label,
+      temp:   cur.temperature_2m,
+      feel:   cur.apparent_temperature,
+      humid:  cur.relative_humidity_2m,
+      code:   cur.weather_code,
+      wind:   cur.wind_speed_10m,
+      hi:     Array.isArray(dly.temperature_2m_max) ? dly.temperature_2m_max[0] : null,
+      lo:     Array.isArray(dly.temperature_2m_min) ? dly.temperature_2m_min[0] : null,
+      precip: Array.isArray(dly.precipitation_probability_max) ? dly.precipitation_probability_max[0] : null,
+      units, windUnits, ts: Date.now(),
     };
     renderWeatherCache(rec);
   }).catch((e) => {
@@ -3897,20 +4234,75 @@ function fetchWeather(rec) {
   });
 }
 
+// v2.3.3-beta: map WMO weather code → inline SVG icon. Single-stroke
+// minimal shapes that read at widget scale; condition-appropriate
+// (sun / partly cloudy / cloud / rain / snow / storm / fog).
+function _weatherIconSvg(code) {
+  const sun  = '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4"/>';
+  const moon = '<path d="M21 13a8 8 0 1 1-9-9 6 6 0 0 0 9 9z"/>';
+  const cloud = '<path d="M7 17h10a4 4 0 0 0 0-8 6 6 0 0 0-11-1 4 4 0 0 0 1 9z"/>';
+  const cloudSun = '<circle cx="7" cy="9" r="2.5"/><path d="M11 17h7a4 4 0 0 0 0-8 6 6 0 0 0-11-1"/>';
+  const rain  = cloud + '<path d="M9 19l-1 3M13 19l-1 3M17 19l-1 3"/>';
+  const snow  = cloud + '<path d="M9 20l1 1M9 21l1-1M13 20l1 1M13 21l1-1M17 20l1 1M17 21l1-1"/>';
+  const storm = cloud + '<path d="M11 17l-2 4h3l-2 4"/>';
+  const fog   = '<path d="M4 10h16M4 14h16M4 18h16"/>';
+  let path;
+  if (code === 0)                            path = sun;
+  else if (code === 1 || code === 2)         path = cloudSun;
+  else if (code === 3)                       path = cloud;
+  else if (code === 45 || code === 48)       path = fog;
+  else if ((code >= 51 && code <= 65)
+        || (code >= 80 && code <= 82))       path = rain;
+  else if ((code >= 71 && code <= 77)
+        || code === 85 || code === 86)       path = snow;
+  else if (code >= 95 && code <= 99)         path = storm;
+  else                                       path = cloud;
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg>';
+}
+
 function renderWeatherCache(rec) {
   const c = rec.cache;
   if (!c) return;
   const unitSym = c.units === "fahrenheit" ? "°F" : "°C";
-  rec.el.querySelector(".wx-head").innerHTML =
-    "<span>" + escapeHtml(c.label || "Weather") + "</span><span></span>";
-  rec.el.querySelector(".wx-temp").textContent =
-    (c.temp == null ? "—" : Math.round(c.temp)) + unitSym;
-  rec.el.querySelector(".wx-cond").textContent = WMO_CODES[c.code] || "—";
+  const windSym = c.windUnits === "mph" ? "mph" : "km/h";
+  const fmtT = (v) => v == null ? "—" : (Math.round(v) + "°");
+  const q = (sel) => rec.el.querySelector(sel);
+  // v2.3.3-beta: populate the redesigned markup. Each query is
+  // null-guarded so older widget DOM (saved before the redesign)
+  // doesn't throw — markup gets regenerated on next page load.
+  const icon = q(".wx-icon");
+  if (icon) icon.innerHTML = _weatherIconSvg(c.code);
+  if (q(".wx-loc"))  q(".wx-loc").textContent  = c.label || "Weather";
+  if (q(".wx-temp")) q(".wx-temp").textContent = (c.temp == null ? "—" : Math.round(c.temp)) + unitSym;
+  if (q(".wx-cond")) q(".wx-cond").textContent = WMO_CODES[c.code] || "—";
+  if (q(".wx-feel")) {
+    q(".wx-feel").textContent = c.feel == null
+      ? "" : "Real Feel " + Math.round(c.feel) + unitSym;
+  }
+  if (q(".wx-hi")) q(".wx-hi").innerHTML = '<span class="wx-arrow">↑</span>' + fmtT(c.hi);
+  if (q(".wx-lo")) q(".wx-lo").innerHTML = '<span class="wx-arrow">↓</span>' + fmtT(c.lo);
+  if (q(".wx-precip")) q(".wx-precip").textContent = "☂ " + (c.precip == null ? "—" : c.precip + "%");
+  if (q(".wx-humid"))  q(".wx-humid").textContent  = "💧 " + (c.humid == null ? "—" : Math.round(c.humid) + "%");
+  if (q(".wx-wind"))   q(".wx-wind").textContent   = "🌬 " + (c.wind == null ? "—" : Math.round(c.wind) + " " + windSym);
   const minsAgo = Math.max(0, Math.round((Date.now() - c.ts) / 60000));
   // Open-Meteo data is CC-BY — the attribution stays in the footer
   // whenever the widget has real data to show.
-  rec.el.querySelector(".wx-foot").textContent =
-    "updated " + (minsAgo === 0 ? "just now" : minsAgo + " min ago") + " · via Open-Meteo";
+  if (q(".wx-foot")) {
+    q(".wx-foot").textContent =
+      "updated " + (minsAgo === 0 ? "just now" : minsAgo + " min ago") + " · via Open-Meteo";
+  }
+  // v2.3.3-beta: weather-reactive ambient overlay. If the user has
+  // weatherReactiveAmbient on, push the mapped preset into the
+  // ambient module. Doesn't touch the stored ambientEffect setting
+  // so the override evaporates the moment reactive mode is toggled
+  // off (handled in the setting dispatcher).
+  if (_weatherReactive) {
+    const want = _weatherCodeToAmbient(c.code);
+    if (want !== _weatherAmbient) {
+      _weatherAmbient = want;
+      ambient.setPreset(want || _userAmbient);
+    }
+  }
 }
 
 // Bundled quotes. We used to hit quotable.io but the service has been
@@ -4403,6 +4795,43 @@ const MATRIX_CHARSET =
 const MATRIX_CHARS = Array.from(MATRIX_CHARSET);
 const MATRIX_CHARS_LEN = MATRIX_CHARS.length;
 
+// v2.3.3-beta: weather-reactive ambient overlay state. When
+// `weatherReactiveAmbient` is on, the weather widget's update path
+// maps the WMO code to one of our ambient presets and sets
+// _weatherAmbient. ambient.setPreset prefers it over the user's
+// stored ambientEffect choice; toggling the reactive mode off drops
+// back to _userAmbient. The user's stored setting is never modified
+// — this is a pure presentation override.
+let _userAmbient     = "off";
+let _weatherAmbient  = "";
+let _weatherReactive = false;
+
+function _weatherCodeToAmbient(code) {
+  if (typeof code !== "number") return "";
+  // WMO code → ambient preset. Empty = no override (clear / cloudy
+  // skies don't push a specific atmosphere, the user's pick wins).
+  // 51-65: drizzle / rain     → rain
+  // 71-77, 85-86: snow        → snow
+  // 80-82: heavy showers      → rain
+  // 95-99: thunderstorm       → storm
+  if (code >= 95 && code <= 99) return "storm";
+  if (code >= 51 && code <= 65) return "rain";
+  if (code >= 80 && code <= 82) return "rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  return "";
+}
+
+// v2.3.3-beta: storm preset lightning state. Kept at module scope so
+// the AMBIENT_PRESETS.storm.before hook can persist across frames
+// without a closure of its own — fits cleaner than ad-hoc state
+// inside the preset literal.
+let _stormFlashA   = 0;          // current flash overlay alpha (0..1)
+let _stormFlashT   = 0;          // seconds since last strike
+let _stormNextFlash = 4 + Math.random() * 8;  // initial first strike
+let _stormLastT    = 0;          // perf.now() at last before() call
+let _stormDouble   = false;      // already double-pulsed this strike?
+let _stormVW = 0, _stormVH = 0;  // viewport dimensions (set by ambient resize)
+
 const AMBIENT_PRESETS = {
   snow: {
     targetCount: (d, w, h) => Math.round((w * h) / 12000 * (d / 60)),
@@ -4455,6 +4884,53 @@ const AMBIENT_PRESETS = {
       ctx.moveTo(p.x, p.y);
       ctx.lineTo(p.x - p.vx * p.length * 0.08, p.y - p.length);
       ctx.stroke();
+    },
+  },
+
+  // v2.3.3-beta: storm = rain + lightning. Reuses rain's spawn /
+  // step / render for the falling drops, plus a small state machine
+  // tracked across `before` calls that periodically fires a
+  // full-viewport flash to fake distant lightning. State lives in
+  // file-scope vars (_stormFlashA + _stormNextFlash + _stormLastT)
+  // because the AMBIENT_PRESETS hook signature (ctx, tint) doesn't
+  // pass dt — we derive elapsed time from performance.now()
+  // ourselves. Flash colour is intentionally cool-white so it reads
+  // as ambient lightning even on a tinted bridge feed.
+  storm: {
+    targetCount: (d, w, h) => Math.round((w * h) / 5000 * (d / 60)),
+    spawn: (w, h) => AMBIENT_PRESETS.rain.spawn(w, h),
+    step: (p, dt, w, h) => AMBIENT_PRESETS.rain.step(p, dt, w, h),
+    render: (ctx, p, tint) => AMBIENT_PRESETS.rain.render(ctx, p, tint),
+    before: (ctx, tint) => {
+      const now = performance.now();
+      const dt = _stormLastT ? Math.min(0.1, (now - _stormLastT) / 1000) : 0;
+      _stormLastT = now;
+      // Lightning timer counts up; when it crosses _stormNextFlash
+      // we punch in a fresh flash and roll a new interval. Distant
+      // storm cadence: 6-22 s between flashes.
+      _stormFlashT += dt;
+      if (_stormFlashT >= _stormNextFlash) {
+        _stormFlashT = 0;
+        _stormNextFlash = 6 + Math.random() * 16;
+        // Random flash strength so consecutive flashes don't feel
+        // identical. Stored as remaining-alpha; decays over the next
+        // ~250 ms.
+        _stormFlashA = 0.45 + Math.random() * 0.35;
+      }
+      if (_stormFlashA > 0) {
+        // Two-stage decay: a quick stepped fall mimics the multiple
+        // discharges of a real lightning strike.
+        ctx.fillStyle = "rgba(220, 235, 255, " + _stormFlashA + ")";
+        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+        _stormFlashA = Math.max(0, _stormFlashA - dt * 4.2);
+        // Occasional double-flash: ~25 % chance a strike re-pulses
+        // halfway through its fade.
+        if (_stormFlashA > 0 && _stormFlashA < 0.2 && !_stormDouble && Math.random() < 0.25) {
+          _stormDouble = true;
+          _stormFlashA = Math.min(1, _stormFlashA + 0.5);
+        }
+        if (_stormFlashA <= 0) _stormDouble = false;
+      }
     },
   },
 
@@ -5590,6 +6066,14 @@ const pixelfx = (function () {
   const wantsTrail   = () => mode === "trail"  || mode === "all";
   const wantsGlow    = () => mode === "glow"   || mode === "all";
   const wantsRipple  = () => mode === "ripple" || mode === "all";
+  // v2.3.3-beta: "water" mode — full-viewport refraction-feel ripple
+  // over the BG image. Distinct from `ripple` (which paints small
+  // tint-colored rings as a click feedback layer): water spawns 3
+  // staggered rings per click, white-blueish, big enough to cover the
+  // screen, with a subtle alpha-sin wave along the radius for an
+  // actual water-surface feel. Not part of `all` — it's too prominent
+  // visually to layer on top of trail+glow+ripple at the same time.
+  const wantsWater   = () => mode === "water";
 
   function start() {
     if (raf) return;
@@ -5624,9 +6108,14 @@ const pixelfx = (function () {
       trail[i].life += dt;
       if (trail[i].life > 0.8) trail.splice(i, 1);
     }
+    // v2.3.3-beta: cleanup threshold depends on mode — water mode
+    // rings have a longer total lifetime (2.4 s of growth + up to
+    // 0.3 s of stagger before they start) than the small tint-colored
+    // ripple-mode rings (1.1 s).
+    const ripCap = wantsWater() ? 2.7 : 1.1;
     for (let i = ripples.length - 1; i >= 0; i--) {
       ripples[i].life += dt;
-      if (ripples[i].life > 1.1) ripples.splice(i, 1);
+      if (ripples[i].life > ripCap) ripples.splice(i, 1);
     }
     ctx.clearRect(0, 0, viewW, viewH);
     const tintCss = currentTintCss;
@@ -5664,11 +6153,51 @@ const pixelfx = (function () {
         ctx.stroke();
       }
     }
+    if (wantsWater()) {
+      // v2.3.3-beta: full-viewport water-ripple. Each click spawns
+      // 3 rings (the `r.idx` shifts the lifetime so they expand in a
+      // staggered "splash"). Color stays cool white-blue (independent
+      // of the glow tint) because that's what reads as water rather
+      // than as a colored click halo. Wave-amplitude along the radius
+      // (sin of phase) sells the "surface ripple" feel without
+      // touching the BG pixels — pure additive overlay.
+      const maxR = Math.hypot(viewW, viewH) * 0.65;
+      for (const r of ripples) {
+        // Per-ring lifetime is 2.4 s with a 0.15 s stagger between
+        // the rings of one click (see the click handler below).
+        const life = Math.max(0, r.life);
+        const tRel = life / 2.4;
+        if (tRel >= 1) continue;
+        const radius = tRel * maxR;
+        const baseA = (1 - tRel) * (1 - tRel) * 0.55;
+        // Outer ring: faint highlight (water meniscus).
+        ctx.strokeStyle = "rgba(220, 235, 255, " + (baseA * 0.6) + ")";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner ring: stronger leading wave.
+        ctx.strokeStyle = "rgba(160, 200, 240, " + baseA + ")";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, Math.max(0, radius - 14), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
   }
 
   document.addEventListener("click", (e) => {
-    if (!wantsRipple()) return;
-    ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
+    if (wantsRipple()) {
+      ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
+    }
+    if (wantsWater()) {
+      // Three rings staggered over 0.3 s. Negative initial life on
+      // the later ones — tick() clamps life to >= 0 in render so they
+      // sit invisible until they "spawn".
+      ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
+      ripples.push({ x: e.clientX, y: e.clientY, life: -0.15 });
+      ripples.push({ x: e.clientX, y: e.clientY, life: -0.3 });
+    }
   });
 
   // v1.2.12: rearm the rAF chain when the page comes off pause.
@@ -5681,7 +6210,7 @@ const pixelfx = (function () {
 
   return {
     setMode(m) {
-      const allowed = ["off","trail","glow","ripple","all"];
+      const allowed = ["off","trail","glow","ripple","water","all"];
       if (allowed.indexOf(m) < 0) m = "off";
       if (m === mode) return;
       mode = m;

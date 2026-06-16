@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.3.2-beta"
+APP_VERSION = "2.3.4-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -729,7 +729,7 @@ APP_VERSION = "2.3.2-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.2.0"
+WALLPAPER_VERSION = "2.3.4-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -932,6 +932,12 @@ DEFAULT_SCREEN_SETTINGS = {
     "ambientTint":     False,
     # 1..100 — relative particle count / saturation knob.
     "ambientDensity":  60,
+    # v2.3.3-beta: when True, the Weather widget's WMO code overrides
+    # the ambient preset at runtime — rain code → rain particles, snow
+    # code → snow, thunderstorm → storm. The override is presentation-
+    # only; ambientEffect (the user's pick) stays untouched and is
+    # restored the moment this is flipped back off.
+    "weatherReactiveAmbient": False,
     # Cursor / click eye-candy (Phase 4). One of:
     #   "off" | "trail" | "glow" | "ripple" | "all"
     # Position arrives via Lively's livelyCurrentCursorPos callback so the
@@ -1083,8 +1089,13 @@ WIDGET_DEFAULTS = {
     "weather": {
         "label":   "Weather",
         "x": 60, "y": 600, "w": 240, "h": 140,
+        # v2.3.4-beta: `skin` = "default" picks the redesigned layout
+        # that shipped in v2.3.3-beta. "compact" / "hexagon" are the
+        # bundled alternates — see WIDGET_REGISTRY.weather.skins in
+        # wallpaper/index.html for the actual markup + render fns.
         "options": {"lat": 52.52, "lon": 13.405, "label": "Berlin",
-                    "units": "metric", "tintFromGlow": False},
+                    "units": "metric", "skin": "default",
+                    "tintFromGlow": False},
     },
     "sticky-note": {
         "label":   "Sticky note",
@@ -3442,6 +3453,47 @@ class Broadcaster:
         # thumb bytes back; the Configurator builds img URLs off this
         # path. Path traversal is blocked by rejecting any name with a
         # path separator or dot-dot.
+        # v2.3.4-beta: GET /widgets/skins[?type=<type>] — surfaces the
+        # bundled skin catalog so the Configurator's widget-config
+        # modal can offer a "Skin" picker without duplicating the
+        # list. Catalog is hardcoded server-side and mirrored from
+        # wallpaper/index.html's SKIN_CATALOG_MIRROR; keep both in
+        # sync when adding a new skin (a future iteration can move
+        # to dynamic discovery via the wallpaper page on WS open).
+        if method == "GET" and target.split("?", 1)[0] == "/widgets/skins":
+            qs = target.split("?", 1)[1] if "?" in target else ""
+            params = dict(p.split("=", 1) for p in qs.split("&") if "=" in p)
+            want = urllib.parse.unquote(params.get("type", ""))
+            catalog = {
+                "weather": [
+                    {"id": "default", "label": "Default"},
+                    {"id": "compact", "label": "Compact"},
+                    {"id": "hexagon", "label": "Hexagon"},
+                ],
+            }
+            if want:
+                resp_obj = {"type": want, "skins": catalog.get(want, [])}
+            else:
+                resp_obj = {"catalog": catalog}
+            try:
+                payload = json.dumps(resp_obj).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
         # /hwmon/sensors — flat list of every sensor LibreHardwareMonitor
         # is reporting, plus a small status block. The Configurator's
         # hardware-sensor widget options modal calls this to populate

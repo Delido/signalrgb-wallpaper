@@ -4,6 +4,117 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4-beta] - 2026-06-17
+
+Two-phase atmosphere + UX wave plus a stack of memory-leak fixes
+that surfaced during testing. v2.3.3-beta was an intermediate build
+that never got cut; v2.3.4-beta folds in everything.
+
+### Added — water-ripple pixelfx mode
+
+A new **Water ripple** option in the cursor pixelfx picker. Each
+click spawns three staggered white-blueish rings that grow to
+≈ 65 % of the viewport diagonal — reads as an actual water surface
+rather than the small tint-coloured ripple `ripple` mode draws.
+
+### Added — Storm ambient preset (rain + lightning)
+
+New **Storm** preset between Rain and Sparks. Rain particles
+(reuses the existing rain spawn / step / render) plus a periodic
+full-viewport white flash every 6-22 s with ≈ 25 % chance of a
+double-pulse mid-fade. Driven by an `after`-style hook in the
+ambient renderer so adding similar combined effects later is just
+one preset entry.
+
+### Added — weather-reactive ambient overlay
+
+New **Match the real weather** toggle in the Effects tab. When on,
+the Weather widget's WMO code drives which ambient preset renders
+— rain codes → `rain`, snow codes → `snow`, thunderstorm codes →
+`storm`. The user's stored `ambientEffect` setting is never
+modified; the override evaporates the moment this is flipped back
+off. Requires a configured Weather widget with valid lat/lon.
+
+### Changed — Weather widget redesign
+
+Pre-2.3.3-beta this rendered just the location, temperature and a
+textual condition. New layout: a condition-dependent SVG icon (sun
+/ partly cloudy / cloud / rain / snow / storm / fog) left, location
++ condition in the middle, big temperature right. Underneath:
+apparent temperature ("Real Feel"), daily high / low row with arrow
+glyphs, and a small extras row with precipitation probability,
+humidity, wind speed. `fetchWeather` now requests the additional
+fields from Open-Meteo in the same call.
+
+### Added — widget skin system
+
+`WIDGET_REGISTRY[type].skins.<id>` registers alternative
+`markup()` + `render(rec)` pairs for an existing widget type. The
+widget's `opts.skin` (default `"default"`) picks which one runs;
+swapping it at runtime regenerates the widget body and swaps a
+`widget-skin-<id>` class on the widget element so the matching CSS
+takes effect. Weather ships three skins as the proof-of-concept
+set:
+
+- `default` — the redesigned 2.3.4-beta layout above
+- `compact` — single icon + temperature row, location + condition
+  combined underneath, no extras
+- `hexagon` — central hexagonal tile (CSS clip-path polygon) holding
+  the icon + temp + condition, small extras row below
+
+Picked from the widget config modal's **Skin** dropdown. The
+Configurator hardcodes the catalog for now; the bridge also
+serves it at `GET /widgets/skins[?type=weather]` so a future
+iteration can move to dynamic discovery. New
+[Widget skins documentation](widget-skins.md) walks through the
+architecture and how to add another skin. Plugins (= entirely new
+widget *types*) remain a separate mechanism.
+
+### Fixed — Liquid Ripple was leaking ~1 MB/s during mouse motion
+
+The SVG `feDisplacementMap` source was being updated every frame
+via `mapCanvas.toDataURL()` + `feImg.setAttribute("href", ...)`.
+Chromium's SVG filter pipeline cached a decoded bitmap per unique
+data: URL and never released them (data: URLs can't be revoked),
+so steady mouse motion produced one new retained value per frame
+≈ ≈ 1 GB after 15 min. Now:
+
+- Stays on `toDataURL` (synchronous, no rAF stall — an interim
+  `toBlob` + `URL.createObjectURL` + `revokeObjectURL` repair
+  eliminated the leak but stuttered the visible displacement
+  because `toBlob` is async).
+- Tracks an idle-frame counter; after ≈ 2 s of no cursor motion
+  *and* no in-progress decay we stop encoding + poking `feImage`.
+  The decay loop keeps running in the canvas so when the next
+  ripple-worthy event happens we resume from the right state, but
+  the SVG paint pipeline isn't fed fresh data: URLs in the idle
+  window — which was where the steady-state RAM growth was
+  coming from.
+
+Net: leak is limited to the time the user actively moves the
+mouse with the effect on. Idle = flat memory.
+
+### Fixed — Magnify Spotlight had the same leak pattern
+
+`o.style.background = "radial-gradient(circle 180px at " +
+_cursorX + "px " + _cursorY + "px, ...)"` every frame produced a
+fresh `CSSImageValue` per unique cursor position that Chromium's
+paint engine retained. Refactored to define the gradient once via
+`cssText` using `var(--fx-sl-x)` / `var(--fx-sl-y)`, and the tick
+only updates the two CSS custom properties. Same approach the
+Chromatic Aberration effect already used — Spotlight had drifted
+out of pattern.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.4-beta
+
+`wallpaper/index.html` shipped substantial changes (storm preset,
+water-ripple mode, weather-reactive override, redesigned weather
+widget, skin system + 3 skins, two memory-leak fixes). Lively /
+Wallpaper Engine **re-import is required** for any of these to
+land — Lively caches each imported zip in a random-hash folder
+and never re-reads the source, see
+[gotcha → "Updated wallpaper but Lively still shows the old version"](troubleshooting.md).
+
 ## [2.3.2-beta] - 2026-06-15
 
 Targeted follow-up to v2.3.1-beta.
