@@ -1347,6 +1347,50 @@
      (selected) or an empty box (unselected), the whole grid gets a
      "we're selecting now" subtle tint, and the bulk-action bar
      appears above the grid. */
+  /* v2.3.5-beta: cursor-effect tile grid (Effects tab). 4 tiles
+     replacing the old labeled checkbox row — each tile is a button
+     with emoji, name, and one-line description. Active state via
+     `.active` class so the styled affordance reads clearly and the
+     full tile is the click target instead of a tiny checkbox. */
+  .fx-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .fx-tile {
+    display: flex; flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .fx-tile:hover {
+    background: rgba(58, 107, 168, 0.18);
+    border-color: rgba(58, 107, 168, 0.55);
+  }
+  .fx-tile.active {
+    background: rgba(58, 107, 168, 0.32);
+    border-color: rgba(58, 107, 168, 0.92);
+  }
+  .fx-tile-head {
+    font-weight: 600;
+    font-size: 13px;
+    display: inline-flex; align-items: baseline; gap: 6px;
+  }
+  .fx-tile-desc {
+    font-size: 11.5px;
+    opacity: 0.72;
+    line-height: 1.35;
+  }
+
   .lib-bulk-bar {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 10px; margin: 8px 0;
@@ -2840,6 +2884,43 @@
 
       <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
 
+      <!-- v2.3.5-beta: stackable cursor distortion effects. Moved here
+           from the Widgets card (they alter wallpaper visuals, not
+           widget layout) and reworked from a checkbox row into a tile
+           grid — each tile shows the effect's emoji + label + a one-
+           line description, with an .active state when enabled. Same
+           four effects as before; persistence still goes through the
+           mouseEffects array setting. -->
+      <div class="row" style="margin-bottom: 4px;">
+        <label data-i18n="mousefx.label" style="flex:0 0 auto;">Cursor effects on the wallpaper (stackable)</label>
+      </div>
+      <div class="fx-tiles" id="mousefx-tiles">
+        <button type="button" class="fx-tile" data-fx="ripple">
+          <span class="fx-tile-head">🌊 <span data-i18n="mousefx.ripple_name">Liquid Distortion</span></span>
+          <span class="fx-tile-desc" data-i18n="mousefx.ripple_desc">Pulls background pixels with the cursor</span>
+        </button>
+        <button type="button" class="fx-tile" data-fx="chromatic">
+          <span class="fx-tile-head">🌈 <span data-i18n="mousefx.chromatic_name">Chromatic Halo</span></span>
+          <span class="fx-tile-desc" data-i18n="mousefx.chromatic_desc">R/G/B glow around the cursor</span>
+        </button>
+        <button type="button" class="fx-tile" data-fx="spotlight">
+          <span class="fx-tile-head">🔦 <span data-i18n="mousefx.spotlight_name">Spotlight</span></span>
+          <span class="fx-tile-desc" data-i18n="mousefx.spotlight_desc">Dims everything outside a cursor disc</span>
+        </button>
+        <button type="button" class="fx-tile" data-fx="repulsion">
+          <span class="fx-tile-head">🧲 <span data-i18n="mousefx.repulsion_name">Widget Float</span></span>
+          <span class="fx-tile-desc" data-i18n="mousefx.repulsion_desc">Widgets ease away from the cursor on display</span>
+        </button>
+      </div>
+      <div class="hint" data-i18n="mousefx.hint" style="margin-top: 6px;">
+        These react to mouse movement over your desktop while the
+        wallpaper is running — not in the Configurator. All four
+        stack; toggle independently. Paused automatically while a
+        fullscreen app has focus.
+      </div>
+
+      <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
+
       <div class="row">
         <label for="parallax3d" data-i18n="effects.parallax">3D parallax</label>
         <input type="range" id="parallax3d" min="0" max="120" step="2">
@@ -2943,42 +3024,11 @@
         — pick a shell variant for chrome and a theme for colours.
       </div>
 
-      <!-- v1.6.1-beta cursor-driven wallpaper effects. These act on
-           the WALLPAPER itself when the cursor moves over the
-           desktop — not on widget editing or anything in the
-           Configurator. All stackable. -->
-      <div class="row" style="margin-top: 14px; flex-wrap: wrap;">
-        <label data-i18n="mousefx.label" style="font-weight:500; flex: 1 1 100%;">
-          Cursor effects on the wallpaper (stackable)
-        </label>
-      </div>
-      <div id="mousefx-options" style="display:flex; gap:14px; flex-wrap:wrap; padding-top:4px;">
-        <label class="row" style="gap:6px; cursor:pointer;">
-          <input type="checkbox" class="mousefx-cb" value="ripple">
-          <span data-i18n="mousefx.ripple">Liquid Distortion 🌊</span>
-        </label>
-        <label class="row" style="gap:6px; cursor:pointer;">
-          <input type="checkbox" class="mousefx-cb" value="chromatic">
-          <span data-i18n="mousefx.chromatic">Chromatic Halo 🌈</span>
-        </label>
-        <label class="row" style="gap:6px; cursor:pointer;">
-          <input type="checkbox" class="mousefx-cb" value="spotlight">
-          <span data-i18n="mousefx.spotlight">Spotlight 🔦</span>
-        </label>
-        <label class="row" style="gap:6px; cursor:pointer;">
-          <input type="checkbox" class="mousefx-cb" value="repulsion">
-          <span data-i18n="mousefx.repulsion">Widget Float 🧲</span>
-        </label>
-      </div>
-      <div class="hint" data-i18n="mousefx.hint" style="margin-top: 6px;">
-        These react to mouse movement over your desktop while the
-        wallpaper is running — not in the Configurator. Liquid
-        Distortion pulls the background pixels with the cursor.
-        Chromatic Halo paints an R/G/B glow around the cursor.
-        Spotlight dims everything outside a disc around the cursor.
-        Widget Float (optional) makes widgets ease away from the
-        cursor on display, never in edit mode.
-      </div>
+      <!-- v2.3.5-beta: cursor-driven wallpaper effects moved out of
+           the Widgets tab and into Effects (where they conceptually
+           belong — they alter the wallpaper visuals, not widget
+           layout). See the .fx-tiles block lower down in the Effects
+           card markup. -->
 
       <div class="live-preview-wrap" id="live-preview-wrap">
         <div class="layout-preview-head">
@@ -3593,8 +3643,24 @@ const TRANSLATIONS = {
   "mousefx.spotlight":          { en: "Spotlight 🔦",       de: "Spotlight 🔦" },
   "mousefx.ripple":             { en: "Liquid Distortion 🌊",
                                   de: "Flüssige Verzerrung 🌊" },
-  "mousefx.hint":               { en: "These react to mouse movement over your desktop while the wallpaper is running — not in the Configurator. Liquid Distortion pulls the background pixels with the cursor. Chromatic Halo paints an R/G/B glow around the cursor. Spotlight dims everything outside a disc around the cursor. Widget Float (optional) makes widgets ease away from the cursor on display, never in edit mode.",
-                                  de: "Diese reagieren auf Mausbewegungen über deinem Desktop während das Wallpaper läuft — nicht im Configurator. Flüssige Verzerrung zieht die Hintergrund-Pixel dem Cursor nach. Chromatischer Halo malt einen R/G/B-Glow um den Cursor. Spotlight dunkelt alles außerhalb einer Scheibe um den Cursor ab. Widget-Schwung (optional) lässt Widgets dem Cursor im Normalbetrieb ausweichen, nie im Bearbeiten-Modus." },
+  // v2.3.5-beta: tile-grid copy. Pre-v2.3.5-beta this was four
+  // labelled checkboxes; we now split each effect's emoji+name from
+  // its one-line description so the tile head + sub-line read
+  // cleanly.
+  "mousefx.ripple_name":        { en: "Liquid Distortion", de: "Flüssige Verzerrung" },
+  "mousefx.ripple_desc":        { en: "Pulls background pixels with the cursor",
+                                  de: "Zieht Hintergrund-Pixel mit dem Cursor" },
+  "mousefx.chromatic_name":     { en: "Chromatic Halo",    de: "Chromatischer Halo" },
+  "mousefx.chromatic_desc":     { en: "R/G/B glow around the cursor",
+                                  de: "R/G/B-Glow rund um den Cursor" },
+  "mousefx.spotlight_name":     { en: "Spotlight",         de: "Spotlight" },
+  "mousefx.spotlight_desc":     { en: "Dims everything outside a cursor disc",
+                                  de: "Dunkelt alles außerhalb einer Cursor-Scheibe ab" },
+  "mousefx.repulsion_name":     { en: "Widget Float",      de: "Widget-Schwung" },
+  "mousefx.repulsion_desc":     { en: "Widgets ease away from the cursor on display",
+                                  de: "Widgets weichen dem Cursor im Normalbetrieb aus" },
+  "mousefx.hint":               { en: "These react to mouse movement over your desktop while the wallpaper is running — not in the Configurator. All four stack; toggle independently. Paused automatically while a fullscreen app has focus.",
+                                  de: "Diese reagieren auf Mausbewegungen über deinem Desktop während das Wallpaper läuft — nicht im Configurator. Alle vier stapelbar, unabhängig schaltbar. Pausiert automatisch wenn eine Vollbild-App im Vordergrund ist." },
 
   // v1.5.0-beta MQTT bridge labels.
   "mqtt.header":                { en: "Home Assistant / MQTT bridge (beta)",
@@ -9658,14 +9724,27 @@ if (els.widgetTheme) {
   window._refreshThemeSwatchActive = _refreshThemeSwatchActive;
   _refreshThemeSwatchActive();
 })();
-// v1.6.0-beta: stackable mouse-effects. Each checkbox toggles its
-// effect name in the array; on change we push the union back.
-for (const cb of document.querySelectorAll(".mousefx-cb")) {
-  cb.addEventListener("change", () => {
-    const next = Array.from(document.querySelectorAll(".mousefx-cb"))
-      .filter(x => x.checked)
-      .map(x => x.value);
-    setSetting("mouseEffects", next);
+// v2.3.5-beta: tile-style cursor-effect toggles (replaces the v1.6.0-beta
+// checkbox row). Each tile click flips that effect's membership in
+// the mouseEffects array; renderAll reapplies the .active class set
+// from the persisted state. Backwards-compat: `.mousefx-cb` selectors
+// would still work if the old HTML is around (legacy preview iframes
+// from third-party tools), but the active config has no such elements.
+for (const tile of document.querySelectorAll(".fx-tile")) {
+  tile.addEventListener("click", () => {
+    const fx = tile.dataset.fx;
+    if (!fx) return;
+    const current = new Set(Array.from(
+      document.querySelectorAll(".fx-tile.active")
+    ).map((t) => t.dataset.fx));
+    if (current.has(fx)) {
+      current.delete(fx);
+      tile.classList.remove("active");
+    } else {
+      current.add(fx);
+      tile.classList.add("active");
+    }
+    setSetting("mouseEffects", Array.from(current));
   });
 }
 els.bgDim  .addEventListener("input",  () => {
@@ -11532,12 +11611,14 @@ function renderAll() {
       window._refreshThemeSwatchActive();
     }
   }
-  // v1.6.0-beta: mouse-effects checkboxes reflect the persisted set.
+  // v2.3.5-beta: mouse-effect tiles reflect the persisted set.
+  // Pre-v2.3.5-beta this was a row of `.mousefx-cb` checkboxes;
+  // the new tiles toggle a `.active` class instead.
   {
     const wanted = new Set(
       Array.isArray(settings.mouseEffects) ? settings.mouseEffects : []);
-    for (const cb of document.querySelectorAll(".mousefx-cb")) {
-      cb.checked = wanted.has(cb.value);
+    for (const tile of document.querySelectorAll(".fx-tile")) {
+      tile.classList.toggle("active", wanted.has(tile.dataset.fx));
     }
   }
   els.bgDim.value   = String(settings.bgDim ?? 0);

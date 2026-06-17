@@ -4,6 +4,44 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5-beta] - 2026-06-17
+
+Three quick UX fixes on top of v2.3.4-beta after the first round of
+real-world feedback.
+
+### Fixed — cursor effects ignored fullscreen pause
+
+The four MouseFx ticks (Liquid Distortion, Chromatic Halo, Spotlight,
+Widget Float) were the only rAF loops in the wallpaper page that
+didn't short-circuit on `isPaused`. Every other tick (ambient,
+audio-glow, pixelfx, parallax, renderFrame) already bailed and the
+"wallpaper-resume" event re-armed them on unpause. Now all four
+follow the same pattern, and a fresh resume listener kicks them
+back to life when fullscreen pause clears.
+
+### Changed — cursor effects moved from Widgets tab to Effects tab
+
+The four cursor distortion effects were in the Widgets card because
+that's where they were when the system first shipped, but they alter
+the *wallpaper* visuals, not widget layout. Moved into the Effects
+card right under the existing Pixelfx (cursor) row where they
+conceptually belong.
+
+### Changed — cursor effects: 4 checkboxes → tile grid
+
+The old labeled-checkbox row was bland and didn't surface what each
+effect actually does — just an emoji + name. New tile grid: each
+tile shows the emoji + name + a one-line description ("Pulls
+background pixels with the cursor" / "R/G/B glow around the cursor"
+/ "Dims everything outside a cursor disc" / "Widgets ease away from
+the cursor on display"). Active tiles get a blue tint + border so
+the state reads at a glance. Same four effects, same `mouseEffects`
+array persistence — just the UI got a refresh.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.5-beta
+
+Wallpaper bundle re-import IS required.
+
 ## [2.3.4-beta] - 2026-06-17
 
 Two-phase atmosphere + UX wave plus a stack of memory-leak fixes

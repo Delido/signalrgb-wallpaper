@@ -3595,6 +3595,14 @@ const MouseFx = (function () {
     // style invalidations on the main thread.
     let _lastTick = 0;
     function tick(now) {
+      // v2.3.5-beta: respect the global pause so fullscreen-pause
+      // doesn't keep four mouse-driven rAF chains burning CPU while
+      // the user games or watches a film. The four MouseFx ticks
+      // were the only rAF loops in the wallpaper page missing this
+      // guard — every other (ambient / pixelfx / audio-glow /
+      // parallax / renderFrame) already short-circuits on isPaused
+      // and re-arms on the "wallpaper-resume" event.
+      if (isPaused) { raf = null; return; }
       raf = requestAnimationFrame(tick);
       if (now - _lastTick < RENDER_INTERVAL_MS) return;
       _lastTick = now;
@@ -3657,6 +3665,8 @@ const MouseFx = (function () {
       return overlay;
     }
     function tick(now) {
+      // v2.3.5-beta: pause guard — see Repulsion's tick comment.
+      if (isPaused) { raf = null; return; }
       raf = requestAnimationFrame(tick);
       if (now - _lastTick < RENDER_INTERVAL_MS) return;
       _lastTick = now;
@@ -3707,6 +3717,8 @@ const MouseFx = (function () {
       return overlay;
     }
     function tick(now) {
+      // v2.3.5-beta: pause guard — see Repulsion's tick comment.
+      if (isPaused) { raf = null; return; }
       raf = requestAnimationFrame(tick);
       if (now - _lastTick < RENDER_INTERVAL_MS) return;
       _lastTick = now;
@@ -3780,6 +3792,8 @@ const MouseFx = (function () {
       mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
     }
     function tick(now) {
+      // v2.3.5-beta: pause guard — see Repulsion's tick comment.
+      if (isPaused) { raf = null; return; }
       raf = requestAnimationFrame(tick);
       if (now - _lastTick < RENDER_INTERVAL_MS) return;
       _lastTick = now;
@@ -3860,8 +3874,23 @@ const MouseFx = (function () {
       }
       active = want;
     },
+    // v2.3.5-beta: expose the active set + the per-effect handles so
+    // the wallpaper-resume listener can re-arm the rAF chain for
+    // every currently-enabled effect after fullscreen pause ends.
+    _activeNames: () => active,
+    _enable: (name) => { if (_EFFECTS[name]) _EFFECTS[name].enable(); },
   };
 })();
+
+// v2.3.5-beta: re-arm the four mouse-effect rAF loops when the
+// page comes off pause. Each effect's tick now bails on isPaused
+// (so no CPU during fullscreen pause), but that means the rAF
+// chain stays dead afterward — calling enable() per active name
+// kicks them back to life. The other rAF loops (ambient, audio-
+// glow, pixelfx, parallax) already had this listener pattern.
+window.addEventListener("wallpaper-resume", () => {
+  for (const name of MouseFx._activeNames()) MouseFx._enable(name);
+});
 
 function applyMouseEffects(arr) {
   MouseFx.setActive(arr);
