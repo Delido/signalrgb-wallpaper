@@ -1,5 +1,5 @@
 PackageIdentifier: Delido.SignalRGBWallpaper
-PackageVersion: 2.0.1
+PackageVersion: 2.3.0
 PackageLocale: en-US
 Publisher: Sebastian Mendyka
 PublisherUrl: https://github.com/Delido
@@ -24,19 +24,24 @@ Description: |-
   on Steam). The installer sets everything up automatically — no
   Python, no manual file copies, no terminal.
 
-  Features:
-  - Live RGB glow behind a transparent background, 60 fps
+  Highlights:
+  - Live RGB glow behind a transparent background, up to 60 Hz
   - Up to 4 monitors, each fully independent or spanned
-  - In-browser image editor — pick any wallpaper, click out
-    transparent regions, no Photoshop required
-  - Starter wallpaper library + per-user uploads
-  - Browser-based Configurator
-  - Twelve ambient effects (snow, rain, sparks, aurora,
+  - In-browser image editor + curated wallpaper-pack browser
+    backed by GitHub Pages manifests
+  - Browser-based Configurator with floating live preview
+  - 18 ambient presets (snow, rain, storm, sparks, aurora,
     constellation, fireflies, plasma, vortex, bubbles, matrix,
-    starfield, lightning)
-  - Eleven+ desktop widgets (clock, calendar, weather, sticky
-    notes, countdowns, photo frame, quote, CPU / RAM / network,
-    audio spectrum, Now-playing)
+    starfield, lightning, waves, ripples, flowfield, wormhole,
+    and weather-reactive auto-pick from your live forecast)
+  - Cursor effects: liquid distortion, chromatic halo,
+    spotlight, widget float, plus a click-driven water ripple
+    that bends the wallpaper image with real SVG refraction
+  - 13 widgets (clock, calendar, weather with three skin
+    variants, sticky note, countdown, picture, quote,
+    CPU/RAM/hardware-sensor meters, audio spectrum, now-playing,
+    RSS feed)
+  - 10 Quick Look bundles (one-click full-screen presets)
   - Preset slots, per-app profiles, hotkeys, auto-cycle
   - DE / EN UI, auto-detected from Windows locale
   - Auto-pause when a fullscreen app is active
@@ -50,6 +55,6 @@ Tags:
   - wallpaper-engine
   - multi-monitor
   - widgets
-ReleaseNotesUrl: https://github.com/Delido/signalrgb-wallpaper/releases/latest
+ReleaseNotesUrl: https://github.com/Delido/signalrgb-wallpaper/releases/tag/v2.3.0
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
