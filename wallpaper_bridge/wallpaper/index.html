@@ -6418,10 +6418,19 @@ const water = (function () {
   let mapCtx = null;
   let svgFilter = null;
   let feImg = null;
+  // v2.3.12-beta: ref to the displacement-map element so we can
+  // ramp its `scale` between 0 (no displacement) and ACTIVE_SCALE
+  // (real ripple amplitude). Holding scale at 0 while no ripple is
+  // in flight side-steps the async-load gap on feImage: even if
+  // in2="map" is still loading the data: URL, scale=0 means the
+  // displacement is zero regardless of map content, so the
+  // wallpaper doesn't jump on filter-attach.
+  let feDisp = null;
   let ripples = [];
   let enabled = false;
   let _lastTick = 0;
   const MAP_SIZE = 256;
+  const ACTIVE_SCALE = 80;
   // Wave lifetime in seconds. Faster than the old outline rings
   // (was 2.4 s) because a propagating displacement front looks
   // best when it's clearly transient — long-lived ripples make the
@@ -6442,30 +6451,39 @@ const water = (function () {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.style.cssText = "position:absolute; width:0; height:0;";
     svg.setAttribute("aria-hidden", "true");
+    // v2.3.12-beta: scale starts at 0. With a missing/loading
+    // feImage input, feDisplacementMap multiplies the channel
+    // value-to-offset by scale — at scale=0 the displacement is
+    // exactly 0 px no matter what `in2` resolves to. So the BG
+    // does NOT jump when the filter is first attached. We bump
+    // scale to ACTIVE_SCALE in tick() when a ripple is in flight
+    // and reset to 0 when the last ripple expires. The previous
+    // pre-seed-feImage approach (v2.3.11-beta) didn't work
+    // because the data: URL set via setAttribute("href") loads
+    // asynchronously — the filter's first render still saw an
+    // empty in2 and shifted the BG by -40 px until the load
+    // finished a frame or two later.
     svg.innerHTML =
       '<defs><filter id="pixelfx-water-filter" x="0" y="0" width="100%" height="100%">' +
       '<feImage id="pixelfx-water-img" preserveAspectRatio="none"' +
       ' result="map" x="0" y="0" width="100%" height="100%"/>' +
-      '<feDisplacementMap in="SourceGraphic" in2="map" scale="80"' +
-      ' xChannelSelector="R" yChannelSelector="G"/>' +
+      '<feDisplacementMap id="pixelfx-water-disp" in="SourceGraphic" in2="map"' +
+      ' scale="0" xChannelSelector="R" yChannelSelector="G"/>' +
       '</filter></defs>';
     document.body.appendChild(svg);
     svgFilter = svg;
     feImg = svg.querySelector("#pixelfx-water-img");
+    feDisp = svg.querySelector("#pixelfx-water-disp");
     mapCanvas = document.createElement("canvas");
     mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
     mapCtx = mapCanvas.getContext("2d");
-    // Neutral grey = no displacement. R=G=128 → (R/255 - 0.5)*scale ≈ 0.
+    // Neutral grey = R=G=128. Used by tick() each frame as the
+    // background of the active map; also pushed once here so the
+    // feImage has SOMETHING to load (avoids a "broken image" icon
+    // logged by some CEF builds), but the displacement scale=0
+    // above is what actually prevents the activation jump.
     mapCtx.fillStyle = "rgb(128,128,0)";
     mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-    // v2.3.11-beta: push the neutral map into feImage IMMEDIATELY.
-    // Without this, between enable() and the user's first click,
-    // `in2="map"` resolves to an empty image. feDisplacementMap
-    // treats missing input as R=G=B=0, which yields a uniform
-    // (0/255 - 0.5) * scale = -40 px shift across the whole #bg —
-    // the wallpaper would visibly jump up-left as soon as water
-    // mode is selected, then snap back to neutral only after the
-    // first ripple painted a real map. Pre-seeding fixes that.
     feImg.setAttribute("href", mapCanvas.toDataURL());
   }
 
@@ -6523,8 +6541,12 @@ const water = (function () {
   function tick(now) {
     if (isPaused) { raf = null; return; }
     if (!enabled || ripples.length === 0) {
-      // No active work — reset the map to neutral once so any
-      // residual displacement clears on screen, then stop the rAF.
+      // v2.3.12-beta: drop displacement scale to 0 BEFORE clearing
+      // the map. Order matters — if we cleared the map first, the
+      // filter would briefly render scale=ACTIVE_SCALE × neutral-map
+      // which is fine, but setting scale=0 first means the very
+      // next paint is provably a no-op regardless of map state.
+      if (feDisp) feDisp.setAttribute("scale", "0");
       if (mapCtx) {
         mapCtx.fillStyle = "rgb(128,128,0)";
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
@@ -6574,6 +6596,12 @@ const water = (function () {
       ripples = [];
       document.body.classList.remove("fx-pixelfx-water");
       if (raf) { cancelAnimationFrame(raf); raf = null; }
+      // v2.3.12-beta: drop scale to 0 on disable too. Strictly
+      // redundant because the class removal detaches the filter,
+      // but cheap belt-and-suspenders so a future caller that
+      // applies the filter via a different CSS path doesn't pick
+      // up a stale ACTIVE_SCALE.
+      if (feDisp) feDisp.setAttribute("scale", "0");
       if (mapCtx) {
         mapCtx.fillStyle = "rgb(128,128,0)";
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
@@ -6583,6 +6611,12 @@ const water = (function () {
     splash(x, y, initialLife) {
       if (!enabled) return;
       ripples.push({ x: x, y: y, life: initialLife || 0 });
+      // v2.3.12-beta: scale goes 0 → ACTIVE_SCALE the moment a
+      // ripple exists. tick() will paint the map this frame; if
+      // we left scale at 0, the first painted ripple frame would
+      // be a no-op. Setting scale before tick() runs guarantees
+      // the displacement is active from the very first paint.
+      if (feDisp) feDisp.setAttribute("scale", String(ACTIVE_SCALE));
       if (!raf) {
         _lastTick = performance.now();
         raf = requestAnimationFrame(tick);

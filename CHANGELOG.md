@@ -4,6 +4,29 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.12-beta] - 2026-06-17
+
+Real fix for the water-mode BG shift the v2.3.11-beta pre-seed
+didn't catch.
+
+### Fixed — Water mode still shifted #bg by -40 px
+
+The v2.3.11-beta fix pre-seeded `feImage.href` with the neutral
+canvas via `toDataURL`, but data: URLs load **asynchronously** —
+the SVG filter's first paint still happened before the load
+completed and saw an empty `in2` input → uniform -40 px shift.
+
+This release flips the strategy: `feDisplacementMap scale` starts
+at **0** (so the displacement is provably 0 px regardless of what
+`in2` resolves to). `splash()` bumps the scale to ACTIVE_SCALE=80
+before the next tick paints; the tail-tick that runs after the
+last ripple expires drops scale back to 0. No more activation
+jump; the BG only moves when a wave is actually in flight.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.12-beta
+
+Wallpaper code changed. Re-import IS required.
+
 ## [2.3.11-beta] - 2026-06-17
 
 Three follow-up fixes off v2.3.10-beta's water rebuild.
