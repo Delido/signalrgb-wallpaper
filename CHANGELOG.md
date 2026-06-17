@@ -4,6 +4,42 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6-beta] - 2026-06-17
+
+Memory-footprint optimisation: idle full-viewport canvases now
+collapse to 1×1 instead of sitting on a ~30 MB backing buffer
+each.
+
+### Changed — canvas backing buffers collapse when their effect is off
+
+The wallpaper page hosts four full-viewport canvases:
+
+- `#bars-canvas` — glow grid in canvas-renderer mode
+- `#ambient-canvas` — snow / rain / sparks / aurora / storm / …
+- `#pixelfx-canvas` — trail / hover-glow / click ripple / water
+- `#audioglow-canvas` — pulse / spectrum bars / waveform
+
+Pre-v2.3.6-beta every one of them kept a viewport-sized backing
+buffer even when the effect was off. At 5120×1440 × DPR=1 × 4
+bytes per pixel that's ~30 MB per canvas → ≈ 100 MB resident per
+wallpaper instance even with three of the four idle. Multi-monitor
+setups doubled or quadrupled that because each monitor runs its
+own WebView2 instance.
+
+Each effect's `stop()` (or `_syncGridCanvasVisibility()`'s
+canvas-off branch for `#bars-canvas`) now sets `canvas.width =
+canvas.height = 1` after clearing. `start()` already calls
+`resize()` to set the canvas back to the full viewport on
+re-enable, so the trade-off is one allocation per off→on
+transition.
+
+Realistic ceiling on a 2-monitor 5120×1440 setup with three of
+the four effects idle: ≈ -150 MB resident RAM.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.6-beta
+
+Wallpaper bundle re-import IS required.
+
 ## [2.3.5-beta] - 2026-06-17
 
 Three quick UX fixes on top of v2.3.4-beta after the first round of

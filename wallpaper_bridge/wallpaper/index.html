@@ -1685,6 +1685,15 @@ function _syncGridCanvasVisibility() {
     // Clear the canvas so a stale snapshot doesn't bleed through if
     // the user later flips back to canvas mode.
     barsCanvasCtx.clearRect(0, 0, barsCanvasEl.width, barsCanvasEl.height);
+    // v2.3.6-beta memory: collapse the backing buffer when the canvas
+    // grid renderer isn't active. _ensureGridImage resizes it back
+    // on next render — `_gridImage` is also nulled + the cache key
+    // reset so the next call re-creates the ImageData backing buffer
+    // at the right size instead of short-circuiting on the stale
+    // cache key.
+    barsCanvasEl.width = 1; barsCanvasEl.height = 1;
+    _gridImage = null;
+    _gridImageKey = "";
     // Force the DOM grid to repaint every zone on its first frame
     // back — without resetting the colour cache the un-stale zones
     // would skip writes and the grid would stay blank.
@@ -4689,6 +4698,15 @@ const ambient = (function () {
     // store but discards references for GC.
     recyclePool.length = 0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // v2.3.6-beta memory: collapse the backing buffer when the effect
+    // is off. A viewport-sized canvas at 5120×1440 × DPR=1 × 4 bytes
+    // is ~30 MB sitting unused; with four such canvases (bars, ambient,
+    // pixelfx, audioglow) that's >100 MB resident per wallpaper
+    // instance — doubled on multi-monitor setups (each gets its own
+    // WebView2). start() resize()s back to full viewport, so the
+    // tradeoff is just one allocation when the user enables the
+    // effect again.
+    canvas.width = 1; canvas.height = 1;
   }
 
   // Per-preset recycle pool for particle objects. Only presets that
@@ -5929,6 +5947,9 @@ const audioGlow = (function () {
     if (raf) cancelAnimationFrame(raf);
     raf = null;
     ctx.clearRect(0, 0, viewW, viewH);
+    // v2.3.6-beta memory: collapse the backing buffer when off. See
+    // the same comment in ambient.stop() — start() resizes back.
+    canvas.width = 1; canvas.height = 1;
   }
 
   // Convert the FFT bin array into a per-band amplitude array of `n`
@@ -6114,6 +6135,8 @@ const pixelfx = (function () {
     if (raf) { cancelAnimationFrame(raf); raf = null; }
     trail = []; ripples = [];
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // v2.3.6-beta memory: collapse the backing buffer when off.
+    canvas.width = 1; canvas.height = 1;
   }
 
   function tick(now) {
