@@ -4,6 +4,34 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.9-beta] - 2026-06-17
+
+Configurator polish: the Pixelfx (Cursor) row is now a tile grid.
+
+### Changed — Pixelfx (Cursor) section → fx-tile grid
+
+The Effects tab's Pixelfx control was the last `.seg` button row in
+the tab — every other effect group had already moved to tile
+layouts (ambient, cursor distortion effects). Reworked into the
+same `.fx-tiles` grid: each mode gets an emoji, a short label
+(Trail / Hover-Glow / Click-Ring / Water-Ripple / Alle / Aus) and
+a one-line description. Active state via `.active` class; the
+selector behaviour is unchanged (single-select radio — only one
+tile lit at a time). Existing `pixelfx` setting values are kept
+1:1, so persisted configs migrate without a touch.
+
+Bonus correctness fix: the mousefx tile collector
+(`document.querySelectorAll(".fx-tile.active")`) was unscoped, so
+once the pixelfx grid also used `.fx-tile` the click handler would
+have swept pixelfx tiles into the `mouseEffects` setting array as
+`undefined` entries. Scoped both that selector and the renderAll
+loop to `#mousefx-tiles`.
+
+### Changed — APP_VERSION → 2.3.9-beta
+
+Configurator-only change. WALLPAPER_VERSION stays at 2.3.8-beta —
+no wallpaper bundle re-import needed.
+
 ## [2.3.8-beta] - 2026-06-17
 
 Three more GPU-budget wins on top of v2.3.7-beta's Repulsion fix.

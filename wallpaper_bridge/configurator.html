@@ -2875,7 +2875,11 @@
       <div class="row" style="margin-bottom: 4px;">
         <label style="flex:0 0 auto;" data-i18n="effects.pixelfx">Pixelfx (cursor)</label>
       </div>
-      <div class="seg-row" id="pixelfx-row"></div>
+      <!-- v2.3.9-beta: same fx-tile grid as the cursor-distortion
+           effects below. Pixelfx is single-select (radio), not
+           stackable, so the build function toggles `.active` on
+           exactly one tile per setSetting("pixelfx", …) push. -->
+      <div class="fx-tiles" id="pixelfx-tiles"></div>
       <div class="hint" style="margin-top: 8px;" data-i18n="effects.hint_pixelfx" data-i18n-html>
         Trail and hover-glow work with Lively click-through enabled (position is
         pushed by the host). Click ripple needs real mouse events — toggle
@@ -4147,6 +4151,26 @@ const TRANSLATIONS = {
     en: "Trail and hover-glow work with Lively click-through enabled (position is pushed by the host). Click ripple needs real mouse events — toggle <em>Wallpaper interaction</em> in Lively to see it.",
     de: "Mausspur und Hover-Glow funktionieren auch mit Lively-Click-Through (Position kommt vom Host). Klick-Welle braucht echte Mausevents — <em>Wallpaper interaction</em> in Lively aktivieren um's zu sehen."
   },
+  // v2.3.9-beta: pixelfx tile labels + per-mode descriptions for the
+  // new fx-tile grid (formerly a flat .seg row).
+  "pixelfx.off_name":     { en: "Off",           de: "Aus" },
+  "pixelfx.off_desc":     { en: "No cursor effect",
+                            de: "Kein Cursor-Effekt" },
+  "pixelfx.trail_name":   { en: "Trail",         de: "Spur" },
+  "pixelfx.trail_desc":   { en: "Tinted streak following the cursor",
+                            de: "Eingefärbte Spur folgt dem Cursor" },
+  "pixelfx.glow_name":    { en: "Hover glow",    de: "Hover-Glow" },
+  "pixelfx.glow_desc":    { en: "Soft tinted halo around the cursor",
+                            de: "Weicher Halo um den Cursor" },
+  "pixelfx.ripple_name":  { en: "Click ripple",  de: "Klick-Ring" },
+  "pixelfx.ripple_desc":  { en: "Small coloured rings on click",
+                            de: "Kleine farbige Ringe bei Klick" },
+  "pixelfx.water_name":   { en: "Water ripple",  de: "Wasserwelle" },
+  "pixelfx.water_desc":   { en: "Full-screen surface ripple on click",
+                            de: "Vollflächige Wasserwelle bei Klick" },
+  "pixelfx.all_name":     { en: "All",           de: "Alle" },
+  "pixelfx.all_desc":     { en: "Trail + glow + click ripple combined",
+                            de: "Spur + Glow + Klick-Ring kombiniert" },
   "effects.hint_parallax":  {
     en: "Slides the background image against your cursor for a fake-depth effect. 0 = off. 30 is subtle, 80 is dramatic.",
     de: "Verschiebt das Hintergrundbild gegen den Cursor für einen Fake-3D-Effekt. 0 = aus. 30 ist dezent, 80 dramatisch."
@@ -4985,7 +5009,7 @@ const els = {
   ambientDensity: $("ambient-density"),
   ambientDensityVal: $("ambient-density-val"),
   effectQuality:  $("effect-quality"),
-  pixelfxRow:     $("pixelfx-row"),
+  pixelfxTiles:   $("pixelfx-tiles"),
   parallax3d:     $("parallax3d"),
   parallax3dVal:  $("parallax3d-val"),
   audioGlowMode:      $("audioglow-mode"),
@@ -9727,15 +9751,18 @@ if (els.widgetTheme) {
 // v2.3.5-beta: tile-style cursor-effect toggles (replaces the v1.6.0-beta
 // checkbox row). Each tile click flips that effect's membership in
 // the mouseEffects array; renderAll reapplies the .active class set
-// from the persisted state. Backwards-compat: `.mousefx-cb` selectors
-// would still work if the old HTML is around (legacy preview iframes
-// from third-party tools), but the active config has no such elements.
-for (const tile of document.querySelectorAll(".fx-tile")) {
+// from the persisted state.
+// v2.3.9-beta: scoped to `#mousefx-tiles` — the pixelfx grid now also
+// uses `.fx-tile`, and an unscoped query would (a) wire pixelfx tiles
+// into the mouseEffects toggle here and (b) sweep them up in the
+// `.active` collector below, which would push `undefined` into the
+// mouseEffects array.
+for (const tile of document.querySelectorAll("#mousefx-tiles .fx-tile")) {
   tile.addEventListener("click", () => {
     const fx = tile.dataset.fx;
     if (!fx) return;
     const current = new Set(Array.from(
-      document.querySelectorAll(".fx-tile.active")
+      document.querySelectorAll("#mousefx-tiles .fx-tile.active")
     ).map((t) => t.dataset.fx));
     if (current.has(fx)) {
       current.delete(fx);
@@ -10045,18 +10072,27 @@ const AMBIENT_PRESETS = ["off", "snow", "rain", "storm", "sparks", "aurora", "co
 // renders a mouse badge on these so users see at a glance that the
 // effect responds to pointer movement.
 const CURSOR_AWARE_AMBIENT = new Set(["wormhole"]);
+// v2.3.9-beta: each entry now carries the emoji + i18n keys the
+// fx-tile head + description use. nameKey / descKey resolve through
+// the regular i18n dict at build/render time.
 const PIXELFX_MODES   = [
-  { value: "off",    label: "Off" },
-  { value: "trail",  label: "Trail" },
-  { value: "glow",   label: "Hover glow" },
-  { value: "ripple", label: "Click ripple" },
+  { value: "off",    emoji: "🚫", nameKey: "pixelfx.off_name",
+    descKey: "pixelfx.off_desc" },
+  { value: "trail",  emoji: "✨", nameKey: "pixelfx.trail_name",
+    descKey: "pixelfx.trail_desc" },
+  { value: "glow",   emoji: "💡", nameKey: "pixelfx.glow_name",
+    descKey: "pixelfx.glow_desc" },
+  { value: "ripple", emoji: "💫", nameKey: "pixelfx.ripple_name",
+    descKey: "pixelfx.ripple_desc" },
   // v2.3.3-beta: water mode is a viewport-spanning click ripple
   // that looks like an actual water surface — three staggered
   // white-blueish rings per click, max radius ≈ 65 % of the viewport
   // diagonal. Excluded from "all" because it's too prominent to
   // layer on top of trail+glow+ripple at the same time.
-  { value: "water",  label: "Water ripple" },
-  { value: "all",    label: "All" },
+  { value: "water",  emoji: "💧", nameKey: "pixelfx.water_name",
+    descKey: "pixelfx.water_desc" },
+  { value: "all",    emoji: "🎆", nameKey: "pixelfx.all_name",
+    descKey: "pixelfx.all_desc" },
 ];
 
 // Build the preset tiles. Each gets a small canvas with a few seed particles
@@ -10671,16 +10707,30 @@ if (els.ambientWeatherReactive) {
                      els.ambientWeatherReactive.checked));
 }
 
-// Build pixelfx segmented buttons
-function buildPixelfxRow() {
-  els.pixelfxRow.innerHTML = "";
+// v2.3.9-beta: build pixelfx tiles (replaces the old .seg row).
+// Same .fx-tile styling as the mousefx grid below; renderAll scopes
+// its querySelectorAll by container so the two grids don't clobber
+// each other's `.active` state.
+function buildPixelfxTiles() {
+  els.pixelfxTiles.innerHTML = "";
   for (const opt of PIXELFX_MODES) {
-    const b = document.createElement("button");
-    b.className = "seg";
-    b.textContent = opt.label;
-    b.dataset.value = opt.value;
-    b.addEventListener("click", () => setSetting("pixelfx", opt.value));
-    els.pixelfxRow.appendChild(b);
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "fx-tile";
+    tile.dataset.value = opt.value;
+    const head = document.createElement("span");
+    head.className = "fx-tile-head";
+    const headName = document.createElement("span");
+    headName.dataset.i18n = opt.nameKey;
+    headName.textContent = t(opt.nameKey);
+    head.append(opt.emoji + " ", headName);
+    const desc = document.createElement("span");
+    desc.className = "fx-tile-desc";
+    desc.dataset.i18n = opt.descKey;
+    desc.textContent = t(opt.descKey);
+    tile.append(head, desc);
+    tile.addEventListener("click", () => setSetting("pixelfx", opt.value));
+    els.pixelfxTiles.appendChild(tile);
   }
 }
 
@@ -11614,10 +11664,12 @@ function renderAll() {
   // v2.3.5-beta: mouse-effect tiles reflect the persisted set.
   // Pre-v2.3.5-beta this was a row of `.mousefx-cb` checkboxes;
   // the new tiles toggle a `.active` class instead.
+  // v2.3.9-beta: scoped to `#mousefx-tiles` so the pixelfx grid
+  // (which also uses .fx-tile) keeps its own active state.
   {
     const wanted = new Set(
       Array.isArray(settings.mouseEffects) ? settings.mouseEffects : []);
-    for (const tile of document.querySelectorAll(".fx-tile")) {
+    for (const tile of document.querySelectorAll("#mousefx-tiles .fx-tile")) {
       tile.classList.toggle("active", wanted.has(tile.dataset.fx));
     }
   }
@@ -11670,7 +11722,7 @@ function renderAll() {
   els.audioGlowIntensityVal.textContent = String(settings.audioGlowIntensity ?? 60);
   els.audioGlowTint.checked    = !!settings.audioGlowTint;
   const pixel = settings.pixelfx || "off";
-  els.pixelfxRow.querySelectorAll(".seg").forEach((b) => {
+  els.pixelfxTiles.querySelectorAll(".fx-tile").forEach((b) => {
     b.classList.toggle("active", b.dataset.value === pixel);
   });
   // Widgets — lock state drives both the lock-bar visuals AND the layout
@@ -11697,7 +11749,7 @@ function escapeHtml(s) {
 
 // Boot
 buildAmbientTiles();
-buildPixelfxRow();
+buildPixelfxTiles();
 buildAddGrid();
 renderLookBundles();   // v1.2-dev: static, paints once at page load
 connect();
