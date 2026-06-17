@@ -381,22 +381,46 @@
     pointer-events: none;
   }
   #widgets-container.edit-mode { pointer-events: none; }
-  /* Edit-mode banner — fixed top so the user can find the lock toggle. */
+  /* v2.3.11-beta: edit-mode pill — fixed top so the user can find
+     the lock toggle without going back to the Configurator. The
+     widgets container itself flips pointer-events: auto in edit
+     mode (so drag/resize works), but this pill stays clickable in
+     either mode because it carries `pointer-events: auto` on its
+     own rule. Toggled via .on class from setWidgetsLocked. */
   #widgets-banner {
     position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-    z-index: 6;
-    padding: 6px 14px; border-radius: 999px;
-    background: rgba(20, 30, 60, 0.85);
+    z-index: 999;   /* above all widgets + canvases */
+    padding: 6px 6px 6px 14px;
+    border-radius: 999px;
+    background: rgba(20, 30, 60, 0.88);
     color: #d8e6fc;
     border: 1px solid #3a6ba8;
     font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
     font-size: 12px;
     display: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    pointer-events: none;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
     user-select: none;
   }
-  #widgets-banner.on { display: block; }
+  #widgets-banner.on { display: inline-flex; }
+  #widgets-banner .wb-text { opacity: 0.85; }
+  #widgets-banner .wb-lock {
+    background: rgba(58, 107, 168, 0.45);
+    border: 1px solid rgba(58, 107, 168, 0.85);
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font: inherit;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  #widgets-banner .wb-lock:hover {
+    background: rgba(58, 107, 168, 0.7);
+  }
 
   .widget {
     position: absolute;
@@ -1528,6 +1552,15 @@
 <canvas id="ambient-canvas"></canvas>
 <canvas id="audioglow-canvas"></canvas>
 <div id="widgets-container"></div>
+<!-- v2.3.11-beta: edit-mode pill with on-screen lock button so the
+     user doesn't have to go back to the Configurator to lock.
+     Visibility is driven by setWidgetsLocked() → .on class. -->
+<div id="widgets-banner" role="status" aria-live="polite">
+  <span class="wb-text">Widgets unlocked</span>
+  <button type="button" class="wb-lock" id="widgets-banner-lock">
+    🔒 Lock
+  </button>
+</div>
 <canvas id="pixelfx-canvas"></canvas>
 <div id="widget-picker">
   <div class="picker-title">Add widget</div>
@@ -3512,6 +3545,20 @@ async function fetchHttpWidget(rec) {
 // ── Cross-widget state ─────────────────────────────────────────────────────
 const widgetsContainer = document.getElementById("widgets-container");
 const widgetPicker     = document.getElementById("widget-picker");
+// v2.3.11-beta: floating edit-mode pill with on-screen lock button.
+// Wired by setWidgetsLocked() and the click handler below.
+const widgetsBanner    = document.getElementById("widgets-banner");
+const widgetsBannerLock = document.getElementById("widgets-banner-lock");
+if (widgetsBannerLock) {
+  widgetsBannerLock.addEventListener("click", () => {
+    // Optimistic local lock — the bridge round-trips a widgets-set
+    // / widgetsLocked update which will reapply via setWidgetsLocked,
+    // but flipping immediately removes the pill without a network
+    // round-trip flicker.
+    setWidgetsLocked(true);
+    sendWidgetCmd({ type: "widgets-lock", locked: true });
+  });
+}
 const widgetNodes      = new Map();
 let   widgetsLocked    = true;
 let   currentTintCss   = "#6ab0ff";
@@ -3933,6 +3980,10 @@ function setWidgetsLocked(locked) {
   // could add a widget but not configure it — net negative UX.
   // Widgets are added + configured via the Configurator instead.
   if (widgetPicker) widgetPicker.classList.remove("on");
+  // v2.3.11-beta: floating edit-mode pill follows the lock state.
+  // Visible only while unlocked so the user can re-lock from the
+  // wallpaper itself instead of opening the Configurator again.
+  if (widgetsBanner) widgetsBanner.classList.toggle("on", !locked);
 }
 
 function setWidgets(list) {
@@ -6189,10 +6240,15 @@ const pixelfx = (function () {
   // v1.6.1-beta R2.3: throttle to RENDER_INTERVAL_MS like ambient.
   let _pixelfxLastTick = 0;
 
+  // v2.3.11-beta: pixelfx is single-select since the "all" mode was
+  // removed. wantsTrail/wantsGlow/wantsRipple compare exactly one
+  // value now — keeping the predicates instead of inlining `mode ===`
+  // because the click handler + render branches read more clearly
+  // with named tests.
   const active       = () => mode !== "off";
-  const wantsTrail   = () => mode === "trail"  || mode === "all";
-  const wantsGlow    = () => mode === "glow"   || mode === "all";
-  const wantsRipple  = () => mode === "ripple" || mode === "all";
+  const wantsTrail   = () => mode === "trail";
+  const wantsGlow    = () => mode === "glow";
+  const wantsRipple  = () => mode === "ripple";
   // v2.3.3-beta: "water" mode — full-viewport refraction-feel ripple
   // over the BG image. Distinct from `ripple` (which paints small
   // tint-colored rings as a click feedback layer): water spawns 3
@@ -6313,7 +6369,10 @@ const pixelfx = (function () {
 
   return {
     setMode(m) {
-      const allowed = ["off","trail","glow","ripple","water","all"];
+      // v2.3.11-beta: "all" removed from the allow-list. Any persisted
+      // "all" value falls through to "off" — user just picks a new
+      // single mode from the Configurator tile grid.
+      const allowed = ["off","trail","glow","ripple","water"];
       if (allowed.indexOf(m) < 0) m = "off";
       if (m === mode) return;
       mode = m;
@@ -6396,9 +6455,18 @@ const water = (function () {
     mapCanvas = document.createElement("canvas");
     mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
     mapCtx = mapCanvas.getContext("2d");
-    // Neutral grey = no displacement. R=G=128 → (R-128)*scale/255 = 0.
+    // Neutral grey = no displacement. R=G=128 → (R/255 - 0.5)*scale ≈ 0.
     mapCtx.fillStyle = "rgb(128,128,0)";
     mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+    // v2.3.11-beta: push the neutral map into feImage IMMEDIATELY.
+    // Without this, between enable() and the user's first click,
+    // `in2="map"` resolves to an empty image. feDisplacementMap
+    // treats missing input as R=G=B=0, which yields a uniform
+    // (0/255 - 0.5) * scale = -40 px shift across the whole #bg —
+    // the wallpaper would visibly jump up-left as soon as water
+    // mode is selected, then snap back to neutral only after the
+    // first ripple painted a real map. Pre-seeding fixes that.
+    feImg.setAttribute("href", mapCanvas.toDataURL());
   }
 
   // Paint one ripple's ring front into the displacement map. The

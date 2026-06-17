@@ -4168,9 +4168,6 @@ const TRANSLATIONS = {
   "pixelfx.water_name":   { en: "Water ripple",  de: "Wasserwelle" },
   "pixelfx.water_desc":   { en: "Full-screen surface ripple on click",
                             de: "Vollflächige Wasserwelle bei Klick" },
-  "pixelfx.all_name":     { en: "All",           de: "Alle" },
-  "pixelfx.all_desc":     { en: "Trail + glow + click ripple combined",
-                            de: "Spur + Glow + Klick-Ring kombiniert" },
   "effects.hint_parallax":  {
     en: "Slides the background image against your cursor for a fake-depth effect. 0 = off. 30 is subtle, 80 is dramatic.",
     de: "Verschiebt das Hintergrundbild gegen den Cursor für einen Fake-3D-Effekt. 0 = aus. 30 ist dezent, 80 dramatisch."
@@ -10091,8 +10088,11 @@ const PIXELFX_MODES   = [
   // layer on top of trail+glow+ripple at the same time.
   { value: "water",  emoji: "💧", nameKey: "pixelfx.water_name",
     descKey: "pixelfx.water_desc" },
-  { value: "all",    emoji: "🎆", nameKey: "pixelfx.all_name",
-    descKey: "pixelfx.all_desc" },
+  // v2.3.11-beta: "all" tile removed on user request — stacking
+  // trail + glow + click ripple at once was visually messy and the
+  // single-select intent of the mode picker was clearer without it.
+  // Existing persisted `pixelfx="all"` falls back to "off" at the
+  // wallpaper-side setMode allow-list.
 ];
 
 // Build the preset tiles. Each gets a small canvas with a few seed particles

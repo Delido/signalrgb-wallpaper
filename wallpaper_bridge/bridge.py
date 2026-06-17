@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.3.10-beta"
+APP_VERSION = "2.3.11-beta"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -729,7 +729,7 @@ APP_VERSION = "2.3.10-beta"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.3.10-beta"
+WALLPAPER_VERSION = "2.3.11-beta"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -2195,7 +2195,8 @@ TRANSLATIONS = {
     "pixelfx.glow":             {"en": "Hover glow",              "de": "Cursor-Glow"},
     "pixelfx.ripple":           {"en": "Click ripple (needs Lively interaction)",
                                  "de": "Klick-Welle (benötigt Lively-Interaktion)"},
-    "pixelfx.all":              {"en": "All combined",            "de": "Alle kombiniert"},
+    "pixelfx.water":            {"en": "Water ripple (needs Lively interaction)",
+                                 "de": "Wasserwelle (benötigt Lively-Interaktion)"},
     # ── Widgets submenu ─────────────────────────────────────────────
     "widgets.edit_toggle":      {"en": "Edit widgets on this screen  ({state})",
                                  "de": "Widgets bearbeiten  ({state})"},
@@ -11360,7 +11361,7 @@ class TrayApp:
         ("trail",  "pixelfx.trail"),
         ("glow",   "pixelfx.glow"),
         ("ripple", "pixelfx.ripple"),
-        ("all",    "pixelfx.all"),
+        ("water",  "pixelfx.water"),
     ]
 
     def _effects_menu_items(self):

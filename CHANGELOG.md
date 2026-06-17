@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.11-beta] - 2026-06-17
+
+Three follow-up fixes off v2.3.10-beta's water rebuild.
+
+### Fixed — Water mode shifted #bg by -40 px on activation
+
+`feDisplacementMap`'s `in2="map"` input was empty between
+`water.enable()` and the user's first click — the SVG filter
+treated the missing input as R=G=B=0, which yields a uniform
+`(0/255 - 0.5) * 80 = -40 px` shift across the whole BG. The
+wallpaper visibly jumped up-left as soon as water mode was
+selected, then snapped back only after a ripple painted a real
+map. Pre-seed feImage with the neutral-grey canvas
+(`rgb(128,128,0)`) in `ensureFilter()` so the displacement
+starts at zero from the first frame.
+
+### Changed — "All" mode removed from Pixelfx
+
+Stacking trail + glow + click ripple at once was visually messy
+and weakened the single-select intent of the mode picker. Removed
+the "All" tile from the Configurator (`PIXELFX_MODES`), the
+wallpaper-side allow-list, the `wantsTrail/wantsGlow/wantsRipple`
+predicates (now strict equality), and the tray menu's
+`PIXELFX_MODES_TRAY`. Tray menu also gained the "water" entry it
+was missing. Any persisted `pixelfx="all"` falls through to "off".
+
+### Added — Floating lock pill on the wallpaper
+
+While widgets are unlocked (edit mode), a small fixed pill appears
+at top-center of the wallpaper carrying a "🔒 Lock" button. Click
+it and widgets re-lock without going back to the Configurator;
+the pill disappears immediately. Reuses the pre-existing
+`#widgets-banner` CSS scaffolding which was dead code (defined but
+never instantiated). Optimistic local lock + WS roundtrip via
+`sendWidgetCmd({ type: "widgets-lock", locked: true })`.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.11-beta
+
+Wallpaper code changed. Re-import IS required.
+
 ## [2.3.10-beta] - 2026-06-17
 
 Pixelfx water mode rebuilt as an actual BG-refraction wave instead
