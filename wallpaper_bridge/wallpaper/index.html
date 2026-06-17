@@ -718,6 +718,14 @@
   body.fx-ripple #bars-canvas {
     filter: url(#fx-ripple-filter);
   }
+  /* v2.3.10-beta: pixelfx water mode — feDisplacementMap fed by a
+     procedurally painted ring-front canvas. Distinct filter ID from
+     fx-ripple so the two effects don't fight; only #bg gets the
+     filter (not #bars / #bars-canvas) so the glow-stripes stay
+     stable and don't read as part of the water surface. */
+  body.fx-pixelfx-water #bg {
+    filter: url(#pixelfx-water-filter);
+  }
 
   body.widget-tile-glass .widget {
     background: var(--theme-bg-glass);
@@ -6274,37 +6282,11 @@ const pixelfx = (function () {
         ctx.stroke();
       }
     }
-    if (wantsWater()) {
-      // v2.3.3-beta: full-viewport water-ripple. Each click spawns
-      // 3 rings (the `r.idx` shifts the lifetime so they expand in a
-      // staggered "splash"). Color stays cool white-blue (independent
-      // of the glow tint) because that's what reads as water rather
-      // than as a colored click halo. Wave-amplitude along the radius
-      // (sin of phase) sells the "surface ripple" feel without
-      // touching the BG pixels — pure additive overlay.
-      const maxR = Math.hypot(viewW, viewH) * 0.65;
-      for (const r of ripples) {
-        // Per-ring lifetime is 2.4 s with a 0.15 s stagger between
-        // the rings of one click (see the click handler below).
-        const life = Math.max(0, r.life);
-        const tRel = life / 2.4;
-        if (tRel >= 1) continue;
-        const radius = tRel * maxR;
-        const baseA = (1 - tRel) * (1 - tRel) * 0.55;
-        // Outer ring: faint highlight (water meniscus).
-        ctx.strokeStyle = "rgba(220, 235, 255, " + (baseA * 0.6) + ")";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
-        ctx.stroke();
-        // Inner ring: stronger leading wave.
-        ctx.strokeStyle = "rgba(160, 200, 240, " + baseA + ")";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, Math.max(0, radius - 14), 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    }
+    // v2.3.10-beta: water mode no longer paints on this canvas. It
+    // lives in the `water` IIFE below — an SVG feDisplacementMap on
+    // #bg fed by a procedurally generated ring-front map. The old
+    // outline-ring rendering looked like an inflated click ring,
+    // not water.
   }
 
   document.addEventListener("click", (e) => {
@@ -6312,12 +6294,12 @@ const pixelfx = (function () {
       ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
     }
     if (wantsWater()) {
-      // Three rings staggered over 0.3 s. Negative initial life on
-      // the later ones — tick() clamps life to >= 0 in render so they
-      // sit invisible until they "spawn".
-      ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
-      ripples.push({ x: e.clientX, y: e.clientY, life: -0.15 });
-      ripples.push({ x: e.clientX, y: e.clientY, life: -0.3 });
+      // v2.3.10-beta: route water clicks to the displacement-based
+      // water module. Two staggered splashes per click (the second
+      // 0.12 s later) so a single click produces a visible follow-up
+      // wave behind the leading front instead of one lonely ring.
+      water.splash(e.clientX, e.clientY);
+      water.splash(e.clientX, e.clientY, -0.12);
     }
   });
 
@@ -6335,12 +6317,218 @@ const pixelfx = (function () {
       if (allowed.indexOf(m) < 0) m = "off";
       if (m === mode) return;
       mode = m;
-      if (mode === "off") { canvas.classList.remove("on"); stop(); }
-      else                { canvas.classList.add("on");    start(); }
+      // v2.3.10-beta: water mode is owned by the `water` IIFE below;
+      // it doesn't paint on the pixelfx canvas. So in water mode we
+      // stop the pixelfx canvas (collapses backing buffer to 1×1,
+      // saves the otherwise-idle full-viewport rAF tick) and hand
+      // off to the water module. The document-level click handler
+      // above is module-scope, so it stays bound in either state
+      // and `wantsWater()` still routes splashes correctly.
+      if (mode === "off" || mode === "water") {
+        canvas.classList.remove("on");
+        stop();
+      } else {
+        canvas.classList.add("on");
+        start();
+      }
+      if (mode === "water") water.enable();
+      else                  water.disable();
     },
     setCursor(x, y) { cursorX = x; cursorY = y; },
   };
 })();
+
+// v2.3.10-beta: pixelfx "water" mode — click-impulse-driven water
+// surface via SVG feDisplacementMap on #bg. Each click spawns a
+// ripple object; the rAF loop paints expanding ring fronts into a
+// 256×256 displacement-map canvas (R/G channels encode radial
+// outward-push then inward-pull across the front), and the SVG
+// filter applies that displacement to the wallpaper image. Result
+// reads as actual water bending the BG, not as an outline circle.
+//
+// Architecture mirrors the Liquid Distortion module (mousefx.ripple)
+// which uses the same SVG-displacement technique for cursor-driven
+// ripples — but with a separate filter ID so the two effects can
+// run independently if a user enables both. Activity-gated
+// toDataURL + setAttribute per gotcha-uncapped-raf-dpr: the map is
+// only re-encoded while ripples are active, and the rAF chain
+// self-stops when the last ripple expires.
+const water = (function () {
+  let raf = null;
+  let mapCanvas = null;
+  let mapCtx = null;
+  let svgFilter = null;
+  let feImg = null;
+  let ripples = [];
+  let enabled = false;
+  let _lastTick = 0;
+  const MAP_SIZE = 256;
+  // Wave lifetime in seconds. Faster than the old outline rings
+  // (was 2.4 s) because a propagating displacement front looks
+  // best when it's clearly transient — long-lived ripples make the
+  // BG feel permanently underwater.
+  const RIPPLE_LIFE = 1.8;
+  // Ring-band geometry in map-space (256 = full edge).
+  const BAND_INNER = 8;   // displacement push-out band thickness
+  const BAND_OUTER = 8;   // displacement pull-in band thickness
+  // Per-side amplitude in encoded R/G (capped at ±127 from neutral 128).
+  // 90 gives a strong but not cartoony bend; combined with the
+  // feDisplacementMap scale="80" below the effective pixel
+  // displacement is ~(90 - 128) * 80 / 255 ≈ 12 px peak — visibly
+  // bends the BG without obvious tearing at the ring edge.
+  const PEAK_AMP = 90;
+
+  function ensureFilter() {
+    if (svgFilter) return;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.style.cssText = "position:absolute; width:0; height:0;";
+    svg.setAttribute("aria-hidden", "true");
+    svg.innerHTML =
+      '<defs><filter id="pixelfx-water-filter" x="0" y="0" width="100%" height="100%">' +
+      '<feImage id="pixelfx-water-img" preserveAspectRatio="none"' +
+      ' result="map" x="0" y="0" width="100%" height="100%"/>' +
+      '<feDisplacementMap in="SourceGraphic" in2="map" scale="80"' +
+      ' xChannelSelector="R" yChannelSelector="G"/>' +
+      '</filter></defs>';
+    document.body.appendChild(svg);
+    svgFilter = svg;
+    feImg = svg.querySelector("#pixelfx-water-img");
+    mapCanvas = document.createElement("canvas");
+    mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
+    mapCtx = mapCanvas.getContext("2d");
+    // Neutral grey = no displacement. R=G=128 → (R-128)*scale/255 = 0.
+    mapCtx.fillStyle = "rgb(128,128,0)";
+    mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+  }
+
+  // Paint one ripple's ring front into the displacement map. The
+  // ring is rendered as N angular slices, each a small radial
+  // gradient with R/G encoding the local outward-push direction at
+  // that angle. Inner edge of band = positive radial push (drags
+  // BG pixels outward), outer edge = negative push (pulls them
+  // back). Net visual: a narrow displacement band moves outward
+  // from the click point — looks like a water surface wave.
+  function paintRipple(r, maxRadiusPx) {
+    const t = r.life / RIPPLE_LIFE;
+    if (t < 0 || t >= 1) return;
+    const radiusPx = t * maxRadiusPx;
+    // Map-space radius (assumes viewport mapped onto MAP_SIZE square).
+    const viewMax = Math.max(window.innerWidth, window.innerHeight);
+    const radiusMap = radiusPx / viewMax * MAP_SIZE;
+    // Falloff: peaks early, decays smoothly so far rings fade out.
+    const ampScale = (1 - t) * (1 - t * 0.4);
+    const amp = PEAK_AMP * ampScale;
+    if (amp < 4 || radiusMap < 2) return;
+    const cx = r.x / window.innerWidth  * MAP_SIZE;
+    const cy = r.y / window.innerHeight * MAP_SIZE;
+    // 48 angular slices = enough overlap so the ring reads as
+    // continuous instead of a dotted polygon at small radii.
+    const N = 48;
+    const sliceR = Math.max(4, Math.min(BAND_INNER, BAND_OUTER) * 1.5);
+    for (let i = 0; i < N; i++) {
+      const theta = (i / N) * Math.PI * 2;
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+      // Outer ring slice — push outward (R/G shifted in radial dir).
+      const ox = cx + (radiusMap + BAND_OUTER) * cosT;
+      const oy = cy + (radiusMap + BAND_OUTER) * sinT;
+      const oR = Math.max(0, Math.min(255, 128 + cosT * amp));
+      const oG = Math.max(0, Math.min(255, 128 + sinT * amp));
+      let grad = mapCtx.createRadialGradient(ox, oy, 0, ox, oy, sliceR);
+      grad.addColorStop(0, "rgba(" + oR + "," + oG + ",0,0.9)");
+      grad.addColorStop(1, "rgba(128,128,0,0)");
+      mapCtx.fillStyle = grad;
+      mapCtx.fillRect(ox - sliceR, oy - sliceR, sliceR * 2, sliceR * 2);
+      // Inner ring slice — pull inward (R/G shifted opposite).
+      const ix = cx + Math.max(0, radiusMap - BAND_INNER) * cosT;
+      const iy = cy + Math.max(0, radiusMap - BAND_INNER) * sinT;
+      const iR = Math.max(0, Math.min(255, 128 - cosT * amp));
+      const iG = Math.max(0, Math.min(255, 128 - sinT * amp));
+      grad = mapCtx.createRadialGradient(ix, iy, 0, ix, iy, sliceR);
+      grad.addColorStop(0, "rgba(" + iR + "," + iG + ",0,0.9)");
+      grad.addColorStop(1, "rgba(128,128,0,0)");
+      mapCtx.fillStyle = grad;
+      mapCtx.fillRect(ix - sliceR, iy - sliceR, sliceR * 2, sliceR * 2);
+    }
+  }
+
+  function tick(now) {
+    if (isPaused) { raf = null; return; }
+    if (!enabled || ripples.length === 0) {
+      // No active work — reset the map to neutral once so any
+      // residual displacement clears on screen, then stop the rAF.
+      if (mapCtx) {
+        mapCtx.fillStyle = "rgb(128,128,0)";
+        mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        feImg.setAttribute("href", mapCanvas.toDataURL());
+      }
+      raf = null;
+      return;
+    }
+    raf = requestAnimationFrame(tick);
+    if (now - _lastTick < RENDER_INTERVAL_MS) return;
+    const dt = Math.min(0.1, (now - _lastTick) / 1000);
+    _lastTick = now;
+
+    // Step lifetimes; drop expired ripples.
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      ripples[i].life += dt;
+      if (ripples[i].life > RIPPLE_LIFE) ripples.splice(i, 1);
+    }
+
+    // Clear map to neutral grey each frame (no decay blending —
+    // gives a crisper wave front than a fade-trail).
+    mapCtx.fillStyle = "rgb(128,128,0)";
+    mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+    // Wave reach in CSS px: ~70 % of the viewport diagonal so the
+    // ring crosses the full screen before fading out, but doesn't
+    // wrap past the corners with full amplitude.
+    const maxRadiusPx = Math.hypot(window.innerWidth, window.innerHeight) * 0.7;
+    for (const r of ripples) paintRipple(r, maxRadiusPx);
+
+    // Push displacement map to the SVG filter. toDataURL is the
+    // memory-leak hot path Liquid Distortion documented in detail
+    // (gotcha-uncapped-raf-dpr); here it's naturally gated by
+    // ripple-presence — the tick early-returns + clears the map
+    // once the last ripple expires.
+    feImg.setAttribute("href", mapCanvas.toDataURL());
+  }
+
+  return {
+    enable() {
+      enabled = true;
+      ensureFilter();
+      document.body.classList.add("fx-pixelfx-water");
+    },
+    disable() {
+      enabled = false;
+      ripples = [];
+      document.body.classList.remove("fx-pixelfx-water");
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      if (mapCtx) {
+        mapCtx.fillStyle = "rgb(128,128,0)";
+        mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
+      }
+    },
+    splash(x, y, initialLife) {
+      if (!enabled) return;
+      ripples.push({ x: x, y: y, life: initialLife || 0 });
+      if (!raf) {
+        _lastTick = performance.now();
+        raf = requestAnimationFrame(tick);
+      }
+    },
+  };
+})();
+
+// Note: no wallpaper-resume listener for the water module on
+// purpose. If a user paused mid-ripple, dt-based propagation
+// would jump ahead on resume (large accumulated dt), skipping
+// the ring forward visibly. Letting in-flight ripples die at
+// pause-time and requiring a new click to spawn the next wave
+// gives cleaner behaviour than trying to continue.
 
 // Lively pushes per-frame cursor coords via this callback when its
 // host gives the wallpaper cursor data. Forwarded to both pixelfx

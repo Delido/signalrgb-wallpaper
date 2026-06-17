@@ -4,6 +4,42 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.10-beta] - 2026-06-17
+
+Pixelfx water mode rebuilt as an actual BG-refraction wave instead
+of expanding outline rings.
+
+### Changed — Water ripple uses SVG feDisplacementMap on #bg
+
+The v2.3.3-beta "Water ripple" mode was three concentric outline
+strokes per click — visually it read as an inflated click ring,
+not as water. Rebuilt from the ground up:
+
+* New `water` IIFE module sitting next to `pixelfx`. Owns its own
+  SVG `<filter id="pixelfx-water-filter">` with `feImage` +
+  `feDisplacementMap` (scale=80), applied via `body.fx-pixelfx-water
+  #bg`. Mirrors the Liquid Distortion (`mousefx.ripple`) architecture
+  but with a separate filter ID so the two effects don't fight.
+* Per-click, the module spawns two staggered ripple objects (the
+  second 0.12 s behind the first so a single click produces a
+  follow-up wave). A rAF chain paints expanding ring fronts into a
+  256×256 displacement-map canvas — N=48 angular slices per ripple,
+  outer band encodes radial outward push (R/G shifted by
+  +cos θ × amp / +sin θ × amp), inner band encodes radial inward
+  pull (opposite sign). The map is pushed to the SVG filter via
+  `toDataURL` + `setAttribute("href")`, activity-gated so the
+  encoding stops when the last ripple dies (gotcha-uncapped-raf-dpr
+  pattern — same encoding-leak risk Liquid Distortion handles).
+* The pixelfx canvas is now stopped (backing buffer → 1×1) in water
+  mode, since the canvas no longer participates in the render.
+
+Visual result: the wallpaper image actually bends along a
+propagating wave front. Reads as water, not as a colored halo.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.10-beta
+
+Wallpaper code changed. Re-import IS required.
+
 ## [2.3.9-beta] - 2026-06-17
 
 Configurator polish: the Pixelfx (Cursor) row is now a tile grid.
