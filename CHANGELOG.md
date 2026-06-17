@@ -4,6 +4,32 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.7-beta] - 2026-06-17
+
+GPU-side perf fix on top of v2.3.6-beta's memory pass.
+
+### Fixed — Widget Float repulsion held N×2 in-flight CSS transitions
+
+The repulsion effect (Widgets Tab → cursor-effect tile "Widget
+Float") wrote `--repel-x` / `--repel-y` CSS custom properties on
+every widget every 33 ms (30 Hz tick). A separate
+`body.fx-repulsion .widget` rule wrapped both vars in a 0.18 s
+`cubic-bezier` transition — so every 33 ms rewrite **restarted**
+the 180 ms transition.
+
+Net effect: with N widgets the compositor kept 2N CSS animations
+in flight at all times, juggling them every frame. Position output
+was already smoothed twice (once by the JS dt-based interpolation,
+once by the CSS easing); the GPU was paying for an N-widget
+animation set that didn't need to exist. Removed the transition;
+the 30 Hz JS updates are perceptually smooth on their own. Same
+class of regression `gotcha-perf-transitions` warned about (the
+v1.0-era grid-zone transition was the original culprit).
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.7-beta
+
+Wallpaper bundle re-import IS required.
+
 ## [2.3.6-beta] - 2026-06-17
 
 Memory-footprint optimisation: idle full-viewport canvases now

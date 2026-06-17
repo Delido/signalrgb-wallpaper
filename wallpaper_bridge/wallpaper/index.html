@@ -696,10 +696,18 @@
      nothing during actual repulsion but saves N×layer cost at idle.
      This is the same class of regression gotcha-perf-transitions
      warns about (transition on per-frame-mutated zones).  */
-  body.fx-repulsion .widget {
-    transition: --repel-x 0.18s cubic-bezier(0.2, 0.7, 0.3, 1),
-                --repel-y 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
-  }
+  /* v2.3.7-beta perf fix: the CSS transition that USED to live here
+     (transition on --repel-x / --repel-y, 0.18s cubic-bezier) had
+     the same anti-pattern gotcha-perf-transitions warns about: the
+     repulsion JS sets fresh target values for every widget every
+     33 ms (30 Hz tick), and each set RESTARTED a 180 ms transition.
+     With N widgets, the compositor kept 2N transitions in flight at
+     all times, juggling them every frame. The widget positions
+     looked fine — they were just being interpolated by both the JS
+     dt-based smoothing AND the CSS easing — but the GPU was paying
+     for one continuous N-widget animation set that didn't need to
+     exist. Removed; the 30 Hz JS updates are already perceptually
+     smooth. No body.fx-repulsion .widget rule needed. */
   body.fx-ripple #bg,
   body.fx-ripple #bars,
   body.fx-ripple #bars-canvas {
