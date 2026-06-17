@@ -6463,8 +6463,21 @@ const water = (function () {
     // asynchronously — the filter's first render still saw an
     // empty in2 and shifted the BG by -40 px until the load
     // finished a frame or two later.
+    // v2.3.13-beta: `color-interpolation-filters="sRGB"` on the
+    // filter element. Without this, Chromium runs feDisplacementMap
+    // in linear-RGB color space — but our canvas exports the
+    // displacement map as an sRGB-encoded PNG. The sRGB → linear
+    // conversion shifts R=128 from 0.502 down to ~0.215, which
+    // means the supposedly-neutral grey produces a constant
+    // (0.215 - 0.5) × 80 = -22.8 px displacement across the
+    // ENTIRE non-ring area of #bg. That was the "verschoben"
+    // shift the user reported in v2.3.12/13: the whole BG moved,
+    // not just the ring band. Forcing the filter chain to operate
+    // in sRGB keeps R=128 as the true neutral the canvas paint
+    // assumes (since sRGB 128 = sRGB 128 with no conversion).
     svg.innerHTML =
-      '<defs><filter id="pixelfx-water-filter" x="0" y="0" width="100%" height="100%">' +
+      '<defs><filter id="pixelfx-water-filter" x="0" y="0" width="100%" height="100%"' +
+      ' color-interpolation-filters="sRGB">' +
       '<feImage id="pixelfx-water-img" preserveAspectRatio="none"' +
       ' result="map" x="0" y="0" width="100%" height="100%"/>' +
       '<feDisplacementMap id="pixelfx-water-disp" in="SourceGraphic" in2="map"' +

@@ -2367,9 +2367,11 @@
   <span id="header-screencount-anchor" class="header-screencount-anchor"></span>
   <button class="btn" id="header-toggle-preview" type="button"
           title="Live preview"
+          data-i18n-title="header.toggle_preview.title"
           data-i18n="header.toggle_preview">📺 Vorschau</button>
   <button class="btn" id="header-replay-tour" type="button"
           title="Show the first-run tour again"
+          data-i18n-title="header.replay_tour.title"
           data-i18n="header.replay_tour">Tour</button>
   <a class="btn" href="/builder" target="_blank" data-i18n="header.open_builder">Open Builder…</a>
 </header>
@@ -2538,7 +2540,8 @@
            explicit button + hint sit on its right. -->
       <div class="bg-current-row">
         <button type="button" class="bg-current-thumb" id="bg-current-thumb"
-                title="Open library">
+                title="Open library"
+                data-i18n-title="bg.open_library.title">
           <span class="bg-current-thumb-label" data-i18n="bg.current_thumb">No background</span>
         </button>
         <div class="bg-current-meta">
@@ -2648,11 +2651,11 @@
       <div class="row">
         <label for="glow-layout" data-i18n="glow.layout">Layout</label>
         <select id="glow-layout">
-          <option value="lay-grid">Pixel grid (2D)</option>
-          <option value="lay-vstripes">Vertical stripes</option>
-          <option value="lay-hstripes">Horizontal stripes</option>
-          <option value="lay-pills">Centered pills</option>
-          <option value="lay-off">Hidden</option>
+          <option value="lay-grid"     data-i18n="glow.layout.grid">Pixel grid (2D)</option>
+          <option value="lay-vstripes" data-i18n="glow.layout.vstripes">Vertical stripes</option>
+          <option value="lay-hstripes" data-i18n="glow.layout.hstripes">Horizontal stripes</option>
+          <option value="lay-pills"    data-i18n="glow.layout.pills">Centered pills</option>
+          <option value="lay-off"      data-i18n="glow.layout.off">Hidden</option>
         </select>
       </div>
       <div class="row">
@@ -2673,8 +2676,8 @@
       <div class="row">
         <label for="grid-renderer" data-i18n="glow.grid_renderer">Grid renderer</label>
         <select id="grid-renderer">
-          <option value="dom">DOM (lower GPU)</option>
-          <option value="canvas">Canvas (lower CPU)</option>
+          <option value="dom"    data-i18n="glow.grid_renderer.dom">DOM (lower GPU)</option>
+          <option value="canvas" data-i18n="glow.grid_renderer.canvas">Canvas (lower CPU)</option>
         </select>
       </div>
       <!-- v1.2.12: glass-tile backdrop-filter quality. Backdrop-filter
@@ -2686,9 +2689,9 @@
       <div class="row">
         <label for="glass-quality" data-i18n="glow.glass_quality">Glass quality</label>
         <select id="glass-quality">
-          <option value="low">Low (no blur)</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
+          <option value="low"    data-i18n="glow.glass_quality.low">Low (no blur)</option>
+          <option value="medium" data-i18n="glow.glass_quality.medium">Medium</option>
+          <option value="high"   data-i18n="glow.glass_quality.high">High</option>
         </select>
       </div>
       <!-- v1.2.12: shared cap on the bridge's outgoing broadcast rate
@@ -2701,9 +2704,9 @@
       <div class="row">
         <label for="frame-rate" data-i18n="glow.frame_rate">Frame rate</label>
         <select id="frame-rate">
-          <option value="20">Performance (20 Hz)</option>
-          <option value="30">Balanced (30 Hz)</option>
-          <option value="60">Quality (60 Hz)</option>
+          <option value="20" data-i18n="glow.frame_rate.performance">Performance (20 Hz)</option>
+          <option value="30" data-i18n="glow.frame_rate.balanced">Balanced (30 Hz)</option>
+          <option value="60" data-i18n="glow.frame_rate.quality">Quality (60 Hz)</option>
         </select>
         <span class="val" id="plugin-fps-val" style="font-variant-numeric: tabular-nums;">— fps</span>
       </div>
@@ -3940,7 +3943,11 @@ const TRANSLATIONS = {
   "redo.applied":           { en: "Redid change",
                               de: "Änderung wiederholt" },
   "header.replay_tour":     { en: "Tour",                 de: "Tour" },
+  "header.replay_tour.title": { en: "Show the first-run tour again",
+                                de: "Erstaufruf-Tour erneut anzeigen" },
   "header.toggle_preview":  { en: "📺 Preview",           de: "📺 Vorschau" },
+  "header.toggle_preview.title": { en: "Live preview",   de: "Live-Vorschau" },
+  "bg.open_library.title":  { en: "Open library",        de: "Bibliothek öffnen" },
   "tour.skip":              { en: "Skip",                 de: "Überspringen" },
   "tour.next":              { en: "Next",                 de: "Weiter" },
   "tour.done":              { en: "Got it",               de: "Verstanden" },
@@ -4084,6 +4091,20 @@ const TRANSLATIONS = {
   "glow.grid_renderer":     { en: "Grid renderer",        de: "Grid-Renderer" },
   "glow.glass_quality":     { en: "Glass quality",        de: "Glas-Qualität" },
   "glow.frame_rate":        { en: "Frame rate",           de: "Bildrate" },
+  // v2.3.13-beta: dropdown OPTIONS for the four selects above.
+  "glow.layout.grid":       { en: "Pixel grid (2D)",      de: "Pixel-Raster (2D)" },
+  "glow.layout.vstripes":   { en: "Vertical stripes",     de: "Vertikale Streifen" },
+  "glow.layout.hstripes":   { en: "Horizontal stripes",   de: "Horizontale Streifen" },
+  "glow.layout.pills":      { en: "Centered pills",       de: "Zentrierte Pillen" },
+  "glow.layout.off":        { en: "Hidden",               de: "Versteckt" },
+  "glow.grid_renderer.dom":    { en: "DOM (lower GPU)",    de: "DOM (weniger GPU)" },
+  "glow.grid_renderer.canvas": { en: "Canvas (lower CPU)", de: "Canvas (weniger CPU)" },
+  "glow.glass_quality.low":    { en: "Low (no blur)",     de: "Niedrig (ohne Blur)" },
+  "glow.glass_quality.medium": { en: "Medium",            de: "Mittel" },
+  "glow.glass_quality.high":   { en: "High",              de: "Hoch" },
+  "glow.frame_rate.performance": { en: "Performance (20 Hz)", de: "Performance (20 Hz)" },
+  "glow.frame_rate.balanced":    { en: "Balanced (30 Hz)",    de: "Ausgewogen (30 Hz)" },
+  "glow.frame_rate.quality":     { en: "Quality (60 Hz)",     de: "Qualität (60 Hz)" },
   // v1.2.13: Span-mode Library Apply dialog.
   "bg.library.span.title":  { en: "Apply image to span screen",
                               de: "Bild auf Span-Screen anwenden" },
@@ -4215,6 +4236,42 @@ const TRANSLATIONS = {
   "looks.applied":          { en: "Applied {name}",             de: "{name} angewendet" },
   "looks.autosnapshot":     { en: "Current state saved to Preset slot 1 (revert via Presets section)",
                               de: "Aktueller Zustand in Preset-Slot 1 gespeichert (zurücksetzen über Presets-Bereich)" },
+  "looks.screen_n":         { en: "Screen {n}",                  de: "Bildschirm {n}" },
+  // v2.3.13-beta: per-bundle name + description i18n keys. Each
+  // LOOK_BUNDLES entry references the matching key via `nameKey`
+  // and `descKey`; renderLookBundles routes both through `t()`.
+  "looks.cyberpunk.name":   { en: "Cyberpunk Streamer",
+                              de: "Cyberpunk Streamer" },
+  "looks.cyberpunk.desc":   { en: "Neon-cyan glow, constellation effect, glass widgets, big now-playing + minimal clock. Built for late-night streaming.",
+                              de: "Neon-Cyan-Glow, Sternbild-Effekt, Glass-Widgets, großes Now-Playing + minimale Uhr. Gebaut für nächtliche Streams." },
+  "looks.minimal.name":     { en: "Minimal Productivity",
+                              de: "Minimal Produktiv" },
+  "looks.minimal.desc":     { en: "No effects, just clock + calendar + sticky note. The wallpaper-disappears-and-you-just-see-content look.",
+                              de: "Keine Effekte, nur Uhr + Kalender + Notiz. Das „Wallpaper verschwindet und nur der Inhalt bleibt\"-Setup." },
+  "looks.gaming.name":      { en: "Gaming",                      de: "Gaming" },
+  "looks.gaming.desc":      { en: "Vortex effect, only CPU/GPU/RAM meters in the corner. Stays out of the way of the game.",
+                              de: "Vortex-Effekt, nur CPU/GPU/RAM-Meter in der Ecke. Bleibt aus dem Spielgeschehen raus." },
+  "looks.music.name":       { en: "Music Studio",                de: "Music Studio" },
+  "looks.music.desc":       { en: "Full-screen audio-reactive waveform, big now-playing + audio-spectrum widget. Made for headphones-on producers.",
+                              de: "Vollbild Audio-reaktive Wellenform, großes Now-Playing + Audio-Spektrum-Widget. Für Kopfhörer-Producer." },
+  "looks.holiday.name":     { en: "Holiday Vibes",               de: "Feiertags-Vibes" },
+  "looks.holiday.desc":     { en: "Snow + fireflies + just a clock. For end-of-year cozy mode.",
+                              de: "Schnee + Glühwürmchen + nur eine Uhr. Für gemütlichen Jahresend-Modus." },
+  "looks.news.name":        { en: "News Desk",                   de: "News-Desk" },
+  "looks.news.desc":        { en: "Aurora ambient + RSS feed + clock + weather, glass tile shell. Drop-in dashboard for the always-on second monitor.",
+                              de: "Aurora-Ambient + RSS-Feed + Uhr + Wetter, Glass-Tile-Shell. Drop-in-Dashboard für den Always-on-Zweitmonitor." },
+  "looks.focus.name":       { en: "Focus Mode",                  de: "Fokus-Modus" },
+  "looks.focus.desc":       { en: "No effects, single big countdown + sticky note. For deep-work blocks where the wallpaper has to disappear.",
+                              de: "Keine Effekte, ein großer Countdown + Notiz. Für Deep-Work-Blöcke wo das Wallpaper verschwinden soll." },
+  "looks.stream-overlay.name": { en: "Stream Overlay",           de: "Stream-Overlay" },
+  "looks.stream-overlay.desc": { en: "Now-playing pinned bottom-left, clock top-right, audio spectrum strip across the bottom. Transparent tiles so the bg shines through — built for OBS scenes that already have alpha.",
+                                 de: "Now-Playing unten links, Uhr oben rechts, Audio-Spektrum-Strip unten. Transparente Tiles damit der BG durchscheint — für OBS-Scenes mit Alpha-Kanal." },
+  "looks.pomodoro.name":    { en: "Pomodoro",                    de: "Pomodoro" },
+  "looks.pomodoro.desc":    { en: "25-minute focus countdown + sticky note with the technique recap. Quote of the day for a context-shift between rounds.",
+                              de: "25-Minuten-Fokus-Countdown + Notiz mit Technik-Recap. Zitat des Tages für einen Kontextwechsel zwischen Runden." },
+  "looks.minimal-calendar.name": { en: "Minimal Calendar",       de: "Minimal Kalender" },
+  "looks.minimal-calendar.desc": { en: "Just the date — a big analog clock + a tall calendar. No effects, no glow. For users who want the wallpaper to be the calendar.",
+                                   de: "Nur das Datum — eine große Analog-Uhr + ein großer Kalender. Keine Effekte, kein Glow. Für User die das Wallpaper als Kalender wollen." },
   "widgets.add_label":      { en: "Add a widget:",        de: "Widget hinzufügen:" },
   "widgets.empty":          { en: "No widgets on this screen yet — pick one below to add.",
                               de: "Noch keine Widgets auf diesem Bildschirm — unten eines auswählen." },
@@ -4226,6 +4283,26 @@ const TRANSLATIONS = {
   "modal.btn.save":         { en: "Save",                 de: "Speichern" },
   "modal.btn.cancel":       { en: "Cancel",               de: "Abbrechen" },
   "modal.configure":        { en: "Configure: {label}",   de: "Konfigurieren: {label}" },
+  // v2.3.13-beta: widget catalog labels + add/remove toast templates.
+  // Read via _widgetLabel(def) so every catalog reference uses the
+  // translated form. The English labels also live as fallbacks on
+  // the WIDGET_CATALOG entries themselves.
+  "widget.clock.label":           { en: "Clock",            de: "Uhr" },
+  "widget.calendar.label":        { en: "Calendar",         de: "Kalender" },
+  "widget.weather.label":         { en: "Weather",          de: "Wetter" },
+  "widget.sticky-note.label":     { en: "Sticky note",      de: "Notiz" },
+  "widget.countdown.label":       { en: "Countdown",        de: "Countdown" },
+  "widget.picture-frame.label":   { en: "Picture",          de: "Bild" },
+  "widget.quote.label":           { en: "Quote",            de: "Zitat" },
+  "widget.cpu-meter.label":       { en: "CPU",              de: "CPU" },
+  "widget.ram-meter.label":       { en: "RAM",              de: "RAM" },
+  "widget.audio-spectrum.label":  { en: "Audio",            de: "Audio" },
+  "widget.hardware-sensor.label": { en: "Hardware Sensor",  de: "Hardware-Sensor" },
+  "widget.now-playing.label":     { en: "Now playing",      de: "Aktueller Titel" },
+  "widget.rss.label":             { en: "RSS",              de: "RSS" },
+  "widget.add_tooltip":           { en: "Add {label}",      de: "{label} hinzufügen" },
+  "widget.added_toast":           { en: "Added {label}",    de: "{label} hinzugefügt" },
+  "widget.removed_toast":         { en: "Removed {label}",  de: "{label} entfernt" },
 };
 
 let _lang = "en";
@@ -4350,22 +4427,48 @@ function _refreshV220Tooltips() {
   if (ac) ac.title = t("library.autocut_title");
 }
 
+// v2.3.13-beta: HTML attributes that may carry their own
+// translated string via `data-i18n-<attr>="key"` (independent
+// from the element's main `data-i18n` textContent key). Lets a
+// single button carry both a translated label and a translated
+// title tooltip via two separate keys.
+const I18N_ATTR_TARGETS = ["title", "placeholder", "aria-label", "alt"];
+
 function applyI18n() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const key = el.getAttribute("data-i18n");
     const html = el.hasAttribute("data-i18n-html");
-    // Any `data-i18n-<name>="value"` attribute gets fed in as a {name}
-    // placeholder for the t() substitution. Lets a single template like
-    // "Slot {n}" reuse the same key for every slot row.
+    // `data-i18n-attr="placeholder"` overrides the default
+    // textContent target — the SAME translated value goes into the
+    // named attribute instead. Kept for backward compat with the
+    // pre-v2.3.13 library-search input which uses this form.
+    const targetAttr = el.getAttribute("data-i18n-attr");
+    // Build {name} param map; skip reserved attrs that drive
+    // routing (html, attr) and any dedicated per-attribute key
+    // slots like data-i18n-title (those are handled below).
     const params = {};
     for (const attr of el.attributes) {
       if (!attr.name.startsWith("data-i18n-")) continue;
       const param = attr.name.slice("data-i18n-".length);
-      if (param === "html") continue;
+      if (param === "html" || param === "attr") continue;
+      if (I18N_ATTR_TARGETS.indexOf(param) >= 0) continue;
       params[param] = attr.value;
     }
     const txt = t(key, Object.keys(params).length ? params : undefined);
-    if (html) el.innerHTML = txt; else el.textContent = txt;
+    if (targetAttr) {
+      el.setAttribute(targetAttr, txt);
+    } else if (html) {
+      el.innerHTML = txt;
+    } else {
+      el.textContent = txt;
+    }
+    // Independent attribute translation slots. Each `data-i18n-<attr>`
+    // names a SEPARATE translation key whose value populates that
+    // attribute. Used for tooltip + label pairs on the same element.
+    for (const attrName of I18N_ATTR_TARGETS) {
+      const attrKey = el.getAttribute("data-i18n-" + attrName);
+      if (attrKey) el.setAttribute(attrName, t(attrKey));
+    }
   }
   document.title = t("header.title");
   _refreshV220Tooltips();
@@ -4429,9 +4532,16 @@ function _refreshConnText() {
 // makes the "what's changing" obvious.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// v2.3.13-beta: every bundle now carries i18n keys (`nameKey`,
+// `descKey`) — renderLookBundles pipes them through `t()` so the
+// tiles follow the active language. The literal `name` / `desc`
+// fields remain as last-resort fallbacks if a translation row is
+// missing.
 const LOOK_BUNDLES = [
   {
     id: "cyberpunk",
+    nameKey: "looks.cyberpunk.name",
+    descKey: "looks.cyberpunk.desc",
     name: "Cyberpunk Streamer",
     desc: "Neon-cyan glow, constellation effect, glass widgets, big now-playing + minimal clock. Built for late-night streaming.",
     tint: "rgb(20, 220, 220)",
@@ -4467,6 +4577,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "minimal",
+    nameKey: "looks.minimal.name",
+    descKey: "looks.minimal.desc",
     name: "Minimal Productivity",
     desc: "No effects, just clock + calendar + sticky note. The wallpaper-disappears-and-you-just-see-content look.",
     tint: "rgb(80, 80, 90)",
@@ -4489,6 +4601,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "gaming",
+    nameKey: "looks.gaming.name",
+    descKey: "looks.gaming.desc",
     name: "Gaming",
     desc: "Vortex effect, only CPU/GPU/RAM meters in the corner. Stays out of the way of the game.",
     tint: "rgb(255, 80, 60)",
@@ -4519,6 +4633,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "music",
+    nameKey: "looks.music.name",
+    descKey: "looks.music.desc",
     name: "Music Studio",
     desc: "Full-screen audio-reactive waveform, big now-playing + audio-spectrum widget. Made for headphones-on producers.",
     tint: "rgb(140, 100, 255)",
@@ -4545,6 +4661,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "holiday",
+    nameKey: "looks.holiday.name",
+    descKey: "looks.holiday.desc",
     name: "Holiday Vibes",
     desc: "Snow + fireflies + just a clock. For end-of-year cozy mode.",
     tint: "rgb(220, 200, 100)",
@@ -4571,6 +4689,8 @@ const LOOK_BUNDLES = [
   // someone with an RSS-reading habit to glance at it.
   {
     id: "news",
+    nameKey: "looks.news.name",
+    descKey: "looks.news.desc",
     name: "News Desk",
     desc: "Aurora ambient + RSS feed + clock + weather, glass tile shell. Drop-in dashboard for the always-on second monitor.",
     tint: "rgb(110, 200, 255)",
@@ -4600,6 +4720,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "focus",
+    nameKey: "looks.focus.name",
+    descKey: "looks.focus.desc",
     name: "Focus Mode",
     desc: "No effects, single big countdown + sticky note. For deep-work blocks where the wallpaper has to disappear.",
     tint: "rgb(180, 180, 180)",
@@ -4627,6 +4749,8 @@ const LOOK_BUNDLES = [
   // ── v1.2.14 bundles ──────────────────────────────────────────────────────
   {
     id: "stream-overlay",
+    nameKey: "looks.stream-overlay.name",
+    descKey: "looks.stream-overlay.desc",
     name: "Stream Overlay",
     desc: "Now-playing pinned bottom-left, clock top-right, audio spectrum strip across the bottom. Transparent tiles so the bg shines through — built for OBS scenes that already have alpha.",
     tint: "rgb(120, 220, 180)",
@@ -4654,6 +4778,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "pomodoro",
+    nameKey: "looks.pomodoro.name",
+    descKey: "looks.pomodoro.desc",
     name: "Pomodoro",
     desc: "25-minute focus countdown + sticky note with the technique recap. Quote of the day for a context-shift between rounds.",
     tint: "rgb(255, 130, 100)",
@@ -4680,6 +4806,8 @@ const LOOK_BUNDLES = [
   },
   {
     id: "minimal-calendar",
+    nameKey: "looks.minimal-calendar.name",
+    descKey: "looks.minimal-calendar.desc",
     name: "Minimal Calendar",
     desc: "Just the date — a big analog clock + a tall calendar. No effects, no glow. For users who want the wallpaper to be the calendar.",
     tint: "rgb(170, 180, 200)",
@@ -4714,17 +4842,29 @@ function renderLookBundles() {
       '<div class="look-thumb"></div>' +
       '<div class="look-title"></div>' +
       '<div class="look-desc"></div>';
-    card.querySelector(".look-title").textContent = bundle.name;
-    card.querySelector(".look-desc").textContent  = bundle.desc;
+    // v2.3.13-beta: route titles + descs through `t()`. data-i18n
+    // attributes also set so applyI18n() picks up language toggles
+    // without us having to re-render the grid.
+    const titleEl = card.querySelector(".look-title");
+    const descEl  = card.querySelector(".look-desc");
+    if (bundle.nameKey) titleEl.setAttribute("data-i18n", bundle.nameKey);
+    if (bundle.descKey) descEl.setAttribute("data-i18n", bundle.descKey);
+    titleEl.textContent = bundle.nameKey ? t(bundle.nameKey) : bundle.name;
+    descEl.textContent  = bundle.descKey ? t(bundle.descKey) : bundle.desc;
     card.addEventListener("click", () => applyLookBundle(bundle));
     grid.appendChild(card);
   }
 }
 
 function applyLookBundle(bundle) {
-  const screenLabel = "Screen " + (activeScreen + 1);
-  const msg = t("looks.confirm", { name: bundle.name, screen: screenLabel })
-            || `Apply "${bundle.name}" to ${screenLabel}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.`;
+  // v2.3.13-beta: localised screen label + bundle name in the
+  // confirm prompt. Falls back to the original English literal
+  // if the i18n keys aren't populated.
+  const screenLabel = t("looks.screen_n", { n: activeScreen + 1 })
+                      || ("Screen " + (activeScreen + 1));
+  const localName = bundle.nameKey ? t(bundle.nameKey) : bundle.name;
+  const msg = t("looks.confirm", { name: localName, screen: screenLabel })
+            || `Apply "${localName}" to ${screenLabel}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.`;
   if (!confirm(msg)) return;
 
   // v1.2.16: single atomic Quick Look apply. The bridge wraps the
@@ -4761,8 +4901,23 @@ function applyLookBundle(bundle) {
   toast(t("looks.applied", { name: bundle.name }) || ("Applied " + bundle.name), "good");
 }
 
+// v2.3.13-beta: every catalog entry gets a `labelKey` pointing
+// at the i18n table. The `label` literal stays as fallback for
+// safety. Use `_widgetLabel(def)` everywhere instead of reading
+// `def.label` directly so language toggles take effect.
+function _widgetLabel(def) {
+  if (!def) return "";
+  if (def.labelKey) {
+    const tr = t(def.labelKey);
+    // t() returns the key itself when a translation is missing;
+    // fall back to the literal so we don't render "widget.foo.label".
+    if (tr && tr !== def.labelKey) return tr;
+  }
+  return def.label || "";
+}
 const WIDGET_CATALOG = {
   "clock": {
+    labelKey: "widget.clock.label",
     label: "Clock",
     icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/>' +
           '<line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg>',
@@ -4775,6 +4930,7 @@ const WIDGET_CATALOG = {
     describe: (o) => (o.style || "analog") + (o.format24h === false ? " · 12h" : ""),
   },
   "calendar": {
+    labelKey: "widget.calendar.label",
     label: "Calendar",
     icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1.5"/>' +
           '<line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="3" x2="8" y2="6"/>' +
@@ -4787,6 +4943,7 @@ const WIDGET_CATALOG = {
     describe: (o) => "week starts " + (o.weekStart === 0 ? "Sunday" : "Monday"),
   },
   "weather": {
+    labelKey: "widget.weather.label",
     label: "Weather",
     icon: '<svg viewBox="0 0 24 24"><circle cx="9" cy="10" r="4"/>' +
           '<path d="M14 14h4a3 3 0 0 0 0-6 5 5 0 0 0-9.5-1.5"/></svg>',
@@ -4807,6 +4964,7 @@ const WIDGET_CATALOG = {
     describe: (o) => (o.label || "—") + " (" + (o.units === "imperial" ? "°F" : "°C") + ")",
   },
   "sticky-note": {
+    labelKey: "widget.sticky-note.label",
     label: "Sticky note",
     icon: '<svg viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/>' +
           '<line x1="16" y1="4" x2="16" y2="8"/><line x1="16" y1="8" x2="20" y2="8"/>' +
@@ -4823,6 +4981,7 @@ const WIDGET_CATALOG = {
     },
   },
   "countdown": {
+    labelKey: "widget.countdown.label",
     label: "Countdown",
     icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/>' +
           '<line x1="12" y1="13" x2="12" y2="8"/><line x1="12" y1="13" x2="15" y2="14"/>' +
@@ -4838,6 +4997,7 @@ const WIDGET_CATALOG = {
     describe: (o) => (o.label || "Event") + " → " + (o.target || "(default +30d)"),
   },
   "picture-frame": {
+    labelKey: "widget.picture-frame.label",
     label: "Picture",
     icon: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/>' +
           '<circle cx="9" cy="9" r="1.6"/><path d="M5 17l5-5 4 3 5-6 0 8z"/></svg>',
@@ -4851,6 +5011,7 @@ const WIDGET_CATALOG = {
     describe: (o) => (o.url || "(no image)").split(/[\\/]/).pop(),
   },
   "quote": {
+    labelKey: "widget.quote.label",
     label: "Quote",
     icon: '<svg viewBox="0 0 24 24"><path d="M6 7c-2 1-3 3-3 6v4h6v-6H6c0-1 1-3 3-4z"/>' +
           '<path d="M16 7c-2 1-3 3-3 6v4h6v-6h-3c0-1 1-3 3-4z"/></svg>',
@@ -4860,6 +5021,7 @@ const WIDGET_CATALOG = {
     describe: () => "via Quotable",
   },
   "cpu-meter": {
+    labelKey: "widget.cpu-meter.label",
     label: "CPU",
     icon: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/>' +
           '<line x1="9" y1="2" x2="9" y2="6"/><line x1="15" y1="2" x2="15" y2="6"/>' +
@@ -4872,6 +5034,7 @@ const WIDGET_CATALOG = {
     describe: () => "1 Hz sparkline",
   },
   "ram-meter": {
+    labelKey: "widget.ram-meter.label",
     label: "RAM",
     icon: '<svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="1"/>' +
           '<line x1="6" y1="8" x2="6" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>' +
@@ -4882,6 +5045,7 @@ const WIDGET_CATALOG = {
     describe: () => "1 Hz sparkline",
   },
   "audio-spectrum": {
+    labelKey: "widget.audio-spectrum.label",
     label: "Audio",
     icon: '<svg viewBox="0 0 24 24"><line x1="4"  y1="8"  x2="4"  y2="16"/>' +
           '<line x1="8"  y1="5"  x2="8"  y2="19"/><line x1="12" y1="9"  x2="12" y2="15"/>' +
@@ -4892,6 +5056,7 @@ const WIDGET_CATALOG = {
     describe: () => "Lively/WE audio FFT",
   },
   "hardware-sensor": {
+    labelKey: "widget.hardware-sensor.label",
     label: "Hardware Sensor",
     icon: '<svg viewBox="0 0 24 24"><path d="M4 4h6v6H4z"/>' +
           '<path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/>' +
@@ -4916,6 +5081,7 @@ const WIDGET_CATALOG = {
       : "(no sensor picked)",
   },
   "now-playing": {
+    labelKey: "widget.now-playing.label",
     label: "Now playing",
     icon: '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/>' +
           '<circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
@@ -4927,6 +5093,7 @@ const WIDGET_CATALOG = {
     describe: (o) => (o.showProgress === false ? "title + artist" : "title + artist + progress"),
   },
   "rss": {
+    labelKey: "widget.rss.label",
     label: "RSS",
     icon: '<svg viewBox="0 0 24 24">' +
           '<path d="M4 11a9 9 0 0 1 9 9"/>' +
@@ -11004,7 +11171,7 @@ function renderLayoutPreview() {
                      ? " · " + opts.textAlign : "";
     const scaleBadge = (opts.textScale && opts.textScale !== 1)
                      ? " · " + Math.round(opts.textScale * 100) + "%" : "";
-    box.textContent = (def ? def.label : w.type) + tileBadge + alignBadge + scaleBadge;
+    box.textContent = (def ? _widgetLabel(def) : w.type) + tileBadge + alignBadge + scaleBadge;
     // Subtle visual cue for overrides — gives the preview-widget a
     // slightly different tint when the user has customised it, so it
     // stands out from inherited-default siblings.
@@ -11106,11 +11273,14 @@ function buildAddGrid() {
   for (const [type, def] of Object.entries(WIDGET_CATALOG)) {
     const b = document.createElement("button");
     b.className = "add-btn";
-    b.title = "Add " + def.label;
-    b.innerHTML = def.icon + '<span class="add-btn-label">' + escapeHtml(def.label) + '</span>';
+    const localLabel = _widgetLabel(def);
+    b.title = t("widget.add_tooltip", { label: localLabel })
+              || ("Add " + localLabel);
+    b.innerHTML = def.icon + '<span class="add-btn-label">' + escapeHtml(localLabel) + '</span>';
     b.addEventListener("click", () => {
       sendCmd({ type: "widget-add", widgetType: type });
-      toast("Added " + def.label, "good");
+      toast(t("widget.added_toast", { label: localLabel })
+            || ("Added " + localLabel), "good");
     });
     els.addGrid.appendChild(b);
   }
@@ -11137,7 +11307,7 @@ function renderWidgetList() {
     meta.className = "w-meta";
     const title = document.createElement("div");
     title.className = "w-title";
-    title.textContent = def ? def.label : w.type;
+    title.textContent = def ? _widgetLabel(def) : w.type;
     const sub = document.createElement("div");
     sub.className = "w-sub";
     sub.textContent = (def && def.describe) ? def.describe(w.options || {}) : "";
@@ -11157,7 +11327,9 @@ function renderWidgetList() {
     remove.textContent = t("widget.btn.remove");
     remove.addEventListener("click", () => {
       sendCmd({ type: "widget-remove", id: w.id });
-      toast("Removed " + (def ? def.label : w.type), "good");
+      const removedLabel = def ? _widgetLabel(def) : w.type;
+      toast(t("widget.removed_toast", { label: removedLabel })
+            || ("Removed " + removedLabel), "good");
     });
     acts.appendChild(configure); acts.appendChild(remove);
     row.appendChild(icon); row.appendChild(meta); row.appendChild(acts);
@@ -11397,7 +11569,7 @@ function openOptionsModal(widget) {
   const def = WIDGET_CATALOG[widget.type];
   if (!def) return;
   modalState = { id: widget.id, options: { ...(widget.options || {}) } };
-  els.modalTitle.textContent = t("modal.configure", { label: def.label });
+  els.modalTitle.textContent = t("modal.configure", { label: _widgetLabel(def) });
   els.modalBody.innerHTML = "";
   // Hardware-sensor widget: repopulate the sensor-path dropdown from
   // /hwmon/sensors right before each modal open, so a freshly-started
@@ -11730,6 +11902,17 @@ function renderAll() {
   renderLockBar();
   renderLayoutPreview();
   renderWidgetList();
+  // v2.3.13-beta: the Add-Widget grid is built once at boot; the
+  // catalog labels under v2.3.13 are translation-driven, so a
+  // language toggle would leave the EN-baked button labels until
+  // a reload. Re-build here so a language switch refreshes them.
+  try { buildAddGrid(); } catch (_) {}
+  // Quick-Looks grid same story — bundle nameKey/descKey already
+  // get data-i18n attributes via renderLookBundles, but the tile
+  // textContent set at create time stays in the boot language
+  // until the next render. Re-paint on language change so the
+  // initial fallback string is also refreshed.
+  try { renderLookBundles(); } catch (_) {}
   // v1.7.4-beta: library strip's filter chips ("All / Backgrounds /
   // Templates / Pinned") are i18n strings rendered into dynamically-
   // built DOM by renderLibraryStrip(). Without including it here, the

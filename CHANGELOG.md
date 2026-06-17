@@ -4,6 +4,87 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.13-beta] - 2026-06-17
+
+Water-ripple gap fix + Configurator i18n sweep.
+
+### Fixed — Water-mode shifted the whole BG, not just the ring band
+
+The v2.3.12 scale=0 default fix stopped the activation jump, but
+during an active ripple the BG still appeared shifted across the
+entire viewport — not just where the ring band crossed.
+
+Root cause: SVG filter color-space mismatch. Chromium runs
+`feDisplacementMap` in linear-RGB by default, but our displacement
+map canvas exports as sRGB-encoded PNG. The sRGB → linear
+conversion remaps R=128 from 0.502 down to ~0.215, which means
+the "neutral grey" the canvas paint assumes (R=G=128 → 0 displacement)
+actually encodes `(0.215 - 0.5) × scale = -22.8 px` displacement
+across the **entire non-ring area** of #bg. Net visual: the whole
+BG slid -22 px up-left whenever a ripple was in flight; the ring
+band's intended displacement layered on top.
+
+Fix: `color-interpolation-filters="sRGB"` on the filter element.
+Forces the chain to operate in sRGB throughout, matching the
+PNG encoding — R=128 now produces the 0-displacement the paint
+math always intended.
+
+### Configurator i18n sweep
+
+Large chunks of the UI still rendered in English when the language
+was switched to DE.
+
+### Fixed — applyI18n() couldn't target attributes
+
+The pre-v2.3.13 `data-i18n-attr="placeholder"` mechanism collected
+the `attr` value as a `{attr}` template parameter instead of using
+it to target the placeholder attribute. Net effect: the search
+input's placeholder stayed English no matter what. Rewrote
+applyI18n to support two new patterns:
+
+* `data-i18n-attr="<name>"` (backward-compat) — pipes the main
+  `data-i18n` value into the named attribute instead of textContent
+* `data-i18n-<attr>="<key>"` for each of `title`, `placeholder`,
+  `aria-label`, `alt` — independent attribute translation slots.
+  Lets a button carry a translated label AND a translated tooltip
+  via two separate keys.
+
+### Added — Quick Looks bundle i18n (10 × name + desc)
+
+Every `LOOK_BUNDLES` entry now carries `nameKey` / `descKey` keys.
+`renderLookBundles` writes the keys onto the rendered tile DOM
+via `data-i18n` so `applyI18n` re-translates on language toggle;
+`applyLookBundle`'s confirm dialog uses the translated name +
+localised screen label too. Added 20 EN/DE entries.
+
+### Added — Widget catalog labels i18n (13 × widget type names)
+
+Every `WIDGET_CATALOG` entry now carries `labelKey`. New
+`_widgetLabel(def)` helper resolves to the translated form,
+falling back to the English literal if the translation is missing.
+Replaced 5 direct `def.label` reads (layout preview, add grid,
+widget list, remove toast, modal title) + 2 toast string templates
+("Added X" / "Removed X") with `t()` calls. The Add-Widget grid +
+Quick-Looks grid are now rebuilt by `renderAll` on language switch
+since both are built once at boot.
+
+### Added — Translation entries for dropdowns + tooltips
+
+* Glow layout dropdown (5 options)
+* Grid renderer dropdown (2 options)
+* Glass quality dropdown (3 options)
+* Frame rate dropdown (3 options)
+* Header `title` tooltips for Live preview, Show tour, Open library
+
+All static `<option>` elements in those four selects got
+`data-i18n` attributes; matching EN/DE entries land in the
+TRANSLATIONS table.
+
+### Changed — APP_VERSION → 2.3.13-beta
+
+Configurator-only change. WALLPAPER_VERSION stays at 2.3.12-beta —
+no wallpaper bundle re-import needed.
+
 ## [2.3.12-beta] - 2026-06-17
 
 Real fix for the water-mode BG shift the v2.3.11-beta pre-seed
