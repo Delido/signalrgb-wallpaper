@@ -4,6 +4,55 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.8-beta] - 2026-06-17
+
+Three more GPU-budget wins on top of v2.3.7-beta's Repulsion fix.
+
+### Fixed — Stripes/Pills layouts held N in-flight CSS transitions
+
+Same regression class the Repulsion fix caught (and the v1.0-era
+grid-zone transition before it). The Vertical Stripes / Horizontal
+Stripes / Centered Pills bar layouts all carried a
+`transition: background 0.08s linear` rule on their `.zone`
+elements. JS rewrites the `--c` CSS var per zone every render tick
+(~30 Hz), which restarted the 80 ms transition on every zone every
+33 ms — keeping N in-flight CSS animations permanently. With a
+typical 16-30 zone stripe layout, that's 16-30 background
+transitions juggling continuously, even though the JS updates were
+already arriving at perceptually smooth cadence. Dropped the
+transition; visuals are unchanged.
+
+### Fixed — Audio-spectrum widget ran at 1 fps
+
+The audio-spectrum widget was driven by the generic 1 Hz
+`setInterval` that ticks all widgets, so the FFT bars updated
+**once per second** even though `lastAudio` was refreshed at the
+host's ~30 Hz FFT cadence. Added a `reg.fastTick` opt-in for
+widgets that need finer redraws, plus a counter-gated rAF loop
+(self-stops at 0 fast widgets) that walks them at
+RENDER_INTERVAL_MS (default 30 Hz, pause-guarded, resume-rearmed).
+Spectrum bars now animate properly; the 1 Hz path skips them so
+there's no double-redraw cost.
+
+### Changed — Pixelfx + audioglow gained SCALE × DPR like ambient
+
+The ambient particle canvas already routed through `_qualityScale()`
+(0.5/0.75/1.0 per Performance/Balanced/Quality bucket) on top of
+`_qualityDpr()`. Pixelfx (cursor trail/glow/ripple/water) and
+audioglow (radial pulse / wide spectrum / wave) only had the DPR
+multiplier — full viewport size in Performance bucket.
+
+Both now apply the SCALE multiplier too: a 5120×1440 backing
+buffer drops from 7.4 Mpx to **1.85 Mpx** in Performance bucket
+(4×) and 4.2 Mpx in Balanced (~1.75×). Content is soft (alpha
+gradients, blurred sprites) so the bilinear-upscaled output is
+visually indistinguishable. Quality bucket stays at native 1:1 ×
+DPR 2 for users who pinned the pre-v1.6.1-beta fidelity.
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.3.8-beta
+
+Wallpaper bundle re-import IS required.
+
 ## [2.3.7-beta] - 2026-06-17
 
 GPU-side perf fix on top of v2.3.6-beta's memory pass.

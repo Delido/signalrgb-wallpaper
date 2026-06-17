@@ -290,11 +290,18 @@
   #bars.bars-canvas-active { display: none; }
 
   /* ── Layout: Vertical Stripes ───────────────────────────────────────────── */
+  /* v2.3.8-beta perf: `transition: background 0.08s` removed from all
+     three bar layouts. JS rewrites `--c` per zone every render tick
+     (~30 Hz) which restarted the 80 ms transition each time, keeping
+     N CSS animations in flight permanently — same compositor pressure
+     pattern gotcha-perf-transitions warned about, and the same bug
+     v2.3.7-beta fixed on the Repulsion effect's --repel-x/-y. The 30 Hz
+     JS updates already provide motion smoothing; the extra CSS easing
+     was redundant. */
   #bars.lay-vstripes { display: flex; flex-direction: row; }
   #bars.lay-vstripes .zone {
     flex: 1; height: 100%;
     background: var(--c, #111);
-    transition: background 0.08s linear;
     filter: blur(calc(var(--stripe-blur, 60px) * var(--glow, 1)));
   }
 
@@ -303,7 +310,6 @@
   #bars.lay-hstripes .zone {
     flex: 1; width: 100%;
     background: var(--c, #111);
-    transition: background 0.08s linear;
     filter: blur(calc(var(--stripe-blur, 60px) * var(--glow, 1)));
   }
 
@@ -318,7 +324,6 @@
     height: var(--bar-h, 38vh);
     border-radius: 999px;
     background: var(--c, #111);
-    transition: background 0.08s linear;
     box-shadow:
       0 0 calc(18px * var(--glow, 1)) calc(2px * var(--glow, 1)) var(--c, #111),
       0 0 calc(48px * var(--glow, 1)) calc(6px * var(--glow, 1)) var(--c, #111),
@@ -3926,6 +3931,9 @@ function setWidgets(list) {
   const wantIds = new Set(list.map((w) => w.id));
   for (const [id, rec] of [...widgetNodes.entries()]) {
     if (!wantIds.has(id)) {
+      // v2.3.8-beta: balance the fast-tick rAF counter when a
+      // fast-tick widget is removed so the rAF self-stops at 0.
+      if (rec.reg && rec.reg.fastTick) _bumpFastTick(-1);
       rec.el.remove();
       widgetNodes.delete(id);
     }
@@ -3941,6 +3949,9 @@ function setWidgets(list) {
       if (rec.reg.mount) {
         try { rec.reg.mount(rec); } catch (e) { console.warn("[widget mount]", e); }
       }
+      // v2.3.8-beta: bump the fast-tick counter when a new fast-tick
+      // widget is created. Starts the rAF loop on 0 → 1.
+      if (rec.reg && rec.reg.fastTick) _bumpFastTick(+1);
     }
     applyWidgetPosition(rec, w);
     applyWidgetOptions(rec, w);
@@ -4571,14 +4582,54 @@ function escapeHtml(s) {
 // Drive all widgets from a single rAF-friendly interval. Clock needs second-
 // resolution; calendar and weather coast on minute-resolution but a 1 s tick
 // is cheap and keeps things simple.
+//
+// v2.3.8-beta: widgets that declare `reg.fastTick = true` opt out of this
+// 1 Hz path because they need finer cadence (the audio-spectrum widget
+// drove FFT bars at 1 fps before this — visually broken). Fast widgets
+// are driven by `_fastTickLoop` below, started on-demand when at least
+// one fast widget exists.
 setInterval(() => {
   if (isPaused) return;
   for (const rec of widgetNodes.values()) {
-    if (rec.tick) {
+    if (rec.tick && !(rec.reg && rec.reg.fastTick)) {
       try { rec.tick(); } catch (e) { console.warn("[widget tick]", e); }
     }
   }
 }, 1000);
+
+// v2.3.8-beta: RENDER_INTERVAL_MS-throttled rAF for widgets that need
+// per-frame redraws (audio-spectrum). Counter-gated so we don't pay
+// for an idle rAF wake every frame when no fast widgets exist; ramp
+// counter via `_bumpFastTick(+1)` on add and `_bumpFastTick(-1)` on
+// remove, and the loop self-stops at 0.
+let _fastTickCount = 0;
+let _fastTickRaf = null;
+let _fastTickLast = 0;
+function _fastTickStep(now) {
+  if (_fastTickCount <= 0) { _fastTickRaf = null; return; }
+  _fastTickRaf = requestAnimationFrame(_fastTickStep);
+  if (isPaused) return;
+  if (now - _fastTickLast < RENDER_INTERVAL_MS) return;
+  _fastTickLast = now;
+  for (const rec of widgetNodes.values()) {
+    if (rec.reg && rec.reg.fastTick && rec.tick) {
+      try { rec.tick(); } catch (e) { console.warn("[fast widget tick]", e); }
+    }
+  }
+}
+function _bumpFastTick(delta) {
+  _fastTickCount = Math.max(0, _fastTickCount + delta);
+  if (_fastTickCount > 0 && !_fastTickRaf) {
+    _fastTickLast = 0;
+    _fastTickRaf = requestAnimationFrame(_fastTickStep);
+  }
+}
+window.addEventListener("wallpaper-resume", () => {
+  if (_fastTickCount > 0 && !_fastTickRaf) {
+    _fastTickLast = 0;
+    _fastTickRaf = requestAnimationFrame(_fastTickStep);
+  }
+});
 
 // Tint update from the live colour stream — called from renderFrame() with the
 // already-decoded zone colours, so it doesn't add a second parse pass. Picks
@@ -5934,15 +5985,21 @@ const audioGlow = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    // v1.6.3-beta: audio-glow gets the same quality-bucket DPR scaling
-    // as the other full-viewport canvases. The content is soft enough
-    // (radial gradient pulse / wide spectrum bars / lerp'd wave) that
-    // performance + balanced stay at 1:1; quality bumps DPR back up
-    // for users who want pre-v1.6.1-beta fidelity.
+    // v2.3.8-beta: audio-glow gains the same SCALE × DPR backing
+    // buffer treatment ambient already had. The radial pulse / wide
+    // spectrum bars / lerped wave are soft, so a 0.5×/0.75× scale is
+    // visually indistinguishable but halves (or quarters) full-screen
+    // clearRect+fill cost — a 5120×1440 canvas drops from 7.4 Mpx to
+    // 1.85 Mpx in performance bucket. The CSS layout still spans
+    // 100vw/100vh; the browser's compositor upscales the smaller
+    // backing buffer with bilinear filtering on the way to the
+    // monitor. Quality bucket keeps 1.0×.
+    const SCALE = _qualityScale();
     const dpr = _qualityDpr();
-    canvas.width  = Math.round(viewW * dpr);
-    canvas.height = Math.round(viewH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const effective = SCALE * dpr;
+    canvas.width  = Math.max(1, Math.round(viewW * effective));
+    canvas.height = Math.max(1, Math.round(viewH * effective));
+    ctx.setTransform(effective, 0, 0, effective, 0, 0);
   }
   window.addEventListener("resize", () => { if (mode !== "off") resize(); });
 
@@ -6106,15 +6163,19 @@ const pixelfx = (function () {
   function resize() {
     viewW = window.innerWidth;
     viewH = window.innerHeight;
-    // v1.6.3-beta: DPR pulled from effectQuality. Quality bucket
-    // pushes back to native DPR for crisper trail edges; performance
-    // and balanced stay at 1:1 since the trail/glow/ripple sprites
-    // are soft and the full-viewport clearRect+fill cost is quadratic
-    // in pixel count.
+    // v2.3.8-beta: pixelfx now scales like ambient/audioglow — SCALE
+    // × DPR. The cursor trail / glow / ripple / water sprites are
+    // already soft (alpha gradients, blurred rings) so a 0.5× backing
+    // buffer in performance bucket is visually indistinguishable but
+    // quarters the clearRect+fill cost. The 30 Hz tick × 5120×1440
+    // surface was the second-largest GPU-frame budget on multi-monitor
+    // setups; this drops it to ~1.85 Mpx per frame in performance.
+    const SCALE = _qualityScale();
     const dpr = _qualityDpr();
-    canvas.width  = Math.round(viewW * dpr);
-    canvas.height = Math.round(viewH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const effective = SCALE * dpr;
+    canvas.width  = Math.max(1, Math.round(viewW * effective));
+    canvas.height = Math.max(1, Math.round(viewH * effective));
+    ctx.setTransform(effective, 0, 0, effective, 0, 0);
   }
   window.addEventListener("resize", () => { if (mode !== "off") resize(); });
   // v1.6.1-beta R2.3: throttle to RENDER_INTERVAL_MS like ambient.
@@ -6552,6 +6613,12 @@ WIDGET_REGISTRY["audio-spectrum"] = {
         '<line x1="8"  y1="5"  x2="8"  y2="19"/><line x1="12" y1="9"  x2="12" y2="15"/>' +
         '<line x1="16" y1="3"  x2="16" y2="21"/><line x1="20" y1="10" x2="20" y2="14"/></svg>',
   markup: () => '<canvas></canvas>',
+  // v2.3.8-beta perf: opt into the fast-tick rAF path. Previously the
+  // generic 1 Hz widget setInterval drove this redraw, which meant the
+  // spectrum bars updated once per second even though `lastAudio` was
+  // refreshed at the host's FFT rate (~30 Hz). The widget looked frozen
+  // between ticks. Now redraws at RENDER_INTERVAL_MS, gated by isPaused.
+  fastTick: true,
   tick: (rec) => {
     drawSpectrum(rec.el.querySelector("canvas"),
                  lastAudio,
