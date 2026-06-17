@@ -4,6 +4,98 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-06-17
+
+Stable cut of the 2.3.x beta wave (2.3.0-beta → 2.3.13-beta).
+Major themes: in-wallpaper pack browser, atmosphere effects + widget
+skins, cursor-effect overhaul, GPU/RAM optimisation pass, water
+ripple as real BG refraction, Configurator i18n sweep.
+
+### Added
+
+- **In-app wallpaper pack browser** — Library tab now browses
+  curated pack manifests hosted on GitHub Pages. Tiles preview the
+  bundled wallpapers; click adds the whole pack to the local
+  library. Backed by `library-packs.json` in the docs repo so new
+  packs land for everyone without a Configurator update.
+- **Atmosphere effects** — new `storm` ambient preset combines
+  rain particles with a lightning flash subsystem (random strikes,
+  occasional doubles); `water ripple` pixelfx mode bends the
+  background image along a propagating SVG-displacement wave on
+  every click; `weather-reactive ambient` ambient picks the right
+  preset based on the live WMO code from Open-Meteo.
+- **Widget skin system** — every widget type can ship alternate
+  skins under `WIDGET_REGISTRY[type].skins.<id>`. Weather ships
+  three: default, compact, hexagon. Skin picker lands in the
+  per-widget edit dialog.
+- **Cursor-effect tile UI** — the four stackable cursor
+  distortions (Liquid Distortion / Chromatic Halo / Spotlight /
+  Widget Float) moved from the Widgets card to the Effects tab and
+  picked up a tile grid replacing the v1.6 checkbox row. The
+  Pixelfx mode picker also moved to the same tile layout (v2.3.9).
+- **Floating lock pill** — while widgets are unlocked, an on-screen
+  pill at top-center carries a Lock button so users can re-lock
+  without going back to the Configurator.
+- **In-page Quick Looks tiles + 10 bundled looks**, all i18n'd in
+  v2.3.13: Cyberpunk Streamer, Minimal Productivity, Gaming,
+  Music Studio, Holiday Vibes, News Desk, Focus Mode, Stream
+  Overlay, Pomodoro, Minimal Calendar.
+
+### Changed
+
+- **Memory + GPU pass**: full-viewport canvases (ambient / pixelfx
+  / audio-glow / bars) collapse their backing buffer to 1×1 when
+  idle (~30 MB saved per canvas per WebView2 instance on a
+  5120×1440 setup); pixelfx + audioglow gained the same SCALE × DPR
+  bucket ambient already had (Performance bucket = 0.5× = 4× fewer
+  pixels per frame); Widget Float repulsion no longer juggles 2N
+  in-flight CSS transitions every render tick; Stripes/Pills bar
+  layouts no longer hold N background transitions for the same
+  reason; audio-spectrum widget now redraws at 30 Hz via a new
+  counter-gated rAF path instead of being stuck at 1 fps.
+- **Pixelfx single-select**: the "All" stack-everything mode is
+  gone (v2.3.11). Modes are exclusive — pick exactly one of trail,
+  hover-glow, click ripple, water ripple. Persisted `all` values
+  fall back to `off`.
+- **Configurator i18n sweep** (v2.3.13): `applyI18n` gained
+  independent attribute translation slots (`data-i18n-title`,
+  `data-i18n-placeholder`, `data-i18n-aria-label`,
+  `data-i18n-alt`); all Quick Looks bundles, widget catalog
+  labels, glow / glass-quality / frame-rate / grid-renderer
+  dropdowns, and header tooltips now follow the active language.
+  Add-Widget grid + Quick-Looks grid rebuild on language switch
+  so initial-paint fallbacks don't stick.
+
+### Fixed
+
+- **Water mode shifted the whole BG**: SVG filter color-space
+  mismatch — Chromium runs feDisplacementMap in linear-RGB by
+  default, but the displacement map canvas exports as sRGB PNG.
+  R=128 sRGB → 0.215 linear → constant -22 px shift across the
+  non-ring area. Added `color-interpolation-filters="sRGB"` on
+  the filter element so the chain stays sRGB end-to-end.
+- **Memory leaks**: Liquid Distortion's per-frame `toDataURL` was
+  leaking ~1 MB/s of decoded SVG-filter bitmaps in Chromium's
+  cache; activity-gated to skip the encode + setAttribute when
+  the cursor is idle. Spotlight allocated a fresh CSS gradient
+  string per frame; refactored to mutate CSS vars only.
+- **Cursor effects ignored fullscreen pause**: all four MouseFx
+  ticks gained the same `if (isPaused) return` guard the
+  ambient/pixelfx rAF chains already had, plus a wallpaper-resume
+  listener so they re-arm correctly.
+- **Library + bulk-select edge cases**: deleting all tag-filtered
+  items used to blank the library until refresh; deleting via
+  bulk-select with a filter active left orphan `_libraryPack` /
+  `_libraryTag` state; the × delete button overlapped the
+  selection checkbox. All addressed in v2.3.1 / v2.3.2.
+
+### Upgrade
+
+Wallpaper bundle re-import IS required. Tray → Re-import wallpaper
+bundles.
+
+This is a MINOR cut — winget submission tracked separately.
+
 ## [2.3.13-beta] - 2026-06-17
 
 Water-ripple gap fix + Configurator i18n sweep.
