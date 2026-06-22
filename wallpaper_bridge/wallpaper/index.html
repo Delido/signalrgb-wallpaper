@@ -3845,6 +3845,20 @@ const MouseFx = (function () {
     let _idleFrames = 0;
     const IDLE_FRAMES_BEFORE_SKIP = 60;  // ≈ 2 s at 30 Hz
     const MAP_SIZE = 256;
+    // v2.3.0 post-release: same host-conditional neutral as the
+    // water module — Lively/WebView2 honour
+    // color-interpolation-filters="sRGB" and treat R=128 as neutral
+    // in sRGB; WE's older CEF ignores the attribute and linearises
+    // PNG pixels, so 128 sRGB → 0.215 linear → constant -14 px
+    // shift across the whole #bg whenever Liquid Distortion is on.
+    // 188 sRGB linearises back to ~0.5 in WE's working space → true
+    // 0 px shift. See gotcha-we-cef-color-space.
+    const _IS_WE_R = typeof window.wallpaperPropertyListener !== "undefined"
+                  || typeof window.wallpaperRegisterAudioListener !== "undefined";
+    const NEUTRAL_BYTE_R = _IS_WE_R ? 188 : 128;
+    const _NEUTRAL_CSS_R = "rgb(" + NEUTRAL_BYTE_R + "," + NEUTRAL_BYTE_R + ",0)";
+    const _NEUTRAL_CSS_R_DECAY = "rgba(" + NEUTRAL_BYTE_R + "," + NEUTRAL_BYTE_R + ",0,0.06)";
+    const _NEUTRAL_CSS_R_A0 = "rgba(" + NEUTRAL_BYTE_R + "," + NEUTRAL_BYTE_R + ",0,0)";
     function ensureFilter() {
       if (svgFilter) return;
       // Hidden SVG container with the displacement filter. Applied
@@ -3853,7 +3867,8 @@ const MouseFx = (function () {
       svg.style.cssText = "position:absolute; width:0; height:0;";
       svg.setAttribute("aria-hidden", "true");
       svg.innerHTML =
-        '<defs><filter id="fx-ripple-filter" x="0" y="0" width="100%" height="100%">' +
+        '<defs><filter id="fx-ripple-filter" x="0" y="0" width="100%" height="100%"' +
+        ' color-interpolation-filters="sRGB">' +
         '<feImage id="fx-ripple-img" preserveAspectRatio="none" result="map" x="0" y="0" width="100%" height="100%"/>' +
         '<feDisplacementMap in="SourceGraphic" in2="map" scale="50"' +
         ' xChannelSelector="R" yChannelSelector="G"/>' +
@@ -3864,8 +3879,9 @@ const MouseFx = (function () {
       mapCanvas = document.createElement("canvas");
       mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
       mapCtx = mapCanvas.getContext("2d");
-      // Neutral grey = no displacement (128, 128, 0). Initialize.
-      mapCtx.fillStyle = "rgb(128,128,0)";
+      // Host-conditional neutral. Initialize so the first feImage
+      // load doesn't see an empty in2.
+      mapCtx.fillStyle = _NEUTRAL_CSS_R;
       mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
     }
     function tick(now) {
@@ -3875,7 +3891,7 @@ const MouseFx = (function () {
       if (now - _lastTick < RENDER_INTERVAL_MS) return;
       _lastTick = now;
       // Decay existing ripple — blend toward neutral grey at 6 %/frame.
-      mapCtx.fillStyle = "rgba(128, 128, 0, 0.06)";
+      mapCtx.fillStyle = _NEUTRAL_CSS_R_DECAY;
       mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
       // Draw a fresh ripple at cursor (scaled into MAP_SIZE coords).
       const dx = _cursorX - lastMouseX;
@@ -3886,11 +3902,11 @@ const MouseFx = (function () {
         const my = (_cursorY / window.innerHeight) * MAP_SIZE;
         // Encode movement direction into R+G channels so the
         // displacement map drags pixels with the cursor.
-        const r = Math.max(0, Math.min(255, 128 + dx * 4));
-        const g = Math.max(0, Math.min(255, 128 + dy * 4));
+        const r = Math.max(0, Math.min(255, NEUTRAL_BYTE_R + dx * 4));
+        const g = Math.max(0, Math.min(255, NEUTRAL_BYTE_R + dy * 4));
         const grad = mapCtx.createRadialGradient(mx, my, 0, mx, my, 18);
         grad.addColorStop(0, "rgba(" + r + "," + g + ",0,0.85)");
-        grad.addColorStop(1, "rgba(128,128,0,0)");
+        grad.addColorStop(1, _NEUTRAL_CSS_R_A0);
         mapCtx.fillStyle = grad;
         mapCtx.fillRect(mx - 20, my - 20, 40, 40);
       }
@@ -6439,12 +6455,38 @@ const water = (function () {
   // Ring-band geometry in map-space (256 = full edge).
   const BAND_INNER = 8;   // displacement push-out band thickness
   const BAND_OUTER = 8;   // displacement pull-in band thickness
-  // Per-side amplitude in encoded R/G (capped at ±127 from neutral 128).
-  // 90 gives a strong but not cartoony bend; combined with the
-  // feDisplacementMap scale="80" below the effective pixel
-  // displacement is ~(90 - 128) * 80 / 255 ≈ 12 px peak — visibly
-  // bends the BG without obvious tearing at the ring edge.
-  const PEAK_AMP = 90;
+
+  // v2.3.0 post-release patch: host-conditional NEUTRAL_BYTE.
+  // Modern Chromium (Lively / WebView2) and Wallpaper Engine's
+  // older CEF disagree on the default color-interpolation-filters
+  // value:
+  //   Lively  → sRGB by default      → R=128 sRGB = 0.502 ≈ neutral
+  //   WE CEF  → linearRGB by default → R=128 sRGB → 0.215 linear
+  //                                  → constant -22 px displacement
+  // The v2.3.13-beta `color-interpolation-filters="sRGB"` attribute
+  // tells the filter to operate in sRGB throughout. Lively respects
+  // it; WE's CEF version pre-dates that being honoured and stays in
+  // linearRGB. Without compensation, WE users see the entire BG
+  // jump up-left by ~22 px while water mode is enabled — no wave,
+  // just a constant offset.
+  // Fix: pick the NEUTRAL_BYTE that linearises (or stays as sRGB)
+  // to exactly 0.5 in the browser's working space. 188 sRGB → 0.5
+  // linear (via the standard sRGB transfer curve); 128 sRGB stays
+  // at 0.5 in sRGB. The PEAK_AMP scales correspondingly so the
+  // displacement amplitude lands in the same neighbourhood on both.
+  const _IS_WE = typeof window.wallpaperPropertyListener !== "undefined"
+              || typeof window.wallpaperRegisterAudioListener !== "undefined";
+  const NEUTRAL_BYTE = _IS_WE ? 188 : 128;
+  // Peak per-channel offset from neutral. In sRGB the available
+  // range above neutral is (255 - NEUTRAL_BYTE); below is NEUTRAL_BYTE.
+  // 90 worked for Lively at neutral 128; for WE at neutral 188, only
+  // 67 is symmetric → cap to keep the displacement symmetric in the
+  // browser's working space.
+  const PEAK_AMP = Math.min(90, NEUTRAL_BYTE, 255 - NEUTRAL_BYTE);
+  // Reused neutral CSS color string so we don't rebuild it every clear.
+  const _NEUTRAL_CSS = "rgb(" + NEUTRAL_BYTE + "," + NEUTRAL_BYTE + ",0)";
+  // For the gradient outer stops we need a transparent-neutral variant.
+  const _NEUTRAL_CSS_A0 = "rgba(" + NEUTRAL_BYTE + "," + NEUTRAL_BYTE + ",0,0)";
 
   function ensureFilter() {
     if (svgFilter) return;
@@ -6463,18 +6505,14 @@ const water = (function () {
     // asynchronously — the filter's first render still saw an
     // empty in2 and shifted the BG by -40 px until the load
     // finished a frame or two later.
-    // v2.3.13-beta: `color-interpolation-filters="sRGB"` on the
-    // filter element. Without this, Chromium runs feDisplacementMap
-    // in linear-RGB color space — but our canvas exports the
-    // displacement map as an sRGB-encoded PNG. The sRGB → linear
-    // conversion shifts R=128 from 0.502 down to ~0.215, which
-    // means the supposedly-neutral grey produces a constant
-    // (0.215 - 0.5) × 80 = -22.8 px displacement across the
-    // ENTIRE non-ring area of #bg. That was the "verschoben"
-    // shift the user reported in v2.3.12/13: the whole BG moved,
-    // not just the ring band. Forcing the filter chain to operate
-    // in sRGB keeps R=128 as the true neutral the canvas paint
-    // assumes (since sRGB 128 = sRGB 128 with no conversion).
+    // v2.3.13-beta added `color-interpolation-filters="sRGB"` which
+    // fixed Lively's whole-BG shift by forcing the filter chain to
+    // stay in sRGB. Kept — Lively honours it. WE's CEF version
+    // pre-dates that attribute being honoured, so it silently
+    // ignores the override and runs the chain in linearRGB anyway.
+    // The fix for WE is the host-conditional NEUTRAL_BYTE above
+    // (188 sRGB linearises back to ~0.5, the true neutral in WE's
+    // working space). Lively gets 128 — the sRGB-space neutral.
     svg.innerHTML =
       '<defs><filter id="pixelfx-water-filter" x="0" y="0" width="100%" height="100%"' +
       ' color-interpolation-filters="sRGB">' +
@@ -6490,12 +6528,10 @@ const water = (function () {
     mapCanvas = document.createElement("canvas");
     mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
     mapCtx = mapCanvas.getContext("2d");
-    // Neutral grey = R=G=128. Used by tick() each frame as the
-    // background of the active map; also pushed once here so the
-    // feImage has SOMETHING to load (avoids a "broken image" icon
-    // logged by some CEF builds), but the displacement scale=0
-    // above is what actually prevents the activation jump.
-    mapCtx.fillStyle = "rgb(128,128,0)";
+    // Neutral grey for the current host (128 sRGB for Lively,
+    // 188 sRGB for WE — both linearise/stay-as 0.5 in their
+    // respective working color spaces).
+    mapCtx.fillStyle = _NEUTRAL_CSS;
     mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
     feImg.setAttribute("href", mapCanvas.toDataURL());
   }
@@ -6531,21 +6567,21 @@ const water = (function () {
       // Outer ring slice — push outward (R/G shifted in radial dir).
       const ox = cx + (radiusMap + BAND_OUTER) * cosT;
       const oy = cy + (radiusMap + BAND_OUTER) * sinT;
-      const oR = Math.max(0, Math.min(255, 128 + cosT * amp));
-      const oG = Math.max(0, Math.min(255, 128 + sinT * amp));
+      const oR = Math.max(0, Math.min(255, NEUTRAL_BYTE + cosT * amp));
+      const oG = Math.max(0, Math.min(255, NEUTRAL_BYTE + sinT * amp));
       let grad = mapCtx.createRadialGradient(ox, oy, 0, ox, oy, sliceR);
       grad.addColorStop(0, "rgba(" + oR + "," + oG + ",0,0.9)");
-      grad.addColorStop(1, "rgba(128,128,0,0)");
+      grad.addColorStop(1, _NEUTRAL_CSS_A0);
       mapCtx.fillStyle = grad;
       mapCtx.fillRect(ox - sliceR, oy - sliceR, sliceR * 2, sliceR * 2);
       // Inner ring slice — pull inward (R/G shifted opposite).
       const ix = cx + Math.max(0, radiusMap - BAND_INNER) * cosT;
       const iy = cy + Math.max(0, radiusMap - BAND_INNER) * sinT;
-      const iR = Math.max(0, Math.min(255, 128 - cosT * amp));
-      const iG = Math.max(0, Math.min(255, 128 - sinT * amp));
+      const iR = Math.max(0, Math.min(255, NEUTRAL_BYTE - cosT * amp));
+      const iG = Math.max(0, Math.min(255, NEUTRAL_BYTE - sinT * amp));
       grad = mapCtx.createRadialGradient(ix, iy, 0, ix, iy, sliceR);
       grad.addColorStop(0, "rgba(" + iR + "," + iG + ",0,0.9)");
-      grad.addColorStop(1, "rgba(128,128,0,0)");
+      grad.addColorStop(1, _NEUTRAL_CSS_A0);
       mapCtx.fillStyle = grad;
       mapCtx.fillRect(ix - sliceR, iy - sliceR, sliceR * 2, sliceR * 2);
     }
@@ -6561,7 +6597,7 @@ const water = (function () {
       // next paint is provably a no-op regardless of map state.
       if (feDisp) feDisp.setAttribute("scale", "0");
       if (mapCtx) {
-        mapCtx.fillStyle = "rgb(128,128,0)";
+        mapCtx.fillStyle = _NEUTRAL_CSS;
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
         feImg.setAttribute("href", mapCanvas.toDataURL());
       }
@@ -6581,7 +6617,7 @@ const water = (function () {
 
     // Clear map to neutral grey each frame (no decay blending —
     // gives a crisper wave front than a fade-trail).
-    mapCtx.fillStyle = "rgb(128,128,0)";
+    mapCtx.fillStyle = _NEUTRAL_CSS;
     mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
     // Wave reach in CSS px: ~70 % of the viewport diagonal so the
@@ -6616,7 +6652,7 @@ const water = (function () {
       // up a stale ACTIVE_SCALE.
       if (feDisp) feDisp.setAttribute("scale", "0");
       if (mapCtx) {
-        mapCtx.fillStyle = "rgb(128,128,0)";
+        mapCtx.fillStyle = _NEUTRAL_CSS;
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
         if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
       }
