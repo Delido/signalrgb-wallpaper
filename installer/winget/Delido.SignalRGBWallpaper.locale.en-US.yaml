@@ -1,5 +1,5 @@
 PackageIdentifier: Delido.SignalRGBWallpaper
-PackageVersion: 2.3.0
+PackageVersion: 2.4.0
 PackageLocale: en-US
 Publisher: Sebastian Mendyka
 PublisherUrl: https://github.com/Delido
@@ -55,6 +55,6 @@ Tags:
   - wallpaper-engine
   - multi-monitor
   - widgets
-ReleaseNotesUrl: https://github.com/Delido/signalrgb-wallpaper/releases/tag/v2.3.0
+ReleaseNotesUrl: https://github.com/Delido/signalrgb-wallpaper/releases/tag/v2.4.0
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
