@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -729,7 +729,7 @@ APP_VERSION = "2.3.0"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.3.0"
+WALLPAPER_VERSION = "2.4.0"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -757,6 +757,109 @@ WS_PROTOCOL_VERSION = 2
 # diagnostic build for further debugging.
 ENABLE_NOWPLAYING = True
 APP_AUTHOR  = "Sebastian Mendyka"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# v2.3.1: release-notes table for the Configurator's "What's new"
+# modal. Each entry is a small dict {body_en, body_de} rendered as
+# light Markdown (paragraphs split on blank lines, leading "- " or
+# "• " becomes a real <li>, **bold** stays inline). Keep entries
+# short and user-facing — full per-commit detail lives in CHANGELOG.md.
+#
+# The modal auto-fires once when the user's lastSeenAppVersion
+# doesn't match APP_VERSION (post-update). A header button lets
+# them re-open it later; "Open full changelog" jumps to the
+# GitHub-hosted CHANGELOG.md.
+#
+# To add a new version: prepend an entry keyed by the bare version
+# string ("2.4.0", not "v2.4.0"). _release_notes_for() falls back
+# to a generic stub if a version isn't listed here yet.
+# ─────────────────────────────────────────────────────────────────────────────
+RELEASE_NOTES = {
+    "2.4.0": {
+        "title_en": "What's new in v2.4.0",
+        "title_de": "Was ist neu in v2.4.0",
+        "body_en": (
+            "Smooth ambient effects on high-refresh monitors, plus clearer "
+            "host-compatibility hints in the Configurator.\n\n"
+            "**Effects**\n"
+            "- The glow grid (Pixel Grid layout) now lands on its own GPU "
+            "compositing layer, so the per-frame blur recompute doesn't "
+            "block the ambient / pixelfx rAF chains on 144 Hz / 240 Hz "
+            "monitors anymore. Same isolation applied to the ambient and "
+            "pixelfx canvases.\n"
+            "- The Configurator's Grid renderer dropdown now recommends "
+            "**Canvas** by default and explains the trade-off: Canvas is "
+            "one putImageData call per frame and frees the main thread, "
+            "while DOM does up to 1024 style writes per frame and can "
+            "stutter on high-refresh setups.\n\n"
+            "**Wallpaper Engine compatibility**\n"
+            "- Three pixelfx / mousefx effects now carry a “Lively only” "
+            "badge in the picker: Hover-Glow, Water-Ripple, and Liquid "
+            "Distortion. Wallpaper Engine's bundled CEF doesn't render "
+            "the underlying SVG filters and canvas gradients the way "
+            "modern Chromium / Lively does, so these stay marked clearly "
+            "instead of silently misbehaving in WE.\n\n"
+            "**Configurator polish**\n"
+            "- This “What's new” modal pops once after each bridge "
+            "update; re-open any time via the header button next to "
+            "“Tour”.\n"
+        ),
+        "body_de": (
+            "Smoothere Ambient-Effekte auf High-Refresh-Monitoren, plus "
+            "klarere Host-Kompatibilitätshinweise im Configurator.\n\n"
+            "**Effekte**\n"
+            "- Das Glow-Raster (Pixel-Grid-Layout) landet jetzt auf einem "
+            "eigenen GPU-Compositing-Layer, damit der per-Frame Blur-"
+            "Recompute nicht mehr die Ambient/Pixelfx-rAF-Chains auf "
+            "144-Hz/240-Hz-Monitoren blockiert. Selbe Isolation auf den "
+            "Ambient- und Pixelfx-Canvases.\n"
+            "- Das Grid-Renderer-Dropdown im Configurator empfiehlt jetzt "
+            "**Canvas** als Default und erklärt den Trade-off: Canvas "
+            "macht ein putImageData pro Frame und entlastet den Main-"
+            "Thread, während DOM bis zu 1024 style-writes pro Frame "
+            "macht und auf High-Refresh-Setups ruckeln kann.\n\n"
+            "**Wallpaper-Engine-Kompatibilität**\n"
+            "- Drei Pixelfx/Mousefx-Effekte tragen jetzt ein „Nur "
+            "Lively\"-Badge im Picker: Hover-Glow, Wasserwelle und "
+            "Flüssige Verzerrung. Die mitgelieferte CEF-Version von "
+            "Wallpaper Engine rendert die zugrundeliegenden SVG-Filter "
+            "und Canvas-Gradients nicht so wie modernes Chromium / "
+            "Lively, deshalb sind diese Effekte jetzt klar markiert "
+            "statt in WE still kaputtzugehen.\n\n"
+            "**Configurator-Politur**\n"
+            "- Dieses „Was ist neu\"-Modal erscheint einmal nach jedem "
+            "Bridge-Update; jederzeit wieder öffnen über den Header-"
+            "Button neben „Tour\".\n"
+        ),
+    },
+}
+
+
+def _release_notes_for(version: str) -> dict:
+    """Return the {title_*, body_*} dict for the given version, or a
+    generic stub if we don't have hand-written notes for it yet.
+    Keeps the Configurator code path uniform — it always renders
+    something, never nothing."""
+    notes = RELEASE_NOTES.get(version)
+    if notes:
+        return dict(notes, version=version)
+    return {
+        "version": version,
+        "title_en": f"What's new in v{version}",
+        "title_de": f"Was ist neu in v{version}",
+        "body_en": (
+            f"Bridge updated to **v{version}**. Detailed per-commit "
+            "release notes are in the full changelog on GitHub — use "
+            "the *Open full changelog* button below."
+        ),
+        "body_de": (
+            f"Bridge auf **v{version}** aktualisiert. Detaillierte "
+            "Per-Commit-Release-Notes findest du im vollständigen "
+            "Changelog auf GitHub — Button *Open full changelog* unten."
+        ),
+    }
+
 APP_GITHUB_USER = "Delido"
 APP_REPO    = f"https://github.com/{APP_GITHUB_USER}/signalrgb-wallpaper"
 APP_AUTHOR_URL = f"https://github.com/{APP_GITHUB_USER}"
@@ -1946,6 +2049,13 @@ def default_config() -> dict:
         "updateCheckEnabled": True,
         "allowBetas":         False,   # include GitHub prerelease tags in update checks
         "language":           "auto",  # "auto" | "en" | "de" — UI language
+        # v2.3.1: tracks which APP_VERSION the user has already seen
+        # release-notes for. After an auto-update, the Configurator
+        # compares APP_VERSION against this and pops the "What's new"
+        # modal once when they don't match, then writes the current
+        # APP_VERSION back here. Empty default → modal fires on
+        # first launch after upgrading (or on a fresh install).
+        "lastSeenAppVersion": "",
         # Global Ctrl+Shift+1..4 → apply preset slot 1..4 on every active
         # screen. Disabled by default so we don't grab shortcuts the user
         # might already have wired up; tray menu flips it on.
@@ -8406,6 +8516,17 @@ class BridgeRuntime:
                 # doesn't accidentally leak the broker creds.
                 "mqttBridge":    _redact_mqtt(self.config.get("mqttBridge") or {}),
                 "apiToken":      str(self.config.get("apiToken") or ""),
+                # v2.3.1: app version + cached release-notes for the
+                # auto-popup "What's new" modal. lastSeenAppVersion
+                # round-trips so the Configurator can compare against
+                # APP_VERSION and decide whether to fire the modal.
+                "appVersion":           APP_VERSION,
+                "lastSeenAppVersion":   str(self.config.get("lastSeenAppVersion", "")),
+                "releaseNotes":         _release_notes_for(APP_VERSION),
+                "releaseNotesUrl":      ("https://github.com/Delido/signalrgb-wallpaper/"
+                                          "releases/tag/v" + APP_VERSION),
+                "changelogUrl":         ("https://github.com/Delido/signalrgb-wallpaper/"
+                                          "blob/main/CHANGELOG.md"),
             }
 
     def _on_fullscreen_state(self, paused: bool):
@@ -9477,6 +9598,11 @@ class BridgeRuntime:
         # setting-update for this key — symptom: clicking the Enabled
         # toggle in the Configurator does nothing.
         "openrgbSdkServer",
+        # v2.3.1: bare version string the Configurator writes after
+        # dismissing the "What's new" modal. Stored so the modal
+        # doesn't re-fire on every Configurator open after the user
+        # has seen the current version's notes.
+        "lastSeenAppVersion",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -9543,6 +9669,21 @@ class BridgeRuntime:
                 self.hotkey_listener.stop()
                 self.hotkey_listener = HotkeyListener(self)
             print(f"[settings] presetHotkeysEnabled -> {enabled}")
+        elif key == "lastSeenAppVersion":
+            # v2.3.1: the Configurator writes APP_VERSION here after
+            # dismissing the "What's new" modal so it doesn't re-fire
+            # on the next page load. Just persist — no side effects.
+            v = str(value or "").strip()
+            with self.config_lock:
+                if str(self.config.get("lastSeenAppVersion", "")) == v:
+                    return
+                self.config["lastSeenAppVersion"] = v
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            print(f"[settings] lastSeenAppVersion -> {v!r}")
         elif key in ("fullscreenPause", "updateCheckEnabled", "allowBetas"):
             # Plain boolean settings the bridge consumes elsewhere
             # (fullscreen-watcher reads fullscreenPause every poll;

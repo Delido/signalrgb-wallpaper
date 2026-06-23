@@ -257,6 +257,23 @@
     grid-template-columns: repeat(var(--cols, 16), 1fr);
     grid-template-rows: repeat(var(--rows, 1), 1fr);
     filter: blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+    /* v2.3.1: `will-change: filter` promotes #bars to its own GPU
+       compositing layer. Without this, every source change inside
+       the grid triggered the browser to re-composite the WHOLE
+       page stack (including ambient-canvas, pixelfx-canvas, widgets)
+       because the blurred output was inlined into the page composite.
+       On 240 Hz monitors the page tried to re-blur the full grid at
+       monitor rate (the source only changes at ~60 Hz, but the
+       compositor doesn't know that) and the main thread couldn't
+       keep up — ambient rAF callbacks were starved and the user
+       saw ambient effects as choppy whenever the glow layer was on.
+       Promoting to its own layer lets the GPU cache the blurred
+       output between source-frame updates; ambient repaints stay
+       on their own layer and don't pay the cost. `isolation: isolate`
+       enforces the layer boundary so the parent composite doesn't
+       absorb #bars into its rendering pass. */
+    will-change: filter;
+    isolation: isolate;
   }
   #bars.lay-grid .zone {
     background: var(--c, #111);
@@ -283,6 +300,13 @@
        the DOM-div grid. */
     image-rendering: auto;
     display: none;     /* shown only when currentLayout === "lay-grid" */
+    /* v2.3.1: same GPU-layer promotion as the DOM grid above —
+       canvas backing buffer changes ~60 Hz via putImageData, but
+       without this the browser re-composited+re-blurred the layer
+       at monitor refresh rate (240 Hz on the user's setup),
+       starving the ambient rAF. See the comment on #bars.lay-grid. */
+    will-change: filter;
+    isolation: isolate;
   }
   #bars-canvas.on { display: block; }
   /* When the canvas grid is active, hide the DOM-div #bars container
@@ -342,6 +366,15 @@
     z-index: 4;
     pointer-events: none;
     display: none;
+    /* v2.3.1: GPU-layer isolation. The glow grid above now has its
+       own composite layer (`will-change: filter`), and to keep this
+       canvas's rAF updates from triggering full-page recomposite
+       cycles on high-refresh monitors we promote it too. The
+       browser then redraws ambient-canvas independently of #bars,
+       so a glow source change doesn't re-render this layer (and
+       vice versa). */
+    will-change: transform;
+    isolation: isolate;
   }
   #ambient-canvas.on { display: block; }
 
@@ -354,6 +387,11 @@
     z-index: 7;
     pointer-events: none;
     display: none;
+    /* v2.3.1: see #ambient-canvas comment — per-canvas GPU layer
+       so high-refresh-monitor compositing stays decoupled from
+       the glow grid's per-frame re-blur. */
+    will-change: transform;
+    isolation: isolate;
   }
   #pixelfx-canvas.on { display: block; }
 
@@ -3845,20 +3883,14 @@ const MouseFx = (function () {
     let _idleFrames = 0;
     const IDLE_FRAMES_BEFORE_SKIP = 60;  // ≈ 2 s at 30 Hz
     const MAP_SIZE = 256;
-    // v2.3.0 post-release: same host-conditional neutral as the
-    // water module — Lively/WebView2 honour
-    // color-interpolation-filters="sRGB" and treat R=128 as neutral
-    // in sRGB; WE's older CEF ignores the attribute and linearises
-    // PNG pixels, so 128 sRGB → 0.215 linear → constant -14 px
-    // shift across the whole #bg whenever Liquid Distortion is on.
-    // 188 sRGB linearises back to ~0.5 in WE's working space → true
-    // 0 px shift. See gotcha-we-cef-color-space.
-    const _IS_WE_R = typeof window.wallpaperPropertyListener !== "undefined"
-                  || typeof window.wallpaperRegisterAudioListener !== "undefined";
-    const NEUTRAL_BYTE_R = _IS_WE_R ? 188 : 128;
-    const _NEUTRAL_CSS_R = "rgb(" + NEUTRAL_BYTE_R + "," + NEUTRAL_BYTE_R + ",0)";
-    const _NEUTRAL_CSS_R_DECAY = "rgba(" + NEUTRAL_BYTE_R + "," + NEUTRAL_BYTE_R + ",0,0.06)";
-    const _NEUTRAL_CSS_R_A0 = "rgba(" + NEUTRAL_BYTE_R + "," + NEUTRAL_BYTE_R + ",0,0)";
+    // v2.3.1: Liquid Distortion is labelled "Nur Lively" in the
+    // Configurator since WE's bundled CEF doesn't render the SVG
+    // feDisplacementMap filter correctly. Neutral kept at 128 for
+    // the Lively / modern-Chromium path.
+    const NEUTRAL_BYTE_R = 128;
+    const _NEUTRAL_CSS_R = "rgb(128,128,0)";
+    const _NEUTRAL_CSS_R_DECAY = "rgba(128,128,0,0.06)";
+    const _NEUTRAL_CSS_R_A0 = "rgba(128,128,0,0)";
     function ensureFilter() {
       if (svgFilter) return;
       // Hidden SVG container with the displacement filter. Applied
@@ -6338,6 +6370,11 @@ const pixelfx = (function () {
       // Fill a circular path instead of a 2r × 2r rect: some CEF
       // builds render the rect's corners visibly (despite the gradient
       // being alpha-0 past radius r), making the glow look square.
+      // v2.3.1: works in Lively / modern Chromium. WE's bundled CEF
+      // renders this as an opaque tinted disc (gradient interpolation
+      // appears broken in that CEF version). The mode is labelled
+      // "Nur Lively" in the Configurator so WE users know to pick
+      // a different mode. See gotcha-we-cef-svg-and-gradients.
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(cursorX, cursorY, r, 0, Math.PI * 2);
@@ -6356,9 +6393,9 @@ const pixelfx = (function () {
     }
     // v2.3.10-beta: water mode no longer paints on this canvas. It
     // lives in the `water` IIFE below — an SVG feDisplacementMap on
-    // #bg fed by a procedurally generated ring-front map. The old
-    // outline-ring rendering looked like an inflated click ring,
-    // not water.
+    // #bg fed by a procedurally generated ring-front map. Mode is
+    // labelled "Nur Lively" in the Configurator since WE's CEF
+    // doesn't render the filter chain correctly.
   }
 
   document.addEventListener("click", (e) => {
@@ -6366,10 +6403,9 @@ const pixelfx = (function () {
       ripples.push({ x: e.clientX, y: e.clientY, life: 0 });
     }
     if (wantsWater()) {
-      // v2.3.10-beta: route water clicks to the displacement-based
-      // water module. Two staggered splashes per click (the second
-      // 0.12 s later) so a single click produces a visible follow-up
-      // wave behind the leading front instead of one lonely ring.
+      // Two staggered splashes per click (the second 0.12 s later)
+      // so a single click produces a visible follow-up wave behind
+      // the leading front instead of one lonely ring.
       water.splash(e.clientX, e.clientY);
       water.splash(e.clientX, e.clientY, -0.12);
     }
@@ -6392,13 +6428,10 @@ const pixelfx = (function () {
       if (allowed.indexOf(m) < 0) m = "off";
       if (m === mode) return;
       mode = m;
-      // v2.3.10-beta: water mode is owned by the `water` IIFE below;
-      // it doesn't paint on the pixelfx canvas. So in water mode we
-      // stop the pixelfx canvas (collapses backing buffer to 1×1,
-      // saves the otherwise-idle full-viewport rAF tick) and hand
-      // off to the water module. The document-level click handler
-      // above is module-scope, so it stays bound in either state
-      // and `wantsWater()` still routes splashes correctly.
+      // v2.3.10-beta: water mode is owned by the SVG-displacement
+      // `water` IIFE below — pixelfx canvas idle in water mode.
+      // The mode is labelled "Nur Lively" in the Configurator
+      // since WE's bundled CEF doesn't render the filter chain.
       if (mode === "off" || mode === "water") {
         canvas.classList.remove("on");
         stop();
@@ -6456,37 +6489,18 @@ const water = (function () {
   const BAND_INNER = 8;   // displacement push-out band thickness
   const BAND_OUTER = 8;   // displacement pull-in band thickness
 
-  // v2.3.0 post-release patch: host-conditional NEUTRAL_BYTE.
-  // Modern Chromium (Lively / WebView2) and Wallpaper Engine's
-  // older CEF disagree on the default color-interpolation-filters
-  // value:
-  //   Lively  → sRGB by default      → R=128 sRGB = 0.502 ≈ neutral
-  //   WE CEF  → linearRGB by default → R=128 sRGB → 0.215 linear
-  //                                  → constant -22 px displacement
-  // The v2.3.13-beta `color-interpolation-filters="sRGB"` attribute
-  // tells the filter to operate in sRGB throughout. Lively respects
-  // it; WE's CEF version pre-dates that being honoured and stays in
-  // linearRGB. Without compensation, WE users see the entire BG
-  // jump up-left by ~22 px while water mode is enabled — no wave,
-  // just a constant offset.
-  // Fix: pick the NEUTRAL_BYTE that linearises (or stays as sRGB)
-  // to exactly 0.5 in the browser's working space. 188 sRGB → 0.5
-  // linear (via the standard sRGB transfer curve); 128 sRGB stays
-  // at 0.5 in sRGB. The PEAK_AMP scales correspondingly so the
-  // displacement amplitude lands in the same neighbourhood on both.
-  const _IS_WE = typeof window.wallpaperPropertyListener !== "undefined"
-              || typeof window.wallpaperRegisterAudioListener !== "undefined";
-  const NEUTRAL_BYTE = _IS_WE ? 188 : 128;
-  // Peak per-channel offset from neutral. In sRGB the available
-  // range above neutral is (255 - NEUTRAL_BYTE); below is NEUTRAL_BYTE.
-  // 90 worked for Lively at neutral 128; for WE at neutral 188, only
-  // 67 is symmetric → cap to keep the displacement symmetric in the
-  // browser's working space.
-  const PEAK_AMP = Math.min(90, NEUTRAL_BYTE, 255 - NEUTRAL_BYTE);
-  // Reused neutral CSS color string so we don't rebuild it every clear.
-  const _NEUTRAL_CSS = "rgb(" + NEUTRAL_BYTE + "," + NEUTRAL_BYTE + ",0)";
-  // For the gradient outer stops we need a transparent-neutral variant.
-  const _NEUTRAL_CSS_A0 = "rgba(" + NEUTRAL_BYTE + "," + NEUTRAL_BYTE + ",0,0)";
+  // v2.3.1: water mode is labelled "Nur Lively" in the Configurator
+  // because WE's bundled CEF doesn't render feDisplacementMap
+  // correctly (color-space mismatch + the `color-interpolation-filters="sRGB"`
+  // override is silently ignored). The displacement math here
+  // assumes the modern Chromium / Lively behaviour: R=128 sRGB
+  // stays at 0.5 in the filter chain → neutral = 0 displacement.
+  // Encoding range: ±90 from 128 gives a peak ~28 px shift at
+  // scale=80. Kept hardcoded since the WE path is disabled.
+  const NEUTRAL_BYTE = 128;
+  const PEAK_AMP = 90;
+  const _NEUTRAL_CSS = "rgb(128,128,0)";
+  const _NEUTRAL_CSS_A0 = "rgba(128,128,0,0)";
 
   function ensureFilter() {
     if (svgFilter) return;
@@ -6596,6 +6610,16 @@ const water = (function () {
       // which is fine, but setting scale=0 first means the very
       // next paint is provably a no-op regardless of map state.
       if (feDisp) feDisp.setAttribute("scale", "0");
+      // v2.3.1: remove the body class so the SVG filter is no
+      // longer applied to #bg between ripples. WE's older CEF
+      // appears to evaluate the filter pipeline differently than
+      // Lively — even with scale=0 and a neutral feImage, WE
+      // showed a constant -22 px shift while the filter was
+      // attached. Detaching the filter entirely between ripples
+      // sidesteps any host-specific filter quirk: no filter =
+      // no possible shift. splash() adds the class back when
+      // the next ripple arrives.
+      document.body.classList.remove("fx-pixelfx-water");
       if (mapCtx) {
         mapCtx.fillStyle = _NEUTRAL_CSS;
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
@@ -6636,20 +6660,19 @@ const water = (function () {
 
   return {
     enable() {
+      // v2.3.1: enable() now ONLY arms the module. The body
+      // class (which actually attaches the SVG filter to #bg)
+      // is NOT added here — only on splash(), and removed by
+      // tick() when the last ripple expires. See the comment
+      // in tick() for why this matters in WE.
       enabled = true;
       ensureFilter();
-      document.body.classList.add("fx-pixelfx-water");
     },
     disable() {
       enabled = false;
       ripples = [];
       document.body.classList.remove("fx-pixelfx-water");
       if (raf) { cancelAnimationFrame(raf); raf = null; }
-      // v2.3.12-beta: drop scale to 0 on disable too. Strictly
-      // redundant because the class removal detaches the filter,
-      // but cheap belt-and-suspenders so a future caller that
-      // applies the filter via a different CSS path doesn't pick
-      // up a stale ACTIVE_SCALE.
       if (feDisp) feDisp.setAttribute("scale", "0");
       if (mapCtx) {
         mapCtx.fillStyle = _NEUTRAL_CSS;
@@ -6666,6 +6689,12 @@ const water = (function () {
       // be a no-op. Setting scale before tick() runs guarantees
       // the displacement is active from the very first paint.
       if (feDisp) feDisp.setAttribute("scale", String(ACTIVE_SCALE));
+      // v2.3.1: attach the filter to #bg only NOW that there's a
+      // ripple to render. tick() removes the class when ripples
+      // drop to 0. Net effect: in WE the BG is never displaced
+      // between clicks — even if the host's filter pipeline has
+      // some quirk that would otherwise shift the BG at scale=0.
+      document.body.classList.add("fx-pixelfx-water");
       if (!raf) {
         _lastTick = performance.now();
         raf = requestAnimationFrame(tick);

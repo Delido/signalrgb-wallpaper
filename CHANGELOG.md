@@ -4,6 +4,120 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-06-22
+
+High-refresh-monitor smoothness, WE host-compatibility labelling,
+and an in-Configurator "What's new" modal.
+
+### Added — On-update "What's new" modal in the Configurator
+
+Bridge ships per-version release-notes (`RELEASE_NOTES` dict in
+`bridge.py`, EN + DE bodies) and pushes the current entry on every
+settings broadcast. The Configurator compares `bridge.appVersion`
+against the persisted `lastSeenAppVersion`; on mismatch it pops a
+modal with the release notes once, then writes the current version
+back so the modal doesn't re-fire until the next bridge update.
+
+Header gains an "✨ Neu" / "✨ What's new" button next to *Tour*
+that re-opens the same modal on demand (no persist-on-dismiss
+this path — the user has obviously seen the notes by clicking).
+Both auto-fire and manual paths include an "Open full changelog"
+button that jumps to the GitHub-hosted CHANGELOG.md.
+
+Markdown body uses a tiny inline subset renderer (paragraphs,
+`**bold**`, `` `code` ``, `-` lists, `**Header**` → `<h3>`) so
+each version's notes can be hand-written as plain text in
+`RELEASE_NOTES`.
+
+### Added — "Nur Lively" / "Lively only" badges on three effects
+
+Three effects ship in the picker but only render correctly under
+Lively / WebView2 because Wallpaper Engine's bundled CEF doesn't
+handle the underlying SVG filters and canvas gradients the way
+modern Chromium does:
+
+- Pixelfx → Hover-Glow (`createRadialGradient` outer stop renders
+  as opaque tinted disc instead of fading to transparent)
+- Pixelfx → Water-Ripple (`feDisplacementMap` color-space
+  mismatch — entire BG shifts ~22 px even with the
+  `color-interpolation-filters="sRGB"` override)
+- Mousefx → Liquid Distortion (same SVG-displacement issue as
+  water mode at smaller scale)
+
+All three tiles now carry a yellow-amber "Nur Lively" pill in
+their `.fx-tile-head`, and an explainer hint sits under the
+Pixelfx grid: "Effekte mit ‚Nur Lively' nutzen SVG-Filter oder
+Canvas-Gradients die Wallpaper Engine's mitgelieferter CEF nicht
+korrekt rendert. Unter Lively / WebView2 funktionieren sie sauber."
+
+### Fixed — Ambient effects stuttered when the glow layer was on (high-refresh monitors)
+
+User report: on a 240 Hz monitor with Pixel Grid glow at default
+30 px blur, ambient / pixelfx effects looked choppy. Disabling the
+glow layer made them buttery smooth. The choppiness traced to the
+browser compositor:
+
+`#bars` (DOM-mode grid) and `#bars-canvas` (canvas-mode grid)
+were *not* on their own composite layers. Every source-data update
+into the grid (via WS message → DOM style writes or putImageData)
+forced the page to re-composite the WHOLE layer stack including
+the blurred glow output. At 240 Hz refresh rate the browser tried
+to re-blur the full grid every 4.17 ms, saturated the main thread,
+and the ambient/pixelfx rAF callbacks were starved.
+
+Fix: explicit GPU-layer promotion on the glow grid and on the
+ambient / pixelfx canvases:
+
+```css
+/* #bars.lay-grid + #bars-canvas */
+will-change: filter;
+isolation: isolate;
+
+/* #ambient-canvas + #pixelfx-canvas */
+will-change: transform;
+isolation: isolate;
+```
+
+The browser now caches each layer's output between source-frame
+updates and re-blends them at monitor refresh without recomputing
+the blur. Memory cost: ~30 MB GPU per promoted layer on a
+5120×1440 setup (so ~120 MB resident when all four effect canvases
+are active). Acceptable on modern GPUs; the perf win is dramatic.
+
+`#audioglow-canvas` deliberately NOT promoted — its
+`mix-blend-mode: screen` needs the parent composite to be flat
+for the blend math to read the layer beneath.
+
+### Changed — Grid renderer dropdown defaults to Canvas, labelled "recommended"
+
+The bridge default has been Canvas since v1.2.12, but the
+Configurator's dropdown listed DOM first and labelled it "lower
+GPU" — which read as "the better choice" to users who don't know
+the trade-off. After the high-refresh stutter investigation
+above, the truth is the opposite for most modern setups:
+
+- **Canvas**: one `putImageData` per frame, main thread free,
+  smooth ambient / pixelfx rAFs. Slightly more GPU because the
+  browser bilinear-upsamples + blurs the small grid texture.
+- **DOM**: up to 1024 `style.background` writes per frame on a
+  32×32 grid. Cheap on GPU (just solid-rect composites), but
+  saturates the main thread on high-refresh monitors and starves
+  other rAF chains.
+
+Dropdown now lists Canvas first as "Canvas (recommended)" /
+"Canvas (empfohlen)" and DOM second as "DOM (legacy)" / "DOM (alt)".
+A hint line below explains: "Canvas: smoothere Ambient-Effekte auf
+High-Refresh-Monitoren (240 Hz etc.). DOM nur wenn deine GPU mit
+dem Canvas-Blur überfordert ist."
+
+### Changed — APP_VERSION + WALLPAPER_VERSION → 2.4.0
+
+Wallpaper code changed (CSS layer-isolation). Re-import IS required
+for Lively + WE.
+
+MINOR cut, so this release goes to winget alongside the GitHub
+release (per `feedback-winget-release-pacing`).
+
 ## [2.3.0] - 2026-06-17
 
 Stable cut of the 2.3.x beta wave (2.3.0-beta → 2.3.13-beta).

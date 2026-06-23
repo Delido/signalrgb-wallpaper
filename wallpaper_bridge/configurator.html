@@ -925,6 +925,37 @@
     border-top: 1px solid var(--border);
     display: flex; justify-content: flex-end; gap: 6px;
   }
+  /* v2.3.1: What's-new modal — wider so release-notes prose
+     doesn't read like a phone-app blurb, and scrollable when
+     a version has a lot of bullets. */
+  .modal.whats-new-modal { max-width: 640px; }
+  .modal.whats-new-modal .body {
+    max-height: 60vh;
+    overflow-y: auto;
+    line-height: 1.5;
+    font-size: 13px;
+  }
+  .modal.whats-new-modal .body p { margin: 0 0 10px; }
+  .modal.whats-new-modal .body p:last-child { margin-bottom: 0; }
+  .modal.whats-new-modal .body h3 {
+    margin: 14px 0 6px; font-size: 12.5px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+    color: var(--accent);
+  }
+  .modal.whats-new-modal .body h3:first-child { margin-top: 0; }
+  .modal.whats-new-modal .body ul {
+    margin: 0 0 10px; padding-left: 20px;
+  }
+  .modal.whats-new-modal .body li { margin: 0 0 4px; }
+  .modal.whats-new-modal .body strong { color: #e6e9ee; }
+  .modal.whats-new-modal .body code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
 
   /* ── Lock toggle ──────────────────────────────────────────────────── */
   .lock-bar {
@@ -1389,6 +1420,24 @@
     font-size: 11.5px;
     opacity: 0.72;
     line-height: 1.35;
+  }
+  /* v2.3.1: badge inside fx-tile-head signalling that an effect
+     only renders correctly under Lively (createRadialGradient and
+     SVG feDisplacementMap both misbehave in WE's bundled CEF). */
+  .fx-tile-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255, 180, 60, 0.18);
+    border: 1px solid rgba(255, 180, 60, 0.55);
+    color: rgba(255, 200, 120, 0.95);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    line-height: 1.4;
+    vertical-align: middle;
   }
 
   .lib-bulk-bar {
@@ -2373,6 +2422,13 @@
           title="Show the first-run tour again"
           data-i18n-title="header.replay_tour.title"
           data-i18n="header.replay_tour">Tour</button>
+  <!-- v2.3.1: "What's new" button. Opens the same modal the
+       post-update auto-popup uses, so users can re-read release
+       notes any time. -->
+  <button class="btn" id="header-whats-new" type="button"
+          title="Was ist neu in dieser Version"
+          data-i18n-title="header.whats_new.title"
+          data-i18n="header.whats_new">✨ Neu</button>
   <a class="btn" href="/builder" target="_blank" data-i18n="header.open_builder">Open Builder…</a>
 </header>
 
@@ -2676,9 +2732,12 @@
       <div class="row">
         <label for="grid-renderer" data-i18n="glow.grid_renderer">Grid renderer</label>
         <select id="grid-renderer">
-          <option value="dom"    data-i18n="glow.grid_renderer.dom">DOM (lower GPU)</option>
-          <option value="canvas" data-i18n="glow.grid_renderer.canvas">Canvas (lower CPU)</option>
+          <option value="canvas" data-i18n="glow.grid_renderer.canvas">Canvas (recommended)</option>
+          <option value="dom"    data-i18n="glow.grid_renderer.dom">DOM (legacy)</option>
         </select>
+      </div>
+      <div class="hint" style="margin-top: 2px;" data-i18n="glow.grid_renderer_hint">
+        Canvas: smoother ambient effects on high-refresh monitors (240 Hz etc.). DOM only if your GPU struggles with the canvas blur.
       </div>
       <!-- v1.2.12: glass-tile backdrop-filter quality. Backdrop-filter
            blur is the single most expensive GPU op on the page; cost
@@ -2888,6 +2947,11 @@
         pushed by the host). Click ripple needs real mouse events — toggle
         <em>Wallpaper interaction</em> in Lively to see it.
       </div>
+      <!-- v2.3.1: explainer for the "Nur Lively" badges on water +
+           hover-glow + Liquid Distortion. -->
+      <div class="hint" style="margin-top: 6px;" data-i18n="fx.lively_only_hint">
+        Effects marked “Lively only” use SVG filters or canvas gradients that Wallpaper Engine's bundled CEF doesn't render correctly. They work fine under Lively / WebView2.
+      </div>
 
       <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
 
@@ -2903,7 +2967,7 @@
       </div>
       <div class="fx-tiles" id="mousefx-tiles">
         <button type="button" class="fx-tile" data-fx="ripple">
-          <span class="fx-tile-head">🌊 <span data-i18n="mousefx.ripple_name">Liquid Distortion</span></span>
+          <span class="fx-tile-head">🌊 <span data-i18n="mousefx.ripple_name">Liquid Distortion</span><span class="fx-tile-badge" data-i18n="fx.lively_only">Nur Lively</span></span>
           <span class="fx-tile-desc" data-i18n="mousefx.ripple_desc">Pulls background pixels with the cursor</span>
         </button>
         <button type="button" class="fx-tile" data-fx="chromatic">
@@ -3510,6 +3574,24 @@
   </div>
 </div>
 
+<!-- v2.3.1: "What's new" modal. Auto-shown once per APP_VERSION
+     change; re-openable via the header button next to Tour.
+     Backdrop click + Esc + close button all dismiss. -->
+<div class="modal-backdrop" id="whats-new-modal">
+  <div class="modal whats-new-modal">
+    <header>
+      <h2 id="whats-new-title" data-i18n="whats_new.title">What's new</h2>
+    </header>
+    <div class="body" id="whats-new-body"></div>
+    <div class="actions">
+      <a class="btn" id="whats-new-changelog" target="_blank" rel="noopener"
+         data-i18n="whats_new.btn.full_changelog">Open full changelog</a>
+      <button class="btn primary" id="whats-new-dismiss"
+              data-i18n="whats_new.btn.dismiss">Got it</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -3657,6 +3739,14 @@ const TRANSLATIONS = {
   "mousefx.ripple_name":        { en: "Liquid Distortion", de: "Flüssige Verzerrung" },
   "mousefx.ripple_desc":        { en: "Pulls background pixels with the cursor",
                                   de: "Zieht Hintergrund-Pixel mit dem Cursor" },
+  // v2.3.1: shared badge for effects that only render correctly
+  // under Lively (Wallpaper Engine's bundled CEF doesn't render
+  // createRadialGradient or feDisplacementMap the same way).
+  "fx.lively_only":             { en: "Lively only",      de: "Nur Lively" },
+  "fx.lively_only_hint":        {
+    en: "Effects marked “Lively only” use SVG filters or canvas gradients that Wallpaper Engine's bundled CEF doesn't render correctly. They work fine under Lively / WebView2.",
+    de: "Mit „Nur Lively\" markierte Effekte nutzen SVG-Filter oder Canvas-Gradients die Wallpaper Engine's mitgelieferter CEF nicht korrekt rendert. Unter Lively / WebView2 funktionieren sie sauber."
+  },
   "mousefx.chromatic_name":     { en: "Chromatic Halo",    de: "Chromatischer Halo" },
   "mousefx.chromatic_desc":     { en: "R/G/B glow around the cursor",
                                   de: "R/G/B-Glow rund um den Cursor" },
@@ -3945,6 +4035,14 @@ const TRANSLATIONS = {
   "header.replay_tour":     { en: "Tour",                 de: "Tour" },
   "header.replay_tour.title": { en: "Show the first-run tour again",
                                 de: "Erstaufruf-Tour erneut anzeigen" },
+  // v2.3.1: header button + What's-new modal.
+  "header.whats_new":       { en: "✨ What's new",        de: "✨ Neu" },
+  "header.whats_new.title": { en: "Release notes for the current version",
+                              de: "Release-Notes für die aktuelle Version" },
+  "whats_new.title":        { en: "What's new",            de: "Was ist neu" },
+  "whats_new.btn.dismiss":  { en: "Got it",                de: "Verstanden" },
+  "whats_new.btn.full_changelog": { en: "Open full changelog",
+                                    de: "Vollständiges Changelog öffnen" },
   "header.toggle_preview":  { en: "📺 Preview",           de: "📺 Vorschau" },
   "header.toggle_preview.title": { en: "Live preview",   de: "Live-Vorschau" },
   "bg.open_library.title":  { en: "Open library",        de: "Bibliothek öffnen" },
@@ -4097,8 +4195,20 @@ const TRANSLATIONS = {
   "glow.layout.hstripes":   { en: "Horizontal stripes",   de: "Horizontale Streifen" },
   "glow.layout.pills":      { en: "Centered pills",       de: "Zentrierte Pillen" },
   "glow.layout.off":        { en: "Hidden",               de: "Versteckt" },
-  "glow.grid_renderer.dom":    { en: "DOM (lower GPU)",    de: "DOM (weniger GPU)" },
-  "glow.grid_renderer.canvas": { en: "Canvas (lower CPU)", de: "Canvas (weniger CPU)" },
+  // v2.3.1: relabelled — Canvas is the recommended path for most
+  // modern setups (one putImageData per frame vs. up to 1024 DOM
+  // style writes → free main thread → smooth ambient/cursor effects).
+  // DOM stays as the lower-GPU fallback for older hardware where
+  // canvas bilinear-upscale + blur is heavier than the per-zone
+  // style writes.
+  "glow.grid_renderer.canvas": { en: "Canvas (recommended)",
+                                  de: "Canvas (empfohlen)" },
+  "glow.grid_renderer.dom":    { en: "DOM (legacy)",
+                                  de: "DOM (alt)" },
+  "glow.grid_renderer_hint":   {
+    en: "Canvas: smoother ambient effects on high-refresh monitors (240 Hz etc.). DOM only if your GPU struggles with the canvas blur.",
+    de: "Canvas: smoothere Ambient-Effekte auf High-Refresh-Monitoren (240 Hz etc.). DOM nur wenn deine GPU mit dem Canvas-Blur überfordert ist."
+  },
   "glow.glass_quality.low":    { en: "Low (no blur)",     de: "Niedrig (ohne Blur)" },
   "glow.glass_quality.medium": { en: "Medium",            de: "Mittel" },
   "glow.glass_quality.high":   { en: "High",              de: "Hoch" },
@@ -5204,6 +5314,13 @@ const els = {
   modalBody:      $("modal-body"),
   modalCancel:    $("modal-cancel"),
   modalSave:      $("modal-save"),
+  // v2.3.1: What's-new modal + header lookup button.
+  whatsNewModal:    $("whats-new-modal"),
+  whatsNewTitle:    $("whats-new-title"),
+  whatsNewBody:     $("whats-new-body"),
+  whatsNewDismiss:  $("whats-new-dismiss"),
+  whatsNewChangelog: $("whats-new-changelog"),
+  headerWhatsNew:   $("header-whats-new"),
   mirrorBar:      $("mirror-bar"),
   mirrorSelect:   $("mirror-select"),
   mirrorHint:     $("mirror-hint"),
@@ -9463,6 +9580,16 @@ function connect() {
         if (msg.bridge && typeof msg.bridge === "object") {
           bridgeState = msg.bridge;
           renderSystemSection();
+          // v2.3.1: post-update "What's new" modal. Auto-fires once
+          // when bridge's appVersion differs from the user's
+          // lastSeenAppVersion — then writes the current version back
+          // so the modal stays put until the next bridge upgrade.
+          // _maybeShowWhatsNew is debounced via _whatsNewShown so a
+          // settings re-push from the bridge (frequent during the
+          // session) doesn't re-fire it.
+          try { _maybeShowWhatsNew(bridgeState); } catch (e) {
+            console.warn("[whats-new]", e);
+          }
         }
         renderAll();
         // v2.2.0-beta: re-light the per-tab mini layout toolbar after
@@ -10244,8 +10371,12 @@ const PIXELFX_MODES   = [
     descKey: "pixelfx.off_desc" },
   { value: "trail",  emoji: "✨", nameKey: "pixelfx.trail_name",
     descKey: "pixelfx.trail_desc" },
+  // v2.3.1: glow + water both rely on rendering that WE's bundled
+  // CEF doesn't handle correctly (createRadialGradient for glow,
+  // feDisplacementMap for water). Marked livelyOnly so the tile
+  // gets a small badge in the picker.
   { value: "glow",   emoji: "💡", nameKey: "pixelfx.glow_name",
-    descKey: "pixelfx.glow_desc" },
+    descKey: "pixelfx.glow_desc", livelyOnly: true },
   { value: "ripple", emoji: "💫", nameKey: "pixelfx.ripple_name",
     descKey: "pixelfx.ripple_desc" },
   // v2.3.3-beta: water mode is a viewport-spanning click ripple
@@ -10254,7 +10385,7 @@ const PIXELFX_MODES   = [
   // diagonal. Excluded from "all" because it's too prominent to
   // layer on top of trail+glow+ripple at the same time.
   { value: "water",  emoji: "💧", nameKey: "pixelfx.water_name",
-    descKey: "pixelfx.water_desc" },
+    descKey: "pixelfx.water_desc", livelyOnly: true },
   // v2.3.11-beta: "all" tile removed on user request — stacking
   // trail + glow + click ripple at once was visually messy and the
   // single-select intent of the mode picker was clearer without it.
@@ -10891,6 +11022,15 @@ function buildPixelfxTiles() {
     headName.dataset.i18n = opt.nameKey;
     headName.textContent = t(opt.nameKey);
     head.append(opt.emoji + " ", headName);
+    // v2.3.1: "Lively only" badge for effects that don't render
+    // correctly under Wallpaper Engine's bundled CEF.
+    if (opt.livelyOnly) {
+      const badge = document.createElement("span");
+      badge.className = "fx-tile-badge";
+      badge.dataset.i18n = "fx.lively_only";
+      badge.textContent = t("fx.lively_only");
+      head.appendChild(badge);
+    }
     const desc = document.createElement("span");
     desc.className = "fx-tile-desc";
     desc.dataset.i18n = opt.descKey;
@@ -11564,6 +11704,123 @@ const UNIVERSAL_WIDGET_FIELDS = [
       { value: "clear",   label: "Clear — minimal outline" },
     ] },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2.3.1: "What's new" modal — auto-fires once per APP_VERSION,
+// re-openable via the header button. Bridge ships the release-notes
+// body inline in `bridgeState.releaseNotes` (already localised via
+// body_en / body_de keys) so we never touch the network.
+// ─────────────────────────────────────────────────────────────────────────────
+let _whatsNewShown = false;
+
+// Tiny Markdown subset → HTML. Handles paragraphs (blank-line
+// split), `**bold**`, `*italic*`, `` `code` ``, leading "- " or
+// "• " as <li>, and "**Section header**" lines as <h3>. Anything
+// fancier (links, tables, images) gets escaped through to text.
+// Kept inline because pulling a real Markdown lib for ~5 short
+// release notes per release is overkill.
+function _renderReleaseNotesMarkdown(src) {
+  if (!src) return "";
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;"
+  }[c]));
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\s][^*]*[^*\s]|[^*\s])\*(?=[\s).,;:!?]|$)/g,
+             "$1<em>$2</em>");
+  const blocks = src.replace(/\r\n/g, "\n").split(/\n\n+/);
+  const out = [];
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    // Bullet list — every line starts with "- " or "• "
+    if (lines.every(l => /^\s*[-•]\s+/.test(l))) {
+      out.push("<ul>" +
+        lines.map(l =>
+          "<li>" + inline(l.replace(/^\s*[-•]\s+/, "")) + "</li>"
+        ).join("") +
+        "</ul>");
+      continue;
+    }
+    // Single-line **header** → h3
+    if (lines.length === 1 && /^\*\*[^*]+\*\*$/.test(lines[0].trim())) {
+      out.push("<h3>" + inline(lines[0].trim().replace(/^\*\*|\*\*$/g, "")) + "</h3>");
+      continue;
+    }
+    out.push("<p>" + lines.map(inline).join("<br>") + "</p>");
+  }
+  return out.join("");
+}
+
+function _renderWhatsNewModal(notes, opts) {
+  if (!notes) return;
+  const lang = (typeof _lang !== "undefined" && _lang === "de") ? "de" : "en";
+  const title = notes["title_" + lang] || notes.title_en || t("whats_new.title");
+  const body  = notes["body_" + lang]  || notes.body_en  || "";
+  els.whatsNewTitle.textContent = title;
+  els.whatsNewBody.innerHTML = _renderReleaseNotesMarkdown(body);
+  if (bridgeState && bridgeState.changelogUrl) {
+    els.whatsNewChangelog.href = bridgeState.changelogUrl;
+  } else {
+    els.whatsNewChangelog.href = "https://github.com/Delido/signalrgb-wallpaper/blob/main/CHANGELOG.md";
+  }
+  els.whatsNewModal.classList.add("on");
+  // Stash whether the close should write lastSeenAppVersion — we
+  // only persist on the auto-fire path, not when the user opens
+  // the modal via the header button (which is idempotent).
+  els.whatsNewModal.dataset.persistOnClose = opts && opts.persistOnClose ? "1" : "";
+}
+
+function _closeWhatsNewModal() {
+  if (!els.whatsNewModal.classList.contains("on")) return;
+  const persist = els.whatsNewModal.dataset.persistOnClose === "1";
+  els.whatsNewModal.classList.remove("on");
+  els.whatsNewModal.dataset.persistOnClose = "";
+  if (persist && bridgeState && bridgeState.appVersion) {
+    sendCmd({ type: "bridge-setting-update",
+              key: "lastSeenAppVersion", value: bridgeState.appVersion });
+  }
+}
+
+function _maybeShowWhatsNew(state) {
+  if (_whatsNewShown) return;
+  if (!state || !state.appVersion) return;
+  // PREVIEW_MODE: the live-preview iframe gets the same bridge
+  // settings push as the main Configurator. Suppress the modal
+  // there so the user doesn't see two stacked popups.
+  if (typeof PREVIEW_MODE !== "undefined" && PREVIEW_MODE) return;
+  const current = String(state.appVersion);
+  const lastSeen = String(state.lastSeenAppVersion || "");
+  if (current && current !== lastSeen) {
+    _whatsNewShown = true;
+    _renderWhatsNewModal(state.releaseNotes, { persistOnClose: true });
+  }
+}
+
+// Header "✨ Neu" button — opens the modal with current bridge's
+// release notes regardless of lastSeenAppVersion. No persist on
+// close (the user has obviously seen the notes by now).
+if (els.headerWhatsNew) {
+  els.headerWhatsNew.addEventListener("click", () => {
+    const notes = bridgeState && bridgeState.releaseNotes;
+    if (notes) _renderWhatsNewModal(notes, { persistOnClose: false });
+  });
+}
+if (els.whatsNewDismiss) {
+  els.whatsNewDismiss.addEventListener("click", _closeWhatsNewModal);
+}
+// Backdrop click + Esc to dismiss.
+if (els.whatsNewModal) {
+  els.whatsNewModal.addEventListener("click", (e) => {
+    if (e.target === els.whatsNewModal) _closeWhatsNewModal();
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && els.whatsNewModal &&
+      els.whatsNewModal.classList.contains("on")) {
+    _closeWhatsNewModal();
+  }
+});
 
 function openOptionsModal(widget) {
   const def = WIDGET_CATALOG[widget.type];

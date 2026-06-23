@@ -137,6 +137,18 @@ python .\wallpaper_bridge\smoke_test.py
 1. Bump `APP_VERSION` in `wallpaper_bridge/bridge.py` and the
    `Version()` export in `SignalRGB_Desktop_Wallpaper.js`. Add an
    entry to `CHANGELOG.md`.
+
+   **Also add a `RELEASE_NOTES` entry for the new version** in
+   `wallpaper_bridge/bridge.py` (the constant just below
+   `APP_VERSION`). The Configurator's "What's new" modal reads
+   this on every settings push; without a matching key the
+   modal falls back to a generic "Bridge updated — see GitHub
+   changelog" stub. Keep the body short and user-facing (3-5
+   bullets, EN + DE), full per-commit detail stays in
+   `CHANGELOG.md`. The modal auto-fires once after each
+   `APP_VERSION` change because the bridge writes the live
+   version into `bridgeState.appVersion` and the Configurator
+   compares against the persisted `lastSeenAppVersion`.
 2. `pwsh installer\build.ps1` — produces the installer + all release
    artefacts.
 3. Commit, tag, push:
