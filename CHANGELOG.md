@@ -4,6 +4,58 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1-beta.1] - 2026-08-04
+
+Beta cut for issue #2 — the "bridge offline" notification that stayed
+up after a Windows sleep/resume. Bridge-only; `WALLPAPER_VERSION` stays
+at 2.4.0, so no Workshop re-upload or bundle re-import is needed.
+
+### Fixed — Stuck "bridge offline" card after sleep/resume (#2)
+
+After a Windows sleep/resume the loopback TCP connection between the
+bridge and each wallpaper page can come back half-open. `broadcast_frame`
+writes without draining, so on such a socket `writer.write()` never
+raises — the bytes just accumulate in the transport buffer. The bridge
+therefore kept the dead client in `clients_by_screen` indefinitely, and
+the page never received the `onclose` its reconnect logic waits for.
+Symptom: permanent standby card until the user restarted the bridge
+manually, while the canvas kept animating from its own rAF loop.
+
+The v2.2.2 backpressure reaper didn't cover this: it only counts skips
+once the write buffer exceeds 256 KiB, which a 432-byte frame at 30 Hz
+takes ~20 s to reach — and never reaches at all if the OS drops the
+queued bytes on resume.
+
+Added a WS keepalive on the bridge:
+
+- `Broadcaster._keepalive_loop()` pings every connected client every
+  20 s (`KEEPALIVE_INTERVAL_S`) and **awaits `drain()`** on each write.
+  The drain is the actual probe — it forces the write through the
+  kernel, which surfaces a dead peer as an `OSError` instead of
+  silently buffering.
+- Clients that send nothing for 50 s (`CLIENT_IDLE_TIMEOUT_S`, two full
+  ping cycles of slack) are force-closed. A clean close is what the
+  wallpaper page needs to fire `onclose` → reconnect.
+- `read_client_text_frame()` now decodes pong (0xA) frames to a
+  `PONG_SENTINEL` and the read loop refreshes a per-client last-seen
+  stamp on *any* inbound frame. Client pings (0x9) get a proper pong
+  reply per RFC 6455 instead of being dropped.
+
+### Fixed — Multi-screen client leak on disconnect
+
+`Broadcaster.remove()` returned from inside its loop over
+`clients_by_screen`, so a writer registered on more than one screen was
+only removed from the first. It now sweeps every screen, always closes
+the transport (even when the writer was in no screen set), and is safe
+to call twice — the keepalive reaper and the read loop can both reach
+it for the same client.
+
+### Fixed — Writes to already-closing transports
+
+`_client_should_skip()` now checks `transport.is_closing()` and lets the
+caller reap the client, rather than relying on `write()` to raise. After
+a resume a socket can sit in the closing state for a while.
+
 ## [2.4.0] - 2026-06-22
 
 High-refresh-monitor smoothness, WE host-compatibility labelling,

@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -776,6 +776,67 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.1-beta.1": {
+        "title_en": "What's new in v2.4.1-beta.1",
+        "title_de": "Was ist neu in v2.4.1-beta.1",
+        "body_en": (
+            "Beta build with a fix for the “bridge offline” notification "
+            "that stuck around after waking the PC from sleep.\n\n"
+            "**Sleep / resume**\n"
+            "- After a Windows sleep/resume the local connection between "
+            "the bridge and each wallpaper page could come back "
+            "half-open: the bridge kept writing frames into a socket "
+            "nobody was reading, and neither side ever noticed the other "
+            "was gone. The result was a permanent “bridge offline” card "
+            "until you restarted the bridge manually.\n"
+            "- The bridge now pings every connected wallpaper page every "
+            "20 seconds and closes connections that stop answering. A "
+            "proper close is what the wallpaper page needs to trigger its "
+            "own reconnect, so the notification should now clear on its "
+            "own within roughly a minute of waking up.\n"
+            "- Also fixed: a client connected to several screens was only "
+            "removed from one of them on disconnect, and sockets already "
+            "in the process of closing are no longer written to.\n\n"
+            "**Testing this**\n"
+            "- Please report back if the notification still sticks after "
+            "a resume — and roughly how long you waited. The bridge log "
+            "(`%LOCALAPPDATA%\\SignalRGBWallpaper\\logs`) now records "
+            "`[ws] client idle …` / `keepalive ping failed` lines when it "
+            "reaps a dead connection, which tells us whether the new code "
+            "fired at all.\n"
+        ),
+        "body_de": (
+            "Beta-Build mit einem Fix für die „Bridge offline\"-"
+            "Benachrichtigung, die nach dem Aufwachen aus dem "
+            "Ruhezustand hängen blieb.\n\n"
+            "**Ruhezustand / Aufwachen**\n"
+            "- Nach einem Windows-Sleep/Resume konnte die lokale "
+            "Verbindung zwischen Bridge und Wallpaper-Seite halb offen "
+            "zurückkommen: Die Bridge schrieb weiter Frames in einen "
+            "Socket, den niemand mehr las, und keine Seite bemerkte, "
+            "dass die andere weg war. Ergebnis war eine dauerhafte "
+            "„Bridge offline\"-Karte, bis man die Bridge manuell neu "
+            "startete.\n"
+            "- Die Bridge pingt jetzt alle 20 Sekunden jede verbundene "
+            "Wallpaper-Seite und schließt Verbindungen, die nicht mehr "
+            "antworten. Genau dieses saubere Schließen braucht die "
+            "Wallpaper-Seite, um ihren eigenen Reconnect auszulösen — "
+            "die Benachrichtigung sollte also innerhalb von etwa einer "
+            "Minute nach dem Aufwachen von selbst verschwinden.\n"
+            "- Außerdem behoben: Ein Client, der auf mehreren Screens "
+            "verbunden war, wurde beim Trennen nur von einem entfernt; "
+            "und Sockets, die bereits geschlossen werden, werden nicht "
+            "mehr beschrieben.\n\n"
+            "**Zum Testen**\n"
+            "- Bitte meldet zurück, ob die Benachrichtigung nach einem "
+            "Resume weiterhin hängen bleibt — und wie lange ihr ungefähr "
+            "gewartet habt. Das Bridge-Log "
+            "(`%LOCALAPPDATA%\\SignalRGBWallpaper\\logs`) schreibt jetzt "
+            "`[ws] client idle …` / `keepalive ping failed`, wenn eine "
+            "tote Verbindung abgeräumt wird — daran sehen wir, ob der "
+            "neue Code überhaupt gegriffen hat.\n"
+        ),
+    },
     "2.4.0": {
         "title_en": "What's new in v2.4.0",
         "title_de": "Was ist neu in v2.4.0",
@@ -2638,11 +2699,25 @@ def encode_text_frame(text: str) -> bytes:
     return _encode_frame(0x1, text.encode("utf-8"))
 
 
+def encode_ping_frame(payload: bytes = b"") -> bytes:
+    """v2.4.1: server→client WS ping (opcode 0x9). Used by the
+    keepalive task to detect half-open sockets after a Windows
+    sleep/resume — see WsBroadcaster._keepalive_loop()."""
+    return _encode_frame(0x9, payload)
+
+
+# v2.4.1: sentinel returned by read_client_text_frame() when the frame
+# was a pong. The read loop treats it as "client is alive" and refreshes
+# the last-seen timestamp. Distinct from "" (ignored frame) so an
+# ordinary binary/fragmented frame doesn't count as liveness proof.
+PONG_SENTINEL = "\x00__pong__"
+
+
 async def read_client_text_frame(reader) -> str | None:
     """Read one masked client→server WS frame; return its decoded text body
-    if it's a text frame, None on close/control/error. Skips ping/pong and
-    binary frames silently — the wallpaper page only ever sends JSON text
-    messages back to the bridge."""
+    if it's a text frame, None on close/control/error, PONG_SENTINEL for a
+    pong. Skips binary frames silently — the wallpaper page only ever sends
+    JSON text messages back to the bridge."""
     try:
         header = await reader.readexactly(2)
     except (asyncio.IncompleteReadError, ConnectionError):
@@ -2675,8 +2750,14 @@ async def read_client_text_frame(reader) -> str | None:
         payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
     if opcode == 0x8:    # close
         return None
-    if opcode == 0x9:    # ping — bridge ignores (no pong sent; browsers
-        return ""        # don't currently ping us anyway)
+    if opcode == 0x9:    # ping from the client — RFC 6455 requires a pong
+        # v2.4.1: we used to drop these on the floor. Browsers don't
+        # normally ping us, but a client that does would otherwise time
+        # us out. The caller owns the writer, so signal via sentinel and
+        # let it send the pong (readers here have no writer handle).
+        return PONG_SENTINEL
+    if opcode == 0xA:    # pong — reply to OUR keepalive ping
+        return PONG_SENTINEL
     if opcode != 0x1:    # not text → caller skips
         return ""
     if not fin:
@@ -2877,6 +2958,15 @@ class Broadcaster:
         # v2.2.2: per-client consecutive-skip counter for the slow-
         # client force-close logic. See _client_should_skip().
         self._client_skip_count: dict = {}
+        # v2.4.1: per-client last-seen timestamp (loop clock), refreshed
+        # on every inbound frame — including pongs to our keepalive ping.
+        # _keepalive_loop() reaps anything that hasn't spoken within
+        # CLIENT_IDLE_TIMEOUT_S. Fixes the stuck "bridge offline" card
+        # after a Windows sleep/resume: the loopback socket comes back
+        # half-open, writes still "succeed" into the transport buffer,
+        # so without an explicit liveness probe neither side ever
+        # notices the peer is gone. See issue #2.
+        self._client_last_seen: dict = {}
         # v1.2.12: per-screen last-broadcast timestamp for the
         # outgoing rate cap. The interval per screen comes from the
         # screen's `frameRate` setting (20 / 30 / 60 Hz); the page
@@ -2891,6 +2981,74 @@ class Broadcaster:
         # Fallback default if a screen's settings haven't been
         # surfaced yet (race with first frame after startup).
         self._BROADCAST_INTERVAL_S = 1.0 / 30.0
+
+    # ----- v2.4.1: WS keepalive / half-open socket detection -----
+    #
+    # Interval between server→client pings. Every inbound frame counts
+    # as liveness, so on a healthy connection that's chatty in both
+    # directions this rarely has to do real work.
+    KEEPALIVE_INTERVAL_S = 20.0
+    # A client that hasn't sent ANY frame within this window is treated
+    # as gone and force-closed. Must be comfortably more than one ping
+    # interval so a single dropped pong doesn't reap a live client;
+    # 50 s gives us two full ping cycles of slack.
+    CLIENT_IDLE_TIMEOUT_S = 50.0
+
+    def note_client_seen(self, writer) -> None:
+        """Refresh a client's last-seen stamp. Called from the WS read
+        loop for every inbound frame (text, pong, or ignored binary) —
+        anything arriving at all proves the socket is still live."""
+        try:
+            self._client_last_seen[writer] = self.loop.time()
+        except Exception:
+            pass
+
+    async def _keepalive_loop(self):
+        """Ping every client on an interval and reap the ones that have
+        gone quiet.
+
+        This is the server half of the sleep/resume fix (issue #2). The
+        important part isn't the ping itself but the `await drain()`
+        below: broadcast_frame() writes without draining, so on a
+        half-open socket the bytes just pile into the transport buffer
+        and no exception is ever raised. Draining forces the write
+        through the kernel, which surfaces the dead peer as an
+        OSError — at which point we can close the socket properly and
+        let the page's existing onclose → reconnect path take over."""
+        while True:
+            try:
+                await asyncio.sleep(self.KEEPALIVE_INTERVAL_S)
+                now = self.loop.time()
+                async with self._lock:
+                    clients = [w for s in self.clients_by_screen.values()
+                               for w in s]
+                if not clients:
+                    continue
+                ping = encode_ping_frame()
+                for w in clients:
+                    # Never seen a frame from this client yet (just
+                    # connected)? Seed the stamp so the first pass
+                    # doesn't reap it before it has had a chance.
+                    seen = self._client_last_seen.get(w)
+                    if seen is None:
+                        self._client_last_seen[w] = now
+                        seen = now
+                    if now - seen > self.CLIENT_IDLE_TIMEOUT_S:
+                        print(f"[ws] client idle for "
+                              f"{now - seen:.0f}s — closing (stale socket)")
+                        await self.remove(w)
+                        continue
+                    try:
+                        w.write(ping)
+                        # The drain is the actual probe — see docstring.
+                        await w.drain()
+                    except Exception:
+                        print("[ws] keepalive ping failed — closing client")
+                        await self.remove(w)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"[ws] keepalive loop error: {e}")
 
     def add_frame_tap(self, callback) -> None:
         """v1.4.0: register a `callback(screen: int, rgb_payload: bytes)`
@@ -2953,6 +3111,9 @@ class Broadcaster:
             if not hasattr(self, "client_roles"):
                 self.client_roles = {}
             self.client_roles[writer] = role
+            # v2.4.1: seed the liveness stamp so _keepalive_loop() gives
+            # this client a full idle window before considering it stale.
+            self._client_last_seen[writer] = self.loop.time()
             total = sum(len(s) for s in self.clients_by_screen.values())
         print(f"[+] ws screen={screen} role={role} (total: {total})")
         # Push current settings immediately so the page can paint with the
@@ -2990,14 +3151,24 @@ class Broadcaster:
             # v2.2.2: drop any pending slow-client skip counter so the
             # dict doesn't grow over a long uptime as clients churn.
             self._client_skip_count.pop(writer, None)
+            # v2.4.1: same for the keepalive liveness stamp.
+            self._client_last_seen.pop(writer, None)
+            removed_from = None
             for screen, clients in list(self.clients_by_screen.items()):
                 if writer in clients:
                     clients.discard(writer)
-                    total = sum(len(s) for s in self.clients_by_screen.values())
-                    try: writer.close()
-                    except Exception: pass
-                    print(f"[-] ws screen={screen} (total: {total})")
-                    return
+                    if removed_from is None:
+                        removed_from = screen
+            # v2.4.1: always close the transport, even when the writer
+            # wasn't in any screen set. remove() is now called from the
+            # keepalive reaper as well as the read loop, so it can race
+            # with itself; a second call must still be a safe no-op but
+            # must never leave a stale socket open.
+            try: writer.close()
+            except Exception: pass
+            if removed_from is not None:
+                total = sum(len(s) for s in self.clients_by_screen.values())
+                print(f"[-] ws screen={removed_from} (total: {total})")
 
     def has_any_clients(self) -> bool:
         """Lock-free snapshot of whether ANY wallpaper page is currently
@@ -3064,6 +3235,12 @@ class Broadcaster:
         resets the counter."""
         tr = w.transport
         if tr is None:
+            return False
+        # v2.4.1: a transport that's already closing must not be written
+        # to. Pre-2.4.1 this only surfaced as an exception on write();
+        # after a sleep/resume the socket can sit closing for a while,
+        # so check explicitly and let the caller reap it.
+        if tr.is_closing():
             return False
         if tr.get_write_buffer_size() <= self._CLIENT_WRITE_BUFFER_LIMIT:
             # Healthy — reset the consecutive-skip count.
@@ -5345,7 +5522,20 @@ class Broadcaster:
                 text = await read_client_text_frame(reader)
                 if text is None:    # close / EOF
                     break
-                if not text:        # ignored frame type (binary, control, fragmented)
+                # v2.4.1: ANY inbound frame proves the socket is alive —
+                # refresh the keepalive stamp before we decide whether
+                # the payload itself is interesting.
+                self.note_client_seen(writer)
+                if text == PONG_SENTINEL:
+                    # Pong to our keepalive ping (or a client ping we
+                    # must answer per RFC 6455 — cheap enough to always
+                    # reply; browsers ignore an unsolicited pong).
+                    try:
+                        writer.write(_encode_frame(0xA, b""))
+                    except Exception:
+                        break
+                    continue
+                if not text:        # ignored frame type (binary, fragmented)
                     continue
                 try:
                     msg = json.loads(text)
@@ -10367,6 +10557,10 @@ class BridgeRuntime:
         # and a single log line surfaces the trend so the next
         # diagnostic export captures the curve.
         self.loop.create_task(self._diag_heartbeat())
+        # v2.4.1: WS keepalive. Pings every client every 20 s and reaps
+        # the ones that stopped answering — the server half of the
+        # sleep/resume fix for the stuck "bridge offline" card (#2).
+        self.loop.create_task(self.broadcaster._keepalive_loop())
         self._ready.set()
         async with ws_server:
             await ws_server.serve_forever()
