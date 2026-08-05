@@ -4,11 +4,15 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.4.2-beta.1] - 2026-08-05
+## [2.4.2] - 2026-08-05
 
-Real fix for issue #2. **Wallpaper-side change** — `WALLPAPER_VERSION`
-goes to 2.4.2, so this needs a Workshop re-upload and a bundle
-re-import.
+Fix for issue #2. **Wallpaper-side change** — `WALLPAPER_VERSION` goes
+to 2.4.2, so this needs a Workshop re-upload, and users must re-import
+their bundles (Configurator → System → *Re-import wallpaper bundles…*)
+before the fix reaches the page.
+
+Also folds in the WS keepalive first cut as v2.4.1-beta.1 (see below);
+2.4.1 was never released as stable.
 
 ### Fixed — "Bridge offline" card latched on over a healthy connection (#2)
 

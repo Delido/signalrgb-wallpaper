@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.2-beta.1"
+APP_VERSION = "2.4.2"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -776,18 +776,20 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
-    "2.4.2-beta.1": {
-        "title_en": "What's new in v2.4.2-beta.1",
-        "title_de": "Was ist neu in v2.4.2-beta.1",
+    "2.4.2": {
+        "title_en": "What's new in v2.4.2",
+        "title_de": "Was ist neu in v2.4.2",
         "body_en": (
-            "Second attempt at the stuck “bridge offline” notification "
-            "after sleep/resume — this time with the actual cause, found "
-            "in a user's bridge log.\n\n"
-            "**Requires re-importing the wallpaper bundle.** This fix is "
-            "in the wallpaper page itself, not the bridge. Use *Re-import "
-            "wallpaper bundles* from the tray, or re-subscribe on the "
-            "Steam Workshop.\n\n"
-            "**What was actually wrong**\n"
+            "Fixes the “bridge offline” notification that could stay on "
+            "screen after waking the PC from sleep, reported in issue "
+            "#2 and tracked down from a user's bridge log.\n\n"
+            "**Wallpaper Engine users need one extra step.** The fix is "
+            "in the wallpaper page itself, which WE keeps cached. Open "
+            "the Configurator, go to **System**, and click **Re-import "
+            "wallpaper bundles…**, then re-apply the wallpaper to your "
+            "monitor in WE. Lively users are updated automatically by "
+            "the same button.\n\n"
+            "**What was wrong**\n"
             "- The connection was never broken. Wallpaper Engine "
             "re-delivers the `screenIndex` property when the PC wakes, "
             "which closes and reopens the connection. Each reconnect left "
@@ -807,22 +809,26 @@ RELEASE_NOTES = {
             "- Added a sleep/resume detector: on wake the reconnect delay "
             "resets to its minimum instead of sitting at the 30-second "
             "ceiling it had backed off to while suspended.\n\n"
-            "**About v2.4.1-beta.1**\n"
-            "- That build added a connection keepalive to the bridge. It "
-            "targeted a different failure mode than the one actually "
-            "occurring, so it didn't help — but it's kept, since leaving "
-            "half-open sockets undetected was wrong regardless.\n"
+            "**Also in this release**\n"
+            "- The bridge now pings each connected wallpaper page every "
+            "20 s and closes connections that stop answering. This was "
+            "first shipped as v2.4.1-beta.1 against a different theory "
+            "of issue #2; it turned out not to be the cause, but it "
+            "stays in — leaving half-open sockets undetected was wrong "
+            "regardless.\n"
         ),
         "body_de": (
-            "Zweiter Anlauf für die hängende „Bridge offline\"-"
-            "Benachrichtigung nach dem Aufwachen — diesmal mit der "
-            "tatsächlichen Ursache, gefunden im Bridge-Log eines "
-            "Nutzers.\n\n"
-            "**Erfordert einen Re-Import des Wallpaper-Bundles.** Dieser "
-            "Fix steckt in der Wallpaper-Seite selbst, nicht in der "
-            "Bridge. Über *Wallpaper-Bundles neu importieren* im Tray "
-            "oder im Steam-Workshop neu abonnieren.\n\n"
-            "**Was wirklich kaputt war**\n"
+            "Behebt die „Bridge offline\"-Benachrichtigung, die nach dem "
+            "Aufwachen aus dem Ruhezustand stehen bleiben konnte — "
+            "gemeldet in Issue #2 und über das Bridge-Log eines Nutzers "
+            "gefunden.\n\n"
+            "**Wallpaper-Engine-Nutzer brauchen einen Extra-Schritt.** "
+            "Der Fix steckt in der Wallpaper-Seite selbst, die WE "
+            "zwischenspeichert. Im Configurator unter **System** auf "
+            "**Wallpaper-Bundles neu importieren…** klicken und danach "
+            "das Wallpaper in WE erneut zuweisen. Bei Lively erledigt "
+            "derselbe Button alles automatisch.\n\n"
+            "**Was kaputt war**\n"
             "- Die Verbindung war nie unterbrochen. Wallpaper Engine "
             "liefert beim Aufwachen die `screenIndex`-Property erneut "
             "aus, was die Verbindung schließt und neu öffnet. Jeder "
@@ -843,12 +849,13 @@ RELEASE_NOTES = {
             "springt die Reconnect-Wartezeit auf den Minimalwert zurück, "
             "statt auf den 30 Sekunden zu verharren, auf die sie im "
             "Ruhezustand hochgelaufen war.\n\n"
-            "**Zu v2.4.1-beta.1**\n"
-            "- Dieser Build hatte ein Verbindungs-Keepalive in der Bridge "
-            "ergänzt. Es zielte auf einen anderen Fehlerfall als den "
-            "tatsächlich auftretenden und half deshalb nicht — bleibt "
-            "aber drin, denn halb offene Sockets unerkannt zu lassen war "
-            "ohnehin falsch.\n"
+            "**Ebenfalls in diesem Release**\n"
+            "- Die Bridge pingt jetzt alle 20 s jede verbundene "
+            "Wallpaper-Seite und schließt Verbindungen, die nicht mehr "
+            "antworten. Das kam zuerst als v2.4.1-beta.1 unter einer "
+            "anderen Annahme zu Issue #2; sie war nicht die Ursache, "
+            "bleibt aber drin — halb offene Sockets unerkannt zu lassen "
+            "war ohnehin falsch.\n"
         ),
     },
     "2.4.1-beta.1": {
