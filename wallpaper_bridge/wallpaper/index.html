@@ -1720,6 +1720,11 @@ function _scheduleReconnect() {
   _reconnectMs = Math.min(RECONNECT_MS_MAX, _reconnectMs * 2);
 }
 
+// v2.4.2 (#2): the sleep/resume detector that resets this backoff lives
+// further down, next to connect() — it has to run after `ws` and
+// connect() are declared or the first tick would hit the temporal dead
+// zone.
+
 function setScreenIndex(n) {
   n = parseInt(n, 10);
   if (!Number.isFinite(n) || n < 0) return;
@@ -2076,23 +2081,71 @@ function disarmStandbyCard() {
   showStandbyCard(false);
 }
 
+// v2.4.2 (#2): self-correcting reconciler. The card used to be driven
+// purely by onopen/onclose edges, so a single missed or out-of-order
+// event could latch it permanently — which is exactly what happened
+// under Wallpaper Engine after a sleep/resume. This loop ignores edges
+// entirely and compares the card against the *actual* socket state
+// twice a second, so any future host quirk that eats an event
+// self-heals within ~500 ms instead of needing a bridge restart.
+const STANDBY_RECONCILE_MS = 500;
+setInterval(() => {
+  if (PREVIEW_MODE || !standbyCardEl) return;
+  const live = ws && ws.readyState === 1;      // 1 = OPEN
+  const shown = standbyCardEl.classList.contains("on");
+  if (live && (shown || _standbyTimer)) {
+    // Connected, yet the card is up (or about to be) — clear it.
+    disarmStandbyCard();
+  } else if (!live && !shown && !_standbyTimer) {
+    // Genuinely disconnected with no timer pending (e.g. the onclose
+    // that should have armed it belonged to a superseded socket).
+    armStandbyCard();
+  }
+}, STANDBY_RECONCILE_MS);
+
 function connect() {
   const url = wsUrl();
   statusEl.textContent = "connecting " + url + "…";
   statusEl.classList.remove("ok");
   statusEl.classList.add("bad");
+  // v2.4.2 (#2): detach the PREVIOUS socket's handlers before we build
+  // a new one. Without this every connect() left the old WebSocket's
+  // onclose closure armed; when it eventually fired — after the new
+  // socket had already opened — it called armStandbyCard() on a
+  // perfectly healthy connection. armStandbyCard() early-returns while
+  // a timer is pending and disarmStandbyCard() only runs from onopen,
+  // so nothing ever cleared it: the "bridge offline" card latched on
+  // and stayed up for good while frames kept arriving and the canvas
+  // kept rendering. That's the Wallpaper-Engine sleep/resume report in
+  // issue #2 — WE re-delivers the `screenIndex` user property on
+  // resume, setScreenIndex() closes the socket to switch routes, and
+  // the resulting reconnect churn is what leaks the stale handlers.
+  if (ws) {
+    try {
+      ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
+      // readyState 0/1 = CONNECTING/OPEN — close so we don't leave an
+      // orphan socket holding a bridge-side client slot.
+      if (ws.readyState <= 1) ws.close();
+    } catch (_) {}
+  }
   // First connect() call (page-load) also arms the timer; if the
   // bridge isn't up by the time the page loads, the standby card
   // appears after STANDBY_DELAY_MS.
   armStandbyCard();
-  try { ws = new WebSocket(url); }
+  let sock;
+  try { sock = new WebSocket(url); }
   catch (e) {
     statusEl.textContent = "ws error: " + e.message;
     _scheduleReconnect();
     return;
   }
+  ws = sock;
   ws.binaryType = "arraybuffer";
+  // v2.4.2 (#2): every handler below is guarded on `sock === ws` so a
+  // late event from a superseded socket can never touch shared state
+  // (standby card, backoff, status line) belonging to the live one.
   ws.onopen = () => {
+    if (sock !== ws) return;
     statusEl.textContent = "connected " + url;
     statusEl.classList.remove("bad");
     statusEl.classList.add("ok");
@@ -2114,6 +2167,9 @@ function connect() {
   };
   ws.onerror = () => {};
   ws.onclose = () => {
+    // Superseded socket closing after we already moved on — ignore it,
+    // or it would re-arm the standby card over a live connection (#2).
+    if (sock !== ws) return;
     statusEl.textContent = "disconnected — retrying in " + Math.round(_reconnectMs / 100) / 10 + "s…";
     statusEl.classList.remove("ok");
     statusEl.classList.add("bad");
@@ -2121,6 +2177,14 @@ function connect() {
     _scheduleReconnect();
   };
   ws.onmessage = (ev) => {
+    if (sock !== ws) return;
+    // v2.4.2 (#2): any inbound frame proves the bridge is reachable, so
+    // clear the standby card even if we never saw a clean onopen — a
+    // host that restores the page from a bfcache-style snapshot can
+    // land us here with a live socket and a stale card.
+    if (_standbyTimer || (standbyCardEl && standbyCardEl.classList.contains("on"))) {
+      disarmStandbyCard();
+    }
     // Binary frame = one rendered frame from the plugin via the bridge.
     if (ev.data instanceof ArrayBuffer) {
       renderFrame(new Uint8Array(ev.data));
@@ -2195,6 +2259,29 @@ function connect() {
 // page starts with the lay-grid CSS class baked into the HTML.
 _syncGridCanvasVisibility();
 connect();
+
+// v2.4.2 (#2): sleep/resume detector. After a resume the backoff can
+// already sit at its 30 s ceiling from attempts that failed while the
+// machine was suspended, so even a working reconnect feels broken.
+// visibilitychange is unreliable in wallpaper hosts (the page is never
+// really "hidden"), so we watch for a wall-clock jump instead: if far
+// more real time passed than the tick interval, we were suspended.
+// Declared after connect() so `ws` and connect() are both initialised.
+const _RESUME_TICK_MS = 2000;
+const _RESUME_JUMP_MS = 10000;   // >10 s of drift = not just a slow tick
+let _lastTickWallClock = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  const drift = now - _lastTickWallClock;
+  _lastTickWallClock = now;
+  if (drift < _RESUME_JUMP_MS) return;
+  console.log("[wallpaper] resume detected (" + Math.round(drift / 1000) +
+              "s gap) — reconnecting now");
+  _reconnectMs = RECONNECT_MS_MIN;
+  // Only force a reconnect if we're not already connected; a live
+  // socket that survived the sleep needs no interruption.
+  if (!ws || ws.readyState > 1) connect();
+}, _RESUME_TICK_MS);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Property handling — works in BOTH Lively and Wallpaper Engine.

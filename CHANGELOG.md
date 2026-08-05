@@ -4,6 +4,61 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2-beta.1] - 2026-08-05
+
+Real fix for issue #2. **Wallpaper-side change** — `WALLPAPER_VERSION`
+goes to 2.4.2, so this needs a Workshop re-upload and a bundle
+re-import.
+
+### Fixed — "Bridge offline" card latched on over a healthy connection (#2)
+
+The v2.4.1-beta.1 keepalive theory was wrong. A reporter's bridge log
+disproved it: `clients=1` held steady across the whole sleep, 253
+connects against 229 disconnects, and not one `[ws] client idle` /
+`keepalive ping failed` line — the bridge never had a dead client to
+reap, because the connection was working the entire time.
+
+What the log did show was runs of `[+] ws screen=1` with no matching
+`[-]` and `total` never climbing past 1: reconnect churn, not a dead
+socket. Wallpaper Engine re-delivers the `screenIndex` user property on
+resume, `setScreenIndex()` closes the WS to switch routes, and the page
+reconnects.
+
+`connect()` never tore down the previous socket, so each reconnect left
+another `onclose` closure armed. When one fired *after* the replacement
+socket had opened, it called `armStandbyCard()` on a live connection —
+and `armStandbyCard()` early-returns while a timer is pending while
+`disarmStandbyCard()` only ran from `onopen`. With no further `onopen`
+coming, nothing could clear it: the card came up 5 s later and stayed
+up permanently, while frames kept arriving and the canvas kept
+rendering off its own rAF loop. Exactly the reported symptom, and why
+20 minutes of waiting changed nothing.
+
+- `connect()` now nulls the previous socket's handlers and closes it
+  before opening a replacement.
+- Every handler is guarded on `sock === ws`, so a late event from a
+  superseded socket can't touch the card, the backoff, or the status
+  line.
+- `onmessage` clears the card too — any inbound frame proves the bridge
+  is reachable, even if a clean `onopen` was never observed.
+
+### Added — Standby-card reconciler
+
+The card was driven purely by `onopen` / `onclose` edges, so one missed
+or out-of-order event could latch it for good. A 500 ms loop now
+compares it against `ws.readyState` directly and corrects either
+direction, making any future host event quirk self-healing instead of
+requiring a bridge restart.
+
+### Added — Sleep/resume detection with backoff reset
+
+Reconnect backoff climbs to a 30 s ceiling and only reset on `onopen`,
+so after a resume even a working reconnect took up to half a minute.
+A 2 s tick watches for a wall-clock jump >10 s (`visibilitychange` is
+unreliable in wallpaper hosts — the page is never really hidden); on
+detection the backoff drops to its floor and reconnects immediately if
+the socket isn't already open.
+
 ## [2.4.1-beta.1] - 2026-08-04
 
 Beta cut for issue #2 — the "bridge offline" notification that stayed

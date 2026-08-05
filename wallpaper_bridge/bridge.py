@@ -706,7 +706,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.1-beta.1"
+APP_VERSION = "2.4.2-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -729,7 +729,7 @@ APP_VERSION = "2.4.1-beta.1"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.0"
+WALLPAPER_VERSION = "2.4.2"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -776,6 +776,81 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.2-beta.1": {
+        "title_en": "What's new in v2.4.2-beta.1",
+        "title_de": "Was ist neu in v2.4.2-beta.1",
+        "body_en": (
+            "Second attempt at the stuck “bridge offline” notification "
+            "after sleep/resume — this time with the actual cause, found "
+            "in a user's bridge log.\n\n"
+            "**Requires re-importing the wallpaper bundle.** This fix is "
+            "in the wallpaper page itself, not the bridge. Use *Re-import "
+            "wallpaper bundles* from the tray, or re-subscribe on the "
+            "Steam Workshop.\n\n"
+            "**What was actually wrong**\n"
+            "- The connection was never broken. Wallpaper Engine "
+            "re-delivers the `screenIndex` property when the PC wakes, "
+            "which closes and reopens the connection. Each reconnect left "
+            "the previous connection's close-handler armed — and when one "
+            "of those fired *after* the new connection was already "
+            "healthy, it raised the standby card over a working link. "
+            "Nothing ever cleared it again, so the card stayed up "
+            "indefinitely while frames kept arriving and the canvas kept "
+            "rendering.\n"
+            "- Stale handlers are now detached on every reconnect, and "
+            "late events from superseded connections are ignored.\n"
+            "- The card is no longer driven purely by connect/disconnect "
+            "events. A reconciler compares it against the real connection "
+            "state twice a second, so any missed or out-of-order event "
+            "now self-corrects within about half a second instead of "
+            "needing a bridge restart.\n"
+            "- Added a sleep/resume detector: on wake the reconnect delay "
+            "resets to its minimum instead of sitting at the 30-second "
+            "ceiling it had backed off to while suspended.\n\n"
+            "**About v2.4.1-beta.1**\n"
+            "- That build added a connection keepalive to the bridge. It "
+            "targeted a different failure mode than the one actually "
+            "occurring, so it didn't help — but it's kept, since leaving "
+            "half-open sockets undetected was wrong regardless.\n"
+        ),
+        "body_de": (
+            "Zweiter Anlauf für die hängende „Bridge offline\"-"
+            "Benachrichtigung nach dem Aufwachen — diesmal mit der "
+            "tatsächlichen Ursache, gefunden im Bridge-Log eines "
+            "Nutzers.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles.** Dieser "
+            "Fix steckt in der Wallpaper-Seite selbst, nicht in der "
+            "Bridge. Über *Wallpaper-Bundles neu importieren* im Tray "
+            "oder im Steam-Workshop neu abonnieren.\n\n"
+            "**Was wirklich kaputt war**\n"
+            "- Die Verbindung war nie unterbrochen. Wallpaper Engine "
+            "liefert beim Aufwachen die `screenIndex`-Property erneut "
+            "aus, was die Verbindung schließt und neu öffnet. Jeder "
+            "Reconnect ließ den Close-Handler der vorherigen Verbindung "
+            "scharf — und wenn einer davon *nach* dem erfolgreichen "
+            "Neuaufbau feuerte, blendete er die Standby-Karte über eine "
+            "funktionierende Verbindung ein. Etwas, das sie wieder "
+            "ausblendet, gab es nicht: Die Karte blieb dauerhaft stehen, "
+            "während weiter Frames ankamen und die Canvas lief.\n"
+            "- Alte Handler werden jetzt bei jedem Reconnect abgehängt, "
+            "und späte Events überholter Verbindungen ignoriert.\n"
+            "- Die Karte hängt nicht mehr allein an Connect/Disconnect-"
+            "Events: Ein Abgleich prüft zweimal pro Sekunde den echten "
+            "Verbindungszustand. Verpasste oder vertauschte Events "
+            "korrigieren sich damit in etwa einer halben Sekunde selbst, "
+            "statt einen Bridge-Neustart zu brauchen.\n"
+            "- Neu: eine Sleep/Resume-Erkennung. Nach dem Aufwachen "
+            "springt die Reconnect-Wartezeit auf den Minimalwert zurück, "
+            "statt auf den 30 Sekunden zu verharren, auf die sie im "
+            "Ruhezustand hochgelaufen war.\n\n"
+            "**Zu v2.4.1-beta.1**\n"
+            "- Dieser Build hatte ein Verbindungs-Keepalive in der Bridge "
+            "ergänzt. Es zielte auf einen anderen Fehlerfall als den "
+            "tatsächlich auftretenden und half deshalb nicht — bleibt "
+            "aber drin, denn halb offene Sockets unerkannt zu lassen war "
+            "ohnehin falsch.\n"
+        ),
+    },
     "2.4.1-beta.1": {
         "title_en": "What's new in v2.4.1-beta.1",
         "title_de": "Was ist neu in v2.4.1-beta.1",
