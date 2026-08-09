@@ -4,6 +4,201 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.1] - 2026-08-09
+
+Corrects the "Lively only" labelling after measuring what actually
+fails in Wallpaper Engine's bundled CEF 146. **Wallpaper-side change** —
+`WALLPAPER_VERSION` goes to 2.4.4, so this needs a Workshop re-upload
+and a bundle re-import.
+
+### Fixed — `rgbToRgba()` ignored hex, flattening every tinted gradient
+
+`rgbToRgba()` was a two-step string replace that only recognised
+`rgb(R,G,B)`:
+
+```js
+rgb.replace("rgb(", "rgba(").replace(")", "," + a + ")")
+```
+
+`currentTintCss` is initialised to the hex literal `#6ab0ff`
+([index.html:3689](wallpaper_bridge/wallpaper/index.html#L3689)) and only
+becomes an `rgb()` string once the first glow frame arrives. Until then
+the replace found no `"rgb("` and returned the hex unchanged, so all
+three stops of hover-glow's gradient came back identical and fully
+opaque — a flat disc instead of a soft glow.
+
+**25 call sites** share this helper, so every tinted ambient effect
+degraded the same way; hover-glow was simply the one with a visible
+gradient edge.
+
+This was misdiagnosed as a Wallpaper Engine rendering fault and the
+effect carried a "Lively only" badge for it. The host was never the
+variable — the timing was. Any host shows the flat disc while the bridge
+is connecting, restarting, or absent; Lively just tends to connect
+before the user first hovers.
+
+The helper now accepts hex (`#rgb` and `#rrggbb`, any case) alongside
+`rgb()`. It also no longer produces a five-component
+`rgba(r,g,b,0.9,0.25)` when handed an `rgba()` string — the existing
+alpha is replaced rather than appended.
+
+Hover-glow's badge is removed: it is pure canvas 2D and never touched
+`feImage`. Measurement on WE's CEF 146 confirms an isolated radial
+gradient with an alpha-0 outer stop fades correctly there (R 206 → 149 →
+128, monotonic, corners neutral — bit-identical to Chromium 151).
+
+`tests/test_tint_colour.mjs` (17 checks) extracts the real helper from
+`index.html` and exercises it, so a copy in the test cannot drift from
+the implementation. It failed 12/17 against the old version.
+
+### Changed — the real cause of the water-ripple failure
+
+Not a colour-space mismatch. Measured on WE's CEF 146:
+
+| Primitive | Chromium 151 | WE CEF 146 |
+|---|---|---|
+| `feFlood` | renders | renders |
+| `feDisplacementMap` @ scale=0 | source unchanged | source unchanged |
+| **`feImage` output** | olive (128,128,0) | **rgba(0,0,0,0), 100 % transparent** |
+
+`feImage` produces nothing. `feDisplacementMap` therefore receives an
+empty `in2` and shreds the image (42 % transparent) rather than bending
+it — which is exactly the reported "shift on click, but never a wave".
+
+Both `data:` and `blob:` URLs fail identically, so the fault is
+`feImage` itself, not the hand-off. A byte sweep of the map's neutral
+value (R=100…220, step 4) returned **the same result for every value**;
+a colour-space error would be value-dependent. That settles it: the
+host-conditional `NEUTRAL_BYTE = 188` shipped in v2.3.0 and removed
+again in v2.4.0 could never have worked, because the map's contents are
+irrelevant when the map never arrives.
+
+Source comments claiming a host-conditional neutral byte, and the
+"Neutral grey for the current host" comment describing a branch that has
+not existed since v2.4.0, are corrected.
+
+### Changed — "Lively only" hint names the actual cause
+
+Was: *"use SVG filters or canvas gradients that Wallpaper Engine's
+bundled CEF doesn't render correctly"* — too broad, and wrong about
+gradients. Now: *"build their distortion from an SVG displacement map,
+which Wallpaper Engine's bundled browser cannot load"*. EN + DE.
+
+### Added — test cover for the badges
+
+`tests/test_wallpaper_source.mjs` (+8 checks) pins which effects carry
+the badge: exactly `water` via the `livelyOnly` flag and exactly
+`ripple` via the hardcoded mousefx markup, with hover-glow explicitly
+excluded. Also asserts both hint translations name the displacement map
+and no longer blame canvas gradients. Stops the badge being re-added on
+a hunch, and stops the two genuine ones being dropped.
+
+### Fixed — Wallpaper Engine's own pause left the glow running
+
+Pausing from WE's tray menu froze the effects and widgets but left the
+glow grid repainting, with no PAUSED badge.
+
+WE implements that pause by wrapping `requestAnimationFrame`,
+`setInterval` and `setTimeout` and queueing their callbacks (confirmed by
+inspecting `webwallpaper64.exe`). That silences every loop the page owns
+— including the 250 ms interval that was our only pause *detector*, so
+`isPaused` never flipped. The glow kept going because it is driven from
+`ws.onmessage`, and WebSocket events are neither a timer nor a frame
+request, so WE does not queue them.
+
+Detection now runs from `ws.onmessage` — the one path still executing
+under that pause — and reads the two marks WE leaves behind:
+
+```js
+window.___wpxAnimLocked = true
+document.documentElement.classList.add('wpxPausePseudoAnimationAll')
+```
+
+Both are undocumented, so either one is accepted and a host that exposes
+neither is left untouched. `_hostPaused` joins `_externalPaused` and
+`_renderingPaused` as a third independent pause source.
+
+### Fixed — paused wallpaper kept waking the compositor
+
+The rAF-staleness probe ran at a fixed ~5 Hz. That is fine while the
+wallpaper is live, but an *externally* paused one — bridge
+fullscreen-watcher, game in the foreground — is usually not suspended by
+the host, so the page kept requesting frames and the Desktop Window
+Manager kept re-compositing. Measured at ~2 % DWM CPU while gaming;
+now 0.3 %.
+
+The probe backs off to 2 s while paused. Two subtleties, both of which
+bit during development:
+
+- The staleness threshold keys off the cadence the **pending** frame
+  request was scheduled at, not off `isPaused`. They differ exactly when
+  it matters: a stalled loop schedules nothing new, so the pending
+  request still carries the fast cadence and its strict threshold, which
+  is what keeps a host pause detectable. Keying off `isPaused` relaxed
+  the threshold the instant we paused, the stalled loop then looked
+  healthy, and the page un-paused itself in a loop.
+- A grace window covers the resume case, where an in-flight 2 s timer
+  leaves a genuinely old timestamp. It suppresses the *check* only — an
+  earlier draft refreshed the timestamp instead, which faked a frame
+  that never arrived and broke WE's menu pause outright.
+
+`#glripple-canvas` also joins the `paused-glow` hide list; a WebGL canvas
+left in the layer tree is still a compositor surface.
+
+### Added — WebGL displacement path for water-ripple and Liquid Distortion
+
+Both effects now render through a fragment shader instead of the SVG
+filter chain, so they work in Wallpaper Engine for the first time.
+
+Implemented as an **overlay, not a replacement for `#bg`**. The div keeps
+owning every background behaviour — six fit modes, tile scaling, the
+cross-fade on image change, video playback, opacity — and
+`#glripple-canvas` only appears while a ripple is in flight, showing a
+displaced copy with `#bg` hidden behind it (`visibility`, not `display`,
+so its computed geometry stays resolvable). Nothing changes for users who
+never enable these effects, and none of CSS's layout maths had to be
+reimplemented in a shader.
+
+- `wallpaper/glripple.js` — the renderer. `computeUV()` reproduces the
+  six fit modes; measured within 0–3 % of a Canvas2D reference, with
+  identical figures on Chromium 151 and WE's CEF 146.
+- Parallax already writes a `transform` on `#bg`; that transform is
+  **mirrored onto the canvas** rather than duplicated in the shader, so
+  both surfaces stay in register by construction.
+- The texture is a second, `crossOrigin`-clean load of the same image
+  (served from cache). Deliberately not `probe` itself: setting
+  `crossOrigin` there would risk the background not appearing at all if
+  the header were ever missing.
+- Video backgrounds clear the texture and the effects fall back to the
+  SVG path — the same behaviour WE users have had all along.
+- Context loss (driver update, sleep/resume, host suspend) hides the
+  overlay and rebuilds on `webglcontextrestored`.
+- Both effects can be enabled at once and share one canvas, so `draw()`
+  and `stop()` take an owner id; the first caller in a frame keeps the
+  overlay and the other falls back to its SVG path.
+
+The SVG path is untouched and still used wherever WebGL is unavailable.
+Also drops the ~30 `toDataURL()` PNG encodes per second the filter path
+performed — 0.36 ms/frame total in WE for map paint, upload and draw.
+
+`tests/test_glripple.mjs` (43 checks) covers the markup and CSS
+contract, fit-mode maths run against the real module, overlay release,
+owner arbitration, and that the SVG fallback survives.
+
+### Note — earlier prototype measurements
+
+A WebGL displacement renderer was built and measured against WE. It
+reproduces all six background-fit modes within 0–3 % of a Canvas2D
+reference (identical figures on Chromium 151 and WE CEF 146), runs on
+the real GPU there (ANGLE / Direct3D11), and costs 0.36 ms per frame
+including map paint, texture upload and draw — about 1 % of the 33 ms
+budget. It also removes the 30 `toDataURL()` calls per second the
+current path performs.
+
+Not integrated in this release: it still needs wiring to the background
+cross-fade, coexistence with parallax's `transform` on `#bg`, resize/DPR
+handling, and a fallback for hosts without WebGL.
+
 ## [2.4.3-beta.1] - 2026-08-09
 
 Maintenance cut. Bridge- and tooling-only — `WALLPAPER_VERSION` stays at

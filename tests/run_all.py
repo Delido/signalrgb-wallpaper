@@ -27,6 +27,8 @@ PY_SUITES = [
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
     ("Wallpaper source (node)", HERE / "test_wallpaper_source.mjs"),
+    ("Tint colour helper (node)", HERE / "test_tint_colour.mjs"),
+    ("glRipple WebGL path (node)", HERE / "test_glripple.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),
@@ -45,10 +47,17 @@ def run(label, cmd, cwd):
     proc = subprocess.run(cmd, cwd=str(cwd),
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                           text=True, encoding="utf-8", errors="replace")
+    # Windows consoles default to cp1252, which cannot encode the arrows
+    # and box characters the suites print. Re-encode per line rather than
+    # letting one unprintable character abort the whole run.
+    enc = getattr(sys.stdout, "encoding", None) or "utf-8"
     for line in (proc.stdout or "").splitlines():
         if "module load failed" in line:
             continue  # optional integrations absent outside a full install
-        print(line, flush=True)
+        try:
+            print(line, flush=True)
+        except UnicodeEncodeError:
+            print(line.encode(enc, "replace").decode(enc, "replace"), flush=True)
     return proc.returncode == 0
 
 

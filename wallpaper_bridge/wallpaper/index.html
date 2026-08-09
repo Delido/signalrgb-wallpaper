@@ -52,6 +52,23 @@
             background-size: cover; background-repeat: no-repeat;
             background-position: center center;
             transition: opacity 0.3s; }
+  /* v2.4.4: sits exactly on top of #bg and shows a displaced copy of it
+     while a ripple runs. Same z-index so it occupies the same slot in
+     the stack; it is only in the DOM flow when `.on` is set, so a user
+     who never enables these effects pays nothing. transform-origin
+     matches #bg's default so a mirrored parallax transform lands
+     identically. */
+  #glripple-canvas {
+    position: fixed; inset: 0; z-index: 2;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    display: none;
+  }
+  #glripple-canvas.on { display: block; }
+  /* While the canvas is showing the displaced copy, hide the original —
+     visibility rather than display so #bg keeps its computed geometry
+     and the CSS background-size / position stay resolvable. */
+  body.glripple-active #bg { visibility: hidden; }
   /* Video-background twin of #bg. Same z-index + fade transition so
      the swap between image-mode and video-mode is invisible. Sized
      via inset:0 + width/height 100%; object-fit picks up the user's
@@ -125,7 +142,16 @@
   body.paused-glow #bars-canvas,
   body.paused-glow #ambient-canvas,
   body.paused-glow #audioglow-canvas,
-  body.paused-glow #pixelfx-canvas { display: none !important; }
+  body.paused-glow #pixelfx-canvas,
+  /* v2.4.4: the WebGL displacement overlay belongs on this list too.
+     Its rAF chain stops with the effect's, but a WebGL canvas left in
+     the layer tree is still a compositor surface the DWM re-composites
+     every frame. */
+  body.paused-glow #glripple-canvas { display: none !important; }
+  /* And release the wallpaper back to #bg while paused: if a ripple was
+     mid-flight when the pause hit, the overlay would otherwise stay
+     `visibility: hidden` over #bg with a stale frozen frame behind it. */
+  body.paused-glow #bg { visibility: visible !important; }
 
   /* v1.2.12: Glass-tile backdrop-filter quality buckets. Default
      (no body.glass-quality-*) uses the 6px-blur rules further down.
@@ -1586,6 +1612,12 @@
 <video id="bg-video" muted playsinline loop autoplay
        preload="auto" disablepictureinpicture
        style="display: none;"></video>
+<!-- v2.4.4: WebGL displacement surface for water-ripple and Liquid
+     Distortion. Hidden unless a ripple is in flight, at which point it
+     shows a displaced copy of #bg and #bg is hidden behind it. See the
+     glRipple bridge further down for why this replaces the SVG filter
+     those effects used to rely on. -->
+<canvas id="glripple-canvas"></canvas>
 <div id="dim"></div>
 <canvas id="ambient-canvas"></canvas>
 <canvas id="audioglow-canvas"></canvas>
@@ -1630,6 +1662,10 @@
   </div>
 </div>
 <script src="interact.min.js"></script>
+<!-- v2.4.4: WebGL displacement renderer. Defines window.GLRipple; the
+     bridge below wires it to #bg's geometry. Loading it costs nothing
+     if the effects stay off — no context is created until enable(). -->
+<script src="glripple.js"></script>
 <script>
 "use strict";
 
@@ -1916,6 +1952,9 @@ if (IS_PREVIEW) {
 }
 
 function renderFrame(buf) {
+  // The host-pause check lives in ws.onmessage, which runs just before
+  // this for every inbound message — see _syncHostPause().
+  //
   // Honor Lively's pause-wallpapers / page-hidden state: drop frames so
   // the glow layer freezes on the last rendered colours. We still consume
   // the WS message (so the queue doesn't back up) but skip the DOM writes.
@@ -2178,6 +2217,13 @@ function connect() {
   };
   ws.onmessage = (ev) => {
     if (sock !== ws) return;
+    // v2.4.4: WebSocket events are the only thing Wallpaper Engine does
+    // NOT queue while its tray-menu pause is active (it wraps rAF,
+    // setInterval and setTimeout), so this is the one place that still
+    // runs and can notice. Checked for every message rather than only
+    // for glow frames, so a screen with no live plugin feed still picks
+    // the pause up from a settings or heartbeat push.
+    _syncHostPause();
     // v2.4.2 (#2): any inbound frame proves the bridge is reachable, so
     // clear the standby card even if we never saw a clean onopen — a
     // host that restores the page from a bfcache-style snapshot can
@@ -2344,14 +2390,171 @@ const BG_FIT_CSS = {
 let currentBgFit = "cover";
 let currentBgTileScale = 100;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// glRipple bridge — feeds the WebGL displacement renderer from #bg's state.
+//
+// Why this exists: water-ripple and Liquid Distortion drew their
+// distortion through an SVG filter chain whose <feImage> step produces
+// nothing at all in Wallpaper Engine's bundled CEF (measured: 100 %
+// transparent output, while feFlood renders and feDisplacementMap at
+// scale=0 returns the source untouched). feDisplacementMap therefore got
+// an empty in2 and shredded the image rather than bending it — the
+// "shift on click, but never a wave" those effects showed in WE.
+//
+// This path replaces the filter with a fragment shader. Measured in WE:
+// ANGLE / Direct3D11 on the real GPU, 0.36 ms per frame for map paint +
+// texture upload + draw, and it drops the ~30 toDataURL() PNG encodes
+// per second the filter path performed.
+//
+// Deliberately an OVERLAY, not a replacement for #bg. The div keeps
+// owning every background behaviour — the six fit modes, tile scaling,
+// the cross-fade on image change, video playback — and the canvas only
+// appears while a ripple is in flight, showing a displaced copy. Nothing
+// about background rendering changes for users who never enable these
+// effects, and none of CSS's layout maths had to be reimplemented in a
+// shader.
+//
+// Video backgrounds are out of scope: the effect simply stays off, which
+// is what WE users have had all along.
+// ─────────────────────────────────────────────────────────────────────────────
+const glRipple = (function () {
+  const canvas = document.getElementById("glripple-canvas");
+  let renderer = null;
+  let available = null;      // null = not probed yet, false = unusable
+  let hasImage = false;
+  let active = false;
+  let lastW = 0, lastH = 0;
+
+  function probe() {
+    if (available !== null) return available;
+    if (!canvas || typeof window.GLRipple !== "function") {
+      available = false;
+      return false;
+    }
+    renderer = new window.GLRipple(canvas);
+    available = renderer.init();
+    if (!available) {
+      console.warn("[glripple] unavailable:", renderer.error,
+                   "— falling back to the SVG filter path");
+      renderer = null;
+    } else {
+      // A lost context (driver update, sleep/resume, host suspend) would
+      // otherwise leave a blank canvas covering the wallpaper.
+      renderer.onContextLost(() => {
+        console.warn("[glripple] context lost — hiding overlay");
+        hide();
+      });
+    }
+    return available;
+  }
+
+  function syncSize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    // Match pixelfx's backing-buffer policy: quality bucket × DPR. The
+    // displaced background is a smooth image, so a half-resolution
+    // buffer is not visually distinguishable but quarters the fill cost.
+    const eff = _qualityScale() * _qualityDpr();
+    const bw = Math.max(1, Math.round(w * eff));
+    const bh = Math.max(1, Math.round(h * eff));
+    if (bw !== lastW || bh !== lastH) {
+      renderer.resize(bw, bh);
+      lastW = bw; lastH = bh;
+    }
+  }
+
+  function show() {
+    if (active) return;
+    active = true;
+    canvas.classList.add("on");
+    document.body.classList.add("glripple-active");
+  }
+  function hide() {
+    if (!active) return;
+    active = false;
+    owner = null;
+    canvas.classList.remove("on");
+    document.body.classList.remove("glripple-active");
+    canvas.style.transform = "";
+  }
+
+  // Water (a pixelfx mode) and Liquid Distortion (a stackable mousefx)
+  // can be enabled at the same time, and there is only one overlay
+  // canvas. Without arbitration they would each clear and redraw it in
+  // the same frame, so whichever ran second would win and the other's
+  // wave would flicker. First caller in a frame takes ownership and
+  // keeps it until it stops; the other silently falls back to its SVG
+  // path, which under Lively still renders correctly.
+  let owner = null;
+
+  return {
+    /** True when a shader-backed ripple is possible right now. */
+    usable() { return probe() && hasImage; },
+
+    /** Called from _setImageBg once the probe Image has decoded. */
+    setImage(img, w, h) {
+      if (!probe()) return;
+      hasImage = renderer.setImage(img, w, h);
+      if (hasImage) renderer.setFit(currentBgFit, currentBgTileScale);
+    },
+
+    /** Video backgrounds have no texture path — make sure we stay off. */
+    clearImage() {
+      hasImage = false;
+      hide();
+    },
+
+    /** Mirrors applyBgFit / applyBgTileScale. */
+    syncFit() {
+      if (renderer && hasImage) {
+        renderer.setFit(currentBgFit, currentBgTileScale);
+      }
+    },
+
+    /**
+     * Draw one displaced frame.
+     * @param who       caller id, used to arbitrate the shared overlay
+     * @param mapCanvas the displacement map the effect just painted
+     * @param amp       displacement in CSS px (the SVG filter's `scale`)
+     */
+    draw(who, mapCanvas, amp) {
+      if (!renderer || !hasImage) return false;
+      if (owner && owner !== who) return false;   // someone else has it
+      syncSize();
+      renderer.setMap(mapCanvas);
+      const ok = renderer.draw(amp, amp, 1);
+      if (!ok) return false;
+      owner = who;
+      show();
+      // Parallax owns a transform on #bg. Rather than reproducing its
+      // translate+scale inside the shader, copy it onto the canvas so
+      // both surfaces move identically and stay in register.
+      const t = bgEl.style.transform;
+      if (canvas.style.transform !== t) canvas.style.transform = t;
+      return true;
+    },
+
+    /**
+     * Hand the wallpaper back to #bg. Only the current owner may do so —
+     * otherwise the effect that is NOT drawing would tear the overlay
+     * out from under the one that is.
+     */
+    stop(who) {
+      if (owner && who && owner !== who) return;
+      hide();
+    },
+  };
+})();
+
 function applyBgFit(mode) {
   currentBgFit = mode;
   _refreshBgSize();
+  glRipple.syncFit();
 }
 function applyBgTileScale(scale) {
   const s = Math.max(10, Math.min(200, parseInt(scale, 10) || 100));
   currentBgTileScale = s;
   _refreshBgSize();
+  glRipple.syncFit();
 }
 function _refreshBgSize() {
   const css = BG_FIT_CSS[currentBgFit] || BG_FIT_CSS.cover;
@@ -2438,6 +2641,14 @@ function _setImageBg(src) {
     // before the image had loaded.
     _refreshBgSize();
     bgEl.style.opacity = "1";
+    // v2.4.4: hand the same image to the WebGL renderer so water-ripple
+    // and Liquid Distortion can displace it. Deliberately a SECOND load
+    // rather than reusing `probe`: a texture upload needs CORS-clean
+    // pixels, and setting crossOrigin on `probe` itself would risk the
+    // background failing to appear at all if the header were ever
+    // missing. This copy is free — the browser serves it from cache —
+    // and if it fails the effects simply stay on the old SVG path.
+    _glRippleLoadTexture(src, probe.naturalWidth, probe.naturalHeight);
   };
   probe.onerror = () => {
     const msg = "image load failed: " + src;
@@ -2451,7 +2662,37 @@ function _setImageBg(src) {
   probe.src = src;
 }
 
+// Load a CORS-enabled copy of the background for the WebGL texture.
+// The bridge echoes the caller's Origin (including the `null` that
+// Lively and Wallpaper Engine send), so anonymous requests are accepted;
+// this stays best-effort regardless.
+function _glRippleLoadTexture(src, w, h) {
+  let tex;
+  try { tex = new Image(); } catch (_) { return; }
+  tex.crossOrigin = "anonymous";
+  tex.onload = () => {
+    try {
+      glRipple.setImage(tex, w || tex.naturalWidth, h || tex.naturalHeight);
+    } catch (e) {
+      console.warn("[glripple] texture upload failed:", e);
+      glRipple.clearImage();
+    }
+  };
+  tex.onerror = () => {
+    // Most likely a CORS refusal. Not worth surfacing to the user: the
+    // background itself is already on screen and the affected effects
+    // fall back to the SVG filter path.
+    console.warn("[glripple] texture load failed — effects stay on the SVG path");
+    glRipple.clearImage();
+  };
+  tex.src = src;
+}
+
 function _setVideoBg(src) {
+  // v2.4.4: video is out of scope for the WebGL displacement path —
+  // drop the texture so the ripple effects fall back to the SVG filter
+  // (which is what they used before, and what WE users have always had).
+  glRipple.clearImage();
   // Hide image div first so the video fade-in isn't masked by a
   // still-painted background-image during the swap.
   _clearImageBg();
@@ -2824,15 +3065,55 @@ window.wallpaperPropertyListener = {
 // _externalPaused.
 let _externalPaused = false;
 let _renderingPaused = false;
+// v2.4.4: two independent host-side pause signals, kept apart because
+// they are written by different code on different hosts and neither may
+// clear the other:
+//   _wePaused     — Wallpaper Engine's tray menu, polled from
+//                   _syncHostPause() on the WS path
+//   _livelyPaused — Lively's playback callback
+// Declared up here with their siblings so _recomputePaused() cannot read
+// them through the temporal dead zone if it is ever called earlier than
+// it is today.
+let _wePaused = false;
+let _livelyPaused = false;
 let isPaused = false;
 const pausedBadgeEl = document.getElementById("paused-badge");
 function _recomputePaused() {
-  const next = _externalPaused || _renderingPaused;
+  // Three independent sources, any of which means "stop":
+  //   _externalPaused  — bridge tray toggle, fullscreen watcher, Lively
+  //                      playback callback, page visibility
+  //   _renderingPaused — the rAF-staleness probe (host suspended us)
+  //   _wePaused        — Wallpaper Engine's tray-menu pause, spotted via
+  //                      its own private flag on the WS render path
+  //   _livelyPaused    — Lively's playback callback
+  const next = _externalPaused || _renderingPaused || _wePaused || _livelyPaused;
   if (next === isPaused) return;
   isPaused = next;
+  // v2.4.4: the probe's cadence and its staleness threshold both key off
+  // isPaused, so give it a grace window before the next check — the
+  // timestamp is stale by design at this instant. Wrapped because
+  // `_rafProbeGraceUntil` is declared with `let` further down the file;
+  // every caller of this function is an event handler so it cannot
+  // actually run that early, but a future top-level call would hit the
+  // temporal dead zone rather than failing quietly.
+  try { _rafProbeOnPauseChange(); } catch (_) {}
   console.log("[wallpaper] paused =", isPaused,
               "(external=" + _externalPaused + ", rendering=" + _renderingPaused + ")");
-  if (pausedBadgeEl) pausedBadgeEl.classList.toggle("on", isPaused);
+  // v2.4.4: only badge a pause the user can actually see happen.
+  //
+  // When the HOST pauses us — Lively's playback toggle, WE's tray menu,
+  // or render suspension — it also stops compositing, so a badge turned
+  // on now is never painted. Worse, it is still in the DOM when the host
+  // resumes: the first frame after unpausing shows a PAUSED badge over a
+  // running wallpaper, which then lingers until our own code gets a turn
+  // and clears it. Users saw the badge appear on *resume*, exactly
+  // backwards, and stick around until they clicked something.
+  //
+  // A bridge-side pause (tray toggle, fullscreen watcher) is different:
+  // the page keeps rendering, so the badge is both visible and useful.
+  const _badgeWorthShowing = isPaused && _externalPaused &&
+                             !_wePaused && !_livelyPaused && !_renderingPaused;
+  if (pausedBadgeEl) pausedBadgeEl.classList.toggle("on", _badgeWorthShowing);
   // v1.2.12: drop all GPU-heavy filter layers out of the compositor
   // when paused. See the body.paused-glow CSS rule for the layer list
   // + rationale. This is what actually pulls the GPU back to ~0 %; the
@@ -2861,6 +3142,40 @@ function _recomputePaused() {
     }
   } catch (_) {}
 }
+// v2.4.4: host-pause detection that survives the host pausing us.
+//
+// Wallpaper Engine's tray-menu pause queues rAF / setInterval /
+// setTimeout callbacks, which silences every loop the page owns —
+// including the rAF-staleness probe that was meant to detect exactly
+// this. The symptom: effects and widgets froze (WE's doing), but the
+// glow grid carried on and no PAUSED badge appeared, because our own
+// isPaused never flipped.
+//
+// WE does leave two observable marks, found by inspecting
+// webwallpaper64.exe:
+//
+//   window.___wpxAnimLocked = true
+//   document.documentElement.classList.add('wpxPausePseudoAnimationAll')
+//
+// Neither is documented, so both are treated as best-effort hints and
+// either one is enough. Reading them is a couple of property lookups, so
+// it is cheap enough to do per WS frame — which is the only code path
+// still executing while the host has us paused.
+function _syncHostPause() {
+  let paused = false;
+  try {
+    if (window.___wpxAnimLocked === true) paused = true;
+    else if (document.documentElement &&
+             document.documentElement.classList.contains("wpxPausePseudoAnimationAll")) {
+      paused = true;
+    }
+  } catch (_) { return; }   // not a host that exposes these — leave as-is
+  if (paused === _wePaused) return;
+  _wePaused = paused;
+  console.log("[wallpaper] host pause =", paused, "(Wallpaper Engine tray menu)");
+  _recomputePaused();
+}
+
 function setPaused(p) {
   _externalPaused = !!p;
   _recomputePaused();
@@ -2906,7 +3221,15 @@ window.livelyWallpaperPlaybackChanged = function (state) {
     paused = false;
   }
   console.log("[wallpaper] livelyWallpaperPlaybackChanged raw=", JSON.stringify(state), "→ paused=", paused);
-  setPaused(paused);
+  // v2.4.4: routed to the host slot, not the external one. Lively stops
+  // compositing along with the playback toggle, so a PAUSED badge set
+  // here would never be painted — and would then flash on screen when
+  // the host resumed, before our code could clear it. Keeping host
+  // pauses in their own slot lets _recomputePaused suppress the badge
+  // for them while still showing it for a bridge-side pause, where the
+  // page carries on rendering.
+  _livelyPaused = paused;
+  _recomputePaused();
 };
 
 document.addEventListener("visibilitychange", () => {
@@ -2942,11 +3265,80 @@ document.addEventListener("visibilitychange", () => {
 // schedule one). Saves ~1-2% baseline CPU on Lively / WE pages where
 // the only thing keeping the compositor warm is this probe.
 let _lastRafTickMs = performance.now();
+// v2.4.4: back off while paused.
+//
+// The 200 ms cadence exists to detect host-side render suspension
+// quickly. But an *externally* paused wallpaper — the bridge's
+// fullscreen watcher pushing {type:"paused"} while a game is in the
+// foreground — is usually NOT suspended by the host: the page keeps
+// rendering, so this probe keeps requesting a frame ~5×/s, and every
+// one of those wakes the compositor. On a wide multi-monitor desktop
+// that showed up as ~2 % Desktop Window Manager CPU during gaming, i.e.
+// exactly the load pausing was supposed to remove.
+//
+// While paused we only need to notice the *transition back*, and that
+// is driven by the WS message rather than by this probe, so a slow
+// heartbeat is enough. The staleness threshold below scales with the
+// interval so the paused state cannot be misread as suspension.
+const RAF_PROBE_MS_ACTIVE = 200;
+const RAF_PROBE_MS_PAUSED  = 2000;
+// The cadence the CURRENTLY PENDING frame request was scheduled at.
+//
+// The staleness threshold has to key off this rather than off isPaused.
+// The two differ exactly when it matters: if the host has stalled the
+// frame loop, no new request has been scheduled since, so the pending
+// one still carries the old (fast) cadence — and the strict threshold
+// that goes with it is what lets us keep recognising the stall. Keying
+// off isPaused instead let the threshold jump to the relaxed value the
+// moment we paused, which then read the stalled loop as healthy and
+// un-paused us, over and over.
+let _rafProbePendingGap = RAF_PROBE_MS_ACTIVE;
+// Set when the pause state changes, to suppress the staleness check
+// until the probe has had a chance to tick at the new cadence. Without
+// this the wallpaper visibly flickered paused/running once on every
+// resume: leaving a game drops the threshold from 3500 ms to 500 ms
+// immediately, but the in-flight 2 s timer means the timestamp is
+// already ~2 s old, so the very next 250 ms check reads it as stale and
+// re-pauses — until the delayed frame finally lands and clears it.
+let _rafProbeGraceUntil = 0;
 function probeRafLoop() {
   _lastRafTickMs = performance.now();
-  setTimeout(() => requestAnimationFrame(probeRafLoop), 200);
+  // Chosen here, at the only point where a frame actually arrived, so a
+  // stalled loop leaves the previous value in place.
+  _rafProbePendingGap = isPaused ? RAF_PROBE_MS_PAUSED : RAF_PROBE_MS_ACTIVE;
+  setTimeout(() => requestAnimationFrame(probeRafLoop), _rafProbePendingGap);
 }
 requestAnimationFrame(probeRafLoop);
+// Called from _recomputePaused() whenever isPaused flips. The two
+// directions need opposite treatment.
+function _rafProbeOnPauseChange() {
+  const now = performance.now();
+  if (isPaused) {
+    // PAUSING — grace only, and deliberately no timestamp refresh.
+    //
+    // An earlier version refreshed it here, which broke Wallpaper
+    // Engine's tray-menu pause. WE pauses by queueing rAF callbacks
+    // (confirmed in webwallpaper64.exe), and the frame loop stalling is
+    // precisely how this page notices that kind of pause — so faking a
+    // fresh tick told it the loop was alive, it un-paused, which flipped
+    // the state, which refreshed the timestamp again: an endless
+    // pause/resume oscillation.
+    _rafProbeGraceUntil = now + RAF_PROBE_MS_PAUSED + 500;
+    return;
+  }
+  // RESUMING — refresh the timestamp and drop the grace window.
+  //
+  // Whoever cleared the pause knows rendering is coming back, so the
+  // staleness accumulated while we were paused says nothing about the
+  // loop's health. Leaving it in place had a visible cost: after
+  // un-pausing in Lively the grace window expired ~2 s later, the probe
+  // measured a timestamp that was still old, and re-paused the wallpaper
+  // for another beat — the "pause hangs on for a second or two after
+  // resuming" users reported. Clearing the grace also means the very
+  // next check judges the loop on fresh evidence.
+  _lastRafTickMs = now;
+  _rafProbeGraceUntil = 0;
+}
 setInterval(() => {
   const stale = performance.now() - _lastRafTickMs;
   // v1.2.5: only flips the rendering-suspension flag. The external
@@ -2956,7 +3348,19 @@ setInterval(() => {
   // updates _lastRafTickMs every ~216 ms (200 ms setTimeout + ~16 ms
   // rAF latency). 500 ms staleness still cleanly distinguishes that
   // from a truly paused page (where rAF doesn't fire at all).
-  _setRenderingPaused(stale > 500);
+  //
+  // v2.4.4: the probe backs off to 2 s while paused, so the threshold
+  // has to follow — otherwise the slower heartbeat would itself read as
+  // "stale" and latch _renderingPaused on, which would then keep the
+  // probe slow and make the page unable to notice it had resumed.
+  // Scaled off the pending request's cadence, not off isPaused — see the
+  // note on _rafProbePendingGap for why that distinction is the whole
+  // point. Allow a bit over one and a half beats so ordinary scheduling
+  // jitter never reads as a stall.
+  const limit = _rafProbePendingGap + 300 + _rafProbePendingGap * 0.5;
+  // Grace window after a pause-state change — see _rafProbeOnPauseChange.
+  if (performance.now() < _rafProbeGraceUntil) return;
+  _setRenderingPaused(stale > limit);
 }, 250);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3968,12 +4372,20 @@ const MouseFx = (function () {
     // happening; once it crosses a threshold we stop touching feImage
     // until the next ripple-worthy event.
     let _idleFrames = 0;
+    // v2.4.4: tracks whether the overlay is currently showing, so the
+    // idle path knows to hand the wallpaper back to #bg exactly once
+    // rather than calling stop() on every idle frame.
+    let _usingGl = false;
     const IDLE_FRAMES_BEFORE_SKIP = 60;  // ≈ 2 s at 30 Hz
     const MAP_SIZE = 256;
-    // v2.3.1: Liquid Distortion is labelled "Nur Lively" in the
-    // Configurator since WE's bundled CEF doesn't render the SVG
-    // feDisplacementMap filter correctly. Neutral kept at 128 for
-    // the Lively / modern-Chromium path.
+    // Matches the SVG filter's scale="50" so the shader path produces
+    // the same displacement amplitude as the filter path.
+    const GL_SCALE = 50;
+    // Liquid Distortion is labelled "Nur Lively" for the same reason as
+    // water mode: feImage produces no output in WE's bundled CEF, so the
+    // displacement map never reaches in2. See the detailed note on
+    // NEUTRAL_BYTE in the water module. feDisplacementMap itself works
+    // in WE — it is specifically feImage that is broken.
     const NEUTRAL_BYTE_R = 128;
     const _NEUTRAL_CSS_R = "rgb(128,128,0)";
     const _NEUTRAL_CSS_R_DECAY = "rgba(128,128,0,0.06)";
@@ -3995,11 +4407,18 @@ const MouseFx = (function () {
       document.body.appendChild(svg);
       svgFilter = svg;
       feImg = svg.querySelector("#fx-ripple-img");
+      _ensureMap();
+    }
+    // v2.4.4: the map canvas feeds both paths (texture upload for the
+    // shader, data: URL for the filter), so it is created independently
+    // of the SVG filter.
+    function _ensureMap() {
+      if (mapCanvas) return;
       mapCanvas = document.createElement("canvas");
       mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
       mapCtx = mapCanvas.getContext("2d");
-      // Host-conditional neutral. Initialize so the first feImage
-      // load doesn't see an empty in2.
+      // Initialise to neutral so the first frame — whichever path draws
+      // it — starts from zero displacement.
       mapCtx.fillStyle = _NEUTRAL_CSS_R;
       mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
     }
@@ -4040,18 +4459,38 @@ const MouseFx = (function () {
       // SVG paint anyway.
       if (moved) _idleFrames = 0;
       else       _idleFrames++;
-      if (_idleFrames < IDLE_FRAMES_BEFORE_SKIP) {
-        feImg.setAttribute("href", mapCanvas.toDataURL());
+      if (_idleFrames >= IDLE_FRAMES_BEFORE_SKIP) {
+        // Idle long enough that the map has decayed to neutral. On the
+        // WebGL path hand the wallpaper back to #bg rather than keep
+        // drawing an identity transform every frame.
+        if (_usingGl) { glRipple.stop("mousefx"); _usingGl = false; }
+        return;
       }
+      // v2.4.4: WebGL path — upload the map as a texture instead of
+      // encoding a PNG per frame. See the glRipple bridge for why the
+      // SVG filter cannot work in Wallpaper Engine.
+      if (glRipple.usable()) {
+        if (glRipple.draw("mousefx", mapCanvas, GL_SCALE)) { _usingGl = true; return; }
+        _usingGl = false;   // context lost mid-frame — fall through
+      }
+      if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
     }
     return {
       enable() {
-        ensureFilter();
-        document.body.classList.add("fx-ripple");
+        // v2.4.4: only build the SVG filter — and only attach it to
+        // #bg — when we are actually going to use it. On the WebGL path
+        // the overlay canvas does the work and #bg stays untouched.
+        _ensureMap();
+        if (!glRipple.usable()) {
+          ensureFilter();
+          document.body.classList.add("fx-ripple");
+        }
         if (!raf) raf = requestAnimationFrame(tick);
       },
       disable() {
         document.body.classList.remove("fx-ripple");
+        glRipple.stop("mousefx");
+        _usingGl = false;
         if (raf) { cancelAnimationFrame(raf); raf = null; }
         _idleFrames = IDLE_FRAMES_BEFORE_SKIP;
       },
@@ -5074,10 +5513,61 @@ const ambient = (function () {
   };
 })();
 
-// rgbToRgba("rgb(R,G,B)", a) → "rgba(R,G,B,a)" — used by ambient renderers
-// to fade particle colours without parsing the rgb() back into components.
+// rgbToRgba(colour, a) → "rgba(R,G,B,a)" — used by every tinted renderer
+// to fade colours without each caller parsing components back out.
+//
+// v2.4.4: accepts hex as well as rgb()/rgba(). The old version was a
+// two-step string replace that only recognised "rgb(R,G,B)":
+//
+//   rgb.replace("rgb(", "rgba(").replace(")", "," + a + ")")
+//
+// `currentTintCss` is initialised to the hex literal "#6ab0ff" and only
+// becomes an rgb() string once the first glow frame arrives from the
+// bridge. Until then the replace found no "rgb(" and handed the hex
+// straight back — so every stop in a gradient came out identical and
+// fully opaque. Hover-glow rendered as a flat blue disc rather than a
+// soft glow, and the same applied to all 25 call sites.
+//
+// This was misdiagnosed as a Wallpaper Engine rendering fault and the
+// effect carried a "Lively only" badge for it. The host was never the
+// variable — the timing was. Any host shows the flat disc while the
+// bridge is still connecting, restarting, or absent; Lively simply tends
+// to connect before the user first hovers.
+//
+// Feeding an rgba() string in also produced a five-component
+// "rgba(r,g,b,0.9,0.25)", which is invalid and paints nothing.
 function rgbToRgba(rgb, a) {
-  return rgb.replace("rgb(", "rgba(").replace(")", "," + a + ")");
+  if (typeof rgb !== "string") return "rgba(255,255,255," + a + ")";
+  var s = rgb.trim();
+  // rgb(...) / rgba(...) — take the first three components, drop any
+  // existing alpha so it is replaced rather than appended.
+  if (s.charCodeAt(0) === 114 /* r */) {
+    var open = s.indexOf("(");
+    if (open !== -1) {
+      var parts = s.slice(open + 1, s.lastIndexOf(")")).split(",");
+      if (parts.length >= 3) {
+        return "rgba(" + parts[0].trim() + "," + parts[1].trim() + "," +
+               parts[2].trim() + "," + a + ")";
+      }
+    }
+    return s;   // unrecognised shape — leave it alone
+  }
+  // #rgb / #rrggbb
+  if (s.charCodeAt(0) === 35 /* # */) {
+    var h = s.slice(1);
+    if (h.length === 3) {
+      h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    }
+    if (h.length === 6) {
+      var n = parseInt(h, 16);
+      if (!isNaN(n)) {
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," +
+               (n & 255) + "," + a + ")";
+      }
+    }
+    return s;
+  }
+  return s;     // named colours etc. — pass through unchanged
 }
 
 // Katakana half-width + digits + a handful of symbols, matching the
@@ -6457,11 +6947,19 @@ const pixelfx = (function () {
       // Fill a circular path instead of a 2r × 2r rect: some CEF
       // builds render the rect's corners visibly (despite the gradient
       // being alpha-0 past radius r), making the glow look square.
-      // v2.3.1: works in Lively / modern Chromium. WE's bundled CEF
-      // renders this as an opaque tinted disc (gradient interpolation
-      // appears broken in that CEF version). The mode is labelled
-      // "Nur Lively" in the Configurator so WE users know to pick
-      // a different mode. See gotcha-we-cef-svg-and-gradients.
+      //
+      // v2.4.4: this carried a "Nur Lively" badge because it rendered as
+      // a flat, fully opaque disc rather than a soft glow. The cause was
+      // not the host and not this code — it was rgbToRgba() silently
+      // passing hex through unconverted, so all three stops below came
+      // back as the same opaque colour. See the note on that function.
+      //
+      // Fixed there, so the badge is gone. Two independent measurements
+      // back this up: on WE's CEF 146 an isolated radial gradient with an
+      // alpha-0 outer stop fades correctly (R 206 → 149 → 128, monotonic,
+      // rect corners outside the radius left neutral — bit-identical to
+      // Chromium 151), and this effect never touched feImage, which is
+      // the primitive that genuinely fails in WE.
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(cursorX, cursorY, r, 0, Math.PI * 2);
@@ -6576,14 +7074,29 @@ const water = (function () {
   const BAND_INNER = 8;   // displacement push-out band thickness
   const BAND_OUTER = 8;   // displacement pull-in band thickness
 
-  // v2.3.1: water mode is labelled "Nur Lively" in the Configurator
-  // because WE's bundled CEF doesn't render feDisplacementMap
-  // correctly (color-space mismatch + the `color-interpolation-filters="sRGB"`
-  // override is silently ignored). The displacement math here
-  // assumes the modern Chromium / Lively behaviour: R=128 sRGB
-  // stays at 0.5 in the filter chain → neutral = 0 displacement.
-  // Encoding range: ±90 from 128 gives a peak ~28 px shift at
-  // scale=80. Kept hardcoded since the WE path is disabled.
+  // Water mode is labelled "Nur Lively" in the Configurator because it
+  // does not work under Wallpaper Engine.
+  //
+  // v2.4.4: the cause, finally measured rather than guessed. It is NOT a
+  // colour-space mismatch — that was the v2.3.0 theory, and the
+  // host-conditional NEUTRAL_BYTE it produced (188 for WE) was removed
+  // again in v2.4.0 because it changed nothing. The real fault is that
+  // **feImage produces no output at all** in WE's bundled CEF 146:
+  // measured mean rgba(0,0,0,0), 100 % transparent, while feFlood renders
+  // fine and feDisplacementMap at scale=0 returns the source untouched.
+  // feDisplacementMap therefore gets an empty in2 and shreds the image
+  // (42 % transparent) instead of bending it — which is the "shift on
+  // click, but never a wave" users reported.
+  //
+  // Both data: and blob: URLs fail identically, so it is feImage itself,
+  // not the hand-off. A byte-value sweep (R=100..220) produced exactly
+  // the same result for every value, which a colour-space error could
+  // not do — it would be value-dependent.
+  //
+  // The displacement maths below assumes modern Chromium / Lively
+  // behaviour: R=128 sRGB stays at 0.5 in the filter chain, so neutral =
+  // 0 displacement. Encoding range ±90 from 128 peaks at ~28 px at
+  // scale=80.
   const NEUTRAL_BYTE = 128;
   const PEAK_AMP = 90;
   const _NEUTRAL_CSS = "rgb(128,128,0)";
@@ -6608,12 +7121,14 @@ const water = (function () {
     // finished a frame or two later.
     // v2.3.13-beta added `color-interpolation-filters="sRGB"` which
     // fixed Lively's whole-BG shift by forcing the filter chain to
-    // stay in sRGB. Kept — Lively honours it. WE's CEF version
-    // pre-dates that attribute being honoured, so it silently
-    // ignores the override and runs the chain in linearRGB anyway.
-    // The fix for WE is the host-conditional NEUTRAL_BYTE above
-    // (188 sRGB linearises back to ~0.5, the true neutral in WE's
-    // working space). Lively gets 128 — the sRGB-space neutral.
+    // stay in sRGB. Kept — Lively honours it.
+    //
+    // v2.4.4: this used to claim WE ignores the override and that a
+    // host-conditional NEUTRAL_BYTE of 188 was "the fix for WE". Neither
+    // is true. There is no host-conditional value in this file (it was
+    // removed in v2.4.0), and it would not help anyway — see the
+    // NEUTRAL_BYTE comment above: feImage yields nothing in WE, so the
+    // map's contents are irrelevant there.
     svg.innerHTML =
       '<defs><filter id="pixelfx-water-filter" x="0" y="0" width="100%" height="100%"' +
       ' color-interpolation-filters="sRGB">' +
@@ -6626,15 +7141,22 @@ const water = (function () {
     svgFilter = svg;
     feImg = svg.querySelector("#pixelfx-water-img");
     feDisp = svg.querySelector("#pixelfx-water-disp");
+    _ensureMap();
+    feImg.setAttribute("href", mapCanvas.toDataURL());
+  }
+
+  // v2.4.4: the displacement map canvas is shared by both render paths —
+  // the shader uploads it as a texture, the filter encodes it to a data:
+  // URL — so it is built separately from the SVG filter.
+  function _ensureMap() {
+    if (mapCanvas) return;
     mapCanvas = document.createElement("canvas");
     mapCanvas.width = MAP_SIZE; mapCanvas.height = MAP_SIZE;
     mapCtx = mapCanvas.getContext("2d");
-    // Neutral grey for the current host (128 sRGB for Lively,
-    // 188 sRGB for WE — both linearise/stay-as 0.5 in their
-    // respective working color spaces).
+    // Neutral grey: 128 sRGB, which stays at 0.5 through the filter
+    // chain and therefore encodes zero displacement.
     mapCtx.fillStyle = _NEUTRAL_CSS;
     mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-    feImg.setAttribute("href", mapCanvas.toDataURL());
   }
 
   // Paint one ripple's ring front into the displacement map. The
@@ -6691,6 +7213,10 @@ const water = (function () {
   function tick(now) {
     if (isPaused) { raf = null; return; }
     if (!enabled || ripples.length === 0) {
+      // v2.4.4: hand the wallpaper back to #bg. On the WebGL path that
+      // is just hiding the overlay; nothing was ever applied to #bg
+      // itself, so there is no filter state to unwind.
+      glRipple.stop("water");
       // v2.3.12-beta: drop displacement scale to 0 BEFORE clearing
       // the map. Order matters — if we cleared the map first, the
       // filter would briefly render scale=ACTIVE_SCALE × neutral-map
@@ -6707,7 +7233,7 @@ const water = (function () {
       // no possible shift. splash() adds the class back when
       // the next ripple arrives.
       document.body.classList.remove("fx-pixelfx-water");
-      if (mapCtx) {
+      if (mapCtx && feImg && !glRipple.usable()) {
         mapCtx.fillStyle = _NEUTRAL_CSS;
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
         feImg.setAttribute("href", mapCanvas.toDataURL());
@@ -6737,12 +7263,23 @@ const water = (function () {
     const maxRadiusPx = Math.hypot(window.innerWidth, window.innerHeight) * 0.7;
     for (const r of ripples) paintRipple(r, maxRadiusPx);
 
+    // v2.4.4: WebGL path. Uploads the map canvas straight to a texture —
+    // no PNG encode, no data: URL, and it works in Wallpaper Engine
+    // where feImage yields nothing. Falls through to the SVG filter when
+    // WebGL is unavailable or the background has no usable texture
+    // (video backgrounds, or a texture load that CORS refused).
+    if (glRipple.usable()) {
+      if (glRipple.draw("water", mapCanvas, ACTIVE_SCALE)) return;
+      // Draw failed (context lost mid-frame) — fall through so the
+      // frame still renders through the filter rather than freezing.
+    }
+
     // Push displacement map to the SVG filter. toDataURL is the
     // memory-leak hot path Liquid Distortion documented in detail
     // (gotcha-uncapped-raf-dpr); here it's naturally gated by
     // ripple-presence — the tick early-returns + clears the map
     // once the last ripple expires.
-    feImg.setAttribute("href", mapCanvas.toDataURL());
+    if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
   }
 
   return {
@@ -6753,35 +7290,46 @@ const water = (function () {
       // tick() when the last ripple expires. See the comment
       // in tick() for why this matters in WE.
       enabled = true;
-      ensureFilter();
+      // v2.4.4: only build the SVG filter when we are actually going to
+      // use it. Creating it on the WebGL path would leave an unused
+      // <svg> in the DOM and, worse, an feImage that WE's CEF chokes on.
+      _ensureMap();
+      if (!glRipple.usable()) ensureFilter();
     },
     disable() {
       enabled = false;
       ripples = [];
       document.body.classList.remove("fx-pixelfx-water");
+      glRipple.stop("water");
       if (raf) { cancelAnimationFrame(raf); raf = null; }
       if (feDisp) feDisp.setAttribute("scale", "0");
-      if (mapCtx) {
+      if (mapCtx && feImg) {
         mapCtx.fillStyle = _NEUTRAL_CSS;
         mapCtx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-        if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
+        feImg.setAttribute("href", mapCanvas.toDataURL());
       }
     },
     splash(x, y, initialLife) {
       if (!enabled) return;
       ripples.push({ x: x, y: y, life: initialLife || 0 });
-      // v2.3.12-beta: scale goes 0 → ACTIVE_SCALE the moment a
-      // ripple exists. tick() will paint the map this frame; if
-      // we left scale at 0, the first painted ripple frame would
-      // be a no-op. Setting scale before tick() runs guarantees
-      // the displacement is active from the very first paint.
-      if (feDisp) feDisp.setAttribute("scale", String(ACTIVE_SCALE));
-      // v2.3.1: attach the filter to #bg only NOW that there's a
-      // ripple to render. tick() removes the class when ripples
-      // drop to 0. Net effect: in WE the BG is never displaced
-      // between clicks — even if the host's filter pipeline has
-      // some quirk that would otherwise shift the BG at scale=0.
-      document.body.classList.add("fx-pixelfx-water");
+      // v2.4.4: the SVG filter is only armed on the fallback path. On
+      // the WebGL path the overlay canvas appears on the first drawn
+      // frame instead, so #bg is never touched at all.
+      if (!glRipple.usable()) {
+        // v2.3.12-beta: scale goes 0 → ACTIVE_SCALE the moment a
+        // ripple exists. tick() will paint the map this frame; if
+        // we left scale at 0, the first painted ripple frame would
+        // be a no-op. Setting scale before tick() runs guarantees
+        // the displacement is active from the very first paint.
+        ensureFilter();
+        if (feDisp) feDisp.setAttribute("scale", String(ACTIVE_SCALE));
+        // v2.3.1: attach the filter to #bg only NOW that there's a
+        // ripple to render. tick() removes the class when ripples
+        // drop to 0. Net effect: in WE the BG is never displaced
+        // between clicks — even if the host's filter pipeline has
+        // some quirk that would otherwise shift the BG at scale=0.
+        document.body.classList.add("fx-pixelfx-water");
+      }
       if (!raf) {
         _lastTick = performance.now();
         raf = requestAnimationFrame(tick);

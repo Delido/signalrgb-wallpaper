@@ -2947,11 +2947,11 @@
         pushed by the host). Click ripple needs real mouse events — toggle
         <em>Wallpaper interaction</em> in Lively to see it.
       </div>
-      <!-- v2.3.1: explainer for the "Nur Lively" badges on water +
-           hover-glow + Liquid Distortion. -->
-      <div class="hint" style="margin-top: 6px;" data-i18n="fx.lively_only_hint">
-        Effects marked “Lively only” use SVG filters or canvas gradients that Wallpaper Engine's bundled CEF doesn't render correctly. They work fine under Lively / WebView2.
-      </div>
+      <!-- v2.4.4: the "Nur Lively" explainer is gone along with the last
+           badge. Water and Liquid Distortion now render through WebGL,
+           which works in Wallpaper Engine; the `fx.lively_only*`
+           translation keys are kept so a future host-specific effect can
+           reuse the badge without re-adding the strings. -->
 
       <hr style="border:none; border-top: 1px solid var(--border); margin: 14px 0;">
 
@@ -2967,7 +2967,9 @@
       </div>
       <div class="fx-tiles" id="mousefx-tiles">
         <button type="button" class="fx-tile" data-fx="ripple">
-          <span class="fx-tile-head">🌊 <span data-i18n="mousefx.ripple_name">Liquid Distortion</span><span class="fx-tile-badge" data-i18n="fx.lively_only">Nur Lively</span></span>
+          <!-- v2.4.4: "Nur Lively" badge dropped — the effect renders
+               through the WebGL path now and works in Wallpaper Engine. -->
+          <span class="fx-tile-head">🌊 <span data-i18n="mousefx.ripple_name">Liquid Distortion</span></span>
           <span class="fx-tile-desc" data-i18n="mousefx.ripple_desc">Pulls background pixels with the cursor</span>
         </button>
         <button type="button" class="fx-tile" data-fx="chromatic">
@@ -3744,8 +3746,8 @@ const TRANSLATIONS = {
   // createRadialGradient or feDisplacementMap the same way).
   "fx.lively_only":             { en: "Lively only",      de: "Nur Lively" },
   "fx.lively_only_hint":        {
-    en: "Effects marked “Lively only” use SVG filters or canvas gradients that Wallpaper Engine's bundled CEF doesn't render correctly. They work fine under Lively / WebView2.",
-    de: "Mit „Nur Lively\" markierte Effekte nutzen SVG-Filter oder Canvas-Gradients die Wallpaper Engine's mitgelieferter CEF nicht korrekt rendert. Unter Lively / WebView2 funktionieren sie sauber."
+    en: "Effects marked “Lively only” build their distortion from an SVG displacement map, which Wallpaper Engine's bundled browser cannot load. They work correctly under Lively.",
+    de: "Mit „Nur Lively\" markierte Effekte bauen ihre Verzerrung aus einer SVG-Displacement-Map, die der mitgelieferte Browser von Wallpaper Engine nicht laden kann. Unter Lively funktionieren sie korrekt."
   },
   "mousefx.chromatic_name":     { en: "Chromatic Halo",    de: "Chromatischer Halo" },
   "mousefx.chromatic_desc":     { en: "R/G/B glow around the cursor",
@@ -10371,12 +10373,15 @@ const PIXELFX_MODES   = [
     descKey: "pixelfx.off_desc" },
   { value: "trail",  emoji: "✨", nameKey: "pixelfx.trail_name",
     descKey: "pixelfx.trail_desc" },
-  // v2.3.1: glow + water both rely on rendering that WE's bundled
-  // CEF doesn't handle correctly (createRadialGradient for glow,
-  // feDisplacementMap for water). Marked livelyOnly so the tile
-  // gets a small badge in the picker.
+  // v2.4.4: glow lost its livelyOnly badge. It did render as a flat
+  // opaque disc, but the cause was a bug in the wallpaper's rgbToRgba()
+  // helper — it passed the default hex tint through unconverted, so
+  // every gradient stop came out the same opaque colour. Fixed in
+  // index.html; the effect works on both hosts. Only the two
+  // feImage-based effects (water below, and mousefx Liquid Distortion)
+  // genuinely fail in WE.
   { value: "glow",   emoji: "💡", nameKey: "pixelfx.glow_name",
-    descKey: "pixelfx.glow_desc", livelyOnly: true },
+    descKey: "pixelfx.glow_desc" },
   { value: "ripple", emoji: "💫", nameKey: "pixelfx.ripple_name",
     descKey: "pixelfx.ripple_desc" },
   // v2.3.3-beta: water mode is a viewport-spanning click ripple
@@ -10384,8 +10389,12 @@ const PIXELFX_MODES   = [
   // white-blueish rings per click, max radius ≈ 65 % of the viewport
   // diagonal. Excluded from "all" because it's too prominent to
   // layer on top of trail+glow+ripple at the same time.
+  // v2.4.4: livelyOnly dropped. The effect now renders through a WebGL
+  // shader instead of the SVG filter whose feImage step produces nothing
+  // in Wallpaper Engine, and it was confirmed working there. Hosts
+  // without WebGL fall back to the filter automatically.
   { value: "water",  emoji: "💧", nameKey: "pixelfx.water_name",
-    descKey: "pixelfx.water_desc", livelyOnly: true },
+    descKey: "pixelfx.water_desc" },
   // v2.3.11-beta: "all" tile removed on user request — stacking
   // trail + glow + click ripple at once was visually messy and the
   // single-select intent of the mode picker was clearer without it.

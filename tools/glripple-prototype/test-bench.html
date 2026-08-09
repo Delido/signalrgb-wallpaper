@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>glRipple test bench</title>
+<style>
+  html,body{margin:0;padding:0;background:#111;color:#ddd;font:13px/1.4 Consolas,monospace}
+  #panel{padding:12px 16px}
+  h1{font-size:15px;margin:0 0 8px;color:#6cf}
+  h2{font-size:13px;margin:14px 0 4px;color:#9cf}
+  table{border-collapse:collapse;width:100%;max-width:1200px}
+  td{padding:2px 10px 2px 0;vertical-align:top}
+  td.k{color:#888;width:380px}
+  .ok{color:#7d7;font-weight:bold}.bad{color:#f77;font-weight:bold}.warn{color:#fd7;font-weight:bold}
+  #verdict{margin-top:12px;padding:10px;background:#1c1c1c;border-left:4px solid #666;
+           white-space:pre-wrap;font-size:14px}
+  .pairs{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0}
+  .pair{text-align:center;color:#888;font-size:10px}
+  .pair .row{display:flex;gap:4px}
+  .pair .cell{position:relative;width:150px;height:84px;border:1px solid #555;
+              background-position:center center}
+  .pair canvas{width:150px;height:84px;display:block;border:1px solid #555}
+  .lbl{margin-bottom:2px;color:#9cf}
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>glRipple — does the WebGL renderer match what CSS paints?</h1>
+  <div class="pairs" id="pairs"></div>
+  <h2>Live ripple (WebGL) — click anywhere</h2>
+  <div style="position:relative;width:480px;height:270px;border:1px solid #555">
+    <div id="liveBg" style="position:absolute;inset:0;background-size:cover;
+         background-position:center center;background-repeat:no-repeat"></div>
+    <canvas id="liveGl" style="position:absolute;inset:0;width:480px;height:270px"></canvas>
+  </div>
+  <table id="rows"></table>
+  <div id="verdict">running…</div>
+</div>
+
+<script src="glripple.js"></script>
+<script>
+"use strict";
+var rows=document.getElementById("rows"),R={};
+function row(k,v,cls){var tr=document.createElement("tr"),a=document.createElement("td"),b=document.createElement("td");
+  a.className="k";a.textContent=k;if(cls)b.className=cls;b.textContent=v;tr.appendChild(a);tr.appendChild(b);rows.appendChild(tr)}
+function head(t){var tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=2;
+  td.innerHTML="<h2>"+t+"</h2>";tr.appendChild(td);rows.appendChild(tr)}
+
+var we=[];
+if(typeof window.wallpaperPropertyListener!=="undefined")we.push("propertyListener");
+if(typeof window.wallpaperRegisterAudioListener==="function")we.push("audioListener");
+if(typeof window.wallpaperRequestRandomFileForProperty==="function")we.push("randomFile");
+R.host=we.length?"Wallpaper Engine":(typeof window.livelyPropertyListener!=="undefined"?"Lively":"plain browser");
+var mm=navigator.userAgent.match(/(?:Chrome|CriOS)\/(\d+)/);R.chrome=mm?parseInt(mm[1],10):0;
+head("Environment");
+row("Host",R.host+(we.length?"  ["+we.join(", ")+"]":""));
+row("Chromium major",R.chrome||"unknown");
+
+// ── build a distinctive test image (deliberately non-square: 3:2) ──────────
+var IW=300,IH=200;
+var imgCv=document.createElement("canvas");imgCv.width=IW;imgCv.height=IH;
+(function(){
+  var c=imgCv.getContext("2d");
+  // Low-frequency content on purpose. An earlier version used a fine
+  // white grid; at 150x84 those lines are ~1px wide, so a half-pixel
+  // sampling difference between WebGL's LINEAR filter and Canvas2D's
+  // own resampler flipped ~13% of pixels with no geometry error at all.
+  // Large flat blocks make a real misalignment obvious and sampling
+  // noise negligible.
+  var cols=["#1b3a6b","#7b1b4b","#2e7d5b","#b4762a","#5a3a8a","#8a2a2a"];
+  var bw=IW/3, bh=IH/2, k=0;
+  for(var by=0;by<2;by++)for(var bx=0;bx<3;bx++){
+    c.fillStyle=cols[k++];c.fillRect(bx*bw,by*bh,bw,bh);
+  }
+  // corner markers so cropping / tiling offsets are unmistakable
+  c.fillStyle="#e33";c.fillRect(0,0,30,30);
+  c.fillStyle="#3e3";c.fillRect(IW-30,0,30,30);
+  c.fillStyle="#33e";c.fillRect(0,IH-30,30,30);
+  c.fillStyle="#ee3";c.fillRect(IW-30,IH-30,30,30);
+  c.fillStyle="#fff";c.fillRect(IW/2-3,0,6,IH);   // centre spine
+})();
+var imgURL=imgCv.toDataURL();
+var imgEl=new Image();
+
+// ── neutral map (no displacement) so geometry can be compared 1:1 ─────────
+var MAP=256;
+var mapCv=document.createElement("canvas");mapCv.width=mapCv.height=MAP;
+var mapCtx=mapCv.getContext("2d");
+function neutralMap(){mapCtx.fillStyle="rgb(128,128,0)";mapCtx.fillRect(0,0,MAP,MAP);}
+neutralMap();
+
+var FITS=["cover","contain","fill","tile","tile-x","tile-y"];
+var TILE_SCALE=25;
+
+function makePair(fit){
+  var wrap=document.createElement("div");wrap.className="pair";
+  var lbl=document.createElement("div");lbl.className="lbl";lbl.textContent=fit;
+  var rowEl=document.createElement("div");rowEl.className="row";
+  var cssCell=document.createElement("div");cssCell.className="cell";
+  var cv=document.createElement("canvas");cv.width=150;cv.height=84;
+  rowEl.appendChild(cssCell);rowEl.appendChild(cv);
+  wrap.appendChild(lbl);wrap.appendChild(rowEl);
+  var cap=document.createElement("div");cap.textContent="CSS  |  WebGL";
+  wrap.appendChild(cap);
+  document.getElementById("pairs").appendChild(wrap);
+
+  // CSS side — exactly the rules index.html applies
+  cssCell.style.backgroundImage="url("+imgURL+")";
+  if(fit==="cover"){cssCell.style.backgroundSize="cover";cssCell.style.backgroundRepeat="no-repeat";}
+  else if(fit==="contain"){cssCell.style.backgroundSize="contain";cssCell.style.backgroundRepeat="no-repeat";}
+  else if(fit==="fill"){cssCell.style.backgroundSize="100% 100%";cssCell.style.backgroundRepeat="no-repeat";}
+  else if(fit==="tile"){cssCell.style.backgroundSize=(IW*TILE_SCALE/100)+"px "+(IH*TILE_SCALE/100)+"px";cssCell.style.backgroundRepeat="repeat";}
+  else if(fit==="tile-x"){cssCell.style.backgroundSize=(IW*TILE_SCALE/100)+"px 100%";cssCell.style.backgroundRepeat="repeat-x";}
+  else if(fit==="tile-y"){cssCell.style.backgroundSize="100% "+(IH*TILE_SCALE/100)+"px";cssCell.style.backgroundRepeat="repeat-y";}
+  return cv;
+}
+
+var verdict=document.getElementById("verdict");
+
+imgEl.onload=function(){
+  head("WebGL renderer");
+  var canvases={};
+  FITS.forEach(function(f){canvases[f]=makePair(f);});
+
+  var results={};
+  var anyFail=false;
+  FITS.forEach(function(fit){
+    var r=new GLRipple(canvases[fit]);
+    var ok=r.init();
+    if(!ok){results[fit]={err:r.error};anyFail=true;return;}
+    r.resize(150,84);
+    r.setImage(imgEl,IW,IH);
+    r.setFit(fit,TILE_SCALE);
+    r.setMap(mapCv);
+    var drew=r.draw(0,0,1);          // neutral map -> pure geometry test
+    results[fit]={drew:drew,err:r.error};
+    if(!drew)anyFail=true;
+  });
+  R.fits=results;
+
+  var first=new GLRipple(document.createElement("canvas"));
+  var initOK=first.init();
+  R.webgl=initOK;
+  row("WebGL context",initOK?"obtained":"FAILED: "+first.error,initOK?"ok":"bad");
+  if(initOK){
+    try{
+      var gl=first.gl,d=gl.getExtension("WEBGL_debug_renderer_info");
+      R.renderer=d?gl.getParameter(d.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+      row("Renderer",R.renderer);
+    }catch(e){}
+  }
+  FITS.forEach(function(f){
+    var x=results[f];
+    row("fit '"+f+"' rendered",x.drew?"yes":("no"+(x.err?": "+x.err:"")),x.drew?"ok":"bad");
+  });
+
+  // ── objective geometry check: WebGL vs a Canvas2D reference ────────────
+  // Comparing screenshots by eye is not evidence. Canvas2D can reproduce
+  // each CSS fit mode exactly (drawImage with computed source/dest rects),
+  // so we render the same mode both ways and diff the pixels. A correct
+  // computeUV() should land within a couple of percent; a swapped or
+  // inverted axis shows up immediately as a large mismatch.
+  head("Geometry check — WebGL vs Canvas2D reference (lower = better)");
+  function refDraw(fit, W, H, scale) {
+    var c = document.createElement("canvas"); c.width = W; c.height = H;
+    var g = c.getContext("2d", { willReadFrequently: true });
+    var s = scale / 100;
+    if (fit === "fill") { g.drawImage(imgEl, 0, 0, W, H); return c; }
+    if (fit === "cover" || fit === "contain") {
+      var ar = IW / IH, va = W / H, dw, dh;
+      var bigger = (fit === "cover") ? (ar > va) : (ar < va);
+      if (bigger) { dh = H; dw = H * ar; } else { dw = W; dh = W / ar; }
+      g.drawImage(imgEl, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      return c;
+    }
+    // tile modes. CSS with background-position:center centres ONE TILE in
+    // the box and repeats outward from it — it does not centre the whole
+    // grid. Getting this wrong shifts everything by up to half a tile,
+    // which is what an earlier version of this reference did.
+    var tw = (fit === "tile-y") ? W : IW * s;
+    var th = (fit === "tile-x") ? H : IH * s;
+    var startX = W / 2 - tw / 2, startY = H / 2 - th / 2;
+    while (startX > 0) startX -= tw;
+    while (startY > 0) startY -= th;
+    if (fit === "tile-x") { startY = 0; th = H; }
+    if (fit === "tile-y") { startX = 0; tw = W; }
+    for (var py = startY; py < H; py += th)
+      for (var px = startX; px < W; px += tw)
+        g.drawImage(imgEl, px, py, tw, th);
+    return c;
+  }
+  function diffPct(aCv, bCv) {
+    var W = aCv.width, H = aCv.height;
+    var A = aCv.getContext("2d", { willReadFrequently: true }).getImageData(0,0,W,H).data;
+    var tmp = document.createElement("canvas"); tmp.width = W; tmp.height = H;
+    var tg = tmp.getContext("2d", { willReadFrequently: true });
+    tg.drawImage(bCv, 0, 0);
+    var B = tg.getImageData(0,0,W,H).data;
+    var bad = 0, n = 0;
+    for (var i = 0; i < A.length; i += 4) {
+      var da = Math.abs(A[i]-B[i]) + Math.abs(A[i+1]-B[i+1]) + Math.abs(A[i+2]-B[i+2]);
+      if (da > 90) bad++;
+      n++;
+    }
+    return Math.round(100 * bad / n);
+  }
+  FITS.forEach(function (fit) {
+    var W = 150, H = 84;
+    var ref = refDraw(fit, W, H, TILE_SCALE);
+    var glc = canvases[fit];
+    var d = null;
+    try { d = diffPct(ref, glc); } catch (e) { d = null; }
+    R.fits[fit].diffPct = d;
+    var good = (d !== null && d <= 6);
+    if (!good) anyFail = true;
+    row("'" + fit + "' pixel mismatch vs reference",
+        d === null ? "unreadable" : d + "%", good ? "ok" : "bad");
+  });
+
+  // ── unit-check computeUV against hand-worked expectations ───────────────
+  head("computeUV maths (viewport 150x84, image 300x200)");
+  function near(a,b){return Math.abs(a-b)<0.005;}
+  var cases=[
+    // cover: image AR 1.5, view AR 1.786 -> image is TALLER, so sx=1, sy=AR ratio
+    ["cover",   150,84, function(u){return near(u.scale[0],1)&&u.scale[1]<1;}],
+    ["contain", 150,84, function(u){return near(u.scale[1],1)&&u.scale[0]>1;}],
+    ["fill",    150,84, function(u){return near(u.scale[0],1)&&near(u.scale[1],1);}],
+    ["tile",    150,84, function(u){return u.repeat===1;}],
+  ];
+  cases.forEach(function(c){
+    var u=GLRipple.computeUV(c[0],TILE_SCALE,c[1],c[2],IW,IH);
+    var pass=c[3](u);
+    if(!pass)anyFail=true;
+    row("computeUV('"+c[0]+"')",
+        "scale=["+u.scale[0].toFixed(3)+","+u.scale[1].toFixed(3)+"] "+
+        "offset=["+u.offset[0].toFixed(3)+","+u.offset[1].toFixed(3)+"] repeat="+u.repeat,
+        pass?"ok":"bad");
+  });
+
+  // ── live ripple demo ────────────────────────────────────────────────────
+  head("Live ripple");
+  document.getElementById("liveBg").style.backgroundImage="url("+imgURL+")";
+  var liveCv=document.getElementById("liveGl");
+  liveCv.width=480;liveCv.height=270;
+  var live=new GLRipple(liveCv);
+  var liveOK=live.init();
+  row("live renderer init",liveOK?"ok":"FAILED: "+live.error,liveOK?"ok":"bad");
+  if(liveOK){
+    live.setImage(imgEl,IW,IH);
+    live.setFit("cover",100);
+    live.setMap(mapCv);
+    var ripples=[],lastT=0,frames=0,tSum=0;
+    function paintMap(){
+      mapCtx.fillStyle="rgb(128,128,0)";mapCtx.fillRect(0,0,MAP,MAP);
+      var alive=false;
+      for(var i=0;i<ripples.length;i++){
+        var rp=ripples[i],t=rp.life/1.8;
+        if(t>=1)continue;
+        alive=true;
+        var radius=t*180, amp=90*(1-t)*(1-t*0.4);
+        if(amp<4)continue;
+        var N=48,band=8,sliceR=12;
+        var cxm=rp.x/480*MAP, cym=rp.y/270*MAP;
+        var rm=radius/480*MAP;
+        for(var k=0;k<N;k++){
+          var th=k/N*Math.PI*2,ct=Math.cos(th),st=Math.sin(th);
+          var ox=cxm+(rm+band)*ct, oy=cym+(rm+band)*st;
+          var oR=Math.max(0,Math.min(255,Math.round(128+ct*amp)));
+          var oG=Math.max(0,Math.min(255,Math.round(128+st*amp)));
+          var g=mapCtx.createRadialGradient(ox,oy,0,ox,oy,sliceR);
+          g.addColorStop(0,"rgba("+oR+","+oG+",0,0.9)");
+          g.addColorStop(1,"rgba(128,128,0,0)");
+          mapCtx.fillStyle=g;mapCtx.fillRect(ox-sliceR,oy-sliceR,sliceR*2,sliceR*2);
+          var ix=cxm+Math.max(0,rm-band)*ct, iy=cym+Math.max(0,rm-band)*st;
+          var iR=Math.max(0,Math.min(255,Math.round(128-ct*amp)));
+          var iG=Math.max(0,Math.min(255,Math.round(128-st*amp)));
+          g=mapCtx.createRadialGradient(ix,iy,0,ix,iy,sliceR);
+          g.addColorStop(0,"rgba("+iR+","+iG+",0,0.9)");
+          g.addColorStop(1,"rgba(128,128,0,0)");
+          mapCtx.fillStyle=g;mapCtx.fillRect(ix-sliceR,iy-sliceR,sliceR*2,sliceR*2);
+        }
+      }
+      return alive;
+    }
+    function tick(now){
+      requestAnimationFrame(tick);
+      var dt=lastT?Math.min(0.1,(now-lastT)/1000):0;lastT=now;
+      for(var i=ripples.length-1;i>=0;i--){ripples[i].life+=dt;if(ripples[i].life>1.8)ripples.splice(i,1);}
+      var t0=performance.now();
+      var alive=paintMap();
+      live.setMap(mapCv);
+      live.draw(alive?80:0,alive?80:0,alive?1:0);
+      tSum+=performance.now()-t0;frames++;
+      if(frames===60){R.frameMs=(tSum/frames).toFixed(2);frames=0;tSum=0;
+        var el=document.getElementById("frameMsRow");
+        if(el)el.textContent=R.frameMs+" ms";}
+    }
+    var tr=document.createElement("tr"),ka=document.createElement("td"),kb=document.createElement("td");
+    ka.className="k";ka.textContent="avg frame cost (map paint + upload + draw)";
+    kb.id="frameMsRow";kb.textContent="measuring…";
+    tr.appendChild(ka);tr.appendChild(kb);rows.appendChild(tr);
+    liveCv.addEventListener("click",function(e){
+      var r=liveCv.getBoundingClientRect();
+      ripples.push({x:e.clientX-r.left,y:e.clientY-r.top,life:0});
+    });
+    document.addEventListener("click",function(e){
+      if(e.target===liveCv)return;
+      var r=liveCv.getBoundingClientRect();
+      if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom){
+        ripples.push({x:e.clientX-r.left,y:e.clientY-r.top,life:0});
+      }
+    });
+    // auto-fire one so the screenshot shows a wave
+    setTimeout(function(){ripples.push({x:240,y:135,life:0.35});},400);
+    requestAnimationFrame(tick);
+  }
+
+  var L=[];
+  L.push("HOST: "+R.host+(R.chrome?"  (Chromium "+R.chrome+")":""));
+  L.push("");
+  if(!R.webgl){
+    L.push("✗ No WebGL — renderer unusable on this host.");
+  }else if(anyFail){
+    L.push("⚠ Renderer initialised but at least one fit mode failed.");
+  }else{
+    L.push("✓ All six fit modes rendered.");
+    L.push("  Compare each pair above: LEFT is what CSS paints, RIGHT is");
+    L.push("  the WebGL renderer with a neutral map. They must be");
+    L.push("  geometrically identical — same crop, same tiling, same");
+    L.push("  corner-marker positions. Any mismatch is a computeUV bug.");
+    L.push("");
+    L.push("  The live panel below shows an actual ripple. It should bend");
+    L.push("  the grid in a travelling ring, not slide the whole image.");
+  }
+  verdict.textContent=L.join("\n");
+  window.__diag=R;
+  var pre=document.createElement("div");
+  pre.style.cssText="margin-top:10px;color:#888;font-size:11px;word-break:break-all;";
+  pre.textContent="JSON: "+JSON.stringify({host:R.host,chrome:R.chrome,webgl:R.webgl,
+    renderer:R.renderer,fits:R.fits});
+  verdict.appendChild(pre);
+};
+imgEl.src=imgURL;
+</script>
+</body>
+</html>
