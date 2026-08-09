@@ -29,6 +29,9 @@
 #   1 — neither Lively nor a WE project folder was detected
 #   2 — Lively CLI invocation failed for at least one ZIP
 #   3 — WE project.json patch failed
+#   4 — nothing failed, but the user's WE copy is a Steam Workshop
+#       subscription we can't touch (v2.4.3). Steam ships the update
+#       itself; the caller should say so rather than report success.
 
 [CmdletBinding()]
 param(
@@ -225,6 +228,10 @@ if (Test-Path $weMyProjects) {
             Write-Status "WE project.json version bumped: $oldVer → $newVer" "Green"
             Write-Status "  Open Wallpaper Engine → My Wallpapers → right-click SignalRGB Glow → Set as wallpaper to apply the update." "DarkGray"
             $anyHostUpdated = $true
+            # v2.4.3: a locally imported project WAS updated here, so the
+            # Workshop notice below must not downgrade the exit code —
+            # a user with both copies is genuinely done.
+            $weProjectPatched = $true
         } catch {
             Write-Status "ERROR patching WE project.json: $_" "Red"
             $weError = $true
@@ -234,6 +241,54 @@ if (Test-Path $weMyProjects) {
     }
 } else {
     Write-Status "Wallpaper Engine not detected (no myprojects\signalrgb-glow folder) — skipping WE path." "DarkGray"
+}
+
+# ── Steam Workshop subscription check ──────────────────────────────────────
+# v2.4.3: the block above only ever looked in myprojects\, i.e. a locally
+# imported project. Users who SUBSCRIBED to the Workshop item have their
+# copy under steamapps\workshop\content\431960\<workshop-id>\ instead, and
+# nothing here can update it: the files are Steam-managed, and the
+# installer doesn't write there either. Pre-2.4.3 those users clicked
+# "Re-import wallpaper bundles", got a success toast, and nothing
+# happened — which is exactly how the v2.4.2 fix failed to reach the
+# person who reported the bug it fixed.
+#
+# We can't fix their copy, but we can stop lying about it and tell them
+# what actually works: Steam ships the update, then they re-apply.
+$weWorkshopRoot = "${env:ProgramFiles(x86)}\Steam\steamapps\workshop\content\431960"
+$subscribedCopy = $null
+if (Test-Path $weWorkshopRoot) {
+    foreach ($dir in Get-ChildItem $weWorkshopRoot -Directory -ErrorAction SilentlyContinue) {
+        $pj = Join-Path $dir.FullName "project.json"
+        if (-not (Test-Path $pj)) { continue }
+        try {
+            $meta = Get-Content $pj -Raw -ErrorAction Stop | ConvertFrom-Json
+        } catch { continue }
+        # Match on title rather than workshop id: the id changes if the
+        # item is ever re-published, the title is what users recognise.
+        if ($meta.title -and $meta.title -match 'SignalRGB') {
+            $subscribedCopy = [pscustomobject]@{
+                Path  = $dir.FullName
+                Id    = $dir.Name
+                Title = $meta.title
+            }
+            break
+        }
+    }
+}
+
+if ($subscribedCopy) {
+    Write-Status "" "Gray"
+    Write-Status "NOTE: you're subscribed to '$($subscribedCopy.Title)' on the Steam Workshop" "Yellow"
+    Write-Status "  (item $($subscribedCopy.Id))" "DarkGray"
+    Write-Status "  That copy is managed by Steam and cannot be updated from here." "Yellow"
+    Write-Status "  Steam downloads new versions automatically — restart Steam to force a check." "Yellow"
+    Write-Status "  Then re-apply the wallpaper in Wallpaper Engine to load it." "Yellow"
+    # Counts as a detected host: the user has a working WE setup, so
+    # "no wallpaper hosts detected" (exit 1) would be plainly wrong and
+    # would surface as a failure toast.
+    $anyHostUpdated = $true
+    $weSubscribed = $true
 }
 
 # ── MSIX-Lively loopback exemption ─────────────────────────────────────────
@@ -258,5 +313,10 @@ if (-not $anyHostUpdated) {
 }
 if ($livelyError) { exit 2 }
 if ($weError)     { exit 3 }
+# v2.4.3: exit 4 — everything we could touch was updated, but the user
+# also has a Steam Workshop subscription we can't reach. Distinct from 0
+# so the tray can say "Steam will deliver it, then re-apply" instead of
+# a bare "done" that leaves them believing they're already up to date.
+if ($weSubscribed -and -not $weProjectPatched) { exit 4 }
 Write-Status "Done." "Green"
 exit 0

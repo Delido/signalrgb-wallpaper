@@ -28,6 +28,9 @@ JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
     ("Wallpaper source (node)", HERE / "test_wallpaper_source.mjs"),
 ]
+PS_SUITES = [
+    ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),
+]
 LIVE_SUITES = [
     ("Smoke test — needs a running bridge", REPO / "wallpaper_bridge" / "smoke_test.py"),
 ]
@@ -48,12 +51,25 @@ def run(label, cmd, cwd):
     return proc.returncode == 0
 
 
-def have_node():
+def have(exe, *args):
     try:
-        subprocess.run(["node", "--version"], capture_output=True, check=True)
+        subprocess.run([exe, *args], capture_output=True, check=True)
         return True
     except Exception:
         return False
+
+
+def have_node():
+    return have("node", "--version")
+
+
+def pwsh_exe():
+    """PowerShell 7 if present, else the Windows-shipped 5.1. The
+    installer scripts support both, so the tests should too."""
+    for exe in ("pwsh", "powershell"):
+        if have(exe, "-NoProfile", "-Command", "$PSVersionTable.PSVersion.Major"):
+            return exe
+    return None
 
 
 def main():
@@ -69,6 +85,14 @@ def main():
     else:
         print("\nnode not found — skipping JS suites")
         outcomes.append(("JS suites", None))
+
+    ps = pwsh_exe()
+    if ps:
+        for label, path in PS_SUITES:
+            outcomes.append((label, run(label, [ps, "-NoProfile", "-File", str(path)], REPO)))
+    else:
+        print("\npowershell not found — skipping PS suites")
+        outcomes.append(("PS suites", None))
 
     if live:
         for label, path in LIVE_SUITES:

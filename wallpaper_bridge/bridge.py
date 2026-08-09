@@ -2407,6 +2407,17 @@ TRANSLATIONS = {
     "tray.reimport_bundles.toast.fail": {
         "en": "Re-import failed — see %TEMP%\\signalrgb-reimport.log for details.",
         "de": "Re-Import fehlgeschlagen — Details in %TEMP%\\signalrgb-reimport.log."},
+    # v2.4.3: the Workshop copy is Steam-managed and can't be touched
+    # from here. Saying "done" would leave subscribers believing they
+    # already have the update — which is how the v2.4.2 fix failed to
+    # reach the user who reported the bug it fixed.
+    "tray.reimport_bundles.toast.workshop": {
+        "en": "You're subscribed on the Steam Workshop — Steam delivers the "
+              "update itself (restart Steam to force a check), then re-apply "
+              "the wallpaper in Wallpaper Engine.",
+        "de": "Du bist im Steam-Workshop abonniert — Steam liefert das Update "
+              "selbst (Steam neu starten erzwingt eine Prüfung). Danach das "
+              "Wallpaper in Wallpaper Engine erneut zuweisen."},
     "tray.reload_wallpapers":   {"en": "Reload wallpaper pages",
                                  "de": "Wallpaper-Seiten neu laden"},
     "tray.updates":             {"en": "Updates",                 "de": "Updates"},
@@ -12073,6 +12084,11 @@ class TrayApp:
             # update.
             if result.returncode == 0:
                 self._tray_notify(tr("tray.reimport_bundles.toast.ok"), tr("tray.reimport_bundles"))
+            elif result.returncode == 4:
+                # v2.4.3: nothing failed — the user's only WE copy is a
+                # Steam Workshop subscription, which we can't update.
+                self._tray_notify(tr("tray.reimport_bundles.toast.workshop"),
+                                  tr("tray.reimport_bundles"))
             elif result.returncode in (2, 3):
                 self._tray_notify(tr("tray.reimport_bundles.toast.partial"), tr("tray.reimport_bundles"))
             else:
