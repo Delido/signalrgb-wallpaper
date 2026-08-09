@@ -159,6 +159,18 @@ def _setup_persistent_logging() -> None:
             log_path, maxBytes=1 * 1024 * 1024, backupCount=3,
             encoding="utf-8", delay=True,
         )
+        # v2.4.3: stamp every line. Until now the log carried no time
+        # information at all, which made the issue-#2 diagnosis far
+        # harder than it needed to be: the reporter's bundle showed
+        # what happened but not *when*, so "before the sleep" and
+        # "after the resume" could only be guessed at from ordering.
+        # Local time (not UTC) because these logs are read alongside a
+        # user telling us "I woke it up around 7am".
+        import logging as _lg
+        handler.setFormatter(_lg.Formatter(
+            fmt="%(asctime)s.%(msecs)03d %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
         # Stream-like adapter so we can hand it to sys.stdout /
         # sys.stderr in place. Each print() lands as one record;
         # the handler does the rollover.
@@ -6646,7 +6658,9 @@ class UdpReceiver(asyncio.DatagramProtocol):
             screen = data[2]
             self.count += 1
             self._bump_fps(screen)
-            if self.count == 1 or self.count % 600 == 0:
+            # v2.4.3: throttled from every 600 frames — see the matching
+            # note on the chunked path below. Same message, same flood.
+            if self.count == 1 or self.count % 30000 == 0:
                 print(f"[udp] {self.count} single-packet frames "
                       f"(last: screen={screen}, {len(data)} bytes)")
             self.source_mgr.emit(screen, data, "signalrgb")
@@ -6727,7 +6741,15 @@ class UdpReceiver(asyncio.DatagramProtocol):
             del self.partials[key]
             self.count += 1
             self._bump_fps(screen)
-            if self.count == 1 or self.count % 600 == 0:
+            # v2.4.3: this line used to fire every 600 frames — at 30-60 Hz
+            # that's every ~10-20 s, and it accounted for ~95 % of the
+            # rotating log. A diagnostics bundle from a machine that had
+            # been up overnight contained 46 267 copies of it and had
+            # rolled almost everything else out of the 4 MiB ringbuffer,
+            # including the client counts that eventually identified the
+            # bug. Keep the first (proves the chunked path works at all)
+            # and then one every 30 000 frames as a liveness marker.
+            if self.count == 1 or self.count % 30000 == 0:
                 print(f"[udp] {self.count} chunked frames assembled "
                       f"(last: screen={screen}, {w}x{h}, {chunk_count} chunks)")
             self.source_mgr.emit(screen, bytes(frame), "signalrgb")
@@ -10656,9 +10678,33 @@ class BridgeRuntime:
             _proc = None
         # gc every 60 s; log line every 5 min so logs stay readable.
         tick = 0
+        # v2.4.3: sleep/resume marker. Each iteration should take ~60 s
+        # of wall-clock; if far more elapsed, the machine was suspended
+        # in between. Windows does broadcast WM_POWERBROADCAST, but
+        # catching it needs a message pump on a window handle, and this
+        # loop already runs on the right cadence to spot the gap for
+        # free. The marker anchors everything else in the log: issue #2
+        # was a sleep/resume bug whose diagnosis started with "which of
+        # these lines are from after the resume?", and nothing in the
+        # log answered that.
+        _last_wall = time.time()
+        _RESUME_GAP_S = 120.0     # 2x the tick — well clear of scheduling jitter
         while True:
             try:
                 await asyncio.sleep(60)
+                now_wall = time.time()
+                gap = now_wall - _last_wall
+                _last_wall = now_wall
+                if gap > _RESUME_GAP_S:
+                    mins = int(gap // 60)
+                    hrs, mins = divmod(mins, 60)
+                    span = f"{hrs}h{mins:02d}m" if hrs else f"{mins}m"
+                    try:
+                        n_now = sum(len(s) for s in self.broadcaster.clients_by_screen.values())
+                    except Exception:
+                        n_now = -1
+                    print(f"[power] resume detected — {span} gap "
+                          f"(suspended or clock jump); clients={n_now}")
                 gc.collect()
                 tick += 1
                 if tick % 5 == 0:
