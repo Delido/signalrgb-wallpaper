@@ -44,17 +44,31 @@ def ws_handshake(target: str) -> tuple[socket.socket, bytes]:
     return s, resp
 
 
-def read_one_binary_frame(s: socket.socket, timeout: float) -> bytes | None:
+def read_one_binary_frame(s: socket.socket, timeout: float,
+                          match: bytes | None = None) -> bytes | None:
     """Skip text/control frames and return the next binary frame's body.
 
     The bridge sends an initial JSON text frame with settings on every
     upgrade, so a naive "read one frame" reader gets misaligned. We
     consume every frame off the wire and only return when we see a
     binary one (opcode 0x2).
+
+    `match` filters for a specific payload. Without it this test is
+    unreliable on a machine where SignalRGB is actually running: the
+    live plugin streams real frames at 30-60 Hz, so a frame arrives on
+    screen 0 whether or not the bridge's routing is correct, and the
+    "screen 0 got nothing" assertion fails on a perfectly healthy
+    build. Filtering to our own synthetic payload makes the assertions
+    mean what they claim. Frames that don't match are drained and
+    ignored until the timeout expires.
     """
-    s.settimeout(timeout)
+    deadline = time.monotonic() + timeout
     try:
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            s.settimeout(remaining)
             header = s.recv(2)
             if len(header) < 2:
                 return None
@@ -73,7 +87,10 @@ def read_one_binary_frame(s: socket.socket, timeout: float) -> bytes | None:
                     return None
                 body += chunk
             if opcode == 0x2:
-                return body
+                if match is None or body == match:
+                    return body
+                # A real frame from the live SignalRGB plugin — not ours.
+                continue
             # else: text/ping/etc — drop and keep reading
     except (socket.timeout, ConnectionResetError):
         return None
@@ -100,8 +117,8 @@ def main():
     expected = send_udp(screen=1)
     print(f"sent UDP for screen=1 ({len(expected)} bytes)")
 
-    frame0 = read_one_binary_frame(ws0, timeout=0.5)
-    frame1 = read_one_binary_frame(ws1, timeout=0.5)
+    frame1 = read_one_binary_frame(ws1, timeout=0.5, match=expected)
+    frame0 = read_one_binary_frame(ws0, timeout=0.5, match=expected)
 
     ok = True
     if frame1 == expected:
@@ -117,8 +134,8 @@ def main():
 
     expected2 = send_udp(screen=0)
     print(f"sent UDP for screen=0 ({len(expected2)} bytes)")
-    frame0b = read_one_binary_frame(ws0, timeout=0.5)
-    frame1b = read_one_binary_frame(ws1, timeout=0.5)
+    frame0b = read_one_binary_frame(ws0, timeout=0.5, match=expected2)
+    frame1b = read_one_binary_frame(ws1, timeout=0.5, match=expected2)
     if frame0b == expected2:
         print(f"  [PASS] screen=0 client received the frame ({len(frame0b)} bytes)")
     else:

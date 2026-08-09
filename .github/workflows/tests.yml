@@ -1,0 +1,68 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # windows-latest because bridge.py imports winreg / pywin32 paths at
+    # module scope. The suite itself is platform-agnostic, but the import
+    # is not, and importing the real module is the point.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install runtime deps
+        # Only what bridge.py needs at import time. The optional
+        # integrations (openrgb, mqtt, …) degrade gracefully when absent,
+        # which the suite tolerates by design.
+        run: pip install psutil pillow
+
+      - name: Run test suite
+        run: python tests/run_all.py
+
+      - name: Byte-compile every python source
+        # Catches syntax errors in modules the suite doesn't import.
+        run: python -m compileall -q wallpaper_bridge
+
+  lint-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version consistency
+        # APP_VERSION must have a RELEASE_NOTES entry (the Configurator's
+        # "What's new" modal reads it) and a CHANGELOG heading. Both were
+        # historically easy to forget on a release cut.
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver=$(grep -oP '^APP_VERSION\s*=\s*"\K[^"]+' wallpaper_bridge/bridge.py)
+          echo "APP_VERSION = $ver"
+
+          if ! grep -q "\"$ver\": {" wallpaper_bridge/bridge.py; then
+            echo "::error::No RELEASE_NOTES entry for $ver in bridge.py"
+            exit 1
+          fi
+          echo "RELEASE_NOTES entry present"
+
+          if ! grep -q "^## \[$ver\]" CHANGELOG.md; then
+            echo "::error::No CHANGELOG.md heading for $ver"
+            exit 1
+          fi
+          echo "CHANGELOG heading present"
+
+          wp=$(grep -oP '^WALLPAPER_VERSION\s*=\s*"\K[^"]+' wallpaper_bridge/bridge.py)
+          echo "WALLPAPER_VERSION = $wp"
