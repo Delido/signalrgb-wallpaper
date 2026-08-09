@@ -718,7 +718,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.2"
+APP_VERSION = "2.4.3-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -788,6 +788,65 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.3-beta.1": {
+        "title_en": "What's new in v2.4.3-beta.1",
+        "title_de": "Was ist neu in v2.4.3-beta.1",
+        "body_en": (
+            "Maintenance beta. No new features — this one is about making "
+            "the next bug easier to find and report.\n\n"
+            "**Re-import now tells the truth about Workshop copies**\n"
+            "- If your wallpaper came from a Steam Workshop subscription, "
+            "*Re-import wallpaper bundles* could never update it — that "
+            "copy is managed by Steam. It reported success anyway, which "
+            "is how the v2.4.2 fix failed to reach the person who "
+            "reported the bug it fixed. It now detects the subscription "
+            "and tells you what actually works: Steam delivers the "
+            "update, then re-apply the wallpaper in Wallpaper Engine.\n\n"
+            "**Readable logs**\n"
+            "- Every log line now carries a timestamp. Previously there "
+            "were none at all, so a diagnostics bundle showed what "
+            "happened but not when.\n"
+            "- The UDP frame-counter line was firing every few seconds "
+            "and had crowded roughly everything else out of the log. It "
+            "now appears about once every ten minutes.\n"
+            "- The bridge notes when the machine wakes from sleep, so "
+            "sleep-related reports are readable at a glance.\n\n"
+            "**Under the hood**\n"
+            "- Added a regression test-suite (77 checks) covering the "
+            "connection lifecycle and the “bridge offline” card, wired "
+            "into CI. The v2.4.1/v2.4.2 episode — a bug that took two "
+            "releases and one wrong fix — is the reason.\n"
+        ),
+        "body_de": (
+            "Wartungs-Beta. Keine neuen Funktionen — es geht darum, den "
+            "nächsten Fehler leichter auffindbar zu machen.\n\n"
+            "**Re-Import sagt die Wahrheit über Workshop-Kopien**\n"
+            "- Wenn dein Wallpaper aus einem Steam-Workshop-Abo stammt, "
+            "konnte *Wallpaper-Bundles neu importieren* es nie "
+            "aktualisieren — diese Kopie verwaltet Steam. Trotzdem wurde "
+            "Erfolg gemeldet; genau so erreichte der v2.4.2-Fix die "
+            "Person nicht, die den behobenen Bug gemeldet hatte. Jetzt "
+            "wird das Abo erkannt und der Weg genannt, der wirklich "
+            "funktioniert: Steam liefert das Update, danach das "
+            "Wallpaper in Wallpaper Engine erneut zuweisen.\n\n"
+            "**Lesbare Logs**\n"
+            "- Jede Log-Zeile hat jetzt einen Zeitstempel. Vorher gab es "
+            "gar keine — ein Diagnose-Paket zeigte, was passiert ist, "
+            "aber nicht wann.\n"
+            "- Die UDP-Frame-Zählzeile feuerte alle paar Sekunden und "
+            "hatte praktisch alles andere aus dem Log verdrängt. Sie "
+            "erscheint jetzt etwa alle zehn Minuten.\n"
+            "- Die Bridge vermerkt, wenn der Rechner aus dem "
+            "Ruhezustand aufwacht — Sleep-Meldungen sind damit auf "
+            "einen Blick lesbar.\n\n"
+            "**Unter der Haube**\n"
+            "- Neue Regressions-Testsuite (77 Checks) für den "
+            "Verbindungs-Lebenszyklus und die „Bridge offline\"-Karte, "
+            "in die CI eingebunden. Anlass ist die v2.4.1/v2.4.2-"
+            "Episode: ein Bug, der zwei Releases und einen falschen Fix "
+            "gekostet hat.\n"
+        ),
+    },
     "2.4.2": {
         "title_en": "What's new in v2.4.2",
         "title_de": "Was ist neu in v2.4.2",

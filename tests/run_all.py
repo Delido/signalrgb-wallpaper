@@ -30,6 +30,7 @@ JS_SUITES = [
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),
+    ("Release + winget tooling (pwsh)", HERE / "test_release_tooling.ps1"),
 ]
 LIVE_SUITES = [
     ("Smoke test — needs a running bridge", REPO / "wallpaper_bridge" / "smoke_test.py"),

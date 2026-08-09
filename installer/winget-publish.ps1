@@ -114,6 +114,15 @@ if (-not $wgc) {
 # to install with --scope user, hit the elevation requirement, and
 # either silently fail or strand users on the old version. Pipe-
 # override the scope so wingetcreate overrides the inherited value.
+#
+# v2.4.3: that pipe-override does NOT work. wingetcreate prints
+# "Überschreiben … mit Bereich Machine" and then writes `Scope: user`
+# anyway, inherited from the previous manifest — so every release from
+# v2.2.1 onward shipped the wrong scope, silently, for three years'
+# worth of versions. Verified against the published 2.4.0 manifest.
+# The pipe stays (it costs nothing and pins the architecture, which
+# does work), but the scope is now patched into the generated YAML
+# below and verified before submit.
 $urlSpec = $assetUrl + "|x64|machine"
 # Renamed from $args to $wgcArgs — $args is a PowerShell automatic
 # variable (the unbound-positional-args collection inside a function /
@@ -131,11 +140,98 @@ if ($DryRun) {
     return
 }
 
-$wgcArgs += "--submit"
-if ($Token) { $wgcArgs += @("--token", $Token) }
-Write-Host "Running wingetcreate update $pkgId --version $Version --submit …" -ForegroundColor Yellow
-& wingetcreate @wgcArgs
-if ($LASTEXITCODE -ne 0) { throw "wingetcreate exited $LASTEXITCODE — check output above" }
+# v2.4.3: sync the fork before submitting.
+#
+# wingetcreate branches the PR off YOUR fork of microsoft/winget-pkgs.
+# That fork is a snapshot from whenever you last pushed, and winget-pkgs
+# takes several hundred commits a day, so after a few weeks between
+# releases the fork is tens of thousands of commits behind and the
+# submit fails with "Das geforkte Repository konnte nicht mit den
+# Upstreamcommits synchronisiert werden". The v2.4.2 push hit exactly
+# this at 17 229 commits behind.
+#
+# `gh repo sync` is idempotent — a fork that's already level is a no-op —
+# so this runs unconditionally rather than trying to detect the drift.
+# Null-conditional (?.) is PowerShell 7 only; this script has to parse
+# under Windows PowerShell 5.1 too.
+$ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+$ghExe = if ($ghCmd) { $ghCmd.Source } else { $null }
+if (-not $ghExe) {
+    foreach ($cand in @("$env:ProgramFiles\GitHub CLI\gh.exe",
+                        "${env:ProgramFiles(x86)}\GitHub CLI\gh.exe",
+                        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\gh.exe")) {
+        if (Test-Path $cand) { $ghExe = $cand; break }
+    }
+}
+if ($ghExe) {
+    Write-Host "Syncing $ghUser/winget-pkgs with upstream…" -ForegroundColor Cyan
+    try {
+        & $ghExe repo sync "$ghUser/winget-pkgs" --source "microsoft/winget-pkgs" --branch master 2>&1 |
+            ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  WARN: fork sync returned $LASTEXITCODE — submitting anyway" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  WARN: fork sync failed ($_) — submitting anyway" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "gh CLI not found — skipping fork sync. If the submit fails with" -ForegroundColor Yellow
+    Write-Host "an upstream-sync error, sync $ghUser/winget-pkgs manually." -ForegroundColor Yellow
+}
+
+# ── 7. Generate, patch, verify, then submit ──────────────────────────────────
+# Split into two wingetcreate calls so the scope fix lands in the YAML
+# that actually gets submitted. `update` without --submit writes the
+# manifest tree under .\manifests\; `submit` pushes that exact tree.
+$manifestDir = Join-Path $repoRoot "manifests\d\Delido\SignalRGBWallpaper\$Version"
+if (Test-Path $manifestDir) { Remove-Item $manifestDir -Recurse -Force }
+
+Push-Location $repoRoot
+try {
+    Write-Host "Generating manifest…" -ForegroundColor Yellow
+    & wingetcreate @wgcArgs
+    if ($LASTEXITCODE -ne 0) { throw "wingetcreate update exited $LASTEXITCODE — check output above" }
+
+    $installerYaml = Join-Path $manifestDir "$pkgId.installer.yaml"
+    if (-not (Test-Path $installerYaml)) {
+        throw "Expected generated manifest at $installerYaml but it isn't there"
+    }
+
+    # Force Scope + ElevationRequirement. The installer sets
+    # PrivilegesRequired=admin and installs into Program Files, so a
+    # `user`-scoped manifest makes `winget upgrade` pick an install mode
+    # the package can't satisfy.
+    $yaml = Get-Content $installerYaml -Raw
+    if ($yaml -match '(?m)^Scope:\s*\S+') {
+        $yaml = $yaml -replace '(?m)^Scope:\s*\S+', 'Scope: machine'
+    } else {
+        $yaml = $yaml -replace '(?m)^(InstallerType:\s*\S+)', "`$1`nScope: machine"
+    }
+    if ($yaml -notmatch '(?m)^ElevationRequirement:') {
+        $yaml = $yaml -replace '(?m)^(Scope:\s*machine)', "`$1`nElevationRequirement: elevationRequired"
+    }
+    Set-Content -Path $installerYaml -Value $yaml -Encoding UTF8 -NoNewline
+
+    # Verify rather than trust: this is the exact check that would have
+    # caught the silent v2.2.1-onward regression.
+    $check = Get-Content $installerYaml -Raw
+    if ($check -notmatch '(?m)^Scope:\s*machine') {
+        throw "Scope is still not 'machine' after patching — refusing to submit $installerYaml"
+    }
+    Write-Host "  Scope: machine + ElevationRequirement: elevationRequired" -ForegroundColor Green
+
+    Write-Host "Validating manifest…" -ForegroundColor Yellow
+    & winget validate --manifest $manifestDir
+    if ($LASTEXITCODE -ne 0) { throw "winget validate rejected the manifest" }
+
+    $submitArgs = @("submit", "--prtitle", "$pkgId version $Version", $manifestDir)
+    if ($Token) { $submitArgs += @("--token", $Token) }
+    Write-Host "Submitting PR…" -ForegroundColor Yellow
+    & wingetcreate @submitArgs
+    if ($LASTEXITCODE -ne 0) { throw "wingetcreate submit exited $LASTEXITCODE — check output above" }
+} finally {
+    Pop-Location
+}
 
 Write-Host ""
 Write-Host "Submitted. PR will appear at https://github.com/microsoft/winget-pkgs/pulls?q=$pkgId+v$Version" -ForegroundColor Green

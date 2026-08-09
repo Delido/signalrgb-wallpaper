@@ -4,6 +4,111 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3-beta.1] - 2026-08-09
+
+Maintenance cut. Bridge- and tooling-only — `WALLPAPER_VERSION` stays at
+2.4.2, so no Workshop re-upload and no bundle re-import.
+
+Everything here is fallout from the issue-#2 investigation: the bug took
+two releases and one wrong fix, and each of the changes below removes
+one reason why.
+
+### Fixed — Re-import claimed success on Steam Workshop subscriptions
+
+`reimport-wallpaper-bundles.ps1` only looked in
+`steamapps\common\wallpaper_engine\projects\myprojects\signalrgb-glow`,
+i.e. a locally imported project. Subscribers have their copy under
+`steamapps\workshop\content\431960\<id>\`, which the script never
+checked and the installer never writes to — so the button reported
+success and did nothing. That is how the v2.4.2 fix failed to reach the
+reporter of the bug it fixed.
+
+Now scans the workshop tree (matching `SignalRGB` in `project.json`'s
+title, since the item id changes on re-publish), and exits **4** when
+the only WE copy is a subscription. The tray toast for that code
+explains what works instead: Steam ships the update, restart Steam to
+force a check, then re-apply in WE. A user with both copies still gets
+a plain success.
+
+### Added — Timestamps in the bridge log
+
+The rotating handler had no `Formatter` at all, so not one line carried
+a time. The issue-#2 bundle showed what happened but not when, and
+"which of these lines are from after the resume?" had no answer. Now
+stamps local time with milliseconds.
+
+### Changed — UDP progress lines throttled 600 → 30 000 frames
+
+At 30-60 Hz the old interval fired every ~10-20 s. The reporter's
+bundle contained 46 267 copies of that one message — about 95 % of the
+4 MiB ringbuffer — and had rolled nearly everything else out, including
+the client counts that eventually identified the bug. An 8 h session at
+60 Hz now spends ~58 lines on it instead of ~2880. Both call sites
+(single-packet and chunked) are throttled.
+
+### Added — `[power] resume detected` marker
+
+The diag heartbeat already ticks every 60 s, so a wall-clock gap much
+larger than that means the machine was suspended — cheaper than a
+`WM_POWERBROADCAST` message pump. Logs the gap and the live client
+count, which is the number that disproved the first theory of issue #2.
+
+### Added — Regression test-suite + CI
+
+`tests/` — 77 checks across five suites, hermetic (no bridge process,
+no ports, no SignalRGB instance), wired into the existing Smoke
+workflow:
+
+- `test_ws_lifecycle.py` — client lifecycle, keepalive, reaping,
+  broadcast routing, backpressure
+- `test_standby_card.mjs` — the standby-card state machine; reproduces
+  the issue-#2 latch against the *old* logic before asserting the fix
+- `test_wallpaper_source.mjs` — that the shipped `index.html` still
+  contains those guards, and that its JS parses
+- `test_logging.py` — the three logging changes above
+- `test_reimport_workshop.ps1` — Workshop detection against fixture
+  Steam trees
+
+`smoke_test.py` is fixed rather than replaced. Its two long-standing
+failures were an artefact: it asserted "screen 0 received nothing"
+while a live SignalRGB plugin was broadcasting on screen 0 at 30-60 Hz,
+so it was only ever green when SignalRGB happened to be idle. It now
+filters for its own synthetic payload and passes 4/4.
+
+CI also asserts every `APP_VERSION` has both a `RELEASE_NOTES` entry
+and a CHANGELOG heading — both drifted during the v2.4.x line.
+
+### Added — `installer\release.ps1`
+
+Automates the hand-run release sequence. Notes come from `bridge.py`'s
+`RELEASE_NOTES`, so the GitHub release and the Configurator's "What's
+new" modal can't drift apart — they did for v2.4.2, where the published
+notes also pointed at a tray entry that had moved to the Configurator.
+Refuses to cut on a dirty tree, an existing tag, a missing changelog
+entry, or failing tests. Beta versions publish as prereleases and skip
+winget by construction.
+
+### Fixed — winget publish shipped the wrong install scope
+
+`winget-publish.ps1` passed `|machine` to `wingetcreate` to override
+the inherited scope. That override does not work: wingetcreate prints
+"overriding with Machine" and writes `Scope: user` anyway. Every
+release from v2.2.1 — when the install moved to Program Files and
+started requiring admin — has carried the wrong scope, which makes
+`winget upgrade` attempt a user-scope install the package can't
+satisfy. Verified against the published 2.4.0 manifest.
+
+The script now generates the manifest, patches `Scope: machine` +
+`ElevationRequirement: elevationRequired` into the YAML, verifies the
+patch took, and only then submits.
+
+### Fixed — winget submit failed on a stale fork
+
+`wingetcreate` branches its PR off the maintainer's fork of
+`microsoft/winget-pkgs`, which drifts hundreds of commits a day. The
+v2.4.2 submit failed with the fork 17 229 commits behind. The script
+now runs `gh repo sync` first (idempotent, so it's unconditional).
+
 ## [2.4.2] - 2026-08-05
 
 Fix for issue #2. **Wallpaper-side change** — `WALLPAPER_VERSION` goes
