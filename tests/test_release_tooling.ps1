@@ -83,6 +83,12 @@ Write-Host "`nrelease.ps1 — preflight refuses bad cuts"
     Check "refuses an existing tag" ($src -match 'already exists')
     Check "refuses on failing tests" ($src -match 'refusing to cut a release')
     Check "notes come from RELEASE_NOTES, not hand-written" ($src -match "RELEASE_NOTES.get")
+    # -SkipBuild reuses installer_out\, which is only valid if that build
+    # postdates the code being tagged. Cutting v2.4.3-beta.1 this way
+    # published an exe built before the final commit.
+    Check "rejects a -SkipBuild artifact older than the source" `
+          ($src -match 'Installer is older than the source')
+    Check "compares against tracked sources only" ($src -match 'git ls-files')
 }
 
 Write-Host "`nwinget-publish.ps1 — scope is patched, not merely requested"

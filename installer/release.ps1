@@ -126,6 +126,28 @@ if (-not $SkipBuild) {
 if (-not (Test-Path $installerExe)) {
     throw "Installer not found at $installerExe$(if($SkipBuild){' — -SkipBuild needs a previous build'})"
 }
+# -SkipBuild reuses whatever is already in installer_out\, which is only
+# safe if it was built from the code we're about to tag. Cutting
+# v2.4.3-beta.1 this way shipped an installer built three minutes before
+# the final commit, so the exe was missing that commit's release notes
+# and tray strings. Compare against the newest tracked source file.
+if ($SkipBuild) {
+    $exeTime = (Get-Item $installerExe).LastWriteTime
+    Push-Location $repoRoot
+    try {
+        $newestSrc = & git ls-files -- 'wallpaper_bridge/*' 'installer/*' |
+            ForEach-Object { Join-Path $repoRoot $_ } |
+            Where-Object { Test-Path $_ } |
+            Get-Item | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    } finally { Pop-Location }
+    if ($newestSrc -and $newestSrc.LastWriteTime -gt $exeTime) {
+        throw ("Installer is older than the source it would ship.`n" +
+               "  installer: $exeTime`n" +
+               "  $($newestSrc.Name): $($newestSrc.LastWriteTime)`n" +
+               "Drop -SkipBuild.")
+    }
+    Ok "Installer is newer than every tracked source file"
+}
 $sizeMb = [math]::Round((Get-Item $installerExe).Length / 1MB, 1)
 Ok "Installer: $([IO.Path]::GetFileName($installerExe)) ($sizeMb MB)"
 
