@@ -61,3 +61,45 @@ jobs:
           assert b.WS_HOST == '127.0.0.1', 'WS_HOST drifted from loopback'
           print('OK')
           "@
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Regression suite
+        # tests/ — behavioural cover for the WS client lifecycle and the
+        # wallpaper page's standby-card state machine. Hermetic: no
+        # bridge process, no ports, no SignalRGB instance. See
+        # tests/README.md for why each suite exists.
+        run: python tests/run_all.py
+
+      - name: Byte-compile every python source
+        # Catches syntax errors in modules the suite never imports.
+        run: python -m compileall -q wallpaper_bridge
+
+  version-consistency:
+    # A release cut must not ship an APP_VERSION the Configurator's
+    # "What's new" modal can't render, or one the changelog doesn't
+    # mention. Both drifted during the v2.4.x line.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: APP_VERSION has release notes + a changelog entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver=$(grep -oP '^APP_VERSION\s*=\s*"\K[^"]+' wallpaper_bridge/bridge.py)
+          wp=$(grep -oP '^WALLPAPER_VERSION\s*=\s*"\K[^"]+' wallpaper_bridge/bridge.py)
+          echo "APP_VERSION=$ver  WALLPAPER_VERSION=$wp"
+
+          if ! grep -q "\"$ver\": {" wallpaper_bridge/bridge.py; then
+            echo "::error file=wallpaper_bridge/bridge.py::No RELEASE_NOTES entry for $ver"
+            exit 1
+          fi
+          if ! grep -q "^## \[$ver\]" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::No heading for $ver"
+            exit 1
+          fi
+          echo "OK — release notes and changelog both mention $ver"
