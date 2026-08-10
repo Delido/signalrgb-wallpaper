@@ -158,24 +158,60 @@ console.log("\nlarge soft blobs don't pay for the square around the circle");
   }
 }
 
-console.log("\nthe glow presets don't rebuild a gradient per particle");
+console.log("\nthe glow presets draw gradients, not stamped sprites");
 {
-  // fireflies and sparks each built a fresh createRadialGradient() for
-  // every particle on every frame — 336 and 205 per frame on a
-  // 2560x1440 desktop, so ~10 000 throwaway gradient objects a second
-  // at 30 fps. They now stamp a cached sprite instead. Both are the
-  // densest presets by particle count, so a regression here is the
-  // expensive kind.
+  // This check used to assert the opposite, and that is worth recording.
+  //
+  // v2.4.5 replaced fireflies' and sparks' per-particle
+  // createRadialGradient() with a cached sprite stamped via drawImage,
+  // reasoning that ~10 000 throwaway gradient objects a second had to
+  // be the expensive part. Measured on a real 5120x1440 desktop it was
+  // 4x SLOWER — Chromium has a fast GPU path for radial gradients that
+  // a scaled drawImage does not hit:
+  //
+  //     cached sprite   1.13 ms/frame
+  //     gradient        0.28 ms/frame
+  //
+  // and switching effects one at a time showed fireflies alone
+  // accounting for 4.15 of the wallpaper's 6.10 % GPU. v2.4.7 reverted
+  // it. The lesson worth keeping: "fewer allocations" is a guess about
+  // the bottleneck, not a measurement of it.
   for (const n of ["fireflies", "sparks"]) {
     const m = measured[n];
-    if (!m) { check(`${n} reuses its glow sprite`, false, "not measured"); continue; }
+    if (!m) { check(`${n} draws gradients`, false, "not measured"); continue; }
     const grads = m.wp.ops.filter(
       (o) => o.fillStyle && typeof o.fillStyle === "object"
              && Array.isArray(o.fillStyle.stops)).length;
-    check(`${n} builds no per-particle gradients (${grads} found)`, grads === 0);
+    check(`${n} paints via radial gradients (${grads})`, grads > 0);
     const imgs = m.wp.ops.filter((o) => o.op === "image").length;
-    check(`${n} stamps sprites instead (${imgs})`, imgs > 0);
+    check(`${n} does not stamp sprites (${imgs})`, imgs === 0);
   }
+}
+
+console.log("\nbig halos shrink with the effect-quality setting");
+{
+  // The halos are what actually costs: fireflies draws at 6x the
+  // particle radius, sparks at 5x, and area goes with the square. They
+  // now follow the quality bucket instead of being fixed, so the user's
+  // existing Performance/Balanced choice buys something on the preset
+  // that needed it most. Quality must stay at today's look exactly.
+  const m = WP.match(/function _qualityHaloScale\(\)[\s\S]*?\n\}/);
+  check("_qualityHaloScale is defined", !!m);
+  if (m) {
+    const f = (q) => new Function("_effectQuality", m[0] + "; return _qualityHaloScale;")(q)();
+    check("quality tier is unscaled", f("quality") === 1.0, String(f("quality")));
+    check("balanced shrinks halos", f("balanced") < 1 && f("balanced") >= 0.85,
+          String(f("balanced")));
+    check("performance shrinks them further", f("performance") < f("balanced"),
+          String(f("performance")));
+  }
+  // Applied where the big blobs get their size, so aurora and plasma —
+  // and any future preset that scales its radius with the viewport —
+  // inherit it without having to remember to ask.
+  check("viewport radius scaling folds in the halo scale",
+        /_ambientRadiusScale[\s\S]{0,600}?_qualityHaloScale\(\)/.test(WP));
+  check("fireflies scales its halo", /p\.r \* 6 \* _qualityHaloScale\(\)/.test(WP));
+  check("sparks scales its halo", /p\.r \* 5 \* _qualityHaloScale\(\)/.test(WP));
 }
 
 console.log("\nthe expensive glow follows the quality setting");

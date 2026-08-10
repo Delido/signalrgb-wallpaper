@@ -313,16 +313,33 @@ console.log("\neffects and widgets cover the whole desktop");
   }
   // Run the helpers to confirm they never shrink the authored look and
   // stay bounded on very large surfaces.
-  const rsM = src.match(/function _ambientRadiusScale\(w, h\)[\s\S]{0,300}?\n\}/);
-  const csM = src.match(/function _ambientCountScale\(w, h\)[\s\S]{0,300}?\n\}/);
+  // Brace-counted rather than a fixed character window: a budget
+  // silently truncates the moment someone adds a comment, and then this
+  // fails for the wrong reason — exactly what happened when
+  // _ambientRadiusScale gained its quality-scaling note.
+  const grab = (name) => {
+    const at = src.indexOf(`function ${name}(`);
+    if (at === -1) return null;
+    let i = src.indexOf("{", at), depth = 0;
+    for (; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) return src.slice(at, i + 1);
+    }
+    return null;
+  };
+  const rsM = grab("_ambientRadiusScale");
+  const csM = grab("_ambientCountScale");
+  const hsM = grab("_qualityHaloScale");
   // The helpers close over _AMBIENT_REF_AREA, so pull that out too rather
   // than hard-coding the reference resolution here — a copy would drift.
   const refM = src.match(/const _AMBIENT_REF_AREA\s*=\s*[^;]+;/);
-  check("both helpers found", !!rsM && !!csM && !!refM);
-  if (rsM && csM && refM) {
+  check("both helpers found", !!rsM && !!csM && !!refM && !!hsM);
+  if (rsM && csM && refM && hsM) {
+    // Pinned to "quality" so these assertions describe the authored
+    // look; the quality trade-off is covered in the parity suite.
     // eslint-disable-next-line no-new-func
     const fns = new Function(
-      `${refM[0]}\n${rsM[0]}\n${csM[0]}\nreturn {r:_ambientRadiusScale,c:_ambientCountScale};`)();
+      `const _effectQuality = "quality";\n${hsM}\n${refM[0]}\n${rsM}\n${csM}\nreturn {r:_ambientRadiusScale,c:_ambientCountScale};`)();
     check("1920x1080 is unchanged (radius)", fns.r(1920, 1080) === 1,
           String(fns.r(1920, 1080)));
     check("1920x1080 is unchanged (count)", fns.c(1920, 1080) === 1,

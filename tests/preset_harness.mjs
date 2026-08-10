@@ -382,16 +382,8 @@ export function loadTable(src, varName, extraPrelude = "") {
 
   // Real helpers where they exist in the file, stubs only for the ones
   // that genuinely belong to the host page (quality buckets, cursor).
-  const borrowed = ["rgbToRgba", "_glowSprite", "_glowHueBucket", "_stampGlow",
-                    "_qualityBlur"]
+  const borrowed = ["rgbToRgba", "_qualityBlur", "_qualityHaloScale"]
     .map((n) => extractFunction(src, n))
-    .filter(Boolean)
-    .join("\n");
-
-  // The sprite cache and its two size constants live beside those
-  // helpers at module scope in the page.
-  const glowState = ["_GLOW_SPRITE_PX", "_GLOW_HUE_STEPS", "_glowSpriteCache"]
-    .map((n) => extractDeclaration(src, n))
     .filter(Boolean)
     .join("\n");
 
@@ -424,6 +416,9 @@ export function loadTable(src, varName, extraPrelude = "") {
       if (!w || !h) return 1;
       return Math.max(1, Math.min(4, (w * h) / _AMBIENT_REF_AREA));
     }
+    // Quality bucket the presets read via _qualityHaloScale. Pinned to
+    // "quality" so the harness measures the unscaled, authored look.
+    const _effectQuality = "quality";
     function _qualityScale() { return 0.5; }
     function _qualityDpr() { return 1; }
     function _wormholeAnchorX(w) { return w / 2; }
@@ -464,7 +459,6 @@ export function loadTable(src, varName, extraPrelude = "") {
       },
     };
     ${stormState}
-    ${glowState}
     ${borrowed}
     ${matrix}
     ${extraPrelude}

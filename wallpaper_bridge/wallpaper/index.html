@@ -5798,73 +5798,67 @@ const TAU = Math.PI * 2;
 const _AMBIENT_REF_AREA = 1920 * 1080;
 function _ambientRadiusScale(w, h) {
   if (!w || !h) return 1;
-  return Math.max(1, Math.min(3, Math.sqrt((w * h) / _AMBIENT_REF_AREA)));
+  // v2.4.7: the effect-quality bucket applies here too. This is the one
+  // place aurora's and plasma's radii are computed, so folding the halo
+  // scale in means any future preset that scales its radius with the
+  // viewport gets the quality trade-off for free rather than having to
+  // remember to ask for it.
+  //
+  // spawn() calls this, so the size is fixed when a particle is born:
+  // changing quality mid-flight affects new particles, and existing
+  // ones age out within seconds. Not worth re-spawning the field for.
+  return _qualityHaloScale() *
+         Math.max(1, Math.min(3, Math.sqrt((w * h) / _AMBIENT_REF_AREA)));
 }
 function _ambientCountScale(w, h) {
   if (!w || !h) return 1;
   return Math.max(1, Math.min(4, (w * h) / _AMBIENT_REF_AREA));
 }
 
-// ── Pre-rendered radial-glow sprites ─────────────────────────────────
+// ── Halo scaling by effect quality ───────────────────────────────────
 //
-// fireflies and sparks each built a fresh createRadialGradient() per
-// particle per frame: measured at 336 and 205 gradients/frame on a
-// 2560×1440 desktop, so ~10 000 short-lived gradient objects a second
-// at 30 fps. Every one had the identical shape — stops at 0, 0.45, 1 —
-// varying only in position, radius, alpha and hue.
+// Several ambient presets draw a glow far larger than the particle that
+// casts it — fireflies at 6x the particle radius, sparks at 5x. Area
+// goes with the square, so on a 5120x1440 span those halos dominate
+// what the effect costs.
 //
-// So the gradient is rasterised once into a small offscreen canvas and
-// stamped with drawImage(). Alpha varies per particle, which
-// globalAlpha applies at stamp time for free. Hue varies too, but only
-// within a narrow band (fireflies 50–85, sparks 30–60), so a handful of
-// sprites quantised across that band is visually indistinguishable from
-// a per-particle hue while collapsing thousands of gradient builds into
-// a few one-off ones.
+// Measured on that desktop by switching one thing at a time (medians of
+// 70 samples each, Lively's WebView2 processes isolated):
 //
-// Sprites are built lazily on first use and cached for the page's
-// lifetime: there are at most _GLOW_HUE_STEPS per preset, each a few KB.
-const _GLOW_SPRITE_PX = 64;     // sprite is drawn at this size, then scaled
-const _GLOW_HUE_STEPS = 12;     // quantisation buckets across the hue band
-const _glowSpriteCache = new Map();
-
-/**
- * A 64×64 canvas holding one radial glow, transparent at the rim.
- *
- * `key` distinguishes preset variants; `core` and `ring` are the two
- * inner stop colours at full alpha. Callers set globalAlpha themselves.
- */
-function _glowSprite(key, core, ring) {
-  let c = _glowSpriteCache.get(key);
-  if (c) return c;
-  c = document.createElement("canvas");
-  c.width = c.height = _GLOW_SPRITE_PX;
-  const g = c.getContext("2d");
-  const mid = _GLOW_SPRITE_PX / 2;
-  const grad = g.createRadialGradient(mid, mid, 0, mid, mid, mid);
-  grad.addColorStop(0, core);
-  grad.addColorStop(0.45, ring);
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  g.fillStyle = grad;
-  g.fillRect(0, 0, _GLOW_SPRITE_PX, _GLOW_SPRITE_PX);
-  _glowSpriteCache.set(key, c);
-  return c;
+//     everything on                6.10 %
+//     fireflies off                1.95 %   <- -4.15 points
+//     + pixelfx off                2.24 %   (no change)
+//     + glow grid off              2.42 %   (no change)
+//
+// So fireflies alone was two thirds of the wallpaper's GPU use, the
+// glow grid costs nothing measurable, and ~2.3 % is an irreducible
+// Lively compositor floor that no setting reaches.
+//
+// Rather than shrinking the halos for everyone, they follow the
+// effect-quality bucket the user already picked. Quality keeps today's
+// look exactly; Balanced and Performance trade halo size for frame
+// time. Squared, so Performance at 0.8 draws 36 % less halo area.
+//
+// Where this actually pays, measured in Edge at 5120x1440:
+//
+//   plasma    (19 blobs, 415-792 px)  1.29 -> 1.05 -> 0.88 ms
+//                                     i.e. -18 % balanced, -32 % performance
+//   fireflies (145 dots, 9-21 px)     0.283 -> 0.282 -> 0.308 ms — noise
+//
+// So it is worth having for the big soft presets and does nothing
+// measurable for the small-particle ones. It is applied to both anyway:
+// the cost is one multiply, and a preset whose radii grow later then
+// already behaves. What fixed fireflies was not this — it was reverting
+// the v2.4.5 sprite experiment, four times more expensive than the
+// gradient it replaced.
+function _qualityHaloScale() {
+  switch (_effectQuality) {
+    case "quality":  return 1.0;
+    case "balanced": return 0.9;    // ~19 % less area
+    default:         return 0.8;    // performance — ~36 % less area
+  }
 }
 
-/** Quantise a hue onto the sprite grid so the cache stays small. */
-function _glowHueBucket(hue, lo, span) {
-  const t = Math.max(0, Math.min(1, (hue - lo) / span));
-  return Math.round(t * (_GLOW_HUE_STEPS - 1));
-}
-
-/**
- * Stamp a cached glow sprite centred on (x, y) with radius r.
- *
- * Replaces `fillStyle = <fresh gradient>; arc(); fill()`. drawImage of a
- * pre-rasterised sprite also covers only the circle's bounding box, and
- * the sprite's own corners are already transparent — so this drops the
- * 21 % square-corner overdraw that the arc() change addressed elsewhere,
- * without needing a path at all.
- */
 /**
  * Scale a shadowBlur radius by the effect-quality setting.
  *
@@ -5894,12 +5888,6 @@ function _qualityBlur(px) {
   return px * (q >= 1 ? 1 : q >= 0.75 ? 0.75 : 0.5);
 }
 
-function _stampGlow(ctx, sprite, x, y, r, alpha) {
-  const prev = ctx.globalAlpha;
-  ctx.globalAlpha = prev * Math.max(0, Math.min(1, alpha));
-  ctx.drawImage(sprite, x - r, y - r, r * 2, r * 2);
-  ctx.globalAlpha = prev;
-}
 
 // Katakana half-width + digits + a handful of symbols, matching the
 // classic Matrix-rain character pool. Defined here (above AMBIENT_PRESETS)
@@ -6082,21 +6070,22 @@ const AMBIENT_PRESETS = {
       // Bright hot core + warm halo. Tint, if any, replaces the warm halo
       // while the core stays neutral white so sparks still pop visually.
       //
-      // v2.4.5: cached sprite rather than a per-particle gradient (was
-      // 205 gradients/frame). Also replaces the fillRect, whose corners
-      // were 21 % transparent-but-still-blended pixels.
-      let key, halo;
-      if (tint) {
-        key  = "sp:tint:" + tint;
-        halo = rgbToRgba(tint, 0.6);
-      } else {
-        const b = _glowHueBucket(p.hue, 30, 30);   // spawn: 30 + rand*30
-        key  = "sp:" + b;
-        halo = "hsla(" + (30 + (b / (_GLOW_HUE_STEPS - 1)) * 30) +
-               ", 95%, 60%, 0.6)";
-      }
-      const sprite = _glowSprite(key, "rgba(255,255,255,1)", halo);
-      _stampGlow(ctx, sprite, p.x, p.y, p.r * 5, a);
+      // v2.4.7: reverted to a per-particle gradient for the same reason
+      // as fireflies — the v2.4.5 sprite path measured ~4x slower.
+      // The arc() fill (rather than v2.4.4's fillRect) is kept: that
+      // part was a real saving, 1 - π/4 = 21 % of every fill.
+      const rad = p.r * 5 * _qualityHaloScale();
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+      grad.addColorStop(0, "rgba(255,255,255," + a + ")");
+      const halo = tint
+        ? rgbToRgba(tint, a * 0.6)
+        : "hsla(" + p.hue + ", 95%, 60%, " + (a * 0.6) + ")";
+      grad.addColorStop(0.45, halo);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, rad, 0, TAU);
+      ctx.fill();
     },
   },
 
@@ -6194,27 +6183,45 @@ const AMBIENT_PRESETS = {
       return true;
     },
     render: (ctx, p, tint) => {
-      // v2.4.5: stamp a cached sprite instead of building a fresh
-      // radial gradient per particle per frame — this was the single
-      // heaviest ambient preset at 336 gradients/frame. The sprite
-      // carries the shape and hue; globalAlpha carries the pulse.
+      // v2.4.7: back to a per-particle radial gradient.
+      //
+      // v2.4.5 replaced this with a cached sprite stamped via
+      // drawImage, on the reasoning that ~10 000 throwaway gradient
+      // objects a second had to be the expensive part. Measuring the
+      // real thing says otherwise — 145 particles on 5120×1440, medians
+      // of three runs in Edge:
+      //
+      //     cached sprite (v2.4.5)   1.13 ms/frame
+      //     radial gradient          0.28 ms/frame
+      //
+      // Chromium has a fast GPU path for radial gradients; scaling a
+      // texture per particle does not hit it, and neither the sprite
+      // size (64 vs 256 px) nor globalAlpha changed that. The sprite
+      // version was 4x slower, which matches what the user measured on
+      // their desktop: fireflies alone accounted for 4.2 of the 6.1 %
+      // GPU the wallpaper was using.
+      //
+      // Kept simple deliberately: allocating a gradient per particle
+      // reads wasteful and isn't, and that is worth a comment rather
+      // than another attempt to outsmart the compositor.
       const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(p.phase));
-      const halo  = p.r * 6;
-      let key, ring;
-      if (tint) {
-        key  = "ff:tint:" + tint;
-        ring = rgbToRgba(tint, 0.55 / 0.9);
-      } else {
-        const b = _glowHueBucket(p.hue, 50, 35);   // spawn: 50 + rand*35
-        key  = "ff:" + b;
-        ring = "hsla(" + (50 + (b / (_GLOW_HUE_STEPS - 1)) * 35) +
-               ", 95%, 55%, " + (0.55 / 0.9) + ")";
-      }
-      // The sprite is built at the core's full 0.9; the ring's relative
-      // weight (0.55) is folded into its own alpha so one globalAlpha
-      // multiply reproduces the original pair of stop alphas exactly.
-      const sprite = _glowSprite(key, "rgba(255,255,230,0.9)", ring);
-      _stampGlow(ctx, sprite, p.x, p.y, halo, pulse);
+      const halo  = p.r * 6 * _qualityHaloScale();
+      const grad  = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, halo);
+      const a     = pulse;
+      const core  = "rgba(255,255,230," + (a * 0.9) + ")";
+      const ring  = tint
+        ? rgbToRgba(tint, a * 0.55)
+        : "hsla(" + p.hue + ", 95%, 55%, " + (a * 0.55) + ")";
+      grad.addColorStop(0,    core);
+      grad.addColorStop(0.45, ring);
+      grad.addColorStop(1,    "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      // Fill the circle, not the square around it: the corners are
+      // alpha 0 but still get blended, and they are 1 - π/4 = 21 % of
+      // every fill.
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, halo, 0, TAU);
+      ctx.fill();
     },
   },
 
