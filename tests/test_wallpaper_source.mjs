@@ -339,6 +339,83 @@ console.log("\neffects and widgets cover the whole desktop");
   }
 }
 
+console.log("\nthe pre-scale grid renderer keeps the picture and cuts the blur");
+{
+  // v2.4.6: "canvas-prescale" draws the grid into a larger backing
+  // buffer and divides the CSS blur radius by the same factor. The
+  // picture must not change — only how much work the blur kernel does.
+  //
+  // The failure this guards against is subtle: get the factor and the
+  // radius out of step and the wallpaper either sharpens into visible
+  // tiles or smears, and neither shows up in a smoke test.
+  const planM = src.match(/function _gridBufferPlan\(gridW, gridH\)[\s\S]*?\n\}/);
+  const longM = src.match(/const _GRID_PRESCALE_LONG_EDGE\s*=\s*[^;]+;/);
+  const minM = src.match(/const _GRID_PRESCALE_MIN_BLUR_PX\s*=\s*[^;]+;/);
+  check("pre-scale plan + its constants are present", !!planM && !!longM && !!minM);
+
+  if (planM && longM && minM) {
+    const make = (mode, blur) =>
+      // eslint-disable-next-line no-new-func
+      new Function("gridRenderer", "_gridBlurConfigured", "window",
+        `${longM[0]}\n${minM[0]}\n${planM[0]}\nreturn _gridBufferPlan;`)(
+        mode, blur, { innerWidth: 5120, innerHeight: 1440 });
+
+    const plain = make("canvas", 30);
+    const pre = make("canvas-prescale", 30);
+
+    // Plain canvas mode must be byte-for-byte what it always was.
+    const p0 = plain(128, 36);
+    check("plain canvas is untouched (buffer = grid, blur unscaled)",
+          p0.w === 128 && p0.h === 36 && p0.blurScale === 1,
+          JSON.stringify(p0));
+
+    const p1 = pre(128, 36);
+    check("pre-scale grows the buffer (128x36 -> 640x180)",
+          p1.w === 640 && p1.h === 180, `${p1.w}x${p1.h}`);
+    // The invariant that makes this a free change: buffer factor and
+    // blur scale are exact reciprocals, so radius-in-grid-units is
+    // constant and the visible softness cannot drift.
+    check("blur scale is the reciprocal of the buffer factor",
+          Math.abs(p1.blurScale - 36 / p1.h) < 1e-9,
+          `${p1.blurScale} vs ${36 / p1.h}`);
+    check("aspect ratio is preserved",
+          Math.abs((p1.w / p1.h) - (128 / 36)) < 1e-9);
+
+    // A coarse grid would otherwise hit a huge factor and leave a
+    // sub-pixel CSS blur, at which point bilinear interpolation — not
+    // the blur — shapes the glow, and it reads as diamonds.
+    const coarse = pre(16, 9);
+    check("coarse grids keep a usable blur radius (>= 6px)",
+          30 * coarse.blurScale >= 6 - 1e-9,
+          `${(30 * coarse.blurScale).toFixed(2)}px`);
+    // Same guard from the other side: a low blur setting must not be
+    // scaled into nothing.
+    const lowBlur = make("canvas-prescale", 8)(128, 36);
+    check("a low blur setting is not scaled away",
+          8 * lowBlur.blurScale >= 6 - 1e-9,
+          `${(8 * lowBlur.blurScale).toFixed(2)}px`);
+
+    // Never upscale past what is displayed — that is pure waste.
+    const tiny = new Function("gridRenderer", "_gridBlurConfigured", "window",
+      `${longM[0]}\n${minM[0]}\n${planM[0]}\nreturn _gridBufferPlan;`)(
+      "canvas-prescale", 30, { innerWidth: 320, innerHeight: 200 });
+    const t0 = tiny(128, 36);
+    check("buffer never exceeds the viewport's long edge",
+          Math.max(t0.w, t0.h) <= 320, `${t0.w}x${t0.h}`);
+  }
+
+  // Every call site that asks "are we on the canvas path?" must go
+  // through the helper. A literal `gridRenderer === "canvas"` left
+  // behind would silently drop pre-scale users onto the DOM path.
+  const strayCompare = /gridRenderer === "canvas"(?!\s*\|\|)/.test(src);
+  check("no call site compares gridRenderer to \"canvas\" directly",
+        !strayCompare);
+  check("the canvas-path helper exists", /function _isCanvasGrid\(\)/.test(src));
+  check("the blit helper handles both modes",
+        /function _blitGridImage\(\)/.test(src) &&
+        /drawImage\(_gridSrcEl/.test(src));
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 process.exit(results.failed.length ? 1 : 0);

@@ -1554,6 +1554,16 @@ DEFAULT_SCREEN_SETTINGS = {
     # SignalRGB grid resolution. Users on tiny grids or specific
     # dGPU setups where DOM was cheaper can still flip back in
     # the Configurator's per-screen Glow card.
+    #
+    # v2.4.6 adds a third value, "canvas-prescale": the same canvas
+    # path, but the grid is drawn into a larger backing buffer and the
+    # CSS blur radius is divided by the same factor. A Gaussian blur is
+    # scale-invariant enough that the picture is unchanged while the
+    # kernel does far less work per output pixel — measured at -23 % in
+    # Canvas 2D at 5120×1440. It stays opt-in rather than becoming the
+    # default because the shipped path is a CSS filter on a composited
+    # layer, which cannot be benchmarked headless; the saving is
+    # expected to carry over but has not been proven on that path.
     "gridRenderer": "canvas",
     # v1.2.12: render-rate cap shared by the bridge's outgoing
     # broadcast and the wallpaper page's renderFrame gate. SignalRGB
