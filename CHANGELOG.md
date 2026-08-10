@@ -4,6 +4,88 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.6] - 2026-08-10
+
+An opt-in grid renderer that does the same blur for less GPU work.
+
+### Measured first — what the wallpaper actually costs
+
+Sampled on a 5120×1440 spanned Lively setup, Lively's WebView2
+processes isolated via the parent chain (`msedgewebview2` →
+`Lively.Player.WebView2` → `Lively`), 240 samples over two minutes:
+
+| | |
+|---|---|
+| median | 4.5 % |
+| mean | 5.5 % |
+| p90 | 9.0 % |
+| p99 | 12.5 % |
+| max | 16.5 % |
+| samples > 10 % | 3 of 240 (1.2 %) |
+
+So a reported "2–20 %" is a stable ~4.5 % floor with rare spikes, not
+continuous churn — Task Manager's one-second refresh just tends to
+catch the spikes. DWM measured 2.9 % mean / 6.7 % max over the same
+window for comparison.
+
+Contributors, in order: the 7.4 Mpx surface; the grid blur (below); and
+the 1 Hz widget `setInterval`, which repaints every non-fast widget at
+once over the blurred layer.
+
+Ruled out by measurement rather than assumed: `backdrop-filter`, which
+the source calls "the single most expensive op on the page" — this
+setup runs `glassQuality: low`, so those are already off.
+
+### Added — `gridRenderer: "canvas-prescale"`
+
+The canvas renderer holds a 128×36 buffer, lets CSS stretch it to the
+viewport, and blurs 30px over all 7.4 Mpx every frame. A Gaussian is
+scale-invariant enough that a larger buffer with a proportionally
+smaller radius produces the same image for much less kernel work:
+
+| | ms/frame |
+|---|---|
+| blur 30 over the full viewport | 1.72 |
+| two-stage (half area, r/2) | 1.32 |
+| no blur at all | 1.24 |
+
+Implemented without a second element: the grid goes into a larger
+backing buffer (long edge ~640px) via `drawImage`, and `--grid-blur` is
+divided by the same factor. Buffer factor and blur scale are exact
+reciprocals, so radius-in-grid-units is constant and the visible
+softness cannot drift — asserted in the suite.
+
+**Opt-in, not the default.** That benchmark is Canvas 2D; the shipped
+path is a CSS filter on a composited layer, which cannot be measured
+headless (Chromium without a compositor reports no meaningful rAF
+timing — the attempt returned nothing). The saving is expected to carry
+over but is unproven there, so this is a renderer choice to compare on
+real hardware rather than a silent change for everyone.
+
+Blur is floored at 6px. Below that the bilinear upscale, not the blur,
+shapes the glow and zones read as soft diamonds; a 16×9 grid would
+otherwise hit factor 40 and leave a 0.75px blur. The cap costs some
+saving on coarse grids and keeps the two modes visually
+interchangeable, which is the point.
+
+Three call sites compared `gridRenderer === "canvas"` directly and now
+go through `_isCanvasGrid()`, so adding a mode could not leave one
+behind. A test asserts no direct comparison returns.
+
+### Fixed — pre-scale buffer could exceed the viewport
+
+`Math.round` on the scale factor rounds up: a 320px viewport with a
+128-wide grid produced a 384px buffer, larger than the area it is drawn
+into. Now `Math.floor`. Caught by the new tests before shipping.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.6.
+
+DOM was tried and rejected on this setup — effects stuttered, matching
+the note already in `bridge.py` recording a 5120×1440 trace where the
+DOM path produced 1.3 M paint events in 7.8 s.
+
 ## [2.4.4-beta.5] - 2026-08-10
 
 Measured performance work, a structural split in the bridge, and the

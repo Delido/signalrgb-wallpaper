@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.5"
+APP_VERSION = "2.4.4-beta.6"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.5"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.5"
+WALLPAPER_VERSION = "2.4.6"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,53 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.6": {
+        "title_en": "What's new in v2.4.4-beta.6",
+        "title_de": "Was ist neu in v2.4.4-beta.6",
+        "body_en": (
+            "One new option to try, aimed at wide and spanned "
+            "desktops.\n\n"
+            "**Glow → Grid renderer → \"Canvas — cheaper blur\"**\n"
+            "- The glow grid is a small image that gets stretched "
+            "across your whole desktop and then blurred. On a wide or "
+            "spanned setup that blur runs over several million pixels "
+            "every frame, and it is roughly a third of what the "
+            "wallpaper costs your graphics card.\n"
+            "- The new option draws the same picture a different way: "
+            "a larger intermediate image with a proportionally smaller "
+            "blur. It should look identical — if you can see any "
+            "difference between it and plain Canvas, that's a bug "
+            "worth reporting.\n"
+            "- Measured at about 23 % less blur work in isolation. "
+            "Whether that shows up on your machine is exactly what "
+            "this option is for, so it is a choice rather than the new "
+            "default.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "the earlier betas.\n"
+        ),
+        "body_de": (
+            "Eine neue Option zum Ausprobieren, gedacht für breite und "
+            "gespannte Desktops.\n\n"
+            "**Glow → Grid-Renderer → „Canvas — günstigerer Blur“**\n"
+            "- Das Glow-Raster ist ein kleines Bild, das über den "
+            "ganzen Desktop gezogen und dann weichgezeichnet wird. Auf "
+            "einem breiten oder gespannten Setup läuft dieser Blur in "
+            "jedem Bild über mehrere Millionen Pixel und macht etwa "
+            "ein Drittel dessen aus, was das Wallpaper deine Grafikkarte "
+            "kostet.\n"
+            "- Die neue Option zeichnet dasselbe Bild auf anderem Weg: "
+            "ein größeres Zwischenbild mit entsprechend kleinerem Blur. "
+            "Es sollte identisch aussehen — falls du einen Unterschied "
+            "zum normalen Canvas siehst, ist das ein meldenswerter "
+            "Fehler.\n"
+            "- Isoliert gemessen rund 23 % weniger Blur-Aufwand. Ob "
+            "sich das auf deiner Maschine zeigt, ist genau die Frage, "
+            "für die es diese Option gibt — deshalb eine Wahl und nicht "
+            "der neue Standard.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "bei den vorherigen Betas.\n"
+        ),
+    },
     "2.4.4-beta.5": {
         "title_en": "What's new in v2.4.4-beta.5",
         "title_de": "Was ist neu in v2.4.4-beta.5",
