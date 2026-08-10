@@ -1802,6 +1802,21 @@ function _ensureGridImage(w, h) {
   for (let i = 3; i < d.length; i += 4) d[i] = 255;
 }
 
+// v1.2.12: which renderer the grid layout uses — "dom" (one solid-colour
+// <div> per zone with style.background writes) or "canvas" (a single
+// <canvas> + putImageData). Set per screen from the Configurator; only
+// takes effect when currentLayout is "lay-grid".
+//
+// v2.4.7 note: this declaration was briefly deleted along with the
+// canvas-prescale block that had grown around it, which left every
+// `gridRenderer === "canvas"` test reading an undeclared name. Under
+// "use strict" that is a ReferenceError, thrown from
+// _syncGridCanvasVisibility during init — so the page died before it
+// ever opened its WebSocket and showed a black screen with the
+// "bridge offline" card. tests/test_wallpaper_source.mjs now asserts
+// the declaration exists.
+let gridRenderer = "dom";
+
 function _syncGridCanvasVisibility() {
   const useCanvas = (currentLayout === "lay-grid") && gridRenderer === "canvas";
   if (useCanvas) {

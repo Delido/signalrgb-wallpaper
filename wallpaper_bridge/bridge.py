@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.7"
+APP_VERSION = "2.4.4-beta.8"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.7"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.7"
+WALLPAPER_VERSION = "2.4.8"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,49 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.8": {
+        "title_en": "What's new in v2.4.4-beta.8",
+        "title_de": "Was ist neu in v2.4.4-beta.8",
+        "body_en": (
+            "**Hotfix — beta.7 was broken.**\n\n"
+            "If you installed beta.7 you got a black wallpaper with a "
+            "\"bridge offline\" card, whatever the bridge was actually "
+            "doing. A variable declaration was deleted along with the "
+            "code block that had grown around it, and the page stopped "
+            "starting up at all. Sorry about that.\n\n"
+            "Everything beta.7 was meant to deliver is intact — the "
+            "Fireflies and Sparks speed-up, the quality-aware glow "
+            "sizes, the \"apply to all screens\" fix. This is beta.7 "
+            "with the page working.\n\n"
+            "The test suite now runs the wallpaper's start-up code "
+            "instead of only checking that it parses. That was the gap "
+            "that let this through: the file was perfectly valid "
+            "JavaScript, it just died on the first line that mattered.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "the earlier betas.\n"
+        ),
+        "body_de": (
+            "**Hotfix — beta.7 war kaputt.**\n\n"
+            "Wer beta.7 installiert hat, bekam ein schwarzes Wallpaper "
+            "mit „Bridge offline“-Karte — unabhängig davon, was die "
+            "Bridge tatsächlich tat. Eine Variablen-Deklaration wurde "
+            "zusammen mit dem Codeblock gelöscht, der um sie herum "
+            "gewachsen war, und die Seite startete gar nicht mehr. "
+            "Sorry dafür.\n\n"
+            "Alles, was beta.7 bringen sollte, ist intakt — die "
+            "Beschleunigung von Glühwürmchen und Funken, die "
+            "qualitätsabhängigen Leuchtgrößen, der Fix für „Auf alle "
+            "Bildschirme anwenden“. Das hier ist beta.7 mit "
+            "funktionierender Seite.\n\n"
+            "Die Testsuite führt den Startcode des Wallpapers jetzt "
+            "wirklich aus, statt nur zu prüfen, ob er sich parsen "
+            "lässt. Genau diese Lücke hat den Fehler durchgelassen: "
+            "Die Datei war einwandfreies JavaScript — sie starb nur "
+            "an der ersten Zeile, auf die es ankam.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "bei den vorherigen Betas.\n"
+        ),
+    },
     "2.4.4-beta.7": {
         "title_en": "What's new in v2.4.4-beta.7",
         "title_de": "Was ist neu in v2.4.4-beta.7",

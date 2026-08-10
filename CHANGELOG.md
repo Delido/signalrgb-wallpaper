@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.8] - 2026-08-11
+
+Hotfix for beta.7, which shipped a wallpaper page that never started.
+
+### Fixed — `let gridRenderer` was deleted with the block around it
+
+Removing the `canvas-prescale` machinery in beta.7 cut a region bounded
+by two markers, and `let gridRenderer = "dom"` had ended up inside it —
+it was moved there in beta.6 when the pre-scale helpers grew around it.
+Every `gridRenderer === "canvas"` test then read an undeclared name.
+Under `"use strict"` that is a `ReferenceError`, thrown during init from
+`_syncGridCanvasVisibility`, so the page died before opening its
+WebSocket: black screen, "bridge offline" card, regardless of bridge
+state.
+
+### Added — the suite runs the page instead of only parsing it
+
+Every existing check passed on the broken file. It was valid
+JavaScript, `node --check` was happy, all the guard regexes matched —
+the page simply threw on the first statement that mattered.
+
+`test_wallpaper_source.mjs` now executes the largest inline script in a
+`node:vm` context against a Proxy-based DOM stub and asserts top-level
+initialisation reaches the end. That does not prove the page renders
+correctly; it proves it starts, which is precisely what broke.
+Mutation-checked: deleting the declaration again turns two checks red.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.8. Everything beta.7 intended is unchanged —
+the sprite revert, `_qualityHaloScale`, the
+`POST /screen/<N>/settings` fix, and the removal of `canvas-prescale`.
+
+Worth recording how this was diagnosed, since the first attempt went
+wrong: the missing loopback exemption for MSIX-Lively was found and
+treated as the cause, because `CheckNetIsolation` genuinely did not list
+Lively. The user's counter-evidence — beta.6 works on the same machine —
+ruled that out immediately. A real finding about the environment was not
+the same as the cause of this failure.
+
 ## [2.4.4-beta.7] - 2026-08-10
 
 Reverts a change that made things slower, and measures the wallpaper's
