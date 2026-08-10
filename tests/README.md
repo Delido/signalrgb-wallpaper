@@ -6,16 +6,23 @@ python tests/run_all.py --live   # also drive a running SignalRGBBridge.exe
 ```
 
 Exit code is 0 only if every suite passed. CI runs the first form on
-every push and PR (`.github/workflows/tests.yml`).
+every push and PR (`.github/workflows/smoke.yml`).
 
 ## What's here
 
 | File | Covers |
 |---|---|
 | `test_ws_lifecycle.py` | Client registration, keepalive, reaping, broadcast routing, backpressure |
+| `test_logging.py` | Log formatting, rotation, the resume marker, UDP progress throttling |
 | `test_standby_card.mjs` | The standby-card state machine — models `connect()` and proves the issue-#2 latch is gone |
 | `test_wallpaper_source.mjs` | That the shipped `index.html` still contains those protections, and that its JS parses |
-| `harness.py` | Shared fakes and helpers |
+| `test_tint_colour.mjs` | `rgbToRgba` across hex / rgb() / rgba() input |
+| `test_glripple.mjs` | The WebGL displacement path — `computeUV` against all six background-fit modes |
+| `test_preset_parity.mjs` | All 17 ambient effects: that they run, paint, and match their Configurator preview |
+| `test_reimport_workshop.ps1` | Workshop-subscription detection and its exit codes |
+| `test_release_tooling.ps1` | `release.ps1` preflight + the winget publish path |
+| `harness.py` | Shared fakes and helpers (python) |
+| `preset_harness.mjs` | Extracts and runs the two preset tables against a recording canvas |
 
 `wallpaper_bridge/smoke_test.py` stays where it is. It's the only
 end-to-end check — real socket, real bridge — and runs opt-in via
@@ -54,6 +61,29 @@ it asserted "screen 0 received nothing" while a live SignalRGB plugin
 was broadcasting on screen 0 at 30-60 Hz. It now filters for its own
 synthetic payload, so the assertions mean what they say.
 
+## Run the code, don't read it
+
+`test_preset_parity.mjs` started out matching regexes against the two
+preset tables. That only worked for the presets whose alpha is a
+literal (`const a = 0.34`); the other thirteen compute it, and
+`a: 0.5 + Math.random()*0.3` is not something a regex can evaluate.
+Those thirteen counted as passes. The suite reported 16/16 green while
+covering four of seventeen effects — and could not detect the aurora
+bug it had been written for.
+
+It now extracts both tables and *runs* them against a recording canvas
+(`preset_harness.mjs`), so the assertions are about what a preset
+paints rather than how its source is spelled. That found two things a
+regex never would: `storm` had been invisible to the old sweep entirely
+(it is built by an IIFE, not an object literal), and `effectiveAlpha`
+originally understood `rgba()` but not `hsla()` — which is what aurora
+and plasma actually paint in, so every draw read as fully opaque.
+
+Where the harness needs a helper the presets call, it lifts the real
+function out of the source instead of reimplementing it. A local copy
+of `rgbToRgba` here would be a third implementation of the thing whose
+divergence this suite exists to catch.
+
 ## Adding a test
 
 Regression tests belong here whenever a bug survives a release. The
@@ -61,3 +91,10 @@ pattern that worked for issue #2: reproduce the failure against the
 *old* behaviour first (`test_standby_card.mjs` still does this
 explicitly), then assert the fix. A test that only passes after the fix
 doesn't prove it was ever testing the bug.
+
+The cheap version of this, when the old behaviour is a constant: patch
+it back in a scratch copy of the source and check the suite goes red.
+Reverting aurora to 0.14 and plasma to 0.18 turns three checks in
+`test_preset_parity.mjs` red — and it was that exercise, not the
+original green run, that showed peak alpha alone is a poor visibility
+signal and the tile/effect *ratio* had to carry the check.

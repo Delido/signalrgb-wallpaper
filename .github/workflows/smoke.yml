@@ -102,4 +102,62 @@ jobs:
             echo "::error file=CHANGELOG.md::No heading for $ver"
             exit 1
           fi
-          echo "OK — release notes and changelog both mention $ver"
+
+          # pyproject.toml carries the version statically — reading it
+          # from bridge.py would mean importing pystray/Pillow/tkinter
+          # just to resolve a string. Static is the right call, but only
+          # if something checks it, so that something is here.
+          pv=$(grep -oP '^version\s*=\s*"\K[^"]+' pyproject.toml)
+          if [ "$pv" != "$ver" ]; then
+            echo "::error file=pyproject.toml::version is $pv, APP_VERSION is $ver"
+            exit 1
+          fi
+          echo "OK — release notes, changelog and pyproject all agree on $ver"
+
+      - name: pyproject declares what the code imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast, re, sys, tomllib, pathlib
+
+          data = tomllib.load(open("pyproject.toml", "rb"))
+          declared = set()
+          for spec in data["project"]["dependencies"]:
+              declared.add(re.split(r"[<>=!\[; ]", spec)[0].lower())
+          for extra in data["project"].get("optional-dependencies", {}).values():
+              for spec in extra:
+                  declared.add(re.split(r"[<>=!\[; ]", spec)[0].lower())
+
+          # import name -> distribution name, for the cases where they differ
+          alias = {"pil": "pillow", "winrt": "winrt-runtime"}
+          stdlib = set(sys.stdlib_module_names)
+          local = {p.stem for p in pathlib.Path("wallpaper_bridge").glob("*.py")}
+
+          # Parse rather than grep. A regex over the raw text also matches
+          # English prose inside docstrings — "import the Lively/WE bundle",
+          # "from any sACN sender" — and reports modules named `the` and
+          # `any` as undeclared dependencies. ast sees only real imports.
+          missing = {}
+          for path in pathlib.Path("wallpaper_bridge").glob("*.py"):
+              tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"), str(path))
+              tops = set()
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      tops.update(a.name.split(".")[0] for a in node.names)
+                  elif isinstance(node, ast.ImportFrom):
+                      if node.level == 0 and node.module:
+                          tops.add(node.module.split(".")[0])
+              for top in tops:
+                  if top in stdlib or top in local:
+                      continue
+                  name = alias.get(top.lower(), top.lower())
+                  if name not in declared:
+                      missing.setdefault(name, path.name)
+
+          if missing:
+              for name, where in sorted(missing.items()):
+                  print(f"::error file=pyproject.toml::{name} imported in {where} but not declared")
+              raise SystemExit(1)
+          print("OK — every third-party import is declared:", ", ".join(sorted(declared)))
+          PY

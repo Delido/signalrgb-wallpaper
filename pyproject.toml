@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signalrgb-wallpaper-bridge"
+description = "Local bridge between SignalRGB (or OpenRGB / sACN / MQTT) and an animated HTML wallpaper"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+
+# Kept in step with APP_VERSION in wallpaper_bridge/bridge.py by the
+# version-consistency CI job, which now covers this file too.
+#
+# Deliberately static rather than setuptools' `dynamic = ["version"]`
+# with `attr:`. That would need wallpaper_bridge to be an importable
+# package, and reading APP_VERSION (bridge.py:721) would execute the
+# whole import header first — pystray, Pillow, tkinter — so resolving a
+# version string would fail on any machine without the GUI stack, CI
+# included.
+version = "2.4.4-beta.4"
+
+# Runtime dependencies, as actually imported by wallpaper_bridge/*.py —
+# not as guessed from the build script.
+#
+# Until now these existed only implicitly, in installer/build.ps1 and in
+# whatever happened to be installed on the maintainer's machine. That
+# worked because there is exactly one build host, and stopped being good
+# enough the moment a Linux port and a CI job entered the picture.
+#
+# Two of the four are genuinely optional: bridge.py guards psutil and
+# winrt with try/except and degrades to "n/a" widgets when they are
+# absent. They are listed under [project.optional-dependencies] instead
+# of here, so a minimal install stays minimal and the guards keep
+# meaning something.
+dependencies = [
+    "pystray>=0.19",   # tray icon; hard import at bridge.py:123
+    "Pillow>=10.0",    # tray icon rendering + library thumbnails; bridge.py:124
+]
+
+[project.optional-dependencies]
+# System stats for the CPU / RAM / Net widgets. Guarded at bridge.py:129
+# — without it those widgets render "n/a" and everything else works.
+stats = ["psutil>=5.9"]
+
+# Now-playing widget, via the Windows Media Control API. Windows-only by
+# nature; the marker keeps `pip install .[all]` working on Linux instead
+# of failing to resolve a package that has no Linux wheel.
+nowplaying = [
+    "winrt-runtime>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Media.Control>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=2.0; sys_platform == 'win32'",
+]
+
+# What the shipped installer contains.
+all = [
+    "signalrgb-wallpaper-bridge[stats]",
+    "signalrgb-wallpaper-bridge[nowplaying]",
+]
+
+# Building the Windows installer. Not needed to run the bridge.
+build = ["pyinstaller>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/Delido/signalrgb-wallpaper"
+Documentation = "https://delido.github.io/signalrgb-wallpaper/"
+Issues = "https://github.com/Delido/signalrgb-wallpaper/issues"
+Changelog = "https://github.com/Delido/signalrgb-wallpaper/blob/main/CHANGELOG.md"
+
+[tool.setuptools]
+# The bridge is deployed as a frozen PyInstaller bundle, not as an
+# importable package, so there is nothing to auto-discover here. This
+# file exists to declare dependencies and tooling config; declaring the
+# package list empty keeps setuptools from guessing wrong.
+packages = []
+
+# NOTE ON tkinter
+#
+# bridge.py imports tkinter (filedialog, ttk) for the settings dialog.
+# It is part of the standard library and therefore not listable as a
+# dependency, but on Debian/Ubuntu it lives in a separate system
+# package. A Linux run needs:
+#
+#     sudo apt install python3-tk
+#
+# ...unless started headless, in which case the tray and its dialog are
+# never constructed. See the Linux plan for the --headless flag.
