@@ -29,6 +29,7 @@ JS_SUITES = [
     ("Wallpaper source (node)", HERE / "test_wallpaper_source.mjs"),
     ("Tint colour helper (node)", HERE / "test_tint_colour.mjs"),
     ("glRipple WebGL path (node)", HERE / "test_glripple.mjs"),
+    ("Preset parity (node)", HERE / "test_preset_parity.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),

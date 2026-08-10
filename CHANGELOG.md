@@ -4,6 +4,52 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.4] - 2026-08-10
+
+Efficiency and a guard rail. No visual change intended.
+
+### Changed — soft-glow presets fill a circle instead of a square
+
+`aurora`, `plasma` and `fireflies` each painted their radial gradient
+with `fillRect(2r × 2r)`. The corners carry alpha 0 but the compositor
+blends them regardless, and they are 1 − π/4 = **21 % of every fill**.
+
+beta.3's radius scaling made this matter: on 5120×1440, plasma's 26
+blobs at ~1.29 Mpx each came to ~33 Mpx of fill per frame, or ~8 Mpx
+after the 0.5× performance backing — more than the desktop's own 7.4
+Mpx. All three now fill through `ctx.arc()`. `hover-glow` already did
+this, with the same reasoning in its comment.
+
+Added a `TAU` constant rather than repeating `Math.PI * 2` per particle
+per frame.
+
+### Added — parity check between effect previews and effects
+
+The Configurator's effect picker renders a live miniature of each preset
+from `TILE_PRESETS` — a **second implementation**, separate from
+`AMBIENT_PRESETS` in the wallpaper. The two had drifted:
+
+| | tile | wallpaper (pre-beta.3) |
+|---|---|---|
+| aurora | 0.40 | 0.14 |
+| plasma | 0.35 | 0.18 |
+
+So the picker showed a lively preview of an effect that was invisible on
+the desktop. The preview that exists precisely to show what an effect
+looks like was concealing the defect instead — which is a large part of
+why aurora shipped broken for as long as it did.
+
+`tests/test_preset_parity.mjs` (16 checks) flags a tile more than ~2×
+the strength of the effect it advertises, holds aurora and plasma above
+the 0.25 perceptual floor, and asserts the arc() fills above. It does
+**not** require the two implementations to match — a 160×100 tile
+legitimately differs in particle counts and speeds; only the misleading
+divergence is guarded.
+
+Noted while measuring: `waves` is also mismatched (tile 0.45, wallpaper
+0.25). Within tolerance, so not changed, but it is why the effect can
+read weaker than its preview promises.
+
 ## [2.4.4-beta.3] - 2026-08-10
 
 ### Fixed — Aurora and Plasma were effectively invisible

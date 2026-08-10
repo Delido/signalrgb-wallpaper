@@ -718,7 +718,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.3"
+APP_VERSION = "2.4.4-beta.4"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -788,6 +788,64 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.4": {
+        "title_en": "What's new in v2.4.4-beta.4",
+        "title_de": "Was ist neu in v2.4.4-beta.4",
+        "body_en": (
+            "Efficiency work on the soft-glow effects. Nothing should "
+            "look different — if Aurora, Plasma or Fireflies changed "
+            "appearance for you, that's a bug worth reporting.\n\n"
+            "**Less GPU work for the same picture**\n"
+            "- Aurora, Plasma and Fireflies each painted a square around "
+            "a round glow. The corners were fully transparent but the "
+            "graphics card still had to blend them, and they made up a "
+            "fifth of everything these effects drew. They now paint the "
+            "circle itself.\n"
+            "- This matters most on wide desktops, where the previous "
+            "beta made these blobs considerably larger: Plasma alone was "
+            "filling more than a full screen's worth of pixels every "
+            "frame on an ultrawide.\n\n"
+            "**Effect previews can no longer flatter the real thing**\n"
+            "- The small animated previews in the effect picker are a "
+            "separate piece of code from the effects themselves, and the "
+            "two had drifted apart. Aurora's preview was nearly three "
+            "times as strong as the effect it advertised — which is part "
+            "of why the effect being invisible went unnoticed for so "
+            "long.\n"
+            "- A check now flags it when a preview promises noticeably "
+            "more than the effect delivers.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "the earlier betas.\n"
+        ),
+        "body_de": (
+            "Effizienzarbeit an den weichen Leuchteffekten. Es sollte "
+            "sich nichts sichtbar ändern — falls Aurora, Plasma oder "
+            "Glühwürmchen bei dir anders aussehen, ist das ein Fehler "
+            "und einen Hinweis wert.\n\n"
+            "**Weniger GPU-Arbeit für dasselbe Bild**\n"
+            "- Aurora, Plasma und Glühwürmchen zeichneten jeweils ein "
+            "Quadrat um einen runden Lichtschein. Die Ecken waren zwar "
+            "vollständig durchsichtig, mussten von der Grafikkarte aber "
+            "trotzdem verrechnet werden — und machten ein Fünftel von "
+            "allem aus, was diese Effekte zeichnen. Jetzt wird der Kreis "
+            "selbst gezeichnet.\n"
+            "- Das zählt vor allem auf breiten Desktops, wo die "
+            "vorherige Beta diese Flecken deutlich vergrößert hat: "
+            "Allein Plasma füllte auf einem Ultrawide pro Bild mehr als "
+            "eine komplette Bildschirmfläche.\n\n"
+            "**Effekt-Vorschauen können nicht mehr schöner sein als das "
+            "Original**\n"
+            "- Die kleinen animierten Vorschauen im Effekt-Picker sind "
+            "eigener Code, getrennt von den Effekten selbst — und beide "
+            "waren auseinandergelaufen. Auroras Vorschau war fast "
+            "dreimal so kräftig wie der beworbene Effekt. Auch deshalb "
+            "blieb lange unbemerkt, dass der Effekt unsichtbar war.\n"
+            "- Eine Prüfung meldet jetzt, wenn eine Vorschau spürbar "
+            "mehr verspricht, als der Effekt liefert.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "bei den vorherigen Betas.\n"
+        ),
+    },
     "2.4.4-beta.3": {
         "title_en": "What's new in v2.4.4-beta.3",
         "title_de": "Was ist neu in v2.4.4-beta.3",

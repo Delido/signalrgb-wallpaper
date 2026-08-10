@@ -5623,6 +5623,9 @@ function rgbToRgba(rgb, a) {
 // coverage stays comparable). Clamped at 1 so nothing shrinks below the
 // authored look on smaller screens, and capped so an ultrawide does not
 // end up with a hundred overlapping blobs.
+// Full turn in radians — the arc() calls below would otherwise repeat
+// `Math.PI * 2` on every particle of every frame.
+const TAU = Math.PI * 2;
 const _AMBIENT_REF_AREA = 1920 * 1080;
 function _ambientRadiusScale(w, h) {
   if (!w || !h) return 1;
@@ -5931,7 +5934,12 @@ const AMBIENT_PRESETS = {
       grad.addColorStop(0.45, ring);
       grad.addColorStop(1,    "rgba(0,0,0,0)");
       ctx.fillStyle = grad;
-      ctx.fillRect(p.x - halo, p.y - halo, halo * 2, halo * 2);
+      // v2.4.4: fill the circle, not the square around it. The corners
+      // are alpha-0 but the compositor still blends them, and they are
+      // 1 - π/4 = 21 % of every fill. See the note in aurora's render.
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, halo, 0, TAU);
+      ctx.fill();
     },
   },
 
@@ -5978,7 +5986,16 @@ const AMBIENT_PRESETS = {
       grad.addColorStop(0.6, "hsla(" + hue + ", 85%, 62%, " + (a * 0.55) + ")");
       grad.addColorStop(1,   "hsla(" + hue + ", 85%, 62%, 0)");
       ctx.fillStyle = grad;
-      ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      // v2.4.4: fill a circle instead of the 2r × 2r square around it.
+      // The corners carry alpha 0, but the compositor blends them all
+      // the same, and they are 1 - π/4 = 21 % of every fill. With the
+      // v2.4.4 radius scaling these blobs cover a large share of a wide
+      // desktop, so that fraction is real fill-rate: plasma alone was
+      // pushing ~8 Mpx per frame on a 5120×1440 screen. hover-glow
+      // already fills through a path for the same reason.
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, TAU);
+      ctx.fill();
     },
   },
 
@@ -6031,7 +6048,10 @@ const AMBIENT_PRESETS = {
         grad.addColorStop(1,   "hsla(" + p.hue + ", 85%, 62%, 0)");
       }
       ctx.fillStyle = grad;
-      ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      // v2.4.4: circle rather than the square around it — see aurora.
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, TAU);
+      ctx.fill();
     },
   },
 
