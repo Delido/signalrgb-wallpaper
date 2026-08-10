@@ -59,6 +59,13 @@ jobs:
           assert callable(b.parse_http_headers), 'parse_http_headers missing'
           assert callable(b._acao), '_acao helper missing'
           assert b.WS_HOST == '127.0.0.1', 'WS_HOST drifted from loopback'
+          # The tray imports are optional so the module can load on Linux,
+          # but on Windows they must always succeed. Without this, a typo
+          # or a missing dependency would silently downgrade the shipped
+          # build to headless — no tray icon, no settings dialog — and the
+          # try/except would swallow the reason.
+          assert b._HAS_TRAY is True, f'tray stack failed to import: {b._TRAY_IMPORT_ERROR}'
+          assert b.tk is not None and b.pystray is not None, 'tray modules are None on Windows'
           print('OK')
           "@
 
@@ -77,6 +84,85 @@ jobs:
       - name: Byte-compile every python source
         # Catches syntax errors in modules the suite never imports.
         run: python -m compileall -q wallpaper_bridge
+
+  linux-import:
+    # The bridge had never once been imported on Linux. SignalRGB is
+    # building a Linux version and the plan is to run there against
+    # OpenRGB before it lands, so "does the module even load" is worth
+    # knowing on every push rather than on the day someone tries it.
+    #
+    # This is deliberately narrower than the Windows job: import, byte-
+    # compile, and the hermetic suites. No headless boot — the tray and
+    # its tkinter dialog are still unconditional, so a real Linux launch
+    # needs the --headless work from the porting plan first. Keeping the
+    # job honest about that is the point; a green tick here means the
+    # module loads, nothing more.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install runtime deps
+        # Deliberately NOT installing python3-tk or a pystray backend.
+        # The GUI stack is optional by design, and the interesting
+        # question on Linux is whether the bridge loads *without* it —
+        # installing it here would test the one configuration the port
+        # will not be running in.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install psutil Pillow
+
+      - name: Import bridge.py on Linux
+        # Four things used to make this impossible:
+        #   from ctypes import wintypes  — raises ValueError off Windows
+        #   _MONITORINFO._fields_        — dereferences wintypes at class
+        #                                  definition time
+        #   import tkinter as tk         — separate system package
+        #   import pystray               — needs a GTK/X11 backend
+        # All four are now guarded. If any regresses, this step catches
+        # it. bridge.py replaces sys.stdout on import, so the result goes
+        # to a file rather than the console.
+        run: |
+          python -c "
+          import sys, traceback
+          sys.path.insert(0, 'wallpaper_bridge')
+          out = []
+          try:
+              import bridge
+              assert bridge.wintypes is None, 'wintypes should be None off Windows'
+              assert bridge._user32 is None, '_user32 should be None off Windows'
+              assert bridge._MONITORINFO is None, '_MONITORINFO should be None off Windows'
+              assert bridge._is_fullscreen_active() is False, 'fullscreen probe must no-op'
+              assert bridge._HAS_TRAY is False, 'no GUI stack installed, so _HAS_TRAY must be False'
+              assert callable(bridge.Broadcaster), 'Broadcaster missing'
+              assert callable(bridge.UdpReceiver), 'UdpReceiver missing'
+              out.append('imported OK on Linux - ' + bridge.APP_VERSION)
+          except Exception:
+              out.append(traceback.format_exc())
+              open('result.txt','w').write(chr(10).join(out)); raise SystemExit(1)
+          open('result.txt','w').write(chr(10).join(out))
+          " || (cat result.txt; exit 1)
+          cat result.txt
+
+      - name: Byte-compile every python source
+        run: python -m compileall -q wallpaper_bridge
+
+      - name: Set up Node
+        # run_all.py skips the JS suites when node is missing rather than
+        # failing, so without this the job would go green while quietly
+        # running less than half the tests.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Regression suite
+        # The JS and Python suites are platform-neutral. The pwsh suites
+        # skip themselves when PowerShell is absent, which it is here.
+        run: python tests/run_all.py
 
   version-consistency:
     # A release cut must not ship an APP_VERSION the Configurator's

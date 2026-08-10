@@ -38,8 +38,18 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import sys          # needed by the platform guard below, before the rest
 import ctypes
-from ctypes import wintypes
+if sys.platform == "win32":
+    from ctypes import wintypes
+else:
+    # ctypes.wintypes raises ValueError at import time off Windows, so it
+    # cannot sit at module scope unguarded — it would kill the process
+    # before anything else runs. Everything that dereferences it is
+    # already behind `if not _user32: return`, so a placeholder keeps the
+    # module importable and the Win32 paths unreachable rather than
+    # subtly wrong.
+    wintypes = None  # type: ignore[assignment]
 import hashlib
 import copy
 import json
@@ -111,17 +121,37 @@ def _redact_mqtt(d: dict) -> dict:
 import sys
 import threading
 import time
-import tkinter as tk
 import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
 from io import BytesIO
 from pathlib import Path
-from tkinter import filedialog, ttk
 
-import pystray
-from PIL import Image, ImageDraw, ImageTk
+# The tray icon and its tkinter dialogs are the only consumers of these
+# four names, and every one of them lives in TrayApp / SettingsDialog /
+# AboutDialog / SystemStatusDialog — nothing in the broadcaster, the
+# runtime or the data plane touches them.
+#
+# On Windows they are always present and this is a plain import. On
+# Linux they are a real system dependency (tkinter ships as python3-tk;
+# pystray needs a GTK or X11 backend) and the port is meant to run
+# headless anyway, so a missing GUI stack degrades to "no tray" instead
+# of refusing to start. _HAS_TRAY lets main() make that decision
+# explicitly rather than crashing 11 000 lines earlier.
+try:
+    import tkinter as tk
+    from tkinter import filedialog, ttk
+    import pystray
+    from PIL import ImageTk
+    _HAS_TRAY = True
+    _TRAY_IMPORT_ERROR = None
+except Exception as _tray_err:   # ImportError, or tkinter's TclError
+    tk = filedialog = ttk = pystray = ImageTk = None  # type: ignore[assignment]
+    _HAS_TRAY = False
+    _TRAY_IMPORT_ERROR = _tray_err
+
+from PIL import Image, ImageDraw
 
 # psutil is optional at import time so a dev `python bridge.py` on a box
 # without it still boots. When missing, the SysStats broadcaster simply
@@ -225,13 +255,21 @@ def _resource_path(rel: str) -> Path:
 _user32 = ctypes.windll.user32 if sys.platform == "win32" else None
 
 
-class _MONITORINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize",    wintypes.DWORD),
-        ("rcMonitor", wintypes.RECT),
-        ("rcWork",    wintypes.RECT),
-        ("dwFlags",   wintypes.DWORD),
-    ]
+if wintypes is not None:
+    class _MONITORINFO(ctypes.Structure):
+        # _fields_ is evaluated when the class body runs, i.e. at import
+        # time — so this is the second and last thing in the module that
+        # a non-Windows interpreter cannot get past. Its only caller,
+        # _is_fullscreen_active(), returns early when _user32 is None,
+        # which is exactly the platforms where the name is absent.
+        _fields_ = [
+            ("cbSize",    wintypes.DWORD),
+            ("rcMonitor", wintypes.RECT),
+            ("rcWork",    wintypes.RECT),
+            ("dwFlags",   wintypes.DWORD),
+        ]
+else:
+    _MONITORINFO = None  # type: ignore[assignment,misc]
 
 
 def _is_fullscreen_active() -> bool:
@@ -12495,6 +12533,36 @@ def main():
 
     bridge = BridgeRuntime(config, config_lock)
     bridge.start()
+
+    if not _HAS_TRAY:
+        # No GUI stack — tkinter, pystray or ImageTk failed to import.
+        # On Windows that should never happen and is worth saying loudly;
+        # on Linux it is the expected state until the tray gets a native
+        # equivalent, and the browser Configurator is the primary UI
+        # there anyway.
+        #
+        # bridge.tray must not be left as None: the Configurator's
+        # `system-action` WS commands call through it, and None would
+        # turn a harmless "reload config" click into an AttributeError
+        # deep in a handler. A stub that ignores unknown attributes
+        # keeps those paths inert instead of fatal.
+        print(f"[tray] unavailable ({_TRAY_IMPORT_ERROR}) — running headless")
+        print(f"[tray] Configurator: http://{WS_HOST}:{WS_PORT}/configurator")
+
+        class _NoTray:
+            """Absorbs every tray call as a no-op. See above."""
+            def __getattr__(self, name):
+                def _noop(*a, **kw):
+                    print(f"[tray] {name}() ignored — no tray on this platform")
+                    return None
+                return _noop
+
+        bridge.tray = _NoTray()
+        try:
+            threading.Event().wait()      # park the main thread
+        except KeyboardInterrupt:
+            print("[tray] interrupted — shutting down")
+        return
 
     tray = TrayApp(bridge, config, config_lock)
     # v1.2.1: hand the tray reference back to the bridge so the
