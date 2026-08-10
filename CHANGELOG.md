@@ -4,6 +4,119 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.7] - 2026-08-10
+
+Reverts a change that made things slower, and measures the wallpaper's
+GPU cost properly for the first time.
+
+### Measured — where the GPU actually goes
+
+Switching one thing at a time on a 5120×1440 spanned Lively setup
+(medians of 70 samples each, Lively's WebView2 processes isolated by
+parent chain):
+
+| | median GPU |
+|---|---|
+| everything on | 6.10 % |
+| fireflies off | 1.95 % |
+| + pixelfx "water" off | 2.24 % |
+| + glow grid off | 2.42 % |
+
+fireflies alone was two thirds of the total. `pixelfx` and the glow grid
+cost nothing measurable, and ~2.3 % is an irreducible Lively compositor
+floor — a full-viewport layer over 7.4 Mpx that gets recomposited
+regardless of content, which no setting in this app can reach.
+
+That last row is the important one: beta.6 spent its entire effort
+optimising the glow grid's blur, which was never costing anything.
+
+### Reverted — the v2.4.5 glow sprites
+
+v2.4.5 replaced fireflies' and sparks' per-particle
+`createRadialGradient()` with a cached sprite stamped via `drawImage`,
+on the reasoning that ~10 000 throwaway gradient objects a second had to
+be the expensive part. It was **4× slower**. Edge, 145 particles at
+5120×1440, medians of three runs:
+
+| | ms/frame |
+|---|---|
+| cached sprite (v2.4.5) | 1.13 |
+| radial gradient | 0.28 |
+
+Neither sprite size (64 vs 256 px) nor `globalAlpha` accounted for it:
+Chromium has a fast GPU path for radial gradients that a per-particle
+scaled `drawImage` does not hit. Both presets are back on gradients and
+the sprite cache is deleted. The `arc()` fill from v2.4.4 stays — that
+saving (21 % of every fill) was real.
+
+Expected effect: fireflies from ~4.15 points to ~1, so roughly
+6.1 % → 3.0 % overall.
+
+### Added — `_qualityHaloScale()`
+
+Several presets draw a glow far larger than the particle casting it —
+fireflies at 6× its radius, sparks at 5× — and area goes with the
+square. That now follows the effect-quality bucket: Quality 1.0,
+Balanced 0.9, Performance 0.8 (81 % / 64 % of the area).
+
+Folded into `_ambientRadiusScale`, the single place aurora's and
+plasma's radii are computed, so any future preset that scales with the
+viewport inherits it rather than having to remember to ask.
+
+Where it actually pays, measured:
+
+| | Quality | Balanced | Performance |
+|---|---|---|---|
+| plasma (19 blobs, 415–792 px) | 1.29 ms | 1.05 ms | 0.88 ms |
+| fireflies (145 dots, 9–21 px) | 0.283 | 0.282 | 0.308 |
+
+So −18 % / −32 % on the big soft presets and nothing but noise on the
+small-particle ones. Applied to both anyway — it is one multiply — but
+the comment says plainly that this is not what fixed fireflies.
+
+### Removed — `gridRenderer: "canvas-prescale"` (beta.6)
+
+Shipped on the strength of a −23 % Canvas 2D benchmark. On the real page
+it changed nothing: median 5.3 % against 4.5 %, inside the run-to-run
+spread. The shipped blur is a CSS filter on a composited layer, which
+cannot be benchmarked headless, and Chromium already downsamples wide
+blur radii internally.
+
+A stored `canvas-prescale` setting falls back to plain `canvas`, not to
+`dom` — the DOM path stutters on this hardware, per the 5120×1440 trace
+recorded in `bridge.py` showing 1.3 M paint events in 7.8 s.
+
+Tests now assert the mode is *gone*, with the measurements inline, so
+the idea is not reintroduced without someone first measuring the
+composited path.
+
+### Fixed — `POST /screen/<N>/settings` never worked
+
+The handler called `self.update_screen_setting`, but that method lives
+on `BridgeRuntime`, not `Broadcaster` — every request raised
+`AttributeError` and answered 500. Not a regression from the v2.4.4
+route split: the same call is in the v2.4.4-beta.4 tag, so the route has
+been dead since it was written. It stayed hidden because the
+Configurator's "apply to all screens" buttons are its only caller, and a
+failure there looks like the click not registering.
+
+Found by accident while trying to flip a setting over HTTP during
+measurement.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.7.
+
+The parity suite previously asserted the sprite path — it was written to
+enforce v2.4.5. Those checks now assert the opposite and carry the
+reason, so the next person reads a record instead of repeating the
+experiment.
+
+`test_wallpaper_source.mjs` extracted helpers with a `[\s\S]{0,300}`
+window, which truncated the moment `_ambientRadiusScale` gained a
+comment — the same failure mode as the old span cap in the parity suite.
+Now brace-counted.
+
 ## [2.4.4-beta.6] - 2026-08-10
 
 An opt-in grid renderer that does the same blur for less GPU work.

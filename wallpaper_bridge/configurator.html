@@ -2733,12 +2733,11 @@
         <label for="grid-renderer" data-i18n="glow.grid_renderer">Grid renderer</label>
         <select id="grid-renderer">
           <option value="canvas" data-i18n="glow.grid_renderer.canvas">Canvas (recommended)</option>
-          <option value="canvas-prescale" data-i18n="glow.grid_renderer.canvas_prescale">Canvas — cheaper blur</option>
           <option value="dom"    data-i18n="glow.grid_renderer.dom">DOM (legacy)</option>
         </select>
       </div>
       <div class="hint" style="margin-top: 2px;" data-i18n="glow.grid_renderer_hint">
-        Canvas: smoother ambient effects on high-refresh monitors (240 Hz etc.). "Cheaper blur" draws the same picture with less GPU work — worth trying on wide or spanned desktops. DOM only if your GPU struggles with the canvas blur.
+        Canvas: smoother ambient effects on high-refresh monitors (240 Hz etc.). DOM only if your GPU struggles with the canvas blur.
       </div>
       <!-- v1.2.12: glass-tile backdrop-filter quality. Backdrop-filter
            blur is the single most expensive GPU op on the page; cost
@@ -4206,14 +4205,11 @@ const TRANSLATIONS = {
   // style writes.
   "glow.grid_renderer.canvas": { en: "Canvas (recommended)",
                                   de: "Canvas (empfohlen)" },
-  "glow.grid_renderer.canvas_prescale": {
-    en: "Canvas — cheaper blur",
-    de: "Canvas — günstigerer Blur" },
   "glow.grid_renderer.dom":    { en: "DOM (legacy)",
                                   de: "DOM (alt)" },
   "glow.grid_renderer_hint":   {
-    en: "Canvas: smoother ambient effects on high-refresh monitors (240 Hz etc.). \"Cheaper blur\" draws the same picture with less GPU work — worth trying on wide or spanned desktops. DOM only if your GPU struggles with the canvas blur.",
-    de: "Canvas: smoothere Ambient-Effekte auf High-Refresh-Monitoren (240 Hz etc.). „Günstigerer Blur“ zeichnet dasselbe Bild mit weniger GPU-Last — einen Versuch wert auf breiten oder gespannten Desktops. DOM nur wenn deine GPU mit dem Canvas-Blur überfordert ist."
+    en: "Canvas: smoother ambient effects on high-refresh monitors (240 Hz etc.). DOM only if your GPU struggles with the canvas blur.",
+    de: "Canvas: smoothere Ambient-Effekte auf High-Refresh-Monitoren (240 Hz etc.). DOM nur wenn deine GPU mit dem Canvas-Blur überfordert ist."
   },
   "glow.glass_quality.low":    { en: "Low (no blur)",     de: "Niedrig (ohne Blur)" },
   "glow.glass_quality.medium": { en: "Medium",            de: "Mittel" },
@@ -12122,9 +12118,10 @@ function renderAll() {
   // Glow
   els.glowBars.checked   = settings.showBars !== false;
   els.glowLayout.value   = settings.barLayout || "lay-grid";
+  // v2.4.7: canvas-prescale removed — measured no benefit, so a stored
+  // value from beta.6 falls back to plain canvas rather than to DOM.
   els.gridRenderer.value =
-    (settings.gridRenderer === "canvas" || settings.gridRenderer === "canvas-prescale")
-      ? settings.gridRenderer : "dom";
+    settings.gridRenderer === "dom" ? "dom" : "canvas";
   {
     const gq = settings.glassQuality;
     els.glassQuality.value = (gq === "low" || gq === "high") ? gq : "medium";

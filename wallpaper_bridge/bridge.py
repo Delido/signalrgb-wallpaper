@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.6"
+APP_VERSION = "2.4.4-beta.7"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.6"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.6"
+WALLPAPER_VERSION = "2.4.7"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,69 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.7": {
+        "title_en": "What's new in v2.4.4-beta.7",
+        "title_de": "Was ist neu in v2.4.4-beta.7",
+        "body_en": (
+            "This one should be noticeably lighter on the graphics "
+            "card, and it starts with an admission: a change in "
+            "beta.5 made things worse, not better.\n\n"
+            "**Fireflies and Sparks are back to how they used to draw**\n"
+            "- beta.5 switched them to a pre-drawn glow image, on the "
+            "theory that rebuilding the glow for each particle every "
+            "frame was wasteful. Measured properly, the pre-drawn "
+            "version was about four times slower — the browser has a "
+            "much faster route for the original approach.\n"
+            "- On a 5120×1440 desktop, Fireflies alone was using two "
+            "thirds of the wallpaper's graphics load. That should now "
+            "be roughly a quarter of what it was.\n\n"
+            "**The quality setting reaches the big soft effects**\n"
+            "- Aurora, Plasma and similar presets draw glows far "
+            "larger than the particle behind them. Those now shrink "
+            "with the effect-quality setting: about 18 % less work on "
+            "Balanced, 32 % on Performance. Quality is untouched.\n\n"
+            "**Removed: the \"cheaper blur\" option from beta.6**\n"
+            "- It made no measurable difference and has been taken out "
+            "again. If you selected it, you will be back on plain "
+            "Canvas automatically. The glow grid turned out not to "
+            "cost anything worth optimising in the first place.\n\n"
+            "**Fixed:** \"Apply to all screens\" in the Configurator "
+            "never worked — the request failed silently. It does now.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "the earlier betas.\n"
+        ),
+        "body_de": (
+            "Diese Version sollte die Grafikkarte spürbar entlasten — "
+            "und sie beginnt mit einem Eingeständnis: Eine Änderung in "
+            "beta.5 hat es verschlechtert statt verbessert.\n\n"
+            "**Glühwürmchen und Funken zeichnen wieder wie früher**\n"
+            "- beta.5 stellte sie auf ein vorgezeichnetes Leuchtbild "
+            "um, in der Annahme, das Neuaufbauen pro Partikel und Bild "
+            "sei verschwenderisch. Richtig gemessen war die "
+            "vorgezeichnete Variante rund viermal langsamer — der "
+            "Browser hat für den ursprünglichen Weg eine deutlich "
+            "schnellere Route.\n"
+            "- Auf einem 5120×1440-Desktop verbrauchten allein die "
+            "Glühwürmchen zwei Drittel der Grafiklast des Wallpapers. "
+            "Das sollte jetzt etwa ein Viertel davon sein.\n\n"
+            "**Die Qualitätsstufe erreicht die großen weichen Effekte**\n"
+            "- Aurora, Plasma und ähnliche Presets zeichnen ein "
+            "Leuchten, das weit größer ist als das Partikel dahinter. "
+            "Das schrumpft jetzt mit der Qualitätsstufe: rund 18 % "
+            "weniger Aufwand bei Ausgewogen, 32 % bei Performance. "
+            "Qualität bleibt unverändert.\n\n"
+            "**Entfernt: die Option „günstigerer Blur“ aus beta.6**\n"
+            "- Sie brachte keinen messbaren Unterschied und ist wieder "
+            "raus. Falls du sie ausgewählt hattest, landest du "
+            "automatisch wieder bei normalem Canvas. Das Glow-Raster "
+            "kostet ohnehin nichts, was sich zu optimieren lohnt.\n\n"
+            "**Behoben:** „Auf alle Bildschirme anwenden“ im "
+            "Configurator hat nie funktioniert — die Anfrage schlug "
+            "stillschweigend fehl. Jetzt geht es.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "bei den vorherigen Betas.\n"
+        ),
+    },
     "2.4.4-beta.6": {
         "title_en": "What's new in v2.4.4-beta.6",
         "title_de": "Was ist neu in v2.4.4-beta.6",
@@ -1602,15 +1665,16 @@ DEFAULT_SCREEN_SETTINGS = {
     # dGPU setups where DOM was cheaper can still flip back in
     # the Configurator's per-screen Glow card.
     #
-    # v2.4.6 adds a third value, "canvas-prescale": the same canvas
-    # path, but the grid is drawn into a larger backing buffer and the
-    # CSS blur radius is divided by the same factor. A Gaussian blur is
-    # scale-invariant enough that the picture is unchanged while the
-    # kernel does far less work per output pixel — measured at -23 % in
-    # Canvas 2D at 5120×1440. It stays opt-in rather than becoming the
-    # default because the shipped path is a CSS filter on a composited
-    # layer, which cannot be benchmarked headless; the saving is
-    # expected to carry over but has not been proven on that path.
+    # v2.4.6 added a "canvas-prescale" value — larger backing buffer,
+    # proportionally smaller CSS blur — on the strength of a -23 %
+    # Canvas 2D benchmark. Measured on the real page it made no
+    # difference at all (median 5.3 % vs 4.5 %, inside the run-to-run
+    # spread), because the shipped blur is a CSS filter on a composited
+    # layer and Chromium already downsamples wide radii internally.
+    # v2.4.7 removed it again. The grid blur turned out not to cost
+    # anything measurable in the first place: switching the whole glow
+    # grid off on a 5120×1440 span moved the needle 2.24 % -> 2.42 %,
+    # i.e. not at all.
     "gridRenderer": "canvas",
     # v1.2.12: render-rate cap shared by the bridge's outgoing
     # broadcast and the wallpaper page's renderFrame gate. SignalRGB
