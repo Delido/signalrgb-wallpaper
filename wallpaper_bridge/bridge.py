@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.4"
+APP_VERSION = "2.4.4-beta.5"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.4"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.4"
+WALLPAPER_VERSION = "2.4.5"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,70 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.5": {
+        "title_en": "What's new in v2.4.4-beta.5",
+        "title_de": "Was ist neu in v2.4.4-beta.5",
+        "body_en": (
+            "More efficiency work, and again nothing should look "
+            "different. If Fireflies, Sparks or Wormhole changed "
+            "appearance for you, that's a bug worth reporting.\n\n"
+            "**Fireflies and Sparks got much cheaper to draw**\n"
+            "- Both rebuilt every particle's glow from scratch on every "
+            "single frame — around ten thousand throwaway gradients a "
+            "second on a 1440p desktop. The glow is now drawn once and "
+            "reused, which removes that work entirely.\n"
+            "- Sparks also stopped painting a square around its round "
+            "glow, the same fix Aurora and Plasma got in the last beta.\n\n"
+            "**The quality setting now reaches the effect that needed "
+            "it most**\n"
+            "- Wormhole's glow is the single most expensive thing the "
+            "wallpaper draws — measured at roughly a quarter of the "
+            "frame budget on a 1440p desktop. It ignored the effect-"
+            "quality setting completely, so choosing Performance did "
+            "nothing for it.\n"
+            "- Balanced and Performance now trade some glow radius for "
+            "frame time (about 20 % and 39 % less work). Quality is "
+            "unchanged — if you liked how it looked, leave it there.\n\n"
+            "**Under the hood**\n"
+            "- The bridge's request handling was split into separate "
+            "routes. No behaviour change; it is simply no longer one "
+            "1,600-line function.\n"
+            "- Groundwork for a future Linux version: the bridge now "
+            "starts without a Windows-only GUI stack.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "the earlier betas.\n"
+        ),
+        "body_de": (
+            "Weitere Effizienzarbeit, und auch hier sollte sich optisch "
+            "nichts ändern. Falls Glühwürmchen, Funken oder Wurmloch bei "
+            "dir anders aussehen, ist das ein meldenswerter Fehler.\n\n"
+            "**Glühwürmchen und Funken sind deutlich günstiger geworden**\n"
+            "- Beide haben das Leuchten jedes Partikels in jedem "
+            "einzelnen Bild neu aufgebaut — rund zehntausend "
+            "Wegwerf-Verläufe pro Sekunde auf einem 1440p-Desktop. Das "
+            "Leuchten wird jetzt einmal gezeichnet und wiederverwendet.\n"
+            "- Funken malt außerdem kein Quadrat mehr um sein rundes "
+            "Leuchten — derselbe Fix, den Aurora und Plasma in der "
+            "letzten Beta bekommen haben.\n\n"
+            "**Die Qualitätsstufe erreicht jetzt den Effekt, der sie am "
+            "nötigsten hatte**\n"
+            "- Das Leuchten von Wurmloch ist das mit Abstand teuerste, "
+            "was das Wallpaper zeichnet — gemessen etwa ein Viertel des "
+            "Bildbudgets auf 1440p. Die Qualitätsstufe wurde dabei "
+            "komplett ignoriert, „Performance“ brachte also nichts.\n"
+            "- Ausgewogen und Performance tauschen jetzt etwas "
+            "Leuchtradius gegen Bildzeit (rund 20 % bzw. 39 % weniger "
+            "Aufwand). Qualität bleibt unverändert.\n\n"
+            "**Unter der Haube**\n"
+            "- Die Anfrageverarbeitung der Bridge wurde in einzelne "
+            "Routen aufgeteilt. Kein Verhaltensunterschied — es ist "
+            "einfach keine 1.600-Zeilen-Funktion mehr.\n"
+            "- Vorarbeit für eine künftige Linux-Version: Die Bridge "
+            "startet jetzt auch ohne den Windows-GUI-Unterbau.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "bei den vorherigen Betas.\n"
+        ),
+    },
     "2.4.4-beta.4": {
         "title_en": "What's new in v2.4.4-beta.4",
         "title_de": "Was ist neu in v2.4.4-beta.4",

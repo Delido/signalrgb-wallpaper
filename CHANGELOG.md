@@ -4,6 +4,136 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.5] - 2026-08-10
+
+Measured performance work, a structural split in the bridge, and the
+groundwork for Linux. No visual change intended.
+
+### Changed — `fireflies` and `sparks` stamp a cached sprite
+
+Both called `createRadialGradient()` once per particle per frame: **336
+and 205 gradients per frame** on 2560×1440, so roughly 10 000 throwaway
+gradient objects a second at 30 fps. All 9 090 measured gradients shared
+identical stop offsets (0, 0.45, 1) — only position, radius, alpha and
+hue varied.
+
+The glow is now rasterised once into a 64×64 offscreen canvas and
+stamped with `drawImage`. Alpha rides on `globalAlpha`; hue is quantised
+into 12 buckets across each preset's narrow band (fireflies 50–85,
+sparks 30–60). Per-frame gradient construction: **336 → 0** and
+**205 → 0**.
+
+Appearance is unchanged as arithmetic, not as opinion: the sprite holds
+the core at its full 0.9 with the ring's relative weight folded into its
+own alpha, so a single `globalAlpha` multiply reproduces the original
+pair of stop alphas — equal to six decimal places across the pulse
+range. `sparks` additionally drops its `fillRect` for the sprite,
+removing the same 21 % corner overdraw `aurora` and `plasma` lost in
+beta.4.
+
+### Changed — `wormhole`'s `shadowBlur` follows the quality setting
+
+The code claimed `shadowBlur` was "GPU-accelerated on Chromium so still
+cheap". Measured in Edge — the same Chromium engine WE and Lively embed
+— at 600 particles on 2560×1440:
+
+| blur | ms/frame |
+|---|---|
+| 12 | 9.59 |
+| 9 | 7.27 |
+| 6 | 6.54 |
+| 3 | 5.22 |
+| none | 1.85 |
+
+That is ~4.5× the un-blurred draw, applied to ~1840 draws per frame — a
+quarter of the 33 ms budget at 30 fps for one effect. Hoisting the
+assignment out of the loop changes nothing (7.62 hoisted vs 7.27
+per-particle), so radius is the only lever.
+
+Lowering it outright would be an unrequested visual change, so it now
+scales with the effect-quality bucket — which until now reached only
+**2 of 17** ambient presets, meaning "Performance" bought nothing on the
+most expensive one. Quality is identical to before; Balanced saves ~20 %
+and Performance ~39 % of the blur cost (medians of three runs).
+
+Tried and rejected: sprite-stamping wormhole too, measured at 19.7
+ms/frame against 8.3 for `shadowBlur` — **2.4× slower**, because the
+sprite covers far more fill rate than the small blurred circle.
+`lightning` uses blur 14 but draws 1.8 ops/frame against wormhole's
+1840, so it is left alone.
+
+### Changed — `Broadcaster.handle_client` split into route methods
+
+1611 lines dispatching 32 routes in one function, on the path every HTTP
+request takes. Route bodies moved verbatim into `_route_*` methods;
+`handle_client` is now 117 lines of prologue and dispatch. A line-level
+comparison shows zero handler lines lost or altered.
+
+`tests/test_http_routing.py` (52 checks) was written and made to pass
+against the **unchanged** code first, then had to stay green afterwards
+— a characterisation test that needs adjusting to pass after the change
+has stopped characterising anything.
+
+Routes signal "handled" by closing the writer rather than returning a
+sentinel: all 32 branches already do so, whereas the sentinel design
+would have meant rewriting 55 bare `return` statements, several inside
+nested helpers where `return` means something else.
+
+The split surfaced two scope dependencies, both caught before shipping.
+`clean_target` was assigned once at the tail and read by both `/api`
+routes — as separate methods they no longer share the binding, which
+fired as a `NameError` on every 404 until each derived it itself.
+
+### Added — bridge imports on Linux, plus an Ubuntu CI job
+
+The bridge had never once been imported off Windows. Four things
+blocked it: `from ctypes import wintypes`, `_MONITORINFO._fields_`
+(dereferences `wintypes` when the class body runs), `import tkinter` and
+`import pystray`. The first two are behind `sys.platform` guards; the
+other two moved into one `try`/`except` that sets `_HAS_TRAY`, since
+every consumer of `tk`, `ttk`, `filedialog`, `pystray` and `ImageTk`
+lives in the four tray/dialog classes — verified with `ast`, not grep.
+
+`main()` handles the headless case instead of crashing, with a no-op
+stub for `bridge.tray` because the Configurator's `system-action`
+handlers call through it.
+
+The Windows job now asserts `_HAS_TRAY is True`, so a typo cannot
+silently downgrade the shipped build to headless. The `linux-import`
+job deliberately installs **no** GUI stack — the point is whether the
+module loads without one.
+
+### Added — `pyproject.toml`
+
+Dependencies previously lived implicitly in `installer/build.ps1` and in
+whatever was installed on the one build host. Now declared and split by
+behaviour: `pystray` and `Pillow` are hard imports; `psutil` and `winrt`
+are guarded and therefore extras, with `winrt` carrying a `sys_platform`
+marker so `[all]` resolves on Linux. CI checks the version matches
+`APP_VERSION` and that every third-party import is declared — parsed
+with `ast`, since a regex over raw text also matches prose in docstrings
+and reported modules named `the` and `any`.
+
+### Changed — repo layout
+
+`SignalRGB_Desktop_Wallpaper.{js,qml}` moved to `plugin/`, `HANDOFF.md`
+to `docs/handoff-notes.md`. Only the Inno installer read them by repo
+path; `bridge.py`'s reference is to the installed copy under Documents.
+The handoff notes are dated 2026-05-17 and still describe phases 2 and 3
+as work-in-progress — kept for the multi-screen reasoning, marked
+historical, and excluded from the rendered docs site.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.5: `wallpaper/index.html` changed, so the
+Workshop item needs re-uploading before the stable release (run
+`installer\maintainer-restore-workshopid.ps1` first).
+
+Test suites: 10, all green. Preset parity grew to 92 checks; its
+square-fill rule now tests the property (no square fills) rather than
+the mechanism (must call `arc`), since sprite-stamping satisfies the
+intent by a better route.
+
 ## [2.4.4-beta.4] - 2026-08-10
 
 Efficiency and a guard rail. No visual change intended.
