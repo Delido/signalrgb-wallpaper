@@ -20,6 +20,7 @@ every push and PR (`.github/workflows/smoke.yml`).
 | `test_tint_colour.mjs` | `rgbToRgba` across hex / rgb() / rgba() input |
 | `test_glripple.mjs` | The WebGL displacement path — `computeUV` against all six background-fit modes |
 | `test_preset_parity.mjs` | All 17 ambient effects: that they run, paint, and match their Configurator preview |
+| `test_span_apply.mjs` | Applying a library image to one half of a spanned screen keeps the other half |
 | `test_reimport_workshop.ps1` | Workshop-subscription detection and its exit codes |
 | `test_release_tooling.ps1` | `release.ps1` preflight + the winget publish path |
 | `harness.py` | Shared fakes and helpers (python) |

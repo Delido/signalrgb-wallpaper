@@ -6743,7 +6743,37 @@ async function applyLibraryItemToSpanTile(item, screenIdx, tileIdx, spanMode) {
     // full-canvas opaque base, the target tile's transparent neon
     // areas would show prev_bg pixels instead of the underlay.
     // Clip prev_bg to the inverse rect, library to the target rect.
-    const prevPath = (snap && snap.bgImage) || settings.bgImage || "";
+    //
+    // v2.4.9: prefer `settings` over `_lastConfigSnapshot` when this is
+    // the active screen, and confirm against /config otherwise.
+    //
+    // The snapshot is refreshed by a 5 s poll (refreshTabLabels), so
+    // applying to the second half within five seconds of the first read
+    // a stale bgImage: the composite got built on the state from BEFORE
+    // the first half and silently discarded it. Reported as "the second
+    // half wipes the first" on both Lively and Wallpaper Engine, and
+    // visible in the bridge log as a save whose byte count exactly
+    // matches the pre-first-half image.
+    //
+    // `settings` is pushed over the WS immediately after every
+    // background upload (bridge.py's /screen/<N>/background route calls
+    // push_settings), so for the active screen it is current by the
+    // time the user can click again. For any other screen it holds the
+    // wrong screen's values, hence the /config read.
+    let prevPath = "";
+    if (screenIdx === activeScreen && settings && settings.bgImage) {
+      prevPath = settings.bgImage;
+    } else {
+      try {
+        const cfgR = await fetch("/config", { cache: "no-store" });
+        if (cfgR.ok) {
+          const cfg = await cfgR.json();
+          const live = Array.isArray(cfg.screens) ? cfg.screens[screenIdx] : null;
+          if (live && live.bgImage) prevPath = live.bgImage;
+        }
+      } catch (_) { /* fall through to the snapshot */ }
+      if (!prevPath) prevPath = (snap && snap.bgImage) || "";
+    }
     if (prevPath) {
       try {
         const r = await fetch("/image?path=" + encodeURIComponent(prevPath),

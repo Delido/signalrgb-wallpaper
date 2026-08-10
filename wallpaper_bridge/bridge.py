@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.8"
+APP_VERSION = "2.4.4-beta.9"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -826,6 +826,52 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.9": {
+        "title_en": "What's new in v2.4.4-beta.9",
+        "title_de": "Was ist neu in v2.4.4-beta.9",
+        "body_en": (
+            "**Fixed: applying a second image to a spanned screen "
+            "erased the first.**\n\n"
+            "On a spanned setup you can send a library image to just "
+            "the left or right half. Applying to one half and then the "
+            "other wiped whichever you did first — on both Lively and "
+            "Wallpaper Engine.\n\n"
+            "The second apply builds a new image by copying the half "
+            "you already set and drawing the new picture beside it. It "
+            "was reading the existing background from a cache that "
+            "refreshes every five seconds, so if you clicked the second "
+            "half sooner than that, it copied the state from before the "
+            "first one — and your first image went with it. Waiting a "
+            "few seconds between clicks happened to work, which is "
+            "why this was easy to miss.\n\n"
+            "It now reads the live value, so the halves survive no "
+            "matter how quickly you work.\n\n"
+            "**No re-import needed** for this one — the wallpaper "
+            "itself is unchanged since beta.8.\n"
+        ),
+        "body_de": (
+            "**Behoben: Ein zweites Bild auf einem gespannten "
+            "Bildschirm löschte das erste.**\n\n"
+            "Auf einem gespannten Setup kann man ein Bild aus der "
+            "Bibliothek nur auf die linke oder rechte Hälfte legen. "
+            "Erst die eine, dann die andere Hälfte zu belegen löschte "
+            "jeweils die zuerst gesetzte — unter Lively wie unter "
+            "Wallpaper Engine.\n\n"
+            "Der zweite Vorgang baut ein neues Bild, indem er die "
+            "bereits gesetzte Hälfte übernimmt und das neue Bild "
+            "daneben zeichnet. Dabei las er den vorhandenen Hintergrund "
+            "aus einem Zwischenspeicher, der nur alle fünf Sekunden "
+            "aktualisiert wird — wer schneller klickte, übernahm den "
+            "Stand von vor der ersten Hälfte, und das erste Bild war "
+            "weg. Ein paar Sekunden Pause zwischen den Klicks "
+            "funktionierte zufällig, weshalb das leicht zu übersehen "
+            "war.\n\n"
+            "Jetzt wird der Live-Wert gelesen; beide Hälften bleiben "
+            "erhalten, egal wie schnell man arbeitet.\n\n"
+            "**Kein Re-Import nötig** — das Wallpaper selbst ist seit "
+            "beta.8 unverändert.\n"
+        ),
+    },
     "2.4.4-beta.8": {
         "title_en": "What's new in v2.4.4-beta.8",
         "title_de": "Was ist neu in v2.4.4-beta.8",

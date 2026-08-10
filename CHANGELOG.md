@@ -4,6 +4,50 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.9] - 2026-08-11
+
+### Fixed — the second half of a spanned screen wiped the first
+
+On a `span-h` / `span-v` screen the library picker offers "left half" /
+"right half". Each apply composites: the current background clipped to
+the *other* half, plus the new image clipped to the target half,
+uploaded as one PNG. That is only correct if "the current background"
+really is current.
+
+It was read from `_lastConfigSnapshot`, which is refreshed by a 5 s poll
+(`refreshTabLabels`). Applying to the second half within five seconds of
+the first therefore composited onto the state from *before* the first
+half and silently discarded it. Slower than five seconds and it worked,
+which is why the bug looked intermittent.
+
+Confirmed in the bridge log before changing anything: three saves 3.7 s
+apart where the third file's byte count (7 362 634) exactly matched the
+first — the second half's composite had reverted to the pre-first-half
+image.
+
+`applyLibraryItemToSpanTile` now takes the path from `settings` for the
+active screen — the bridge pushes a settings message over the WS
+immediately after every background upload, so it is current by the time
+the user can click again — and re-reads `/config` uncached for any other
+screen, since `settings` only ever holds the active screen's values.
+
+### Added — `tests/test_span_apply.mjs`
+
+First test coverage for the Configurator's own logic. 22 checks: that
+the live path is preferred over the polled snapshot, that the two clip
+rects tile the screen exactly and never overlap (span-h and span-v,
+three resolutions), and a simulation of the reported click sequence
+showing a stale source losing the first half while a live one keeps
+both.
+
+Mutation-checked: restoring the old `_lastConfigSnapshot` read turns
+four checks red.
+
+### Notes
+
+`WALLPAPER_VERSION` stays at 2.4.8 — `wallpaper/index.html` is
+untouched, so **no bundle re-import is needed** for this release.
+
 ## [2.4.4-beta.8] - 2026-08-11
 
 Hotfix for beta.7, which shipped a wallpaper page that never started.
