@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.3] - 2026-08-10
+
+### Fixed — Aurora and Plasma were effectively invisible
+
+Both presets read as "no different from off" on either host. They were
+rendering the whole time; the output was just far below the threshold
+where a soft area of colour registers.
+
+Two independent causes, both of which only bite above 1080p:
+
+**Fixed pixel geometry.** The blob radii (180–340 px for aurora,
+200–420 px for plasma) were authored against 1920×1080, and
+`targetCount` keyed off the density setting alone. A 300 px blob is
+13.6 % of a 1920×1080 screen but 3.8 % of 5120×1440, and the count never
+grew to compensate. Radii now scale with √area and counts with area,
+both clamped at 1 so nothing shrinks below the authored look, and capped
+(3× / 4×) so an 8K surface doesn't end up saturated.
+
+**Alpha far too low.** aurora peaked at 0.14, plasma sat at 0.18. Every
+ambient preset that reads clearly uses 0.25–0.9 — these two were the
+weakest in the set by a wide margin. Raised to 0.34 and 0.38, with the
+gradient's mid stop moved out (0.5/0.4 → 0.6/0.55 for aurora, 0.55/0.35
+→ 0.6/0.55 for plasma) so the blobs keep some body instead of falling
+away almost immediately.
+
+Measured on 5120×1440, mean per-pixel colour shift over a mid-tone
+background:
+
+| | before | after |
+|---|---|---|
+| aurora | 6.1 | 11.3 |
+| plasma | 11.2 | 21.6 |
+
+A note on the measurement: the first pass measured against a black
+canvas, which flatters a faint overlay — alpha that looks like
+"something" on black disappears over a photograph. Only after
+compositing the bench over a realistic background did the alpha problem
+show up at all; the geometry fix alone left aurora at 6.1, still under
+the perceptual floor.
+
 ## [2.4.4-beta.2] - 2026-08-10
 
 Two fixes on top of beta.1, both from real use. `WALLPAPER_VERSION`

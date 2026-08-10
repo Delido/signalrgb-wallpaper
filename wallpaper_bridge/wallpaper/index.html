@@ -5606,6 +5606,33 @@ function rgbToRgba(rgb, a) {
   return s;     // named colours etc. — pass through unchanged
 }
 
+// v2.4.4: viewport scaling for the two "soft glow blob" presets.
+//
+// aurora and plasma draw large, very faint radial gradients whose radii
+// were authored as absolute pixel values against a 1920×1080 desktop.
+// On a wider surface each blob covers a much smaller share of the screen
+// — a 300 px blob is 13.6 % of 1920×1080 but only 3.8 % of 5120×1440 —
+// and the particle count is driven by the density setting alone, so it
+// does not grow with the area either. Measured on a 5120×1440 desktop,
+// the shipped values produced a mean alpha of 1.5/255 for aurora and
+// 3/255 for plasma: drawn, but effectively invisible. Users reported
+// both presets as "no different from off".
+//
+// Radii scale with the square root of the area (so a blob keeps the same
+// share of the screen) and counts scale with the area itself (so the
+// coverage stays comparable). Clamped at 1 so nothing shrinks below the
+// authored look on smaller screens, and capped so an ultrawide does not
+// end up with a hundred overlapping blobs.
+const _AMBIENT_REF_AREA = 1920 * 1080;
+function _ambientRadiusScale(w, h) {
+  if (!w || !h) return 1;
+  return Math.max(1, Math.min(3, Math.sqrt((w * h) / _AMBIENT_REF_AREA)));
+}
+function _ambientCountScale(w, h) {
+  if (!w || !h) return 1;
+  return Math.max(1, Math.min(4, (w * h) / _AMBIENT_REF_AREA));
+}
+
 // Katakana half-width + digits + a handful of symbols, matching the
 // classic Matrix-rain character pool. Defined here (above AMBIENT_PRESETS)
 // so the Matrix preset's spawn() finds it at call time.
@@ -5909,12 +5936,16 @@ const AMBIENT_PRESETS = {
   },
 
   aurora: {
-    targetCount: (d) => Math.max(3, Math.round(3 + d / 25)),
+    // v2.4.4: count and radius scale with the viewport — see
+    // _ambientRadiusScale(). Fixed pixel radii made this preset
+    // effectively invisible on wide desktops.
+    targetCount: (d, w, h) =>
+      Math.max(3, Math.round((3 + d / 25) * _ambientCountScale(w, h))),
     spawn: (w, h) => ({
       x: Math.random() * w,
       y: h * (0.2 + Math.random() * 0.5),
       vx: (Math.random() - 0.5) * 0.3,
-      r: 180 + Math.random() * 160,
+      r: (180 + Math.random() * 160) * _ambientRadiusScale(w, h),
       hue: 130 + Math.random() * 140,
       life: 0,
       maxLife: 20 + Math.random() * 25,
@@ -5929,12 +5960,23 @@ const AMBIENT_PRESETS = {
     render: (ctx, p) => {
       const fadeIn  = Math.min(1, p.life / 4);
       const fadeOut = Math.min(1, (p.maxLife - p.life) / 4);
-      const a = 0.14 * Math.min(fadeIn, fadeOut);
+      // v2.4.4: peak alpha 0.14 → 0.34, and the mid stop moved out from
+      // 0.5/0.4 to 0.6/0.55 so the blob keeps some body instead of
+      // falling away almost immediately.
+      //
+      // These gradients sit over a photographic background, not over
+      // black. Measured against a mid-tone wallpaper, a 0.14 peak
+      // shifted a channel by ~14/255 at the very centre and far less
+      // across the rest of the blob — below the point where a soft
+      // area of colour registers at all. Every ambient preset that
+      // reads clearly uses 0.25–0.9. Users reported aurora as
+      // indistinguishable from having the effect switched off.
+      const a = 0.34 * Math.min(fadeIn, fadeOut);
       const hue = p.hue;
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
-      grad.addColorStop(0,   "hsla(" + hue + ", 80%, 60%, " + a + ")");
-      grad.addColorStop(0.5, "hsla(" + hue + ", 80%, 60%, " + (a * 0.4) + ")");
-      grad.addColorStop(1,   "hsla(" + hue + ", 80%, 60%, 0)");
+      grad.addColorStop(0,   "hsla(" + hue + ", 85%, 62%, " + a + ")");
+      grad.addColorStop(0.6, "hsla(" + hue + ", 85%, 62%, " + (a * 0.55) + ")");
+      grad.addColorStop(1,   "hsla(" + hue + ", 85%, 62%, 0)");
       ctx.fillStyle = grad;
       ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
     },
@@ -5946,13 +5988,15 @@ const AMBIENT_PRESETS = {
   // the whole canvas and own their hue clock so the colour wash is
   // always shifting.
   plasma: {
-    targetCount: (d) => Math.max(4, Math.round(4 + d / 18)),
+    // v2.4.4: viewport-scaled like aurora above, same reason.
+    targetCount: (d, w, h) =>
+      Math.max(4, Math.round((4 + d / 18) * _ambientCountScale(w, h))),
     spawn: (w, h) => ({
       x: Math.random() * w,
       y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.25,
       vy: (Math.random() - 0.5) * 0.2,
-      r: 200 + Math.random() * 220,
+      r: (200 + Math.random() * 220) * _ambientRadiusScale(w, h),
       hue: Math.random() * 360,
       hueSpeed: 4 + Math.random() * 6,                 // deg / s
     }),
@@ -5968,19 +6012,23 @@ const AMBIENT_PRESETS = {
       return true;
     },
     render: (ctx, p, tint) => {
-      const a = 0.18;
+      // v2.4.4: 0.18 → 0.38, with the mid stop moved out from 0.55/0.35
+      // to 0.6/0.55. Same reasoning as aurora above — these blobs are
+      // composited over a photograph, where the old values washed out
+      // to almost nothing.
+      const a = 0.38;
       const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
       if (tint) {
         // Tint mode: drop the hue cycle, run the user's glow colour at
         // varying alpha across the blob's radius. Still feels alive
         // thanks to the drift + size, but stays on-palette.
-        grad.addColorStop(0,    rgbToRgba(tint, a));
-        grad.addColorStop(0.55, rgbToRgba(tint, a * 0.35));
-        grad.addColorStop(1,    rgbToRgba(tint, 0));
+        grad.addColorStop(0,   rgbToRgba(tint, a));
+        grad.addColorStop(0.6, rgbToRgba(tint, a * 0.55));
+        grad.addColorStop(1,   rgbToRgba(tint, 0));
       } else {
-        grad.addColorStop(0,    "hsla(" + p.hue + ", 80%, 60%, " + a + ")");
-        grad.addColorStop(0.55, "hsla(" + p.hue + ", 80%, 60%, " + (a * 0.35) + ")");
-        grad.addColorStop(1,    "hsla(" + p.hue + ", 80%, 60%, 0)");
+        grad.addColorStop(0,   "hsla(" + p.hue + ", 85%, 62%, " + a + ")");
+        grad.addColorStop(0.6, "hsla(" + p.hue + ", 85%, 62%, " + (a * 0.55) + ")");
+        grad.addColorStop(1,   "hsla(" + p.hue + ", 85%, 62%, 0)");
       }
       ctx.fillStyle = grad;
       ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);

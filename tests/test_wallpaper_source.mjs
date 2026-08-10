@@ -294,6 +294,49 @@ console.log("\neffects and widgets cover the whole desktop");
         /Promise\.resolve\(\)\.then\(_drainFirstTicks\)/.test(src));
   check("skips widgets removed before the tick ran",
         /_drainFirstTicks[\s\S]{0,400}?isConnected/.test(src));
+
+  // aurora and plasma draw large, very faint gradients whose radii were
+  // authored as absolute pixels against 1920x1080. On a wider desktop
+  // each blob covers a far smaller share of the screen and the count
+  // never grew with the area. Measured on 5120x1440: mean alpha 1.5/255
+  // for aurora and 3/255 for plasma -- drawn, but invisible. Users
+  // reported both as "no different from off".
+  check("blob radii scale with the viewport", /_ambientRadiusScale/.test(src));
+  check("blob counts scale with the viewport", /_ambientCountScale/.test(src));
+  for (const preset of ["aurora", "plasma"]) {
+    const block = src.slice(src.indexOf(`  ${preset}: {`),
+                            src.indexOf(`  ${preset}: {`) + 900);
+    check(`${preset} scales its radius`,
+          /_ambientRadiusScale\(w, h\)/.test(block));
+    check(`${preset} scales its count`,
+          /_ambientCountScale\(w, h\)/.test(block));
+  }
+  // Run the helpers to confirm they never shrink the authored look and
+  // stay bounded on very large surfaces.
+  const rsM = src.match(/function _ambientRadiusScale\(w, h\)[\s\S]{0,300}?\n\}/);
+  const csM = src.match(/function _ambientCountScale\(w, h\)[\s\S]{0,300}?\n\}/);
+  // The helpers close over _AMBIENT_REF_AREA, so pull that out too rather
+  // than hard-coding the reference resolution here — a copy would drift.
+  const refM = src.match(/const _AMBIENT_REF_AREA\s*=\s*[^;]+;/);
+  check("both helpers found", !!rsM && !!csM && !!refM);
+  if (rsM && csM && refM) {
+    // eslint-disable-next-line no-new-func
+    const fns = new Function(
+      `${refM[0]}\n${rsM[0]}\n${csM[0]}\nreturn {r:_ambientRadiusScale,c:_ambientCountScale};`)();
+    check("1920x1080 is unchanged (radius)", fns.r(1920, 1080) === 1,
+          String(fns.r(1920, 1080)));
+    check("1920x1080 is unchanged (count)", fns.c(1920, 1080) === 1,
+          String(fns.c(1920, 1080)));
+    check("smaller screens are not shrunk", fns.r(1280, 720) === 1 && fns.c(1280, 720) === 1);
+    check("5120x1440 grows the radius", fns.r(5120, 1440) > 1.5,
+          fns.r(5120, 1440).toFixed(2));
+    check("5120x1440 grows the count", fns.c(5120, 1440) > 3,
+          fns.c(5120, 1440).toFixed(2));
+    check("scaling is capped on huge surfaces",
+          fns.r(7680, 4320) <= 3 && fns.c(7680, 4320) <= 4,
+          `${fns.r(7680, 4320).toFixed(2)} / ${fns.c(7680, 4320).toFixed(2)}`);
+    check("degenerate input is safe", fns.r(0, 0) === 1 && fns.c(0, 0) === 1);
+  }
 }
 
 const total = results.passed + results.failed.length;

@@ -718,7 +718,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.2"
+APP_VERSION = "2.4.4-beta.3"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -788,6 +788,60 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.3": {
+        "title_en": "What's new in v2.4.4-beta.3",
+        "title_de": "Was ist neu in v2.4.4-beta.3",
+        "body_en": (
+            "**Aurora and Plasma are actually visible now**\n\n"
+            "Both looked no different from having the effect switched "
+            "off, on either host. They were drawing the whole time — just "
+            "far too faintly to notice.\n\n"
+            "Two things were wrong, and both only showed up on larger "
+            "screens:\n"
+            "- The soft colour blobs had a fixed size in pixels, chosen "
+            "for a 1920×1080 desktop. On a wider screen each one covers "
+            "a much smaller share of it, and the number of blobs never "
+            "grew either. Both now scale with your screen.\n"
+            "- They were also drawn far too transparently. Measured "
+            "against a real wallpaper rather than a black screen, the "
+            "colour barely shifted at all. Every other ambient effect "
+            "uses roughly twice to six times as much. Aurora and Plasma "
+            "are now about twice as strong and keep their shape further "
+            "out from the centre.\n\n"
+            "Nothing changes on a 1920×1080 screen — the scaling only "
+            "ever adds, so the original look is preserved there.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "the earlier betas. Configurator → System → *Re-import "
+            "wallpaper bundles…*, then re-apply the wallpaper in "
+            "Wallpaper Engine.\n"
+        ),
+        "body_de": (
+            "**Aurora und Plasma sind jetzt wirklich sichtbar**\n\n"
+            "Beide sahen auf beiden Hosts aus, als wäre der Effekt "
+            "ausgeschaltet. Gezeichnet wurde die ganze Zeit — nur viel "
+            "zu schwach, um es zu bemerken.\n\n"
+            "Zwei Dinge waren falsch, und beide fielen erst auf großen "
+            "Bildschirmen auf:\n"
+            "- Die weichen Farbflecken hatten eine feste Größe in Pixeln, "
+            "ausgelegt für einen 1920×1080-Desktop. Auf einem breiteren "
+            "Bildschirm deckt jeder davon einen viel kleineren Teil ab, "
+            "und die Anzahl wuchs ebenfalls nicht mit. Beides skaliert "
+            "jetzt mit deinem Bildschirm.\n"
+            "- Außerdem wurden sie viel zu durchsichtig gezeichnet. "
+            "Gegen ein echtes Wallpaper gemessen statt gegen einen "
+            "schwarzen Bildschirm verschob sich die Farbe kaum. Alle "
+            "anderen Ambient-Effekte nutzen etwa das Doppelte bis "
+            "Sechsfache. Aurora und Plasma sind jetzt rund doppelt so "
+            "kräftig und behalten ihre Form weiter nach außen.\n\n"
+            "Auf einem 1920×1080-Bildschirm ändert sich nichts — die "
+            "Skalierung legt nur zu, das ursprüngliche Aussehen bleibt "
+            "dort erhalten.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "bei den vorherigen Betas. Configurator → System → "
+            "*Wallpaper-Bundles neu importieren…*, danach das Wallpaper "
+            "in Wallpaper Engine erneut zuweisen.\n"
+        ),
+    },
     "2.4.4-beta.2": {
         "title_en": "What's new in v2.4.4-beta.2",
         "title_de": "Was ist neu in v2.4.4-beta.2",
