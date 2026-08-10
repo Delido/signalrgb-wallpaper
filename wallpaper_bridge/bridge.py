@@ -718,7 +718,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.1"
+APP_VERSION = "2.4.4-beta.2"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -788,6 +788,60 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.2": {
+        "title_en": "What's new in v2.4.4-beta.2",
+        "title_de": "Was ist neu in v2.4.4-beta.2",
+        "body_en": (
+            "Two fixes on top of beta.1, both reported from real use.\n\n"
+            "**The Waves effect stopped partway across the desktop**\n"
+            "- The lines were drawn across only half or three quarters of "
+            "the screen and cut off mid-monitor, depending on the Effect "
+            "quality setting. On a wide multi-monitor desktop this was "
+            "hard to miss.\n"
+            "- Waves was the only effect that worked out its own drawing "
+            "width, and it did so from the wrong number. It now reads the "
+            "value actually in use, so it spans the full desktop in every "
+            "quality bucket.\n\n"
+            "**Widgets could sit at “loading” forever**\n"
+            "- A widget that fetches data — weather most visibly — only "
+            "did so from the shared once-a-second update. Wallpaper "
+            "Engine suspends that update while a wallpaper is paused, so "
+            "a widget created in that window never loaded and stayed "
+            "blank until it was re-saved.\n"
+            "- New widgets now get their first update immediately, "
+            "through a path the host does not suspend.\n\n"
+            "**Requires re-importing the wallpaper bundle** — as with "
+            "beta.1. Configurator → System → *Re-import wallpaper "
+            "bundles…*, then re-apply the wallpaper in Wallpaper "
+            "Engine.\n"
+        ),
+        "body_de": (
+            "Zwei Korrekturen auf beta.1 auf, beide aus dem echten "
+            "Einsatz gemeldet.\n\n"
+            "**Der Wellen-Effekt hörte mitten auf dem Desktop auf**\n"
+            "- Die Linien wurden je nach Effekt-Qualität nur über die "
+            "Hälfte oder drei Viertel des Bildschirms gezeichnet und "
+            "brachen mitten auf einem Monitor ab. Auf einem breiten "
+            "Multi-Monitor-Desktop fiel das deutlich auf.\n"
+            "- Wellen war der einzige Effekt, der seine Zeichenbreite "
+            "selbst ermittelte — und dabei den falschen Wert nahm. Er "
+            "liest jetzt den tatsächlich verwendeten Wert und läuft in "
+            "jeder Qualitätsstufe über den gesamten Desktop.\n\n"
+            "**Widgets konnten dauerhaft auf „loading\" stehen bleiben**\n"
+            "- Ein Widget, das Daten lädt — am sichtbarsten das Wetter — "
+            "tat das ausschließlich über die gemeinsame Sekunden-"
+            "Aktualisierung. Wallpaper Engine hält diese an, solange ein "
+            "Wallpaper pausiert ist; ein in diesem Moment erzeugtes "
+            "Widget lud daher nie und blieb leer, bis man es erneut "
+            "gespeichert hat.\n"
+            "- Neue Widgets holen ihre Daten jetzt sofort, über einen "
+            "Weg, den der Host nicht anhält.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles** — wie "
+            "schon bei beta.1. Configurator → System → *Wallpaper-"
+            "Bundles neu importieren…*, danach das Wallpaper in "
+            "Wallpaper Engine erneut zuweisen.\n"
+        ),
+    },
     "2.4.4-beta.1": {
         "title_en": "What's new in v2.4.4-beta.1",
         "title_de": "Was ist neu in v2.4.4-beta.1",

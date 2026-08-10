@@ -4089,6 +4089,24 @@ if (widgetsBannerLock) {
   });
 }
 const widgetNodes      = new Map();
+// v2.4.4: widgets awaiting their first tick. Drained by
+// _drainFirstTicks() via a microtask, so a widget created while the
+// host has the page paused still loads its data instead of sitting at
+// "loading" until the shared 1 Hz interval next runs. Deliberately not
+// a setTimeout or rAF: Wallpaper Engine queues both while paused, which
+// is the exact situation this works around.
+const _pendingFirstTick = [];
+let _firstTickScheduled = false;
+function _drainFirstTicks() {
+  _firstTickScheduled = false;
+  while (_pendingFirstTick.length) {
+    const rec = _pendingFirstTick.shift();
+    // The widget may have been removed again before we got here.
+    if (!rec || !rec.el || !rec.el.isConnected) continue;
+    if (!rec.tick) continue;
+    try { rec.tick(); } catch (e) { console.warn("[widget first tick]", e); }
+  }
+}
 let   widgetsLocked    = true;
 let   currentTintCss   = "#6ab0ff";
 
@@ -4585,6 +4603,24 @@ function setWidgets(list) {
       // v2.3.8-beta: bump the fast-tick counter when a new fast-tick
       // widget is created. Starts the rAF loop on 0 → 1.
       if (rec.reg && rec.reg.fastTick) _bumpFastTick(+1);
+      // v2.4.4: give the widget one tick right away.
+      //
+      // Widgets that load remote data do it from tick(), which only runs
+      // on the shared 1 Hz setInterval. That interval is one of the
+      // things Wallpaper Engine queues while a wallpaper is paused, so a
+      // widget created during a pause — or one whose first tick was
+      // swallowed — sat at "loading" until something else woke the loop.
+      // The weather widget showed this: it stayed blank until the user
+      // re-saved it, which recreated the widget and happened to land
+      // while the page was running.
+      //
+      // Deferred to a microtask so mount() and the option/position
+      // application below have finished before the tick reads them.
+      _pendingFirstTick.push(rec);
+      if (!_firstTickScheduled) {
+        _firstTickScheduled = true;
+        Promise.resolve().then(_drainFirstTicks);
+      }
     }
     applyWidgetPosition(rec, w);
     applyWidgetOptions(rec, w);
@@ -6338,7 +6374,28 @@ const AMBIENT_PRESETS = {
       return true;     // waves don't despawn
     },
     render: (ctx, p, tint) => {
-      const w = ctx.canvas.width / (window.devicePixelRatio || 1);
+      // v2.4.4: derive the CSS-pixel width from the context's own
+      // transform, not from devicePixelRatio.
+      //
+      // The ambient canvas is scaled by `_qualityScale() * _qualityDpr()`
+      // — 0.5 in the Performance bucket, 0.75 in Balanced — and that
+      // factor is baked into ctx.setTransform(). Dividing the backing
+      // width by devicePixelRatio instead (which is 1 outside the
+      // Quality bucket) therefore returned the *backing* width, so the
+      // wave was drawn across only half or three quarters of the screen
+      // and stopped dead. On a 5120 px desktop in Balanced it reached
+      // 3840 px and cut off mid-monitor.
+      //
+      // getTransform().a is the horizontal scale actually in force, so
+      // this stays correct for every bucket and any future scaling.
+      let _sx = 1;
+      try {
+        const t = ctx.getTransform();
+        if (t && t.a) _sx = t.a;
+      } catch (_) {
+        _sx = _qualityScale() * _qualityDpr();   // very old CEF fallback
+      }
+      const w = ctx.canvas.width / (_sx || 1);
       ctx.strokeStyle = tint
         ? rgbToRgba(tint, p.alpha)
         : "rgba(120, 180, 255, " + p.alpha + ")";

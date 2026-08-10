@@ -265,6 +265,37 @@ console.log("\nWallpaper Engine's own pause is detected");
         /classList\.toggle\("on",\s*_badgeWorthShowing\)/.test(src));
 }
 
+console.log("\neffects and widgets cover the whole desktop");
+{
+  // The waves preset derived its drawing width from
+  // ctx.canvas.width / devicePixelRatio. But the ambient canvas is
+  // scaled by _qualityScale() * _qualityDpr() -- 0.5 in Performance,
+  // 0.75 in Balanced -- and devicePixelRatio is 1 in both. It therefore
+  // got the BACKING width back and drew across only half or three
+  // quarters of the screen, stopping dead mid-monitor. On a 5120 px
+  // desktop in Balanced the waves reached 3840 px.
+  check("waves reads the real transform scale",
+        /getTransform\(\)/.test(src));
+  check("waves no longer divides by devicePixelRatio",
+        !/ctx\.canvas\.width\s*\/\s*\(window\.devicePixelRatio/.test(src));
+  check("there is a fallback for hosts without getTransform",
+        /_qualityScale\(\)\s*\*\s*_qualityDpr\(\)/.test(src));
+
+  // Widgets that load remote data do it from tick(), which only runs on
+  // the shared 1 Hz setInterval -- one of the things Wallpaper Engine
+  // queues while paused. A widget created during a pause sat at
+  // "loading" indefinitely; the weather widget only appeared after the
+  // user re-saved it. A first tick is now scheduled on creation.
+  check("new widgets get a first tick", /_pendingFirstTick/.test(src));
+  check("the queue is drained", /function _drainFirstTicks\(\)/.test(src));
+  // Must be a microtask: setTimeout and rAF are both queued by WE while
+  // paused, which is the situation being worked around.
+  check("drained via a microtask, not a timer",
+        /Promise\.resolve\(\)\.then\(_drainFirstTicks\)/.test(src));
+  check("skips widgets removed before the tick ran",
+        /_drainFirstTicks[\s\S]{0,400}?isConnected/.test(src));
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 process.exit(results.failed.length ? 1 : 0);

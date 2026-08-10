@@ -4,6 +4,47 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.2] - 2026-08-10
+
+Two fixes on top of beta.1, both from real use. `WALLPAPER_VERSION`
+stays 2.4.4 — same wallpaper generation, corrected.
+
+### Fixed — Waves stopped partway across the desktop
+
+`AMBIENT_PRESETS.waves.render()` derived its drawing width as
+`ctx.canvas.width / devicePixelRatio`. The ambient canvas is scaled by
+`_qualityScale() * _qualityDpr()` — 0.5 in Performance, 0.75 in Balanced
+— and `devicePixelRatio` is 1 in both, so the division returned the
+*backing* width and the wave was drawn across only that fraction of the
+screen, ending abruptly mid-monitor.
+
+| Bucket | drawn |
+|---|---|
+| performance | 50 % |
+| balanced | 75 % |
+| quality | 100 % (correct by coincidence) |
+
+On a 5120 px desktop in Balanced the waves reached 3840 px. It now reads
+`ctx.getTransform().a` — the horizontal scale actually in force — so it
+is correct in every bucket and stays correct if the scaling changes.
+This was the only place in the file reading raw canvas dimensions; every
+other preset is handed its size.
+
+### Fixed — widgets could sit at "loading" indefinitely
+
+Widgets that fetch remote data do it from `tick()`, which only runs on
+the shared 1 Hz `setInterval`. That interval is one of the things
+Wallpaper Engine queues while a wallpaper is paused, so a widget created
+during a pause never loaded. The weather widget showed this: blank until
+the user re-saved it, which recreated it at a moment the page happened
+to be running.
+
+New widgets are now queued for an immediate first tick, drained from a
+**microtask**. Deliberately not `setTimeout` or `requestAnimationFrame`
+— WE queues both while paused, which is the exact situation being worked
+around. The drain skips widgets removed again before it ran, and runs
+after `applyWidgetOptions()` so the tick sees a fully configured widget.
+
 ## [2.4.4-beta.1] - 2026-08-09
 
 Corrects the "Lively only" labelling after measuring what actually
