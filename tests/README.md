@@ -14,6 +14,7 @@ every push and PR (`.github/workflows/smoke.yml`).
 |---|---|
 | `test_ws_lifecycle.py` | Client registration, keepalive, reaping, broadcast routing, backpressure |
 | `test_logging.py` | Log formatting, rotation, the resume marker, UDP progress throttling |
+| `test_http_routing.py` | Which of the 32 routes answers what — dispatch decisions, not handler output |
 | `test_standby_card.mjs` | The standby-card state machine — models `connect()` and proves the issue-#2 latch is gone |
 | `test_wallpaper_source.mjs` | That the shipped `index.html` still contains those protections, and that its JS parses |
 | `test_tint_colour.mjs` | `rgbToRgba` across hex / rgb() / rgba() input |
@@ -60,6 +61,32 @@ against. That harness is now this directory.
 it asserted "screen 0 received nothing" while a live SignalRGB plugin
 was broadcasting on screen 0 at 30-60 Hz. It now filters for its own
 synthetic payload, so the assertions mean what they say.
+
+## Characterisation before restructuring
+
+`test_http_routing.py` was written to enable a change, not to catch a
+bug. `handle_client` had grown to 1611 lines dispatching 32 routes
+through a linear if/elif chain, and every HTTP request the bridge serves
+goes through it. Splitting that up without a net would have been a
+change whose mistakes are silent: the request still gets answered, by
+the wrong handler.
+
+So the tests came first and had to pass **unmodified against the code as
+it was** — 52/52 before a single line moved. Only then was the split
+made, and the same 52 had to stay green. A characterisation test that
+needs adjusting to pass after the change has stopped characterising
+anything.
+
+It asserts dispatch decisions, not handler output: which route claims a
+target, that `/config` still doesn't swallow `/configurator`, that a
+wrong method 404s, and — most importantly — that the four routes which
+deliberately *decline* after matching a prefix still fall through to the
+routes behind them.
+
+That last group is why the split signals "handled" by closing the
+writer rather than returning a sentinel: the sentinel version would have
+meant rewriting 55 bare `return` statements inside handler bodies,
+several of them in nested helpers where `return` means something else.
 
 ## Run the code, don't read it
 

@@ -3958,6 +3958,41 @@ class Broadcaster:
     # ----- TCP accept handler (HTTP or WS upgrade) -----
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        """Accept one HTTP request (or a WS upgrade) and dispatch it.
+
+        Every route below used to be an inline `if` in this function,
+        which had grown to 1611 lines — 13 % of this file in a single
+        body, and the path every request the bridge serves goes through.
+        The bodies moved into `_route_*` methods verbatim; only the
+        dispatch moved.
+
+        HOW A ROUTE SIGNALS THAT IT HANDLED THE REQUEST
+
+        By closing the writer, not by returning a value. Every handler
+        already ends its successful path with `writer.close()` — all 32
+        of them, including the two /api ones that delegate to
+        `_handle_api_request` — so the existing code already carries the
+        signal. The alternative (return a sentinel) would have meant
+        rewriting 55 bare `return` statements inside the handler bodies,
+        several of which sit in nested helper functions where `return`
+        means something entirely different. That edit is the kind whose
+        mistakes are silent, and there was no reason to make it.
+
+        FALL-THROUGH IS LOAD-BEARING
+
+        Four routes match on a path prefix but decline once they inspect
+        it further — POST /screen/<N>/… when the third segment is
+        neither "background" nor "settings", and GET /wallpaper/… and
+        /plugins/… when the file does not resolve. They leave the writer
+        open and the chain continues, which is how /api/v1/… still gets
+        reached after the broad `if method == "GET"` block above it.
+        tests/test_http_routing.py pins that behaviour.
+
+        ORDER MATTERS. `/config` is matched exactly rather than by
+        prefix so it cannot swallow `/configurator`; several routes
+        overlap similarly. Reordering these calls changes which handler
+        answers what.
+        """
         try:
             request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
         except (asyncio.IncompleteReadError, asyncio.TimeoutError):
@@ -3973,6 +4008,113 @@ class Broadcaster:
         if headers.get(b"upgrade", b"").lower() == b"websocket":
             return await self._serve_websocket(reader, writer, request, target)
 
+        await self._route_image(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_config(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_screen_background(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_screen_settings(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_builder(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_widgets_skins(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_hwmon_sensors(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_openrgb_status(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_channel_status(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_list(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_file(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_thumb(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_upload(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_delete(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_pin(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_category(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_transform(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_openfolder(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_packs_list(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_packs_install(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_packs_uninstall(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_tags(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_library_reorder(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_backup(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_restore(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_help(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_help_images(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_configurator(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_wallpaper_assets(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_plugins(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_api_openapi_json(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+        await self._route_api_v1(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
+
+        http_error(writer, 404, "not found")
+        try: await writer.drain()
+        except Exception: pass
+        try: writer.close()
+        except Exception: pass
+
+    async def _route_image(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         if method == "GET" and target.startswith("/image"):
             query = target.split("?", 1)[1] if "?" in target else ""
             range_hdr = headers.get(b"range", b"").decode("latin-1")
@@ -3985,6 +4127,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_config(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # The SignalRGB plugin XHRs here on every Update() tick to learn how
         # many controllers to announce. Plugin sandbox has no service-level
@@ -4065,6 +4211,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_screen_background(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # POST /screen/<N>/background — receive a PNG from the builder
         # and apply it as that screen's background. Body is the raw PNG
         # bytes (no multipart wrapper; Content-Type: image/png). We
@@ -4136,6 +4286,10 @@ class Broadcaster:
                 except Exception: pass
                 return
 
+    async def _route_screen_settings(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # POST /screen/<N>/settings — body is JSON {key1: val1, key2: val2}
         # for a batch setting update on screen N. Used by the Configurator's
         # "Apply to all screens" buttons: the open WS is bound to one
@@ -4193,6 +4347,10 @@ class Broadcaster:
                 except Exception: pass
                 return
 
+    async def _route_builder(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # Local in-browser wallpaper builder. Opened via the tray "Build
         # Wallpaper…" menu item. Pure client-side canvas app — we just
         # serve the static HTML file bundled alongside the exe.
@@ -4217,6 +4375,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_widgets_skins(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # Wallpaper library: list + individual file. Files live under
         # %LOCALAPPDATA%\SignalRGBWallpaper\library\ — the installer drops
@@ -4268,6 +4430,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_hwmon_sensors(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # /hwmon/sensors — flat list of every sensor LibreHardwareMonitor
         # is reporting, plus a small status block. The Configurator's
         # hardware-sensor widget options modal calls this to populate
@@ -4300,6 +4466,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_openrgb_status(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v1.4.0-beta: status snapshot for the OpenRGB output channel.
         # Configurator polls this every few seconds while its OpenRGB
@@ -4336,6 +4506,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_channel_status(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v1.5.0-beta: status endpoints for the three new channels.
         # Same single-shot polling pattern as /openrgb/status — Configurator
@@ -4375,6 +4549,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_library_list(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # v2.0.1: /library/packs/* HTTP endpoints removed (see
         # the note above library_dir() for why).
 
@@ -4402,6 +4580,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_library_file(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
         if method == "GET" and target.split("?", 1)[0].startswith("/library/"):
             # v1.2.13: defence in depth. The pre-v1.2.13 check rejected
             # literal `/ \ ..` but missed the URL-encoded equivalents
@@ -4486,6 +4668,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_library_thumb(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # POST /library/thumb — attach a poster thumbnail to an existing
         # library entry. Body is the raw PNG, query string carries
         # ?name=<slug> matching the catalogue id. Saved as <slug>.thumb.png
@@ -4558,6 +4744,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_library_upload(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # POST /library/upload — body is the raw PNG; query string carries
         # ?name=<label>. We slug the label, drop into the user-writable
@@ -4683,6 +4873,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_library_delete(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # DELETE /library/<name> — removes the file + its thumbnail (if any)
         # + regenerates library.json. Same path-traversal protections as the
         # GET handler. We only delete inside library_dir(); no risk of
@@ -4756,6 +4950,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_library_pin(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # POST /library/pin — body is JSON {"file": "...", "pinned": bool}.
         # Toggles the pin flag on a library entry without re-scanning the
         # directory; the Configurator's right-click Pin/Unpin menu hits
@@ -4808,6 +5006,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_library_category(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v1.6.1-beta: POST /library/category — body is JSON
         # {"file": "...", "category": "background"|"template"|"both"}.
@@ -4865,6 +5067,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_library_transform(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v2.2.0-beta: POST /library/transform — body is JSON
         # {"file": "...", "op": "rotate90cw|rotate90ccw|rotate180|flipH|flipV"}.
@@ -4957,6 +5163,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_library_openfolder(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # v2.2.0-beta: POST /library/openfolder — opens the user's
         # library directory in Explorer. Tray menu + Library-tab hint
         # both call this. Pure os.startfile, no payload needed.
@@ -4987,6 +5197,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_packs_list(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v2.3.0-beta: GET /packs/list — proxies the discovery manifest
         # at https://delido.github.io/signalrgb-wallpaper/library-packs.json
@@ -5032,6 +5246,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_packs_install(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v2.3.0-beta: POST /packs/install — body is JSON
         # {"pack_id": "...", "url": "...", "sha256": "...",
@@ -5097,6 +5315,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_packs_uninstall(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # v2.3.0-beta.1: POST /packs/uninstall — body is JSON
         # {"pack_id": "..."}. Walks library.json, removes every
         # file (+ siblings: .thumb.*, .4k.*) whose entry carries
@@ -5143,6 +5365,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_library_tags(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v1.7.5: POST /library/tags — body is JSON
         # {"file": "...", "tags": ["cyberpunk", "neon", ...]}. Mirrors
@@ -5219,6 +5445,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_library_reorder(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # POST /library/reorder — body is JSON {"order": ["a.png", "b.png", ...]}.
         # Assigns sequential `order` indices to matching entries. The
         # Configurator drags-and-drops tiles in the Library strip and
@@ -5267,6 +5497,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_backup(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # GET /backup — stream a ZIP of every piece of user state
         # (config.json + library/ + screens/). Browser-driven download.
         if method == "GET" and target.split("?", 1)[0] == "/backup":
@@ -5291,6 +5525,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_restore(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # POST /restore — body is the raw ZIP. Replaces config.json,
         # merges library/ + screens/ files on top of the existing dirs,
@@ -5339,6 +5577,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_help(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # In-browser help page — scenario-based walkthroughs (1/2/3/4
         # monitors × Lively / Wallpaper Engine). Static HTML; pulls the
         # active language from /config like the Builder does. Images
@@ -5365,6 +5607,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_help_images(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
         # /help/images/<file> — optional screenshots the maintainer can
         # drop into wallpaper_bridge/help_assets/ (dev) or
         # %LOCALAPPDATA%\SignalRGBWallpaper\help_images\ (post-install).
@@ -5409,6 +5655,10 @@ class Broadcaster:
             except Exception: pass
             return
 
+    async def _route_configurator(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # In-browser configurator — replaces the tray's per-screen widget /
         # effect submenus with a rich tabbed UI. Same WS protocol as the
         # wallpaper page; sends `setting-update` / `widget-*` commands.
@@ -5433,6 +5683,10 @@ class Broadcaster:
             try: writer.close()
             except Exception: pass
             return
+
+    async def _route_wallpaper_assets(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # ── /wallpaper (live-preview path, v1.2-dev) ──
         # Serves wallpaper/index.html + its sibling assets from inside
@@ -5483,6 +5737,10 @@ class Broadcaster:
                 try: writer.close()
                 except Exception: pass
                 return
+
+    async def _route_plugins(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
 
         # v1.5.0-beta plugin API: serve plugin assets under
         # /plugins/<name>/<rel>. The PluginRegistry's resolve_asset
@@ -5536,6 +5794,10 @@ class Broadcaster:
                 except Exception: pass
                 return
 
+    async def _route_api_openapi_json(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+
         # v1.5.0-beta: REST API + OpenAPI. All /api/v1/* routes go
         # through `_handle_api_request` which enforces token auth on
         # non-loopback requests (loopback bypasses so the local
@@ -5546,6 +5808,11 @@ class Broadcaster:
         if clean_target == "/api/openapi.json":
             await self._serve_openapi_spec(writer, headers)
             return
+
+    async def _route_api_v1(self, method, target, headers, reader, writer):
+        """Split out of handle_client. Answers the request and
+        closes the writer, or leaves it open for the next route."""
+        clean_target = target.split("?", 1)[0]
         if clean_target.startswith("/api/v1/"):
             # Pull the request body when present — the handler picks
             # the routes that actually need it.
@@ -5563,12 +5830,6 @@ class Broadcaster:
                                             clean_target, target,
                                             headers, body)
             return
-
-        http_error(writer, 404, "not found")
-        try: await writer.drain()
-        except Exception: pass
-        try: writer.close()
-        except Exception: pass
 
     # ── v1.5.0-beta REST API ────────────────────────────────────────────
 

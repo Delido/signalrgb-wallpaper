@@ -23,6 +23,7 @@ REPO = HERE.parent
 PY_SUITES = [
     ("WS lifecycle (python)", HERE / "test_ws_lifecycle.py"),
     ("Logging + diagnostics (python)", HERE / "test_logging.py"),
+    ("HTTP routing (python)", HERE / "test_http_routing.py"),
 ]
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
