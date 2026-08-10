@@ -4442,9 +4442,27 @@ class Broadcaster:
                         req = json.loads(body.decode("utf-8"))
                         if not isinstance(req, dict):
                             raise ValueError("body must be a JSON object")
+                        # update_screen_setting lives on BridgeRuntime, not
+                        # here. This called self.update_screen_setting and
+                        # therefore raised AttributeError on every request —
+                        # the route has never worked. It predates the v2.4.4
+                        # route split (verified against the v2.4.4-beta.4
+                        # tag) and stayed hidden because the Configurator's
+                        # "apply to all screens" buttons are the only
+                        # caller, and a failure there looks like the click
+                        # not registering.
+                        runtime = getattr(self, "bridge_runtime", None)
+                        if runtime is None:
+                            http_error(writer, 503, "bridge runtime not wired",
+                                       request_headers=headers)
+                            try: await writer.drain()
+                            except Exception: pass
+                            try: writer.close()
+                            except Exception: pass
+                            return
                         applied = 0
                         for key, value in req.items():
-                            snap = self.update_screen_setting(screen_idx, str(key), value)
+                            snap = runtime.update_screen_setting(screen_idx, str(key), value)
                             if snap is not None:
                                 applied += 1
                         payload = json.dumps({"ok": True, "applied": applied}).encode("utf-8")

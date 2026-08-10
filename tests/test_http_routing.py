@@ -223,6 +223,64 @@ for target in ("/screen/0/nonsense", "/screen/0", "/screen/", "/screen/x/backgro
     w = serve("POST", target, {"Content-Length": "2"}, b"{}")
     R.eq(f"POST {target} -> 404 (no matching sub-route)", w.status, 404)
 
+emit("\nPOST /screen/<N>/settings actually applies the settings")
+if True:
+    # This route was dead from the day it was written: the handler called
+    # self.update_screen_setting, but that method lives on BridgeRuntime,
+    # not Broadcaster — so every request raised AttributeError. It
+    # predates the v2.4.4 route split (checked against the beta.4 tag)
+    # and survived because the Configurator's "apply to all screens"
+    # buttons are the only caller, and a failure there just looks like
+    # the click not registering.
+    #
+    # The characterisation tests above could not catch it: they assert
+    # which route answers, not that the handler runs. This one drives the
+    # handler.
+    class _Runtime:
+        def __init__(self):
+            self.applied = []
+
+        def update_screen_setting(self, screen, key, value):
+            self.applied.append((screen, key, value))
+            return {"ok": True}
+
+    body = b'{"gridRenderer": "canvas", "gridBlur": 24}'
+    head = (b"POST /screen/0/settings HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n")
+
+    loop = asyncio.new_event_loop()
+    try:
+        bc = make_broadcaster(b, loop)
+        rt = _Runtime()
+        bc.bridge_runtime = rt
+        w = RecordingWriter()
+        loop.run_until_complete(bc.handle_client(ScriptedReader(head, body), w))
+        R.eq("POST /screen/0/settings -> 200", w.status, 200)
+        R.check("both keys reached update_screen_setting",
+                len(rt.applied) == 2, repr(rt.applied))
+        R.check("the screen index is passed through",
+                all(a[0] == 0 for a in rt.applied), repr(rt.applied))
+        R.check("the response reports what was applied",
+                '"applied": 2' in w.text, w.text[-60:])
+    finally:
+        loop.close()
+
+    # Without a runtime wired up it must answer, not raise: a missing
+    # collaborator is a 503, not a dropped connection.
+    loop = asyncio.new_event_loop()
+    try:
+        bc = make_broadcaster(b, loop)
+        w = RecordingWriter()
+        crashed = False
+        try:
+            loop.run_until_complete(bc.handle_client(ScriptedReader(head, body), w))
+        except Exception:
+            crashed = True
+        R.check("no runtime -> answers instead of raising", not crashed)
+        R.check("no runtime -> 503", w.status == 503, f"status {w.status}")
+    finally:
+        loop.close()
+
 emit("\n/wallpaper/ and /plugins/ fall through to the API block")
 # Both are GET blocks that return only when they resolve a file. An
 # unresolvable one must keep walking the chain rather than 404 early —
