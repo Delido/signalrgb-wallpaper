@@ -31,7 +31,14 @@ function Find-SubscribedCopy([string]$weWorkshopRoot) {
     return $subscribedCopy
 }
 
-$root = Join-Path $env:TEMP "wsdetect-$PID"
+# $env:TEMP is a Windows-ism and is null on Linux, where Join-Path then
+# fails with "Cannot bind argument to parameter 'Path'". GetTempPath()
+# resolves on both. The suite itself is platform-neutral — it walks
+# synthetic directory trees, and only the paths it *describes* are
+# Windows-specific — so it should run wherever pwsh does, which on
+# ubuntu-latest it does.
+$tempRoot = [System.IO.Path]::GetTempPath()
+$root = Join-Path $tempRoot "wsdetect-$PID"
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 
 try {

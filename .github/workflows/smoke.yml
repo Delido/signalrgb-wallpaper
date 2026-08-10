@@ -160,8 +160,12 @@ jobs:
           node-version: "22"
 
       - name: Regression suite
-        # The JS and Python suites are platform-neutral. The pwsh suites
-        # skip themselves when PowerShell is absent, which it is here.
+        # All ten suites run here, pwsh ones included: ubuntu-latest ships
+        # PowerShell 7, so run_all.py's "skip when absent" path never
+        # triggers. That is the better outcome — it caught test_reimport_
+        # workshop.ps1 reaching for $env:TEMP, which is null off Windows —
+        # but it does mean a Windows-only assumption in a test fails this
+        # job rather than being quietly skipped.
         run: python tests/run_all.py
 
   version-consistency:
