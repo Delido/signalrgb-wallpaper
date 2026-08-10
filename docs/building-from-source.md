@@ -135,7 +135,7 @@ python .\wallpaper_bridge\smoke_test.py
 ## Publishing a release (maintainer notes)
 
 1. Bump `APP_VERSION` in `wallpaper_bridge/bridge.py` and the
-   `Version()` export in `SignalRGB_Desktop_Wallpaper.js`. Add an
+   `Version()` export in `plugin\SignalRGB_Desktop_Wallpaper.js`. Add an
    entry to `CHANGELOG.md`.
 
    **Also add a `RELEASE_NOTES` entry for the new version** in
@@ -173,8 +173,8 @@ python .\wallpaper_bridge\smoke_test.py
      wallpaper_bridge\SignalRGB_Glow_Screen3.zip `
      wallpaper_bridge\SignalRGB_Glow_WallpaperEngine.zip `
      wallpaper_bridge\SignalRGB_Glow_WE_Single.zip `
-     SignalRGB_Desktop_Wallpaper.js `
-     SignalRGB_Desktop_Wallpaper.qml
+     plugin\SignalRGB_Desktop_Wallpaper.js `
+     plugin\SignalRGB_Desktop_Wallpaper.qml
    ```
 
    Add `--prerelease` for beta tags (e.g. `0.7.2-beta`); the in-app

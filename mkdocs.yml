@@ -125,6 +125,12 @@ extra:
 # to discover available wallpaper packs. Excluding it from
 # rendering happens automatically because MkDocs only renders .md.
 exclude_docs: |
+  # Design archaeology from the multi-screen build-out (May 2026).
+  # Kept in the repo because the reasoning is still useful when
+  # touching the plumbing, but it describes phases 2 and 3 as
+  # work-in-progress and they shipped long ago — publishing it on
+  # the docs site would just mislead.
+  handoff-notes.md
 
 
 nav:

@@ -3,7 +3,8 @@
 How the pieces fit together, and why they're split the way they are.
 
 For the chronological design history (what we tried, what failed, why we
-landed here), see [HANDOFF.md](https://github.com/Delido/signalrgb-wallpaper/blob/main/HANDOFF.md) in the repo root.
+landed here), see [handoff-notes.md](https://github.com/Delido/signalrgb-wallpaper/blob/main/docs/handoff-notes.md)
+(historical — describes phases that have since shipped).
 
 ## Components
 
@@ -305,10 +306,12 @@ just shows the wallpaper; the tray owns configuration.
 ├── README.md                                   # user-facing
 ├── CHANGELOG.md                                # version history
 ├── LICENSE                                     # MIT
-├── HANDOFF.md                                  # design history / archaeology
-├── SignalRGB_Desktop_Wallpaper.js              # plugin source (UDP sender)
-├── SignalRGB_Desktop_Wallpaper.qml             # plugin Service-Page UI
-├── docs/                                       # this folder
+├── pyproject.toml                              # dependency + tooling manifest
+├── plugin/                                     # SignalRGB device plugin
+│   ├── SignalRGB_Desktop_Wallpaper.js           # plugin source (UDP sender)
+│   └── SignalRGB_Desktop_Wallpaper.qml          # plugin Service-Page UI
+├── docs/                                       # this folder (handoff-notes.md = archaeology)
+├── tests/                                      # regression suites (see tests/README.md)
 ├── installer/
 │   ├── build.ps1                               # build script (PyInstaller → ISCC)
 │   ├── signalrgb-wallpaper.iss                 # Inno Setup script

@@ -148,9 +148,9 @@ Source: "reimport-wallpaper-bundles.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "msix-lively-loopback-exempt.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 ; SignalRGB plugin (only if user opted in)
-Source: "..\SignalRGB_Desktop_Wallpaper.js";  DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
+Source: "..\plugin\SignalRGB_Desktop_Wallpaper.js";  DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
   Flags: ignoreversion; Tasks: installplugin
-Source: "..\SignalRGB_Desktop_Wallpaper.qml"; DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
+Source: "..\plugin\SignalRGB_Desktop_Wallpaper.qml"; DestDir: "{userdocs}\WhirlwindFX\Plugins"; \
   Flags: ignoreversion; Tasks: installplugin
 
 ; Lively wallpaper zips — kept under {app} as a manual-import fallback,

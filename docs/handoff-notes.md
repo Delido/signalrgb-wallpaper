@@ -1,5 +1,15 @@
 # SignalRGB → Desktop Wallpaper — Handoff Notes
 
+> **Historisches Dokument — Stand 2026-05-17, nicht gepflegt.**
+> Beschreibt Phase 2 (Tray-Settings) und Phase 3 (Inno-Installer) als
+> work-in-progress; beide sind seit v1.0 fertig. Die Architektur-Notizen
+> zum Multi-Screen-Plumbing sind weiterhin nützlich, wenn man an der
+> Verrohrung arbeitet — für den aktuellen Stand siehe
+> [architecture.md](architecture.md) und den
+> [CHANGELOG](https://github.com/Delido/signalrgb-wallpaper/blob/main/CHANGELOG.md).
+> Nicht Teil der gerenderten Doku-Seite (siehe `exclude_docs` in
+> `mkdocs.yml`).
+
 Stand: 2026-05-17. **Active architecture: Multi-screen (1..3) HTML Lively
 wallpapers + Python bridge that routes UDP-frames to screen-tagged WS
 subscribers.** Tray-Icon-Settings (Phase 2) und Inno-Setup-Installer
