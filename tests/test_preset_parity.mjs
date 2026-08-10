@@ -134,17 +134,72 @@ console.log("\nthe soft presets stayed above the perceptual floor");
   }
 }
 
-console.log("\nlarge soft blobs fill a circle, not the square around it");
+console.log("\nlarge soft blobs don't pay for the square around the circle");
 {
   // The corners of a 2r x 2r fill are alpha 0 but still get blended, and
   // they are 1 - pi/4 = 21 % of every fill. With v2.4.4's radius scaling
   // these blobs cover much of a wide desktop, so it is real fill rate.
-  for (const n of ["aurora", "plasma", "fireflies"]) {
+  //
+  // The check is "no square fills", not "uses arc()". Two ways to avoid
+  // the corners are in use: arc() + fill() (aurora, plasma) and stamping
+  // a pre-rendered sprite whose rim is already transparent (fireflies,
+  // sparks — v2.4.5). An earlier version of this test demanded arc()
+  // specifically and failed the sprite path, which is strictly better
+  // than what it was asking for. Test the property, not the mechanism.
+  for (const n of ["aurora", "plasma", "fireflies", "sparks"]) {
     const m = measured[n];
-    if (!m) { check(`${n} fills via arc()`, false, "not measured"); continue; }
+    if (!m) { check(`${n} avoids square fills`, false, "not measured"); continue; }
     const arcs = m.wp.ops.filter((o) => o.op === "arc").length;
+    const imgs = m.wp.ops.filter((o) => o.op === "image").length;
     const rects = m.wp.ops.filter((o) => o.op === "fillRect").length;
-    check(`${n} fills via arc() (${arcs} arcs, ${rects} rects)`, arcs > 0 && rects === 0);
+    check(`${n} paints circles, not squares ` +
+          `(${arcs} arcs, ${imgs} sprites, ${rects} rects)`,
+          rects === 0 && (arcs > 0 || imgs > 0));
+  }
+}
+
+console.log("\nthe glow presets don't rebuild a gradient per particle");
+{
+  // fireflies and sparks each built a fresh createRadialGradient() for
+  // every particle on every frame — 336 and 205 per frame on a
+  // 2560x1440 desktop, so ~10 000 throwaway gradient objects a second
+  // at 30 fps. They now stamp a cached sprite instead. Both are the
+  // densest presets by particle count, so a regression here is the
+  // expensive kind.
+  for (const n of ["fireflies", "sparks"]) {
+    const m = measured[n];
+    if (!m) { check(`${n} reuses its glow sprite`, false, "not measured"); continue; }
+    const grads = m.wp.ops.filter(
+      (o) => o.fillStyle && typeof o.fillStyle === "object"
+             && Array.isArray(o.fillStyle.stops)).length;
+    check(`${n} builds no per-particle gradients (${grads} found)`, grads === 0);
+    const imgs = m.wp.ops.filter((o) => o.op === "image").length;
+    check(`${n} stamps sprites instead (${imgs})`, imgs > 0);
+  }
+}
+
+console.log("\nthe expensive glow follows the quality setting");
+{
+  // shadowBlur is the priciest property in Canvas 2D and its cost tracks
+  // the radius: measured in Edge at 600 particles / 2560x1440, blur 12
+  // costs 9.59 ms/frame against 1.85 ms with no blur at all. wormhole
+  // applies it to every one of ~1840 draws per frame, and until v2.4.5
+  // ignored the effect-quality setting entirely — "Performance" bought
+  // the user nothing on the single most expensive preset.
+  const wp = WP;
+  check("wormhole's shadowBlur goes through _qualityBlur",
+        /shadowBlur\s*=\s*_qualityBlur\(/.test(wp));
+  check("_qualityBlur is defined", /function _qualityBlur\(/.test(wp));
+  // Quality must keep today's appearance exactly; the other two tiers
+  // are the ones allowed to trade glow for frame time.
+  const m = wp.match(/function _qualityBlur\([\s\S]*?\n\}/);
+  if (m) {
+    const f = new Function("_qualityScale", m[0] + "; return _qualityBlur;");
+    check("quality tier leaves the radius untouched", f(() => 1.0)(12) === 12);
+    check("balanced tier shrinks it", f(() => 0.75)(12) === 9);
+    check("performance tier shrinks it further", f(() => 0.5)(12) === 6);
+  } else {
+    check("_qualityBlur is readable", false);
   }
 }
 

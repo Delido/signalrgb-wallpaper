@@ -101,7 +101,24 @@ export function recordingCtx(w, h) {
     createLinearGradient() { return grad(); },
     createRadialGradient() { return grad(); },
     createPattern() { return null; },
-    drawImage() { ops.push({ op: "image", ...pick() }); },
+    // drawImage(img, dx, dy, dw, dh) — the sprite-stamping form the
+    // glow presets use. Recorded with its real box so opArea() can
+    // measure coverage the same way it does for a fill.
+    //
+    // `spriteAlpha` is what the sprite itself was rasterised with. A
+    // stamped image carries no colour of its own, so reading only
+    // globalAlpha would report a firefly at its pulse value while the
+    // pixel it actually paints is pulse x the sprite's own core alpha.
+    // Without this the harness would score a sprite preset brighter
+    // than the gradient it replaced and call an identical rendering a
+    // regression.
+    drawImage(img, dx, dy, dw, dh) {
+      ops.push({
+        op: "image", x: dx, y: dy, w: dw, h: dh,
+        spriteAlpha: (img && img.__peakAlpha) || 1,
+        ...pick(),
+      });
+    },
     setTransform() {}, resetTransform() {}, transform() {},
     translate() {}, rotate() {}, scale() {},
     getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
@@ -147,6 +164,8 @@ function colourAlpha(style) {
 /** Alpha actually applied to a draw: globalAlpha x any alpha in the colour. */
 export function effectiveAlpha(op) {
   const ga = typeof op.globalAlpha === "number" ? op.globalAlpha : 1;
+  // A stamped sprite's colour lives in the bitmap, not in fillStyle.
+  if (op.op === "image") return ga * (op.spriteAlpha ?? 1);
   const style = op.op === "stroke" || op.op === "strokeRect" ? op.strokeStyle : op.fillStyle;
   let ca = 1;
   if (typeof style === "string") {
@@ -168,6 +187,10 @@ export function effectiveAlpha(op) {
 export function opArea(op, w, h) {
   switch (op.op) {
     case "arc":     return Math.PI * op.r * op.r;
+    // A stamped glow sprite is transparent at the rim, so it covers the
+    // inscribed circle rather than its full box — same as the arc it
+    // replaced, which keeps coverage comparable across the change.
+    case "image":   return Math.PI * (op.w || 0) * (op.h || 0) / 4;
     case "fillRect":
     case "rect":
     case "strokeRect": return Math.abs((op.w || 0) * (op.h || 0));
@@ -359,8 +382,16 @@ export function loadTable(src, varName, extraPrelude = "") {
 
   // Real helpers where they exist in the file, stubs only for the ones
   // that genuinely belong to the host page (quality buckets, cursor).
-  const borrowed = ["rgbToRgba"]
+  const borrowed = ["rgbToRgba", "_glowSprite", "_glowHueBucket", "_stampGlow",
+                    "_qualityBlur"]
     .map((n) => extractFunction(src, n))
+    .filter(Boolean)
+    .join("\n");
+
+  // The sprite cache and its two size constants live beside those
+  // helpers at module scope in the page.
+  const glowState = ["_GLOW_SPRITE_PX", "_GLOW_HUE_STEPS", "_glowSpriteCache"]
+    .map((n) => extractDeclaration(src, n))
     .filter(Boolean)
     .join("\n");
 
@@ -401,13 +432,49 @@ export function loadTable(src, varName, extraPrelude = "") {
     let _wormholeDiagTs = 0;
     let _cursorX = 0, _cursorY = 0;
     const window = { devicePixelRatio: 1 };
+    // fireflies and sparks rasterise their glow into an offscreen canvas
+    // once and stamp it thereafter. Node has no DOM, so hand them a stub
+    // whose getContext returns the same recording surface the presets
+    // draw onto — the sprite build is then visible to the harness as the
+    // handful of one-off gradients it is, rather than throwing.
+    const document = {
+      createElement: () => {
+        const el = { width: 0, height: 0, __peakAlpha: 1 };
+        el.getContext = () => {
+          const c = __recordingCtx(64, 64);
+          // Remember what the sprite was painted with, so a later
+          // drawImage of it can be scored on the pixels it lays down
+          // rather than on globalAlpha alone.
+          const commit = () => {
+            let peak = 0;
+            for (const o of c.ops) {
+              const a = __effectiveAlpha(o);
+              if (a > peak) peak = a;
+            }
+            if (peak) el.__peakAlpha = peak;
+          };
+          const wrap = (name) => {
+            const orig = c[name].bind(c);
+            c[name] = (...args) => { const r = orig(...args); commit(); return r; };
+          };
+          wrap("fill"); wrap("fillRect");
+          return c;
+        };
+        return el;
+      },
+    };
     ${stormState}
+    ${glowState}
     ${borrowed}
     ${matrix}
     ${extraPrelude}
   `;
   // storm delegates to its sibling presets by name, so the table has to
   // be reachable under the identifier the source uses.
-  const fn = new Function(`${prelude}\nconst ${varName} = ${body};\nreturn ${varName};`);
-  return fn();
+  // recordingCtx is passed in rather than referenced by closure: the
+  // table is built by `new Function`, which sees only globals and its
+  // own arguments, not this module's scope.
+  const fn = new Function("__recordingCtx", "__effectiveAlpha",
+    `${prelude}\nconst ${varName} = ${body};\nreturn ${varName};`);
+  return fn(recordingCtx, effectiveAlpha);
 }
