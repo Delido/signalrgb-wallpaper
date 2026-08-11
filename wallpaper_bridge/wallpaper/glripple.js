@@ -154,6 +154,7 @@
     this._fit = "cover";
     this._tileScale = 100;
     this._onLost = null;
+    this._onRestored = null;
   }
 
   GLRipple.prototype.init = function () {
@@ -183,6 +184,13 @@
     this.canvas.addEventListener("webglcontextrestored", function () {
       self.lost = false;
       try { self._build(); self.ready = true; } catch (err) { self.error = String(err); }
+      // _build() nulls _imgTex / _mapTex — the old handles belonged to
+      // the dead context. Nothing in here can re-upload the background
+      // (only the page knows its URL), so tell the owner to do it.
+      // Without this the effects stay dark forever: draw() keeps
+      // returning false because _imgTex is null, and the page never
+      // learns it has to act.
+      if (self._onRestored) self._onRestored();
     }, false);
 
     try { this._build(); } catch (e) { this.error = String(e); return false; }
@@ -304,6 +312,7 @@
   };
 
   GLRipple.prototype.onContextLost = function (fn) { this._onLost = fn; };
+  GLRipple.prototype.onContextRestored = function (fn) { this._onRestored = fn; };
 
   GLRipple.prototype.destroy = function () {
     var gl = this.gl;

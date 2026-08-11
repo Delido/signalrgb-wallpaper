@@ -2451,8 +2451,32 @@ const glRipple = (function () {
       // A lost context (driver update, sleep/resume, host suspend) would
       // otherwise leave a blank canvas covering the wallpaper.
       renderer.onContextLost(() => {
-        console.warn("[glripple] context lost — hiding overlay");
+        // v2.4.10: a lost context used to kill water + liquid
+        // distortion permanently, while everything else kept running.
+        //
+        // The chain: the context drops, _build() nulls _imgTex on
+        // restore, but nothing re-uploads the background — and
+        // `hasImage` stayed true, so usable() kept claiming the WebGL
+        // path was fine. draw() then returned false on every frame,
+        // the effects never fell back to the SVG filter, and the only
+        // way back was reloading the wallpaper.
+        //
+        // Clearing hasImage does two things: usable() goes false so
+        // the SVG path takes over immediately, and _reloadTexture()
+        // below can put the WebGL path back once a context exists.
+        console.warn("[glripple] context lost — hiding overlay, dropping texture");
+        hasImage = false;
         hide();
+        // Ask for the background again. If the context is still gone
+        // setImage() no-ops via probe(); the next background change or
+        // the restore handler retries.
+        if (_glRippleLastSrc) _glRippleLoadTexture(_glRippleLastSrc,
+                                                   _glRippleLastW, _glRippleLastH);
+      });
+      renderer.onContextRestored(() => {
+        console.warn("[glripple] context restored — re-uploading texture");
+        if (_glRippleLastSrc) _glRippleLoadTexture(_glRippleLastSrc,
+                                                   _glRippleLastW, _glRippleLastH);
       });
     }
     return available;
@@ -2676,7 +2700,18 @@ function _setImageBg(src) {
 // The bridge echoes the caller's Origin (including the `null` that
 // Lively and Wallpaper Engine send), so anonymous requests are accepted;
 // this stays best-effort regardless.
+// v2.4.10: remember what was last uploaded so the context-lost /
+// -restored handlers can put it back. Without this a lost context left
+// water + liquid distortion permanently dark — the page had no record of
+// which image to re-upload.
+let _glRippleLastSrc = null;
+let _glRippleLastW = 0;
+let _glRippleLastH = 0;
+
 function _glRippleLoadTexture(src, w, h) {
+  _glRippleLastSrc = src;
+  _glRippleLastW = w;
+  _glRippleLastH = h;
   let tex;
   try { tex = new Image(); } catch (_) { return; }
   tex.crossOrigin = "anonymous";

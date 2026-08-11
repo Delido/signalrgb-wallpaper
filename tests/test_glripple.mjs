@@ -116,8 +116,40 @@ console.log("\nbackground state is mirrored, not reimplemented");
 console.log("\ncontext loss is handled");
 {
   check("renderer exposes onContextLost", /onContextLost\s*=\s*function/.test(mod));
-  check("bridge hides the overlay on loss",
-        /onContextLost\(\(\)\s*=>\s*\{[\s\S]{0,200}?hide\(\)/.test(src));
+  // v2.4.10: a lost context used to kill water + liquid distortion for
+  // good. _build() nulls _imgTex on restore, but nothing re-uploaded the
+  // background — and `hasImage` stayed true, so usable() kept claiming
+  // the WebGL path was fine and the effects never fell back to SVG.
+  // Reported as "water and mouse distortion went completely dead on one
+  // screen while canvas and widgets kept running".
+  //
+  // Matched without a character budget: the handler carries a long
+  // comment, and a `[\s\S]{0,200}` window silently stops matching the
+  // moment someone adds a line to it.
+  const lostBody = (() => {
+    const at = src.indexOf("onContextLost(() => {");
+    if (at === -1) return "";
+    let i = src.indexOf("{", at + 18), depth = 0;
+    for (; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) return src.slice(at, i + 1);
+    }
+    return "";
+  // Kommentare entfernen: ein auskommentiertes Statement darf die
+  // Pruefung nicht erfuellen.
+  })().replace(/\/\/[^\n]*/g, "");
+
+  check("bridge hides the overlay on loss", /hide\(\)/.test(lostBody));
+  check("bridge drops hasImage so usable() falls back to SVG",
+        /hasImage\s*=\s*false/.test(lostBody));
+  check("renderer exposes onContextRestored",
+        /onContextRestored\s*=\s*function/.test(mod));
+  check("restore re-uploads the texture",
+        /onContextRestored\(\(\)\s*=>/.test(src) &&
+        /_glRippleLoadTexture\(_glRippleLastSrc/.test(src));
+  check("the last texture source is remembered",
+        /let _glRippleLastSrc/.test(src) &&
+        /_glRippleLastSrc\s*=\s*src/.test(src));
   check("webglcontextrestored rebuilds", /webglcontextrestored/.test(mod));
 }
 
