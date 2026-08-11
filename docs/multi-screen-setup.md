@@ -101,6 +101,39 @@ which SignalRGB device the wallpaper subscribes to, not which
 physical monitor it has to go on. The two are independent — you
 decide the mapping by which host-monitor you activate it on.
 
+#### Lively: prefer per-display over span
+
+Lively's *Wallpaper arrangement* has a **Span** mode that stretches one
+wallpaper across every monitor. It works, but it costs you Lively's
+auto-pause.
+
+Lively pauses a wallpaper when windows cover the screen — since v1.0.163
+via a grid algorithm that divides the display into tiles and checks how
+much is occluded (tray icon → *Report Bug* → *Grid Detection Overlay*
+shows it live). The changelog notes that each display pauses
+independently **in per-display mode**, and that is exactly where the
+difference shows up.
+
+Measured on a 2 × 2560×1440 setup with windows covering both screens:
+
+| Lively arrangement | GPU while covered |
+|---|---|
+| Span (one wallpaper across both) | 3.7 % — kept rendering |
+| **Per-display (one per monitor)** | **0 % — paused** |
+
+So on span the glow carries on drawing behind whatever you are working
+in. Assign *SignalRGB Glow - Screen 1* and *Screen 2* to their own
+monitors instead and Lively stops them for you.
+
+This is Lively suspending the player process, not a signal the page
+reacts to — adding `--pause-event true` to the bundle's `LivelyInfo.json`
+changes nothing (tested: 3.66 % → 3.63 %, i.e. noise). Nothing to
+configure on our side; it is purely which arrangement you pick.
+
+Wallpaper Engine users are unaffected: assigning the combined item per
+monitor with a different *Screen index* is already the per-display
+equivalent.
+
 ### Step 4 — verify
 
 Each wallpaper should now glow with a portion of your SignalRGB effect.
