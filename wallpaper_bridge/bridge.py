@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.9"
+APP_VERSION = "2.4.4-beta.10"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.9"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.8"
+WALLPAPER_VERSION = "2.4.9"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,63 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.10": {
+        "title_en": "What's new in v2.4.4-beta.10",
+        "title_de": "Was ist neu in v2.4.4-beta.10",
+        "body_en": (
+            "**Fixed: water and mouse distortion could die permanently "
+            "on one screen.**\n\n"
+            "Both effects run on the graphics card, and the browser "
+            "sometimes drops that connection — a driver update, waking "
+            "from sleep, or the host suspending the wallpaper. Recovery "
+            "was broken: the background image was never handed back to "
+            "the graphics card afterwards, and the wallpaper still "
+            "believed everything was fine, so it never fell back to the "
+            "slower-but-working path either.\n\n"
+            "The result was exactly what one user described: water and "
+            "mouse distortion completely dead on one screen while the "
+            "glow and widgets carried on. Only reloading the wallpaper "
+            "brought them back.\n\n"
+            "Now the image is re-uploaded when the connection returns, "
+            "and while it is gone the effects switch to the fallback "
+            "path instead of silently doing nothing.\n\n"
+            "**Still open:** memory climbing over a long session. "
+            "Measured and confirmed — roughly 80 MB stays behind after "
+            "each burst of clicking and mouse movement — but the cause "
+            "is not yet found. This release may help if the graphics "
+            "connection was dropping repeatedly; that is a hypothesis, "
+            "not a fix.\n\n"
+            "**Requires re-importing the wallpaper bundle.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Wasserwelle und Mausverzerrung konnten auf "
+            "einem Bildschirm dauerhaft ausfallen.**\n\n"
+            "Beide Effekte laufen über die Grafikkarte, und der Browser "
+            "verliert diese Verbindung gelegentlich — bei einem "
+            "Treiber-Update, beim Aufwachen aus dem Ruhezustand oder "
+            "wenn der Host das Wallpaper aussetzt. Die "
+            "Wiederherstellung war kaputt: Das Hintergrundbild wurde "
+            "danach nie wieder an die Grafikkarte übergeben, und das "
+            "Wallpaper hielt trotzdem alles für in Ordnung — also fiel "
+            "es auch nicht auf den langsameren, aber funktionierenden "
+            "Weg zurück.\n\n"
+            "Das Ergebnis war genau das gemeldete Bild: Wasserwelle und "
+            "Mausverzerrung auf einem Bildschirm komplett tot, während "
+            "Glow und Widgets weiterliefen. Nur ein Neuladen des "
+            "Wallpapers half.\n\n"
+            "Jetzt wird das Bild neu übergeben, sobald die Verbindung "
+            "zurück ist — und solange sie fehlt, schalten die Effekte "
+            "auf den Ersatzweg um, statt stillschweigend nichts zu "
+            "tun.\n\n"
+            "**Weiterhin offen:** Der Speicherverbrauch steigt über "
+            "eine lange Sitzung. Gemessen und bestätigt — nach jeder "
+            "Phase mit Klicken und Mausbewegung bleiben rund 80 MB "
+            "zurück — die Ursache ist aber noch nicht gefunden. Diese "
+            "Version könnte helfen, falls die Grafikverbindung wiederholt "
+            "abriss; das ist eine Vermutung, keine Lösung.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles.**\n"
+        ),
+    },
     "2.4.4-beta.9": {
         "title_en": "What's new in v2.4.4-beta.9",
         "title_de": "Was ist neu in v2.4.4-beta.9",

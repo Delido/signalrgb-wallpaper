@@ -4,6 +4,68 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.10] - 2026-08-11
+
+### Fixed — a lost WebGL context killed water + liquid distortion for good
+
+Reported as "water and mouse distortion went completely dead on the left
+screen, canvas and widgets keep running" — the signature of a lost WebGL
+context whose recovery path never completed:
+
+1. context lost → the bridge called `hide()` and nothing else
+2. context restored → `_build()` nulls `_imgTex` / `_mapTex`, since the
+   old handles belonged to the dead context
+3. nothing re-uploaded the background: only the page knows its URL, and
+   `glripple.js` had no way to ask for it
+4. `hasImage` stayed `true`, so `usable()` kept reporting the WebGL path
+   as healthy and the effects never fell back to the SVG filter
+5. `draw()` returned `false` on every frame from then on
+
+Only reloading the wallpaper recovered it.
+
+Fixed on both sides: `glripple.js` gains `onContextRestored` so it can
+ask the page to re-upload; the page remembers the last texture source
+and reloads it on loss *and* restore, and clears `hasImage` on loss so
+`usable()` drops to the SVG path immediately instead of pretending.
+
+### Fixed — the test for that path could not fail
+
+`test_glripple.mjs` matched the loss handler through a
+`[\s\S]{0,200}` window, which stopped matching the moment the handler
+grew a comment — the third instance of this character-budget failure
+after the parity suite's span cap and `test_wallpaper_source`'s helper
+window.
+
+Worse, the first repair still passed against a *commented-out*
+`hasImage = false`, i.e. it would not have caught the regression it was
+written for. Now brace-counted with comments stripped before matching,
+and mutation-checked: commenting the assignment out turns one check red.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.9, so this needs a bundle re-import.
+
+**Open, not fixed: a rising memory floor.** Measured across repeated
+activity cycles on a 2 × 2560×1440 per-display setup, wallpaper
+renderers only:
+
+| | start | end | floor after idle |
+|---|---|---|---|
+| cycle 1 | 582 MB | 663 MB | 658 MB |
+| cycle 2 | 729 MB | 747 MB | 740 MB |
+
+Roughly 80 MB stays behind per cycle. An earlier single-cycle
+measurement led me to call this "cache, not a leak" — wrong, because one
+cycle cannot distinguish the two. The user's description of the pattern
+(450 MB fresh → 1.2 GB → only back to 700–800 MB) is what prompted the
+multi-cycle test.
+
+The per-frame paths are clean: `setMap` reuses its texture, and the two
+apparently unguarded `toDataURL` calls turned out to be a comment and a
+one-off filter build. So the earlier data:-URL theory does not explain
+it. This release may help if the context was being lost repeatedly — but
+that is a hypothesis, and it is not claimed as a fix.
+
 ## [2.4.4-beta.9] - 2026-08-11
 
 ### Fixed — the second half of a spanned screen wiped the first
