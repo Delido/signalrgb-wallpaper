@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.10"
+APP_VERSION = "2.4.4-beta.11"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.10"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.9"
+WALLPAPER_VERSION = "2.4.10"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,76 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.11": {
+        "title_en": "What's new in v2.4.4-beta.11",
+        "title_de": "Was ist neu in v2.4.4-beta.11",
+        "body_en": (
+            "**The wallpaper now tells you why it's black.**\n\n"
+            "Getting this running takes six steps, and two of them are "
+            "easy to miss: dragging the *Desktop Wallpaper* device onto "
+            "the SignalRGB canvas, and assigning the wallpaper to a "
+            "monitor. Miss the first and everything looks fine — the "
+            "bridge is running, the Configurator says \"connected\" — "
+            "while the screen stays black and nothing anywhere says "
+            "why.\n\n"
+            "- The Configurator now shows a banner naming the next step "
+            "whenever the chain is broken, with a button to jump "
+            "straight there. It stays out of the way when everything "
+            "works.\n"
+            "- The wallpaper's own \"bridge offline\" card learned a "
+            "second message for the case above: connected, but nothing "
+            "is being sent.\n"
+            "- Both are now shown in your language. The card was the "
+            "last English-only corner of the app — and it appears "
+            "exactly when you least want to be puzzling over "
+            "English.\n\n"
+            "**Also: help wanted with the memory question.**\n"
+            "Memory climbs over a long session and does not fully come "
+            "back. There is a prime suspect — a fallback drawing path "
+            "that leaves an image in the browser's cache on every frame "
+            "— but no proof, and two earlier fix attempts made things "
+            "worse because they were built on a theory instead of a "
+            "measurement.\n\n"
+            "So this build only counts. It records once a minute which "
+            "drawing path is actually running, into the log you already "
+            "have. Use the wallpaper normally for a day; the log will "
+            "settle the question either way.\n\n"
+            "**Requires re-importing the wallpaper bundle.**\n"
+        ),
+        "body_de": (
+            "**Das Wallpaper sagt jetzt, warum es schwarz ist.**\n\n"
+            "Bis alles läuft, sind sechs Schritte nötig, und zwei davon "
+            "übersieht man leicht: das Gerät *Desktop Wallpaper* auf die "
+            "SignalRGB-Fläche zu ziehen und das Wallpaper einem Monitor "
+            "zuzuweisen. Fehlt der erste, sieht alles in Ordnung aus — "
+            "die Bridge läuft, der Configurator meldet „verbunden“ — "
+            "während der Bildschirm schwarz bleibt und nirgends steht, "
+            "warum.\n\n"
+            "- Der Configurator zeigt jetzt einen Hinweis mit dem "
+            "nächsten Schritt, sobald etwas in der Kette fehlt, samt "
+            "Knopf, der direkt dorthin führt. Läuft alles, hält er sich "
+            "raus.\n"
+            "- Die „Bridge offline“-Karte auf dem Wallpaper hat einen "
+            "zweiten Text für genau den Fall oben bekommen: verbunden, "
+            "aber es wird nichts gesendet.\n"
+            "- Beides erscheint jetzt auf Deutsch. Die Karte war die "
+            "letzte rein englische Ecke der App — und sie taucht genau "
+            "dann auf, wenn man am wenigsten Lust auf Englisch hat.\n\n"
+            "**Außerdem: Mithilfe bei der Speicherfrage.**\n"
+            "Der Speicherverbrauch steigt über eine lange Sitzung und "
+            "geht nicht vollständig zurück. Es gibt einen "
+            "Hauptverdächtigen — ein Ersatz-Zeichenweg, der pro Bild "
+            "eine Grafik im Browser-Cache zurücklässt — aber keinen "
+            "Beweis. Zwei frühere Reparaturversuche haben es "
+            "verschlimmert, weil sie auf einer Theorie statt einer "
+            "Messung beruhten.\n\n"
+            "Dieser Build zählt deshalb nur. Er schreibt einmal pro "
+            "Minute mit, welcher Zeichenweg tatsächlich läuft — in das "
+            "Log, das du ohnehin hast. Nutze das Wallpaper einen Tag "
+            "normal; das Log klärt die Frage in beide Richtungen.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles.**\n"
+        ),
+    },
     "2.4.4-beta.10": {
         "title_en": "What's new in v2.4.4-beta.10",
         "title_de": "Was ist neu in v2.4.4-beta.10",
@@ -4360,6 +4430,9 @@ class Broadcaster:
         await self._route_hwmon_sensors(method, target, headers, reader, writer)
         if writer.is_closing():
             return
+        await self._route_health(method, target, headers, reader, writer)
+        if writer.is_closing():
+            return
         await self._route_openrgb_status(method, target, headers, reader, writer)
         if writer.is_closing():
             return
@@ -4810,6 +4883,47 @@ class Broadcaster:
                 writer.write(head + payload)
             except Exception as e:
                 http_error(writer, 500, f"server error: {e}")
+            try: await writer.drain()
+            except Exception: pass
+            try: writer.close()
+            except Exception: pass
+            return
+
+    async def _route_health(self, method, target, headers, reader, writer):
+        """GET /health — is this install actually working end to end?
+
+        v2.4.11. get_health_status() has existed since v0.8.9 but was
+        reachable only through the tray's System-status dialog, which a
+        first-time user has no reason to open. Meanwhile the
+        Configurator's "connected" pill reports the Configurator's own
+        socket to the bridge, which reads to a novice as "everything is
+        fine" while the SignalRGB half of the chain can be entirely
+        dead.
+
+        Same snapshot, now over HTTP so the Configurator can show it
+        where people actually look.
+        """
+        if method == "GET" and target.split("?", 1)[0] == "/health":
+            try:
+                runtime = getattr(self, "bridge_runtime", None)
+                if runtime is None:
+                    snap = {"available": False, "reason": "bridge runtime not wired"}
+                else:
+                    snap = runtime.get_health_status()
+                    snap["available"] = True
+                payload = json.dumps(snap).encode("utf-8")
+                head = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Cache-Control: no-store\r\n"
+                    f"Access-Control-Allow-Origin: {_acao(headers)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(head + payload)
+            except Exception as e:
+                http_error(writer, 500, f"server error: {e}",
+                           request_headers=headers)
             try: await writer.drain()
             except Exception: pass
             try: writer.close()
@@ -6651,6 +6765,28 @@ class Broadcaster:
                         await self._on_hello(writer, screen, msg)
                     except Exception as e:
                         print(f"[ws] hello handler failed: {e}")
+                    continue
+                # v2.4.11: render-path diagnostics. The page reports
+                # once a minute which ripple path it is actually using.
+                # Logged rather than answered — this exists so the
+                # question "is the leaky SVG fallback running?" can be
+                # settled from the user's own log instead of from a
+                # devtools console they cannot open on a wallpaper.
+                # See the _diag block in wallpaper/index.html for why.
+                if isinstance(msg, dict) and msg.get("type") == "diag":
+                    try:
+                        print(
+                            f"[diag] screen={screen} "
+                            f"gl={int(msg.get('gl') or 0)} "
+                            f"svg={int(msg.get('svg') or 0)} "
+                            f"no_gl={int(msg.get('usableFalseNoGl') or 0)} "
+                            f"no_img={int(msg.get('usableFalseNoImg') or 0)} "
+                            f"ctx_lost={int(msg.get('ctxLost') or 0)} "
+                            f"ctx_restored={int(msg.get('ctxRestored') or 0)} "
+                            f"heap={int(msg.get('heapMb') or 0)}MB"
+                        )
+                    except Exception as e:
+                        print(f"[diag] malformed report: {e}")
                     continue
                 self.handle_client_message(screen, msg)
         except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError, OSError):
@@ -10599,12 +10735,57 @@ class BridgeRuntime:
             except Exception:
                 pass
 
+        # v2.4.11: the two setup steps nothing automates and nothing
+        # used to detect — and between them the most common way a
+        # correct-looking install still shows a black screen.
+        #
+        #   frames_arriving  the user installed everything but never
+        #                    dragged the "Desktop Wallpaper" device onto
+        #                    the SignalRGB canvas. The WS is up, so the
+        #                    wallpaper's standby card stays hidden and
+        #                    the screen is simply black with no clue.
+        #   pages_per_screen the wallpaper was never assigned to a
+        #                    monitor in Lively / WE. `pages_connected`
+        #                    existed but only as a total, which cannot
+        #                    say WHICH screen is missing one.
+        #
+        # get_measured_fps() already exists for the Configurator's
+        # frame-rate readout; this just asks it the health question.
+        screen_count = 1
+        try:
+            screen_count = max(1, int(self._get_screen_count()))
+        except Exception:
+            pass
+        pages_per_screen = []
+        fps_per_screen = []
+        for i in range(screen_count):
+            n = 0
+            if self.broadcaster:
+                try:
+                    n = len(self.broadcaster.clients_by_screen.get(i, ()) or ())
+                except Exception:
+                    pass
+            pages_per_screen.append(n)
+            f = 0.0
+            try:
+                prov = getattr(self.broadcaster, "udp_provider", None) if self.broadcaster else None
+                if prov:
+                    f = float(prov.get_measured_fps(i))
+            except Exception:
+                pass
+            fps_per_screen.append(round(f, 1))
+        frames_arriving = any(f > 0 for f in fps_per_screen)
+
         return {
             "plugin_present":    plugin_present,
             "plugin_path":       str(plugin_path) if plugin_path else "",
             "plugin_dir":        str(plugin_path.parent) if plugin_path else "",
             "signalrgb_running": signalrgb_running,
             "pages_connected":   pages_connected,
+            "screen_count":      screen_count,
+            "pages_per_screen":  pages_per_screen,
+            "fps_per_screen":    fps_per_screen,
+            "frames_arriving":   frames_arriving,
             "lhm_widget_present": lhm_widget_present,
             "lhm_online":        lhm_online,
             "lhm_count":         lhm_count,

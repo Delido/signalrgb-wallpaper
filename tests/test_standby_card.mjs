@@ -14,6 +14,12 @@
 //
 // Run: node tests/test_standby_card.mjs
 
+// v2.4.11 checks below read the shipped page directly: the model here
+// would keep passing even if index.html lost the rule it models.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
 const results = { passed: 0, failed: [] };
 
 function check(label, cond, detail = "") {
@@ -201,6 +207,75 @@ async function main() {
           c.st.cardOn === false && c.st.ws.readyState === 1,
           `cardOn=${c.st.cardOn}`);
     c.stop();
+  }
+
+  // ── v2.4.11: the second reason the card exists ─────────────────
+  //
+  // Until now the card meant exactly one thing: the bridge process is
+  // unreachable. The far more common first-run failure is the inverse
+  // — bridge reachable, socket live, and SignalRGB never got the
+  // device dragged onto its canvas. No frames arrive, the screen is
+  // black, and the card stayed hidden PRECISELY BECAUSE the bridge was
+  // fine. Total silence at the one moment a new user needs a sentence.
+  //
+  // Checked against the shipped source rather than the model: the
+  // model would happily keep passing if the real page lost the rule.
+  {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..",
+           "wallpaper_bridge", "wallpaper", "index.html"), "utf8");
+
+    check("a starvation grace period is defined",
+          /const NOFRAME_GRACE_MS = (\d+)/.test(src));
+    const grace = Number((src.match(/const NOFRAME_GRACE_MS = (\d+)/) || [])[1] || 0);
+    // Long enough to ride out an effect switch or a resume, short
+    // enough that a stuck setup is explained while the user is still
+    // looking at it.
+    check("grace is between 5s and 60s", grace >= 5000 && grace <= 60000, String(grace));
+
+    check("the reconciler tests for starvation",
+          /const starved = live && !isPaused/.test(src));
+    // A paused wallpaper legitimately receives nothing. Blaming
+    // SignalRGB for that would send the user to the wrong app.
+    check("a paused wallpaper is never called starved",
+          /starved = live && !isPaused/.test(src));
+    check("starvation raises the card with its own reason",
+          /showStandbyCard\(true, "noframes"\)/.test(src));
+
+    // The timestamp has to be taken before both the pause check and
+    // the frame-rate gate: it answers "is the sender sending", not
+    // "did we choose to draw".
+    // Scoped to renderFrame's body: there are three `if (isPaused)
+    // return;` statements in the file, so searching forward from the
+    // stamp just finds a later unrelated one and passes regardless.
+    // The first version of this check did exactly that and survived a
+    // mutation that moved the stamp below the pause check.
+    const rfAt = src.indexOf("function renderFrame(buf) {");
+    const rfEnd = src.indexOf("\nfunction ", rfAt + 10);
+    const rf = src.slice(rfAt, rfEnd === -1 ? rfAt + 4000 : rfEnd);
+    const stampAt = rf.indexOf("_lastFrameAtMs = Date.now()");
+    const pauseAt = rf.indexOf("if (isPaused) return;");
+    check("frame arrival is stamped before the pause check",
+          stampAt !== -1 && pauseAt !== -1 && stampAt < pauseAt,
+          `stamp@${stampAt} pause@${pauseAt}`);
+    // Same reasoning for the frame-rate gate: a 20 Hz cap must not read
+    // as starvation at 30 Hz.
+    const gateAt = rf.indexOf("RENDER_INTERVAL_MS) return;");
+    check("frame arrival is stamped before the frame-rate gate",
+          gateAt === -1 || stampAt < gateAt, `stamp@${stampAt} gate@${gateAt}`);
+    // let is not hoisted; v2.4.4-beta.7 shipped exactly this mistake
+    // with gridRenderer and the page died on load.
+    check("the timestamp is declared before it is assigned",
+          src.indexOf("let _lastFrameAtMs") < src.indexOf("_lastFrameAtMs = Date.now()"));
+
+    // The card was the last hardcoded-English surface in an otherwise
+    // bilingual product — and it appears exactly when a confused user
+    // is reading it.
+    check("card text exists in both languages",
+          /STANDBY_TEXT/.test(src) && /noframes:/.test(src) &&
+          /de: \[/.test(src));
+    check("language comes from the bridge push",
+          /window._wallpaperLang = msg.language/.test(src));
   }
 
   const total = results.passed + results.failed.length;

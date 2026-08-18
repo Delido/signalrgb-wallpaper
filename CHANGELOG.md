@@ -4,6 +4,102 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.11] - 2026-08-11
+
+Two things a first-time user could not diagnose, and the groundwork for
+settling the memory question by measurement instead of theory.
+
+### Added — setup status the user can actually see
+
+Six steps stand between installing this and a working glow. Two are
+neither automated nor were they detected: dragging the *Desktop
+Wallpaper* device onto the SignalRGB canvas, and assigning the wallpaper
+to a monitor.
+
+Miss the first and every signal reads green. The bridge is up, the
+Configurator's pill says "connected", the wallpaper page holds a live
+socket — and the screen is black. The wallpaper's own standby card stays
+hidden *because* the bridge is not offline. Nothing anywhere in the
+product says a word.
+
+The bridge has known this since v0.8.9: `get_health_status()` already
+checked plugin file, SignalRGB process and connected pages. It was only
+ever rendered in a tray dialog a first-time user has no reason to open,
+and had no HTTP surface at all.
+
+- `get_health_status()` gains `frames_arriving` (from the existing
+  `get_measured_fps`, which the Configurator already polls for its
+  frame-rate readout) and `pages_per_screen` — per screen, because a
+  total cannot say *which* monitor is missing its wallpaper.
+- New `GET /health` route, sitting in the dispatcher alongside the other
+  33.
+- A banner in the Configurator names the **first** broken step and how
+  to fix it. Only the first: the steps are ordered, a later one usually
+  fails *because* an earlier one did, and four red rows when the real
+  problem is step one helps nobody. Hidden entirely while healthy — a
+  banner that is green 99 % of the time trains people to skip past the
+  place the red one appears.
+
+### Added — the standby card's second reason, in both languages
+
+The card meant exactly one thing: the bridge is unreachable. It now also
+covers the inverse — bridge connected, socket live, no frames arriving
+for 15 s — which is the silent black-screen case above.
+
+The frame timestamp is taken *before* both the pause check and the
+frame-rate gate: it answers "is the sender sending", not "did we choose
+to draw". Stamping it after the pause check would make every paused
+wallpaper look like a dead SignalRGB.
+
+The card was also the last hardcoded-English surface in an otherwise
+bilingual product, and it appears exactly when a confused user is
+reading it. It now uses the `language` field the bridge has always
+shipped with every settings push and the page simply never read.
+
+### Added — render-path diagnostics (measurement, not a fix)
+
+Memory climbs across a session and does not come back: ~80 MB retained
+per activity cycle (582 → 658 → 740 MB floor).
+
+The leading suspect is the SVG fallback for the ripple effects. When the
+WebGL path is unavailable, both water and Liquid Distortion run
+`feImage.href = canvas.toDataURL()` once per frame; Chromium caches a
+decoded bitmap per unique `data:` URL and cannot revoke them — the note
+at the Liquid Distortion tick says exactly that.
+
+It is a suspicion. Two earlier attempts at this same problem were built
+on a plausible theory plus a benchmark of the wrong code path, and both
+made things worse (the glow sprites measured 4× slower; the pre-scale
+blur did nothing). So this release only counts:
+
+```text
+[diag] screen=0 gl=1834 svg=0 no_gl=0 no_img=0 ctx_lost=0 ctx_restored=0 heap=42MB
+```
+
+`svg > 0` proves the fallback is running and the theory is worth acting
+on. `svg = 0` kills it, and the search moves to Chromium's heap profiler
+instead of guessing from outside the process. The page reports once a
+minute over the existing socket; a single guarded timer, because an
+unguarded one per reconnect would be a poor way to instrument a leak
+hunt.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.10, so this needs a bundle re-import.
+
+Two new suites (`test_setup_status.mjs`, plus health-route coverage in
+`test_http_routing.py`) and extensions to two existing ones. All
+mutation-checked, and two of those checks were toothless on the first
+attempt:
+
+- the health-route helper raised on a non-JSON body instead of letting
+  the assertion report the failure, so unhooking the route from the
+  dispatcher looked like a pass
+- the frame-timestamp ordering check searched forward from the stamp for
+  `if (isPaused) return;` — of which there are three in the file — so it
+  passed even with the stamp moved below the pause check. Now scoped to
+  `renderFrame`'s body.
+
 ## [2.4.4-beta.10] - 2026-08-11
 
 ### Fixed — a lost WebGL context killed water + liquid distortion for good

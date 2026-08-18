@@ -32,6 +32,7 @@ JS_SUITES = [
     ("glRipple WebGL path (node)", HERE / "test_glripple.mjs"),
     ("Preset parity (node)", HERE / "test_preset_parity.mjs"),
     ("Span half-apply (node)", HERE / "test_span_apply.mjs"),
+    ("Setup status (node)", HERE / "test_setup_status.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),

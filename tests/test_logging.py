@@ -120,6 +120,62 @@ def test_log_dir_unchanged(r):
     r.check("rotation keeps backups", "backupCount=3" in src)
 
 
+def test_render_path_diagnostics(r):
+    """v2.4.11 ships counters that answer one question from the user's
+    own log: which ripple render path is actually running?
+
+    Memory grows ~80 MB per activity cycle and never comes back
+    (measured: 582 -> 658 -> 740 MB floor across cycles). The leading
+    suspect is the SVG fallback, which encodes a fresh `data:` URL per
+    frame into an feImage href — Chromium caches a decoded bitmap per
+    unique data: URL and cannot revoke them.
+
+    It is a suspicion, not a finding. Two earlier attempts at this same
+    memory/perf problem were built on a plausible theory plus a
+    benchmark of the wrong code path, and both made things worse. So
+    this release only counts, and these checks exist so the counting
+    itself cannot quietly break.
+    """
+    root = Path(__file__).resolve().parent.parent
+    src = (root / "wallpaper_bridge" / "wallpaper" / "index.html").read_text(
+        encoding="utf-8", errors="replace")
+    bridge_src = (root / "wallpaper_bridge" / "bridge.py").read_text(
+        encoding="utf-8", errors="replace")
+
+    r.check("wallpaper declares the diag counters", "const _diag = {" in src)
+
+    # Both ripple modules must be instrumented on BOTH sides of the
+    # branch. Counting only the WebGL path would leave the fallback
+    # invisible — which is the exact thing being measured.
+    gl_hits = src.count("_diag.gl++")
+    svg_hits = src.count("_diag.svg++")
+    r.check("both modules count the WebGL path", gl_hits == 2, f"found {gl_hits}")
+    r.check("both modules count the SVG fallback", svg_hits == 2, f"found {svg_hits}")
+
+    # The two reasons usable() can fail need different fixes: no WebGL
+    # at all is terminal, a missing texture is recoverable.
+    r.check("usable() separates its two failure reasons",
+            "_diag.usableFalseNoGl++" in src and "_diag.usableFalseNoImg++" in src)
+    r.check("context loss and restore are counted",
+            "_diag.ctxLost++" in src and "_diag.ctxRestored++" in src)
+
+    # One timer, not one per reconnect. connect() runs again on every
+    # reconnect, and an unguarded setInterval there would itself leak —
+    # a poor way to instrument a leak hunt.
+    r.check("the report timer is started once, not per reconnect",
+            "if (_diagTimer) return;" in src)
+    r.check("reports go out over the existing socket", 'type: "diag"' in src)
+
+    # Bridge side: the report has to land in the log the user already
+    # has, not in a devtools console they cannot open on a wallpaper.
+    r.check("bridge handles the diag message",
+            'msg.get("type") == "diag"' in bridge_src)
+    r.check("bridge logs it under the [diag] tag",
+            "[diag] screen=" in bridge_src)
+    r.check("malformed reports cannot crash the WS loop",
+            "[diag] malformed report" in bridge_src)
+
+
 async def main():
     r = Results("logging")
     emit("\ntimestamp format")
@@ -130,6 +186,8 @@ async def main():
     await test_resume_marker(r)
     emit("\nlog location contract")
     test_log_dir_unchanged(r)
+    emit("\nrender-path diagnostics")
+    test_render_path_diagnostics(r)
     emit("")
     return 0 if r.summary() else 1
 

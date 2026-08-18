@@ -715,6 +715,44 @@
     margin-bottom: 10px;
   }
 
+  /* ── Setup status banner (v2.4.11) ────────────────────────────────
+     Only rendered when something in the chain is broken; see the
+     comment on #setup-status in the markup for why there is no green
+     "all good" state. Reuses --danger / --good rather than inventing
+     colours so it reads as part of the same UI. */
+  #setup-status {
+    max-width: 920px;
+    margin: 12px auto 0;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #2a1c1c;
+    border: 1px solid var(--danger);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  #setup-status.hidden { display: none; }
+  #setup-status h3 {
+    margin: 0 0 6px; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #setup-status h3::before {
+    content: ""; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--danger); flex: 0 0 auto;
+  }
+  #setup-status ol { margin: 6px 0 0; padding-left: 20px; }
+  #setup-status li { margin-bottom: 6px; }
+  #setup-status li:last-child { margin-bottom: 0; }
+  #setup-status .fix {
+    display: inline-block; margin-left: 6px; padding: 2px 8px;
+    border-radius: 4px; border: 1px solid var(--border);
+    background: var(--accent-bg); color: var(--text);
+    font-size: 12px; cursor: pointer;
+  }
+  #setup-status .fix:hover { background: var(--accent-bg-hover); }
+  #setup-status .done { color: var(--text-dim); }
+  #setup-status .done::marker { color: var(--good); }
+
   /* ── Ambient preset tiles ─────────────────────────────────────────── */
   .ambient-tiles {
     display: grid;
@@ -2514,6 +2552,28 @@
 
 <main data-active-tab="look">
 
+  <!-- ── Setup status ──────────────────────────────────────────────────
+       v2.4.11. Getting a working wallpaper takes six steps, and two of
+       them — dragging the device onto the SignalRGB canvas, and
+       assigning the wallpaper to a monitor — are neither automated nor,
+       until now, detected. Miss the canvas step and the WebSocket is
+       still up, so the wallpaper's own "bridge offline" card stays
+       hidden and the user just gets a black screen with no explanation.
+
+       The bridge has known all of this since v0.8.9 via
+       get_health_status(), but it was only ever rendered in a tray
+       dialog a first-time user has no reason to open. Worse, the
+       "connected" pill in the header reports THIS page's socket to the
+       bridge, which reads as a green light for the whole chain while
+       the SignalRGB half can be completely dead.
+
+       Sits outside the tab panes on purpose: it answers "does any of
+       this work", which is not a Look/Library/Effects question. Stays
+       hidden entirely while everything is fine — a permanent green
+       banner is just noise that trains people to ignore the spot where
+       the red one will appear. -->
+  <div id="setup-status" class="hidden" role="status" aria-live="polite"></div>
+
   <!-- ── Presets ───────────────────────────────────────────────────── -->
   <!-- v2.2.0-beta: per-bridge screen-count moved out of the noisy
        top toolbar and into the System tab where it belongs (rare
@@ -3614,6 +3674,37 @@ const TRANSLATIONS = {
   "conn.connecting":        { en: "connecting…",          de: "verbinde…" },
   "conn.disconnected":      { en: "disconnected — retrying…", de: "getrennt — versuche erneut…" },
   "conn.connected":         { en: "connected · Screen {n}", de: "verbunden · Bildschirm {n}" },
+
+  // v2.4.11 setup status. Written for someone who has never heard of a
+  // WebSocket and does not know what "the canvas" is — each string
+  // names the app to open and the thing to do in it, because the point
+  // is to unblock someone staring at a black screen.
+  "setup.title":            { en: "Setup isn't finished yet",
+                              de: "Die Einrichtung ist noch nicht fertig" },
+  "setup.step.plugin":      {
+    en: "The SignalRGB plugin file is missing. Re-run the installer and leave the "
+      + "\"SignalRGB plugin\" option ticked — without it SignalRGB cannot talk to the wallpaper.",
+    de: "Die SignalRGB-Plugin-Datei fehlt. Führe das Installationsprogramm erneut aus und "
+      + "lass die Option „SignalRGB-Plugin“ angehakt — ohne sie kann SignalRGB nicht mit "
+      + "dem Wallpaper sprechen." },
+  "setup.step.signalrgb":   {
+    en: "SignalRGB isn't running. Start it — the wallpaper gets its colours from there.",
+    de: "SignalRGB läuft nicht. Starte es — das Wallpaper bekommt seine Farben von dort." },
+  "setup.step.frames":      {
+    en: "SignalRGB is running but isn't sending anything. Open SignalRGB, go to Devices, "
+      + "and drag \"Desktop Wallpaper\" onto the layout. Until it sits on the canvas it "
+      + "receives no colours — which looks exactly like a black wallpaper.",
+    de: "SignalRGB läuft, sendet aber nichts. Öffne SignalRGB, geh auf Geräte und zieh "
+      + "„Desktop Wallpaper“ auf die Fläche. Solange es nicht dort liegt, bekommt es keine "
+      + "Farben — und das sieht genau aus wie ein schwarzes Wallpaper." },
+  "setup.step.assigned":    {
+    en: "No wallpaper is running on at least one screen. Open Lively or Wallpaper Engine "
+      + "and set \"SignalRGB Glow\" as the wallpaper for that monitor.",
+    de: "Auf mindestens einem Bildschirm läuft kein Wallpaper. Öffne Lively oder Wallpaper "
+      + "Engine und setze „SignalRGB Glow“ als Hintergrund für diesen Monitor." },
+  "setup.more":             { en: "{n} more step(s) after this one.",
+                              de: "Danach folgen noch {n} Schritt(e)." },
+  "setup.fix.plugin_folder": { en: "Open plugins folder", de: "Plugin-Ordner öffnen" },
 
   "section.bg":             { en: "Background",           de: "Hintergrund" },
   "section.glow":           { en: "Glow",                 de: "Glow" },
@@ -5491,6 +5582,92 @@ async function refreshTabLabels() {
 }
 refreshTabLabels();
 setInterval(refreshTabLabels, 5000);
+
+// ── Setup status (v2.4.11) ───────────────────────────────────────────
+//
+// Six steps stand between installing this and seeing a glow. Two are
+// neither automated nor were they detected: dragging the device onto
+// the SignalRGB canvas, and assigning the wallpaper to a monitor. Miss
+// the first and everything LOOKS fine — the bridge is up, this page
+// says "connected", the wallpaper page holds a live socket — and the
+// screen is simply black.
+//
+// The bridge has known all of this since v0.8.9; it was just locked
+// inside a tray dialog. /health exposes the same snapshot.
+//
+// Deliberately silent while healthy. A banner that is green 99 % of the
+// time teaches people to skip past the one place the red one appears.
+const SETUP_STEPS = [
+  {
+    id: "plugin",
+    ok: (h) => h.plugin_present,
+    fix: (h) => h.plugin_dir
+      ? { label: t("setup.fix.plugin_folder"), href: null, dir: h.plugin_dir }
+      : null,
+  },
+  { id: "signalrgb", ok: (h) => h.signalrgb_running },
+  // The silent black screen. SignalRGB is running and the plugin is
+  // installed, but the device was never placed on the canvas, so no
+  // frames are sent and nothing anywhere says so.
+  { id: "frames", ok: (h) => h.frames_arriving },
+  // Per screen, because a total cannot say WHICH monitor is missing
+  // its wallpaper.
+  {
+    id: "assigned",
+    ok: (h) => Array.isArray(h.pages_per_screen)
+      ? h.pages_per_screen.every((n) => n > 0)
+      : (h.pages_connected || 0) > 0,
+  },
+];
+
+function renderSetupStatus(h) {
+  const el = document.getElementById("setup-status");
+  if (!el) return;
+  if (!h || h.available === false) { el.classList.add("hidden"); return; }
+
+  const failed = SETUP_STEPS.filter((s) => !s.ok(h));
+  if (!failed.length) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+
+  // Only the FIRST broken step gets called out. The steps are ordered,
+  // and a later one is usually broken *because* an earlier one is —
+  // listing four red rows when the real problem is step one reads as
+  // "everything is broken" and helps nobody.
+  const first = failed[0];
+  const parts = [];
+  parts.push("<h3>" + escapeHtml(t("setup.title")) + "</h3>");
+  parts.push("<div>" + escapeHtml(t("setup.step." + first.id)) + "</div>");
+
+  const fix = first.fix ? first.fix(h) : null;
+  if (fix && fix.dir) {
+    parts.push('<button type="button" class="fix" data-open-dir="'
+               + escapeHtml(fix.dir) + '">' + escapeHtml(fix.label) + "</button>");
+  }
+  if (failed.length > 1) {
+    parts.push('<div class="done" style="margin-top:6px">'
+               + escapeHtml(t("setup.more", { n: failed.length - 1 })) + "</div>");
+  }
+  el.innerHTML = parts.join("");
+  el.classList.remove("hidden");
+
+  const btn = el.querySelector("[data-open-dir]");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      // Reuses the same system-action channel the tray's "Open plugins
+      // folder" button goes through — no new bridge surface for this.
+      sendCmd({ type: "system-action", action: "open-plugins-folder" });
+    });
+  }
+}
+
+async function refreshSetupStatus() {
+  try {
+    const r = await fetch("/health", { cache: "no-store" });
+    if (!r.ok) return;
+    renderSetupStatus(await r.json());
+  } catch (_) { /* bridge down — the conn pill already says so */ }
+}
+refreshSetupStatus();
+setInterval(refreshSetupStatus, 5000);
 
 // Multi-monitor overview — one mini-thumb per screen, clicking jumps to
 // that tab. Hidden when screenCount < 2 (the overview card adds clutter

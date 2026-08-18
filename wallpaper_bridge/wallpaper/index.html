@@ -1742,6 +1742,63 @@ function showVersionMismatchBanner(bridgeVer, wallpaperVer) {
 // user gets a true WYSIWYG editing experience.
 const PREVIEW_MODE = _URL_PARAMS.get("preview") === "1";
 
+// ── Render-path diagnostics (v2.4.11) ────────────────────────────────
+//
+// Memory grows across a session and does not come back: measured on a
+// 2×2560×1440 per-display setup, repeated 40 s activity + 60 s idle
+// cycles left ~80 MB behind each time (582 → 658 → 740 MB floor).
+//
+// The leading suspect is the SVG fallback for the ripple effects. When
+// the WebGL path is unavailable, both water and Liquid Distortion fall
+// back to `feImage.href = canvas.toDataURL()` once per frame. Chromium
+// caches a decoded bitmap per unique data: URL and cannot revoke them —
+// the note at the Liquid Distortion tick says exactly that.
+//
+// It is a suspicion, not a finding. Two earlier attempts at this same
+// memory/perf problem were built on a plausible theory and a benchmark
+// of the wrong code path, and both made things worse (the glow sprites
+// measured 4× slower; the pre-scale blur did nothing). So this release
+// only COUNTS. Nothing about rendering changes.
+//
+// `svg > 0` in the log proves the fallback is running and the theory is
+// worth acting on. `svg = 0` kills it, and the search moves to
+// Chromium's own heap profiler instead of guessing from the outside.
+const _diag = {
+  gl: 0,            // frames drawn through glRipple.draw()
+  svg: 0,           // frames encoded through toDataURL() — the suspect
+  usableFalseNoGl: 0,   // usable() false because WebGL itself is out
+  usableFalseNoImg: 0,  // usable() false because no texture is loaded
+  ctxLost: 0,
+  ctxRestored: 0,
+};
+
+// Ships the counters above to the bridge once a minute so the answer
+// lands in the log the user already has, instead of requiring them to
+// open a devtools console on a wallpaper.
+//
+// Single timer, guarded: connect() runs again on every reconnect, and
+// starting a second interval per reconnect is exactly the kind of leak
+// this release is trying to find.
+let _diagTimer = null;
+function _startDiagReporting() {
+  if (_diagTimer) return;
+  _diagTimer = setInterval(() => {
+    if (!ws || ws.readyState !== 1) return;
+    let heapMb = 0;
+    try {
+      // Chromium-only and coarse, but it separates "JS objects piling
+      // up" from "something outside the heap" — which is the whole
+      // question here, since data: URL bitmaps live outside it.
+      if (performance.memory) {
+        heapMb = Math.round(performance.memory.usedJSHeapSize / 1048576);
+      }
+    } catch (_) {}
+    try {
+      ws.send(JSON.stringify({ type: "diag", ..._diag, heapMb }));
+    } catch (_) {}
+  }, 60000);
+}
+
 function wsUrl() {
   return "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
 }
@@ -1961,7 +2018,23 @@ if (IS_PREVIEW) {
   document.documentElement.classList.add("is-preview");
 }
 
+// Last time a frame arrived from the bridge, regardless of whether we
+// drew it. Declared above renderFrame because that is where it is
+// assigned — `let` is not hoisted, and a declaration further down the
+// file would throw on the very first frame. (v2.4.4-beta.7 shipped
+// exactly that mistake with `gridRenderer` and left the page dead.)
+let _lastFrameAtMs = 0;
+
 function renderFrame(buf) {
+  // v2.4.11: stamp arrival BEFORE the pause check and before the frame
+  // -rate gate. This timestamp answers "is SignalRGB sending at all?"
+  // for the standby card, which is a question about the sender — not
+  // about whether we chose to draw. Stamping it after `if (isPaused)`
+  // would make every paused wallpaper look like a dead SignalRGB, and
+  // stamping it after the RENDER_INTERVAL_MS gate would make a
+  // 20 Hz cap look like starvation at 30 Hz.
+  _lastFrameAtMs = Date.now();
+
   // The host-pause check lives in ws.onmessage, which runs just before
   // this for every inbound message — see _syncHostPause().
   //
@@ -2109,9 +2182,55 @@ window.addEventListener("resize", reportViewport);
 const STANDBY_DELAY_MS = 5000;
 const standbyCardEl = document.getElementById("standby-card");
 let _standbyTimer = null;
-function showStandbyCard(show) {
+// v2.4.11: the card grew a second reason, and both are now written in
+// the page's language instead of hardcoded English.
+//
+// "offline" was the only case it ever covered: the bridge process is
+// not reachable. But the far more common first-run failure is the
+// opposite — the bridge IS reachable, the socket is live, and SignalRGB
+// simply never got the device placed on its canvas. No frames arrive,
+// the screen is black, and because the bridge is not offline the card
+// stayed hidden and said nothing at all. That was the single worst
+// moment in the product for someone setting it up: total silence.
+const STANDBY_TEXT = {
+  offline: {
+    en: ["SignalRGB Wallpaper Bridge offline",
+         "The wallpaper is running, but the bridge isn't reachable.",
+         "Start <code>SignalRGBBridge.exe</code> — the glow + widgets will resume automatically."],
+    de: ["SignalRGB Wallpaper Bridge offline",
+         "Das Wallpaper läuft, aber die Bridge ist nicht erreichbar.",
+         "Starte <code>SignalRGBBridge.exe</code> — Glow und Widgets kommen von selbst zurück."],
+  },
+  noframes: {
+    en: ["SignalRGB isn't sending anything",
+         "The bridge is connected, but no colours are arriving.",
+         "Open SignalRGB → Devices and drag <b>Desktop Wallpaper</b> onto the layout."],
+    de: ["SignalRGB sendet nichts",
+         "Die Bridge ist verbunden, es kommen aber keine Farben an.",
+         "Öffne SignalRGB → Geräte und zieh <b>Desktop Wallpaper</b> auf die Fläche."],
+  },
+};
+let _standbyReason = "offline";
+function _renderStandbyCard(reason) {
+  if (!standbyCardEl) return;
+  const set = STANDBY_TEXT[reason] || STANDBY_TEXT.offline;
+  // The bridge pushes `language` with every settings message; fall back
+  // to the browser's own before English.
+  const lang = (window._wallpaperLang
+                || (navigator.language || "en")).slice(0, 2).toLowerCase();
+  const txt = set[lang] || set.en;
+  const title = standbyCardEl.querySelector(".standby-title");
+  const sub = standbyCardEl.querySelector(".standby-sub");
+  if (title) title.textContent = txt[0];
+  if (sub) sub.innerHTML = txt[1] + "<br>" + txt[2];
+}
+function showStandbyCard(show, reason) {
   if (PREVIEW_MODE) return;
   if (!standbyCardEl) return;
+  if (show) {
+    _standbyReason = reason || _standbyReason;
+    _renderStandbyCard(_standbyReason);
+  }
   standbyCardEl.classList.toggle("on", !!show);
 }
 function armStandbyCard() {
@@ -2138,12 +2257,35 @@ function disarmStandbyCard() {
 // twice a second, so any future host quirk that eats an event
 // self-heals within ~500 ms instead of needing a bridge restart.
 const STANDBY_RECONCILE_MS = 500;
+// v2.4.11: how long a live connection may go without a single frame
+// before we say so. SignalRGB sends continuously while a device sits on
+// its canvas, so a gap this long means it is not sending at all — not
+// that it is briefly idle. Generous enough to ride out a paused
+// wallpaper resuming or SignalRGB switching effects.
+const NOFRAME_GRACE_MS = 15000;
 setInterval(() => {
   if (PREVIEW_MODE || !standbyCardEl) return;
   const live = ws && ws.readyState === 1;      // 1 = OPEN
   const shown = standbyCardEl.classList.contains("on");
-  if (live && (shown || _standbyTimer)) {
-    // Connected, yet the card is up (or about to be) — clear it.
+
+  // The silent black screen. Everything is installed, the socket is up,
+  // and SignalRGB still has no device on its canvas — so nothing is
+  // sent and the wallpaper renders black with no explanation anywhere.
+  // Before this, the card stayed hidden precisely BECAUSE the bridge
+  // was reachable, which is the one case a user cannot diagnose alone.
+  //
+  // Only while unpaused: a paused wallpaper legitimately receives
+  // nothing, and blaming SignalRGB for that would be wrong.
+  const starved = live && !isPaused && _lastFrameAtMs > 0
+                  && (Date.now() - _lastFrameAtMs) > NOFRAME_GRACE_MS;
+
+  if (live && starved) {
+    if (!shown || _standbyReason !== "noframes") {
+      disarmStandbyCard();
+      showStandbyCard(true, "noframes");
+    }
+  } else if (live && (shown || _standbyTimer)) {
+    // Connected and fed, yet the card is up (or about to be) — clear it.
     disarmStandbyCard();
   } else if (!live && !shown && !_standbyTimer) {
     // Genuinely disconnected with no timer pending (e.g. the onclose
@@ -2213,6 +2355,7 @@ function connect() {
       }));
     } catch (_) {}
     reportViewport();
+    _startDiagReporting();
   };
   ws.onerror = () => {};
   ws.onclose = () => {
@@ -2256,6 +2399,13 @@ function connect() {
     if (typeof ev.data === "string") {
       try {
         const msg = JSON.parse(ev.data);
+        // v2.4.11: the bridge has always shipped the active UI language
+        // with each settings push; the wallpaper just never read it.
+        // The standby card needs it — it was the one piece of the
+        // product still hardcoded to English.
+        if (msg && typeof msg.language === "string" && msg.language !== "auto") {
+          window._wallpaperLang = msg.language;
+        }
         if (msg && msg.type === "settings" && msg.data && typeof msg.data === "object") {
           // v1.5.0-beta plugin API: register each discovered plugin
           // as a widget type BEFORE applying settings (which may
@@ -2464,6 +2614,7 @@ const glRipple = (function () {
         // Clearing hasImage does two things: usable() goes false so
         // the SVG path takes over immediately, and _reloadTexture()
         // below can put the WebGL path back once a context exists.
+        _diag.ctxLost++;
         console.warn("[glripple] context lost — hiding overlay, dropping texture");
         hasImage = false;
         hide();
@@ -2474,6 +2625,7 @@ const glRipple = (function () {
                                                    _glRippleLastW, _glRippleLastH);
       });
       renderer.onContextRestored(() => {
+        _diag.ctxRestored++;
         console.warn("[glripple] context restored — re-uploading texture");
         if (_glRippleLastSrc) _glRippleLoadTexture(_glRippleLastSrc,
                                                    _glRippleLastW, _glRippleLastH);
@@ -2522,7 +2674,14 @@ const glRipple = (function () {
 
   return {
     /** True when a shader-backed ripple is possible right now. */
-    usable() { return probe() && hasImage; },
+    usable() {
+      // v2.4.11: count the two failure reasons separately. "No WebGL at
+      // all" and "WebGL is fine but the background texture never loaded"
+      // need different fixes, and only the second is recoverable.
+      if (!probe()) { _diag.usableFalseNoGl++; return false; }
+      if (!hasImage) { _diag.usableFalseNoImg++; return false; }
+      return true;
+    },
 
     /** Called from _setImageBg once the probe Image has decoded. */
     setImage(img, w, h) {
@@ -4533,9 +4692,10 @@ const MouseFx = (function () {
       // encoding a PNG per frame. See the glRipple bridge for why the
       // SVG filter cannot work in Wallpaper Engine.
       if (glRipple.usable()) {
-        if (glRipple.draw("mousefx", mapCanvas, GL_SCALE)) { _usingGl = true; return; }
+        if (glRipple.draw("mousefx", mapCanvas, GL_SCALE)) { _diag.gl++; _usingGl = true; return; }
         _usingGl = false;   // context lost mid-frame — fall through
       }
+      _diag.svg++;
       if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
     }
     return {
@@ -7555,7 +7715,7 @@ const water = (function () {
     // WebGL is unavailable or the background has no usable texture
     // (video backgrounds, or a texture load that CORS refused).
     if (glRipple.usable()) {
-      if (glRipple.draw("water", mapCanvas, ACTIVE_SCALE)) return;
+      if (glRipple.draw("water", mapCanvas, ACTIVE_SCALE)) { _diag.gl++; return; }
       // Draw failed (context lost mid-frame) — fall through so the
       // frame still renders through the filter rather than freezing.
     }
@@ -7565,6 +7725,7 @@ const water = (function () {
     // (gotcha-uncapped-raf-dpr); here it's naturally gated by
     // ripple-presence — the tick early-returns + clears the map
     // once the last ripple expires.
+    _diag.svg++;
     if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
   }
 

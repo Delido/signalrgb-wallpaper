@@ -281,6 +281,95 @@ if True:
     finally:
         loop.close()
 
+emit("\nGET /health answers the setup question")
+if True:
+    # v2.4.11. get_health_status() has existed since v0.8.9 but was
+    # reachable only from the tray's System-status dialog, which a
+    # first-time user has no reason to open. Meanwhile the
+    # Configurator's "connected" pill reports its own socket to the
+    # bridge — which reads as "everything is fine" while the SignalRGB
+    # half of the chain can be completely dead.
+    #
+    # The two fields added here are the two setup steps nothing
+    # automates and nothing used to detect: the device never dragged
+    # onto the SignalRGB canvas (frames_arriving), and the wallpaper
+    # never assigned to a monitor (pages_per_screen).
+    import json as _json
+
+    class _Runtime:
+        def __init__(self, **over):
+            self.snap = {
+                "plugin_present": True, "signalrgb_running": True,
+                "frames_arriving": True, "screen_count": 2,
+                "pages_per_screen": [1, 1], "fps_per_screen": [30.0, 30.0],
+            }
+            self.snap.update(over)
+
+        def get_health_status(self):
+            return dict(self.snap)
+
+    def _health(**over):
+        loop = asyncio.new_event_loop()
+        try:
+            bc = make_broadcaster(b, loop)
+            bc.bridge_runtime = _Runtime(**over)
+            w = RecordingWriter()
+            head, _ = request("GET", "/health")
+            loop.run_until_complete(bc.handle_client(ScriptedReader(head), w))
+            parts = w.text.split("\r\n\r\n", 1)
+            # Tolerate a non-JSON body rather than raising: if the route
+            # is ever unhooked from the dispatcher the response is a 404
+            # HTML page, and this helper has to let the assertions below
+            # report that as a failure instead of dying here — which is
+            # exactly what happened on the first mutation check.
+            if len(parts) > 1 and parts[1]:
+                try:
+                    return w, _json.loads(parts[1])
+                except ValueError:
+                    return w, {}
+            return w, {}
+        finally:
+            loop.close()
+
+    w, data = _health()
+    R.eq("GET /health -> 200", w.status, 200)
+    R.check("responds with JSON", "application/json" in w.text.lower())
+    R.check("reports every signal the tray dialog shows",
+            all(k in data for k in ("plugin_present", "signalrgb_running",
+                                    "frames_arriving", "pages_per_screen")),
+            repr(sorted(data)))
+
+    # The silent black-screen case: everything installed, device never
+    # placed on the canvas. WS is up, so the standby card stays hidden
+    # and the user gets no clue at all.
+    _, data = _health(frames_arriving=False, fps_per_screen=[0.0, 0.0])
+    R.check("a canvas-less SignalRGB shows as frames_arriving=false",
+            data.get("frames_arriving") is False)
+
+    # Per-screen, not a total — a total cannot say WHICH screen is
+    # missing its wallpaper assignment.
+    _, data = _health(pages_per_screen=[1, 0])
+    R.check("unassigned screens are visible individually",
+            data.get("pages_per_screen") == [1, 0], repr(data.get("pages_per_screen")))
+
+    # A missing collaborator must answer, not raise.
+    loop = asyncio.new_event_loop()
+    try:
+        bc = make_broadcaster(b, loop)
+        w = RecordingWriter()
+        head, _ = request("GET", "/health")
+        crashed = False
+        try:
+            loop.run_until_complete(bc.handle_client(ScriptedReader(head), w))
+        except Exception:
+            crashed = True
+        R.check("no runtime -> answers instead of raising", not crashed)
+        R.check("no runtime -> reports unavailable rather than lying",
+                '"available": false' in w.text)
+    finally:
+        loop.close()
+
+
 emit("\n/wallpaper/ and /plugins/ fall through to the API block")
 # Both are GET blocks that return only when they resolve a file. An
 # unresolvable one must keep walking the chain rather than 404 early —
