@@ -354,21 +354,46 @@ UPDATE_CHECK_INTERVAL_S = 24 * 3600    # daily background poll
 UPDATE_STARTUP_DELAY_S  = 12           # let the bridge settle before the first call
 
 
+def _prerelease_key(pre: str) -> tuple:
+    """Sort key for a prerelease label such as 'beta.11'.
+
+    v2.4.4-beta.13: the label used to be compared as a plain string, so
+    'beta.9' sorted ABOVE 'beta.10' — "9" > "1" character by character.
+    From beta.10 onwards the tray offered beta.9 as the newest build and
+    the real latest release was invisible.
+
+    Semver says identifiers are compared field by field, numeric ones
+    numerically and always below alphanumeric ones. Each field becomes
+    (0, n, "") when it is a number and (1, 0, text) otherwise, which
+    orders 9 < 10 < 11 and keeps 'beta' < 'rc' intact.
+    """
+    if not pre:
+        return ()
+    out = []
+    for field in re.split(r"[.]", pre):
+        if field.isdigit():
+            out.append((0, int(field), ""))
+        else:
+            out.append((1, 0, field))
+    return tuple(out)
+
+
 def _parse_version(s: str) -> tuple:
     """Parse 'v0.5.1', '0.5.1' or '0.5.1-beta' into a sortable tuple.
 
     Stable releases sort *after* any prerelease of the same MAJOR.MINOR.PATCH,
     which matches semver semantics ('1.0.0-beta' < '1.0.0'). Returns
-    (major, minor, patch, channel, pre_label) where channel is 1 for stable
+    (major, minor, patch, channel, pre_key) where channel is 1 for stable
     and 0 for prerelease. Garbage strings sort to (0,0,0,…) so they never
     trigger a false-positive 'newer than current' result for a real version.
     """
     s = (s or "").strip().lstrip("vV")
     m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:[-+](.+))?$", s)
     if not m:
-        return (0, 0, 0, 0, "")
+        return (0, 0, 0, 0, ())
     major, minor, patch, pre = m.groups()
-    return (int(major), int(minor), int(patch), 0 if pre else 1, pre or "")
+    return (int(major), int(minor), int(patch), 0 if pre else 1,
+            _prerelease_key(pre or ""))
 
 
 class UpdateChecker:
