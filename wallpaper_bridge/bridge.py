@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.12"
+APP_VERSION = "2.4.4-beta.13"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,72 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.13": {
+        "title_en": "What's new in v2.4.4-beta.13",
+        "title_de": "Was ist neu in v2.4.4-beta.13",
+        "body_en": (
+            "**Fixed: changing the glow grid size did nothing on one "
+            "monitor.**\n\n"
+            "With two monitors, changing *Glow Grid Base Size* or "
+            "*Aspect Ratio* in SignalRGB only took effect on one of "
+            "them. The other silently kept its old grid — and which one "
+            "got stuck was down to chance, so the setting looked "
+            "randomly broken.\n\n"
+            "The plugin remembered \"something changed, rebuild the "
+            "grid\" once for all monitors instead of once per monitor. "
+            "Whichever screen redrew first used up that note, and the "
+            "second never saw it. Now each monitor keeps its own.\n\n"
+            "If a monitor's glow looks blocky, this is also worth "
+            "checking in SignalRGB → Devices → Desktop Wallpaper:\n"
+            "- **Aspect Ratio** should be *Auto* — a value left over "
+            "from a previous monitor arrangement makes the glow squares "
+            "stretched instead of square.\n"
+            "- **Glow Grid Base Size** controls how fine the glow is. "
+            "64 gives noticeably smaller squares than 36.\n\n"
+            "**Fixed: the update check offered an older beta.**\n\n"
+            "Version numbers were compared as text, so \"beta.9\" "
+            "counted as newer than \"beta.10\" — nine is bigger than "
+            "one, character by character. From beta.10 onwards the tray "
+            "kept offering beta.9 and never saw anything newer.\n\n"
+            "Note this fix can only work from the next update onwards: "
+            "the version you are upgrading *from* still has the old "
+            "comparison.\n\n"
+            "**No re-import needed** — the wallpaper itself is unchanged "
+            "since beta.12.\n"
+        ),
+        "body_de": (
+            "**Behoben: Die Glow-Rastergröße zu ändern bewirkte auf "
+            "einem Monitor nichts.**\n\n"
+            "Mit zwei Monitoren wirkte eine Änderung an *Glow Grid Base "
+            "Size* oder *Aspect Ratio* in SignalRGB nur auf einem von "
+            "beiden. Der andere behielt still sein altes Raster — und "
+            "welcher hängenblieb, war Zufall. Die Einstellung wirkte "
+            "dadurch willkürlich kaputt.\n\n"
+            "Das Plugin merkte sich „etwas hat sich geändert, Raster neu "
+            "berechnen\" einmal für alle Monitore statt einmal pro "
+            "Monitor. Welcher Bildschirm zuerst neu zeichnete, "
+            "verbrauchte diese Notiz, der zweite sah sie nie. Jetzt hat "
+            "jeder Monitor seine eigene.\n\n"
+            "Falls der Glow auf einem Monitor klotzig aussieht, lohnt "
+            "sich zusätzlich ein Blick in SignalRGB → Geräte → Desktop "
+            "Wallpaper:\n"
+            "- **Aspect Ratio** sollte auf *Auto* stehen — ein Wert aus "
+            "einer früheren Monitoranordnung macht die Glow-Kästchen "
+            "verzerrt statt quadratisch.\n"
+            "- **Glow Grid Base Size** bestimmt, wie fein der Glow ist. "
+            "64 ergibt spürbar kleinere Kästchen als 36.\n\n"
+            "**Behoben: Die Update-Prüfung bot eine ältere Beta an.**\n\n"
+            "Versionsnummern wurden als Text verglichen, dadurch galt "
+            "„beta.9\" als neuer als „beta.10\" — Zeichen für Zeichen "
+            "ist die Neun größer als die Eins. Ab beta.10 bot der Tray "
+            "immer wieder beta.9 an und sah nichts Neueres mehr.\n\n"
+            "Dieser Fix kann erst ab dem nächsten Update greifen: Die "
+            "Version, von der aus du aktualisierst, hat noch den alten "
+            "Vergleich.\n\n"
+            "**Kein Re-Import nötig** — das Wallpaper selbst ist seit "
+            "beta.12 unverändert.\n"
+        ),
+    },
     "2.4.4-beta.12": {
         "title_en": "What's new in v2.4.4-beta.12",
         "title_de": "Was ist neu in v2.4.4-beta.12",

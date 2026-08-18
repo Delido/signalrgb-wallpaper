@@ -4,6 +4,76 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.13] - 2026-08-18
+
+Two order-dependent bugs, both reported from real use.
+
+### Fixed — the plugin's grid-dirty flag was global, not per device
+
+Reported as "if I change the Glow Grid Base Size on Screen 1 nothing
+happens", alongside a visibly blockier glow on that monitor.
+
+`dimsDirty` was a single boolean, but SignalRGB calls `Render()` once
+per **device**. Whichever device rendered first after a settings change
+consumed the flag; the other never saw it and kept its previous grid.
+Which monitor got stuck depended purely on the order SignalRGB happened
+to call `Render()` in, so the setting looked randomly broken.
+
+It is now a `Set` of screen indices: a `ControllableParameter` change
+marks every screen via `dirtyAll()`, a viewport change from the
+`/config` poll marks only the screen that moved, and each `Render()`
+clears its own entry. The rebuild-coalescing the flag exists for is
+unchanged — measured at 2 rebuilds over 50 frames across two devices
+once settled.
+
+Plugin version 0.2.0 → 0.3.0.
+
+### Not a code fault, but worth recording — the 128×36 grid
+
+The reported grid was 128×36 on 16:9 monitors: a 3.56:1 shape, i.e. a
+`32:9` Aspect Ratio left over from the earlier span layout. On a
+2560×1440 screen that is 20×40 px cells — twice as tall as wide, and
+coarse enough that the 30 px blur cannot hide the block edges. `Auto`
+(or `16:9`) restores square cells; a larger base size makes them finer.
+
+The tests now pin that derivation, since nothing in the product warns
+about the mismatch even though the bridge knows both numbers.
+
+### Fixed — the update checker ranked beta.9 above beta.10
+
+`_parse_version` returned the prerelease label as a plain string, so the
+sort tuples were compared character by character:
+
+```text
+"beta.9" vs "beta.10"  ->  "9" > "1"  ->  beta.9 wins
+```
+
+From v2.4.4-beta.10 onwards the update check picked beta.9 as the newest
+release and everything after it was invisible. The bug was dormant
+through beta.1–beta.9 because single digits happen to sort correctly as
+strings.
+
+Prerelease labels now compare field by field per semver: numeric fields
+numerically, alphanumeric ones lexically and always above numeric. That
+fixes 9 < 10 < 11 while keeping `beta` < `rc`, prerelease < stable, and
+the garbage-input sentinel that stops a stray tag from faking an update.
+
+This can only take effect from the *next* update onwards — the version
+being upgraded from still carries the old comparison.
+
+### Notes
+
+`WALLPAPER_VERSION` stays at 2.4.11 — `wallpaper/index.html` is
+untouched, so **no bundle re-import is needed**. The installer does
+replace the SignalRGB plugin file, so SignalRGB should be restarted
+after installing.
+
+Two new suites (`test_plugin_grid.mjs`, `test_version_order.py`), both
+mutation-checked against the original bugs. The plugin one runs the
+extracted dirty-flag machinery against a fake two-device render loop in
+**both** render orders — the bug was order-dependent, so passing in one
+direction would have proved nothing.
+
 ## [2.4.4-beta.12] - 2026-08-11
 
 ### Fixed — Liquid Distortion shredded the background until the first mouse move
