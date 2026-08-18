@@ -32,7 +32,7 @@ const ICON_DATA_URI = "data:image/svg+xml;utf8,"
     + "</svg>";
 
 export function Name()                { return "SignalRGB Desktop Wallpaper"; }
-export function Version()             { return "0.2.0"; }
+export function Version()             { return "0.3.0"; }
 export function Type()                { return "network"; }
 export function Publisher()           { return "Delido"; }
 // Size() declares the device's *visual aspect ratio* in SignalRGB's
@@ -313,11 +313,27 @@ export function Initialize() {
 // rebuild collapses a 5x rebuild storm into one. dimsDirty also gets
 // flipped when the bridge's /config poll brings a new viewport while
 // aspectRatio is Auto, since SignalRGB has no callback for that path.
-let dimsDirty = true;
-export function ongridSizeChanged()     { dimsDirty = true; }
-export function onaspectRatioChanged()  { dimsDirty = true; }
-export function oncustomColsChanged()   { dimsDirty = true; }
-export function oncustomRowsChanged()   { dimsDirty = true; }
+//
+// v0.3.0: the flag is per screen, not global. Render() runs once per
+// DEVICE, and a single shared boolean meant whichever device rendered
+// first after a settings change consumed the flag — the other one never
+// saw it and silently kept its old grid. Symptom: changing "Glow Grid
+// Base Size" appeared to do nothing on one of two monitors, while the
+// other updated normally. Which one depended purely on the order
+// SignalRGB happened to call Render() in.
+//
+// A Set of screen indices marks every device dirty and lets each clear
+// its own entry. `dirtyAll()` is what the change callbacks use, since a
+// ControllableParameter change applies to every screen we serve.
+const dimsDirty = new Set();
+function dirtyAll() {
+    for (let i = 0; i < MAX_SCREENS; i++) dimsDirty.add(i);
+}
+dirtyAll();
+export function ongridSizeChanged()     { dirtyAll(); }
+export function onaspectRatioChanged()  { dirtyAll(); }
+export function oncustomColsChanged()   { dirtyAll(); }
+export function oncustomRowsChanged()   { dirtyAll(); }
 export function onbridgePortChanged()   { openSocket(); }
 export function ontargetFpsChanged()    { applyFrameRateTarget(); }
 
@@ -330,8 +346,9 @@ export function Render() {
     // is cheap, but skipping it (plus the early-bail check inside
     // applyZoneSize) entirely on the steady-state path keeps the
     // single-threaded SignalRGB JS sandbox free for other plugins.
-    if (dimsDirty) {
-        dimsDirty = false;
+    const _screen = currentScreenIndex();
+    if (dimsDirty.has(_screen)) {
+        dimsDirty.delete(_screen);
         applyZoneSize();
     }
 
@@ -491,7 +508,9 @@ export function DiscoveryService() {
                         if (!prev || !next ||
                             prev.w !== next.w || prev.h !== next.h) {
                             viewportsByScreen[i] = next;
-                            dimsDirty = true;
+                            // Only THIS screen's viewport moved, so only
+                            // it needs recomputing.
+                            dimsDirty.add(i);
                         }
                     }
                 }
