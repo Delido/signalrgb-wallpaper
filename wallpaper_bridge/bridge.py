@@ -756,7 +756,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.11"
+APP_VERSION = "2.4.4-beta.12"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -779,7 +779,7 @@ APP_VERSION = "2.4.4-beta.11"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.10"
+WALLPAPER_VERSION = "2.4.11"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -826,6 +826,53 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.12": {
+        "title_en": "What's new in v2.4.4-beta.12",
+        "title_de": "Was ist neu in v2.4.4-beta.12",
+        "body_en": (
+            "**Fixed: Liquid Distortion made the background dark and "
+            "wrongly coloured until you moved the mouse.**\n\n"
+            "Switching the effect on applied its distortion to the "
+            "wallpaper before the distortion map existed. With nothing "
+            "to bend the image by, the filter tore the colours apart "
+            "instead — so the background looked dark and off, then "
+            "visibly jumped the moment the first mouse movement filled "
+            "the map in.\n\n"
+            "Turning the effect off and on again appeared to fix it, "
+            "because by then the map had content. That was a "
+            "workaround, not a different setting.\n\n"
+            "The water effect never had this problem — it prepares the "
+            "map before the filter can touch the image, and keeps the "
+            "strength at zero until then. Liquid Distortion now does "
+            "the same.\n\n"
+            "So: if the background looks darker to you after this "
+            "update than it did before, that darker version is the "
+            "correct one. What you saw earlier was the broken filter.\n\n"
+            "**Requires re-importing the wallpaper bundle.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Die flüssige Verzerrung machte den Hintergrund "
+            "dunkel und farblich falsch, bis man die Maus bewegte.**\n\n"
+            "Beim Einschalten wurde die Verzerrung auf das Wallpaper "
+            "angewendet, bevor die Verzerrungskarte überhaupt "
+            "existierte. Ohne etwas, womit sich das Bild biegen ließe, "
+            "zerriss der Filter stattdessen die Farben — der Hintergrund "
+            "wirkte dunkel und daneben und sprang sichtbar um, sobald "
+            "die erste Mausbewegung die Karte füllte.\n\n"
+            "Den Effekt aus- und wieder einzuschalten schien zu helfen, "
+            "weil die Karte dann bereits Inhalt hatte. Das war ein "
+            "Umweg, keine andere Einstellung.\n\n"
+            "Der Wassereffekt hatte das Problem nie — er bereitet die "
+            "Karte vor, bevor der Filter das Bild anfassen kann, und "
+            "hält die Stärke bis dahin auf null. Die flüssige "
+            "Verzerrung macht das jetzt genauso.\n\n"
+            "Das heißt: Wenn dir der Hintergrund nach diesem Update "
+            "dunkler vorkommt als vorher — diese dunklere Fassung ist "
+            "die richtige. Was du vorher gesehen hast, war der kaputte "
+            "Filter.\n\n"
+            "**Erfordert einen Re-Import des Wallpaper-Bundles.**\n"
+        ),
+    },
     "2.4.4-beta.11": {
         "title_en": "What's new in v2.4.4-beta.11",
         "title_de": "Was ist neu in v2.4.4-beta.11",

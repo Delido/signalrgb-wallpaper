@@ -4598,6 +4598,9 @@ const MouseFx = (function () {
     // idle path knows to hand the wallpaper back to #bg exactly once
     // rather than calling stop() on every idle frame.
     let _usingGl = false;
+    // v2.4.12: handle on the displacement node so the tick can lift
+    // scale off 0 once the map has real content. See ensureFilter().
+    let feDisp = null;
     const IDLE_FRAMES_BEFORE_SKIP = 60;  // ≈ 2 s at 30 Hz
     const MAP_SIZE = 256;
     // Matches the SVG filter's scale="50" so the shader path produces
@@ -4623,13 +4626,29 @@ const MouseFx = (function () {
         '<defs><filter id="fx-ripple-filter" x="0" y="0" width="100%" height="100%"' +
         ' color-interpolation-filters="sRGB">' +
         '<feImage id="fx-ripple-img" preserveAspectRatio="none" result="map" x="0" y="0" width="100%" height="100%"/>' +
-        '<feDisplacementMap in="SourceGraphic" in2="map" scale="50"' +
+        '<feDisplacementMap id="fx-ripple-disp" in="SourceGraphic" in2="map" scale="0"' +
         ' xChannelSelector="R" yChannelSelector="G"/>' +
         '</filter></defs>';
       document.body.appendChild(svg);
       svgFilter = svg;
       feImg = svg.querySelector("#fx-ripple-img");
+      feDisp = svg.querySelector("#fx-ripple-disp");
       _ensureMap();
+      // v2.4.12: prime the map BEFORE the filter can be applied.
+      //
+      // Without this, ensureFilter() attached the filter to #bg with
+      // feImage carrying no href at all. feDisplacementMap then got an
+      // empty in2 and shredded the image instead of bending it — the
+      // background read as dark and wrongly-coloured until the first
+      // mouse move set a real href, at which point it visibly jumped.
+      // Toggling the effect off and on "fixed" it because by the second
+      // enable() the map had content.
+      //
+      // The water module (pixelfx) has always done this — it primes the
+      // href on the same line it builds the filter, and additionally
+      // starts at scale=0 so an in-flight href load cannot displace
+      // anything. Same two guarantees here.
+      feImg.setAttribute("href", mapCanvas.toDataURL());
     }
     // v2.4.4: the map canvas feeds both paths (texture upload for the
     // shader, data: URL for the filter), so it is created independently
@@ -4696,7 +4715,17 @@ const MouseFx = (function () {
         _usingGl = false;   // context lost mid-frame — fall through
       }
       _diag.svg++;
-      if (feImg) feImg.setAttribute("href", mapCanvas.toDataURL());
+      if (feImg) {
+        feImg.setAttribute("href", mapCanvas.toDataURL());
+        // v2.4.12: the filter is built at scale=0 so an unprimed or
+        // still-loading map can never displace anything. Raise it once
+        // we have actually painted a map — same order the water module
+        // uses, and the reason the background no longer jumps colour on
+        // the first mouse move.
+        if (feDisp && feDisp.getAttribute("scale") !== String(GL_SCALE)) {
+          feDisp.setAttribute("scale", String(GL_SCALE));
+        }
+      }
     }
     return {
       enable() {
@@ -4716,6 +4745,11 @@ const MouseFx = (function () {
         _usingGl = false;
         if (raf) { cancelAnimationFrame(raf); raf = null; }
         _idleFrames = IDLE_FRAMES_BEFORE_SKIP;
+        // v2.4.12: drop back to no displacement. The filter node
+        // survives disable() (it is built once and reused), so leaving
+        // scale at 50 meant the next enable() could apply the previous
+        // session's map for a frame before the tick refreshed it.
+        if (feDisp) feDisp.setAttribute("scale", "0");
       },
     };
   })();

@@ -193,6 +193,53 @@ console.log("\ncomputeUV behaviour (run against the real module)");
   }
 }
 
+console.log("\nboth SVG filters are primed before they can be applied");
+{
+  // A displacement filter attached to #bg with an feImage that has no
+  // href yet gets an EMPTY in2. feDisplacementMap then shreds the
+  // source instead of bending it: the background reads dark and
+  // wrongly coloured until something sets a real href, at which point
+  // it visibly jumps.
+  //
+  // That is what Liquid Distortion did. ensureFilter() built the
+  // filter, attached it, and left the href unset until the first
+  // mouse move. Reported as "the image is dark and changes to a
+  // completely different colour when I move the mouse" — and toggling
+  // the effect off and on appeared to fix it, because by the second
+  // enable() the map already had content.
+  //
+  // The water module never had the bug: it primes the href on the
+  // same line it builds the filter, and starts at scale=0 so even an
+  // in-flight href load cannot displace anything. Both modules now
+  // carry both guarantees, and this checks them as a pair so the next
+  // displacement effect cannot be added with only one.
+  const modules = [
+    { name: "Liquid Distortion", id: "fx-ripple" },
+    { name: "water",             id: "pixelfx-water" },
+  ];
+  for (const m of modules) {
+    // The filter is built inside ensureFilter(); slice that function
+    // out rather than searching the whole file, or a match from the
+    // OTHER module would satisfy the check.
+    const at = src.indexOf(`id="${m.id}-filter"`);
+    const scope = at === -1 ? "" : src.slice(Math.max(0, at - 600), at + 1600);
+    check(`${m.name}: filter is defined`, at !== -1);
+    check(`${m.name}: starts at scale="0", not a live amplitude`,
+          /scale="0"/.test(scope), scope.match(/scale="[^"]*"/)?.[0] || "none");
+    check(`${m.name}: href is primed where the filter is built`,
+          /setAttribute\("href", mapCanvas\.toDataURL\(\)\)/.test(scope));
+  }
+
+  // Raising the amplitude is only correct once a map exists — and it
+  // has to happen, or the effect stays invisible at scale 0 forever.
+  check("Liquid Distortion lifts scale off 0 once the map is painted",
+        /feDisp\.setAttribute\("scale", String\(GL_SCALE\)\)/.test(src));
+  // The filter node outlives disable(), so a stale amplitude would
+  // apply the previous session's map for a frame on re-enable.
+  check("disable() drops the amplitude back to 0",
+        /feDisp\.setAttribute\("scale", "0"\)/.test(src));
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 process.exit(results.failed.length ? 1 : 0);

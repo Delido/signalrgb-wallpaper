@@ -4,6 +4,54 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.12] - 2026-08-11
+
+### Fixed — Liquid Distortion shredded the background until the first mouse move
+
+Reported as "the image is dark and changes to a completely different
+colour when I move the mouse", with the note that disabling and
+re-enabling the effect made it stop — and left the background
+permanently darker.
+
+`ensureFilter()` built the SVG filter, attached it to `#bg` / `#bars` /
+`#bars-canvas`, and left `feImage` with **no `href` at all**. The
+displacement map only got its first URL inside `tick()`, i.e. on the
+first mouse movement. Until then `feDisplacementMap` received an empty
+`in2` and tore the source apart rather than bending it — exactly the
+failure mode documented for Wallpaper Engine's broken `feImage`, except
+here it was self-inflicted and affected every host.
+
+Re-enabling appeared to fix it because `ensureFilter()` early-returns on
+the second call: the map already had content by then. The darker
+result the user was left with is the correct rendering; the earlier,
+brighter one was the shredded filter output.
+
+The water module never had the bug. It primes `href` on the same line it
+builds the filter and starts at `scale="0"`, so an unprimed or
+still-loading map cannot displace anything. Liquid Distortion now
+carries both guarantees:
+
+- `href` is set where the filter is built, before it can be applied
+- the filter starts at `scale="0"`; `tick()` raises it to `GL_SCALE`
+  once a real map has been painted
+- `disable()` drops it back to `0` — the filter node outlives
+  `disable()`, so a stale amplitude would apply the previous session's
+  map for a frame on re-enable
+
+### Added — a paired check for both displacement filters
+
+`test_glripple.mjs` now asserts the two guarantees for *both* modules
+together, scoped to each filter's own definition so a match from the
+other one cannot satisfy the check. A future displacement effect cannot
+be added with only one of the two.
+
+Mutation-checked by restoring the original bug — removing the `href`
+priming turns the Liquid Distortion check red while water stays green.
+
+### Notes
+
+`WALLPAPER_VERSION` → 2.4.11, so this needs a bundle re-import.
+
 ## [2.4.4-beta.11] - 2026-08-11
 
 Two things a first-time user could not diagnose, and the groundwork for
