@@ -65,7 +65,7 @@ sind nützlich). Jeder Tab hat vier aufklappbare Bereiche.
 | --- | --- |
 | Glow-Lage anzeigen | Master-an/aus für die SignalRGB-getriebene Glow-Lage. |
 | Layout | Pixel-Grid (Default), vertikale Streifen, horizontale Streifen, zentrierte Pills, versteckt. |
-| Stärke | Multiplikator für die Gesamt-Helligkeit/-Unschärfe des Glow, 0–200 %. |
+| Ausbreitung | Multiplikator für Weichzeichner-Radius und Schattenausbreitung des Glow, 0–200 %. Ändert **nicht** die Helligkeit. Bei 50 % werden aus 30 px Raster-Weichzeichner nur 15 px — zu wenig, und die einzelnen Rasterkästchen werden als Blöcke sichtbar. |
 | Grid-Unschärfe | Unschärfe-Radius in CSS-Pixeln für das Pixel-Grid-Layout (Default 30 px). Größer = sanfter / diffuser. |
 | Streifen-Unschärfe | Gleiches für das Streifen-Layout (Default 60 px). |
 

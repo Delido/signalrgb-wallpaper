@@ -8,6 +8,29 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Two order-dependent bugs, both reported from real use.
 
+### Changed — the glow's "Strength" slider is now called "Spread"
+
+The same investigation turned up a second, purely cosmetic cause for
+"one monitor looks blockier". Preset slot 1 stores `glowStrength: 50`,
+slot 4 stores `100`, and switching between them visibly changed how
+sharp the glow grid looked — with nothing under *Look* to explain why.
+
+`--glow` never affected brightness. Every one of its six uses scales a
+blur radius or a shadow spread, so turning "Strength" down does not dim
+the glow: it shrinks the blur until the grid cells stop overlapping and
+their edges show as blocks. On a 128x36 grid stretched across a 16:9
+screen the cells are 20x40 px, and 50 % of a 30 px blur covers barely a
+third of a cell vertically — which is exactly what "pixelated" looked
+like.
+
+The slider is now **Spread** / **Ausbreitung**, with a hint naming Grid
+blur as the thing it multiplies. The documentation, which claimed it
+multiplied "the glow's overall brightness/blur", has been corrected.
+
+**No behaviour changed.** The stored key, the 0-200 range and the
+percent-to-`--glow` mapping are untouched, so saved preset slots and
+Quick Looks render exactly as before.
+
 ### Fixed — the plugin's grid-dirty flag was global, not per device
 
 Reported as "if I change the Glow Grid Base Size on Screen 1 nothing

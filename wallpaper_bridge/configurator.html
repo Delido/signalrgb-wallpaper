@@ -2774,8 +2774,16 @@
           <option value="lay-off"      data-i18n="glow.layout.off">Hidden</option>
         </select>
       </div>
+      <!-- v2.4.4-beta.14: relabelled from "Strength". The slider scales the
+           blur radii and shadow spreads and nothing else — it never
+           touched brightness or opacity. Called "Strength", turning it
+           down reads as "dimmer glow"; what actually happens is a
+           smaller blur, so the grid cells stop overlapping and their
+           edges show. A user hit exactly that: a preset saved at 50 %
+           looked blocky while one saved at 100 % looked smooth, and
+           nothing in the UI connected the two. -->
       <div class="row">
-        <label for="glow-strength" data-i18n="glow.strength">Strength</label>
+        <label for="glow-strength" data-i18n="glow.strength">Spread</label>
         <input type="range" id="glow-strength" min="0" max="200" step="1">
         <span class="val" id="glow-strength-val">100 %</span>
       </div>
@@ -2783,6 +2791,11 @@
         <label for="grid-blur" data-i18n="glow.grid_blur">Grid blur</label>
         <input type="range" id="grid-blur" min="0" max="120" step="1">
         <span class="val" id="grid-blur-val">30 px</span>
+      </div>
+      <div class="hint" style="margin-top: 2px;" data-i18n="glow.spread_hint">
+        Spread multiplies Grid blur — at 50 % a 30 px blur becomes 15 px.
+        Too little blur and the glow grid's individual cells become
+        visible as blocks; raise Grid blur to compensate.
       </div>
       <!-- v1.2.12: grid renderer pick. DOM is the default and the
            cheaper-on-GPU path for solid-coloured zones; Canvas trades
@@ -4277,7 +4290,11 @@ const TRANSLATIONS = {
 
   "glow.show":              { en: "Show glow layer",      de: "Glow-Schicht anzeigen" },
   "glow.layout":            { en: "Layout",               de: "Layout" },
-  "glow.strength":          { en: "Strength",             de: "Stärke" },
+  "glow.strength":          { en: "Spread",               de: "Ausbreitung" },
+  "glow.spread_hint":       {
+    en: "Spread multiplies Grid blur — at 50 % a 30 px blur becomes 15 px. Too little blur and the glow grid's individual cells become visible as blocks; raise Grid blur to compensate.",
+    de: "Ausbreitung multipliziert den Raster-Weichzeichner — bei 50 % werden aus 30 px nur 15 px. Zu wenig Weichzeichnung lässt die einzelnen Rasterkästchen als Blöcke sichtbar werden; dann den Raster-Weichzeichner erhöhen."
+  },
   "glow.grid_blur":         { en: "Grid blur",            de: "Grid-Unschärfe" },
   "glow.grid_renderer":     { en: "Grid renderer",        de: "Grid-Renderer" },
   "glow.glass_quality":     { en: "Glass quality",        de: "Glas-Qualität" },

@@ -35,6 +35,7 @@ JS_SUITES = [
     ("Span half-apply (node)", HERE / "test_span_apply.mjs"),
     ("Setup status (node)", HERE / "test_setup_status.mjs"),
     ("Plugin grid state (node)", HERE / "test_plugin_grid.mjs"),
+    ("Glow spread slider (node)", HERE / "test_glow_spread.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),

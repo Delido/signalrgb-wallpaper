@@ -63,7 +63,7 @@ useful). Each tab has four collapsible sections.
 | --- | --- |
 | Show glow layer | Master on/off for the SignalRGB-driven glow layer. |
 | Layout | Pixel grid (default), vertical stripes, horizontal stripes, centered pills, hidden. |
-| Strength | Multiplier for the glow's overall brightness/blur, 0–200 %. |
+| Spread | Multiplier for the glow's blur radius and shadow spread, 0–200 %. Does **not** change brightness. At 50 % a 30 px Grid blur becomes 15 px — too little and the grid's individual cells show as blocks. |
 | Grid blur | Blur radius in CSS pixels for the pixel-grid layout (default 30 px). Larger = softer / more diffuse glow. |
 | Stripes blur | Same for the stripes layout (default 60 px). |
 
