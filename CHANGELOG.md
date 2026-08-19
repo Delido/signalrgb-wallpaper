@@ -4,6 +4,29 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.17] - 2026-08-19
+
+### Fixed — an empty collapsible box under the System card
+
+Reported from the running build: a bordered strip containing nothing but
+a chevron, directly below System.
+
+Splitting `card-system` in beta.16 cut straight through a
+`<details><summary>`. The opening `<details>` and half the `<summary>`
+stayed in `card-system`; the heading and `</summary>` ended up in
+`card-integrations`, along with a stray `</details>`. Browsers repair
+that by closing the element themselves, which renders as an empty
+expandable box.
+
+The beta.16 commit message claimed the integrations kept their markup
+verbatim. They did not — one element was torn in half.
+
+Nothing in the suite noticed, and that is the more interesting part: the
+markup still parsed, every control still existed, every id still
+resolved, every setting was still reachable. `test_settings_reachable.mjs`
+now counts opening against closing tags per card, so a container cut in
+half fails the build. Reverting the fix turns it red.
+
 ## [2.4.4-beta.16] - 2026-08-19
 
 The task-oriented Configurator redesign, in five phases. No setting was

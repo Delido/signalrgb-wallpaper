@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.16"
+APP_VERSION = "2.4.4-beta.17"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,29 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.17": {
+        "title_en": "What\'s new in v2.4.4-beta.17",
+        "title_de": "Was ist neu in v2.4.4-beta.17",
+        "body_en": (
+            "**Fixed: an empty box under the System card.**\n\n"
+            "Reorganising the Configurator in beta.16 cut through "
+            "the middle of a collapsible section, which left the "
+            "browser rendering an empty expandable strip with "
+            "nothing in it.\n\n"
+            "The OpenRGB block it belonged to is back where it "
+            "should be, under Connections.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: ein leerer Kasten unter der System-Karte.**\n\n"
+            "Beim Umbau des Konfigurators in Beta 16 verlief der "
+            "Schnitt mitten durch einen aufklappbaren Abschnitt. "
+            "\u00dcbrig blieb ein leerer Aufklapp-Streifen ohne Inhalt.\n\n"
+            "Der zugeh\u00f6rige OpenRGB-Block steht wieder dort, wo er "
+            "hingeh\u00f6rt: unter Verbindungen.\n\n"
+            "**Kein Neuimport n\u00f6tig.**\n"
+        ),
+    },
     "2.4.4-beta.16": {
         "title_en": "What\'s new in v2.4.4-beta.16",
         "title_de": "Was ist neu in v2.4.4-beta.16",

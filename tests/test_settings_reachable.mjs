@@ -197,6 +197,42 @@ if (keyBlock) {
   }
 }
 
+// --- container elements must not straddle a card boundary --------------
+// Splitting card-system into two cards cut straight through a
+// <details><summary>…</summary>, leaving an unclosed <details> in one
+// card and a stray </details> in the next. The browser repairs that by
+// rendering an empty collapsible box — which is exactly what showed up
+// under the System card, and what nothing in this suite noticed:
+// the markup still parsed, every control still existed, every id still
+// resolved.
+//
+// So: count opening and closing tags per card. Any imbalance means a
+// container was cut in half.
+for (const tag of ["details", "section", "div"]) {
+  const opens = tag === "div"
+    ? null   // div counts are dominated by layout noise; skip the pairing
+    : new RegExp(`<${tag}\\b`, "g");
+  if (!opens) continue;
+  for (let i = 0; i < cards.length; i++) {
+    const seg = MARKUP.slice(cards[i].at,
+                             i + 1 < cards.length ? cards[i + 1].at : MARKUP.length);
+    // The card's own <section> is excluded by starting the count after it.
+    const body = tag === "section" ? seg.slice(seg.indexOf(">") + 1) : seg;
+    const nOpen = (body.match(new RegExp(`<${tag}\\b`, "g")) || []).length;
+    const nClose = (body.match(new RegExp(`</${tag}>`, "g")) || []).length;
+    if (tag === "section" && nOpen === 0 && nClose === 1) continue;  // own closer
+    check(`${cards[i].id}: <${tag}> tags are balanced`,
+          nOpen === nClose, `${nOpen} open vs ${nClose} close`);
+  }
+}
+
+// A <summary> must sit inside a <details> and contain its heading. A cut
+// through the summary leaves a heading orphaned outside any details.
+const summaries = [...MARKUP.matchAll(/<summary\b[^>]*>([\s\S]{0,200}?)<\/summary>/g)];
+check("every <summary> is well-formed",
+      summaries.every(m => !/<\/(?:div|section)>/.test(m[1])),
+      "a summary containing a closing div/section means the split cut through it");
+
 // --- collapsed "More settings" blocks ----------------------------------
 // Phase 3 hides the controls most people never touch behind a per-card
 // toggle. Hidden is fine; unreachable is not. Every .adv-body needs a
