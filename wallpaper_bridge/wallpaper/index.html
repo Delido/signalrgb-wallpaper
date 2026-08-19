@@ -801,11 +801,32 @@
      for one continuous N-widget animation set that didn't need to
      exist. Removed; the 30 Hz JS updates are already perceptually
      smooth. No body.fx-repulsion .widget rule needed. */
-  body.fx-ripple #bg,
-  body.fx-ripple #bars,
-  body.fx-ripple #bars-canvas {
+  body.fx-ripple #bg {
     filter: url(#fx-ripple-filter);
   }
+  /* v2.4.4-beta.15: the glow layers keep their blur while distorted.
+     `filter` is one property, so the rule above REPLACED the
+     blur(--grid-blur * --glow) that #bars / #bars-canvas carry — it
+     did not add to it. Switching Liquid Distortion on therefore
+     stripped the glow's blur entirely and left the bare grid cells
+     showing as blocks, which is exactly the artefact beta.14 renamed
+     the Spread slider to explain. Reported as "wenn ich fluessige
+     verzerrung aktiviere, ist der glow wieder kaestchen gebroeckelt".
+
+     Chaining both keeps the displacement AND the blur. Order matters:
+     displace first, then blur, so the blur softens the distorted
+     result rather than the distortion re-sharpening blurred edges.
+
+     Note this path only runs when glRipple.usable() is false — on the
+     WebGL path #bars is never touched and never had the bug. */
+  body.fx-ripple #bars {
+    filter: url(#fx-ripple-filter) blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+  }
+  body.fx-ripple #bars-canvas {
+    filter: url(#fx-ripple-filter) blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+  }
+  /* Stripe layouts blur the .zone children, not #bars itself, so they
+     are unaffected by the rule above and keep working as before. */
   /* v2.3.10-beta: pixelfx water mode — feDisplacementMap fed by a
      procedurally painted ring-front canvas. Distinct filter ID from
      fx-ripple so the two effects don't fight; only #bg gets the

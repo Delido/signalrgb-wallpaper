@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.14"
+APP_VERSION = "2.4.4-beta.15"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -804,7 +804,7 @@ APP_VERSION = "2.4.4-beta.14"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.11"
+WALLPAPER_VERSION = "2.4.12"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -851,6 +851,45 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.15": {
+        "title_en": "What\'s new in v2.4.4-beta.15",
+        "title_de": "Was ist neu in v2.4.4-beta.15",
+        "body_en": (
+            "**Fixed: Liquid Distortion made the glow look blocky.**\n\n"
+            "Switching Liquid Distortion on stripped the glow layer of "
+            "its blur, so the individual squares of the glow grid "
+            "showed as hard blocks. Switching it off brought the blur "
+            "back.\n\n"
+            "A CSS quirk: the distortion and the glow blur are the "
+            "same property, so the distortion *replaced* the blur "
+            "instead of adding to it. Both are now applied together.\n\n"
+            "This only ever affected the fallback rendering path. If "
+            "your graphics driver supports the faster path, you never "
+            "saw it.\n\n"
+            "**Re-import needed** — the wallpaper itself changed. In "
+            "Lively, remove the wallpaper and import the new zip; in "
+            "Wallpaper Engine, re-subscribe or re-import the bundle.\n"
+        ),
+        "body_de": (
+            "**Behoben: Die Fl\u00fcssige Verzerrung lie\u00df den Glow "
+            "kl\u00f6tzig aussehen.**\n\n"
+            "Beim Aktivieren der Fl\u00fcssigen Verzerrung verlor die "
+            "Glow-Schicht ihre Weichzeichnung, sodass die einzelnen "
+            "K\u00e4stchen des Glow-Rasters als harte Bl\u00f6cke sichtbar "
+            "wurden. Beim Deaktivieren war die Weichzeichnung wieder da.\n\n"
+            "Eine CSS-Eigenheit: Verzerrung und Glow-Weichzeichnung sind "
+            "dieselbe Eigenschaft, daher hat die Verzerrung die "
+            "Weichzeichnung *ersetzt* statt sie zu erg\u00e4nzen. Jetzt "
+            "werden beide gemeinsam angewendet.\n\n"
+            "Betroffen war nur der Ersatz-Renderpfad. Wenn deine "
+            "Grafikkarte den schnelleren Pfad unterst\u00fctzt, ist dir das "
+            "nie begegnet.\n\n"
+            "**Neuimport n\u00f6tig** — das Wallpaper selbst hat sich "
+            "ge\u00e4ndert. In Lively das Wallpaper entfernen und die neue "
+            "Zip importieren; in Wallpaper Engine neu abonnieren bzw. "
+            "das Bundle neu importieren.\n"
+        ),
+    },
     "2.4.4-beta.14": {
         "title_en": "What's new in v2.4.4-beta.14",
         "title_de": "Was ist neu in v2.4.4-beta.14",

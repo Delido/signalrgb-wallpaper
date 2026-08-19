@@ -4,6 +4,37 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.15] - 2026-08-19
+
+### Fixed — Liquid Distortion stripped the glow of its blur
+
+Reported one release after beta.14 renamed the Spread slider to explain
+blocky-looking glow: "wenn ich flüssige verzerrung aktiviere, ist der
+glow wieder kästchen gebröckelt". A second, unrelated way to produce the
+same artefact.
+
+`filter` is one property, not a list that merges. `body.fx-ripple #bars`
+(specificity 410) set `filter: url(#fx-ripple-filter)` and thereby
+**replaced** `#bars.lay-grid`'s `filter: blur(...)` (specificity 110)
+rather than adding to it. The glow grid lost its blur entirely and its
+cells showed as hard blocks.
+
+Both are now chained in one declaration, displacement first so the blur
+softens the distorted result rather than the distortion re-sharpening
+blurred edges. `#bg` keeps displacement only — it is the background
+photo, not a glow layer — and the stripe layouts were never affected,
+because they blur their `.zone` children rather than `#bars` itself.
+
+Only the SVG fallback path could hit this: `body.fx-ripple` is set only
+when `glRipple.usable()` is false, so on the WebGL path `#bars` is never
+touched. That also makes the report a useful signal: the reporting
+machine is running the fallback path.
+
+`tests/test_filter_chain.mjs` resolves the real cascade for every
+glow-carrying element under every combination of effect classes, so a
+future effect that adds another body-level `filter` rule cannot
+reintroduce this silently. Reverting the fix turns it red.
+
 ## [2.4.4-beta.14] - 2026-08-19
 
 ### Added — the port is overridable via `SIGNALRGB_WP_PORT`
