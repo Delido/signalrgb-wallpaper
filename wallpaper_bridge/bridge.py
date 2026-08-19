@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.20"
+APP_VERSION = "2.4.4-beta.21"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,44 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.21": {
+        "title_en": "What\'s new in v2.4.4-beta.21",
+        "title_de": "Was ist neu in v2.4.4-beta.21",
+        "body_en": (
+            "**New: Reset all screen settings.**\n\n"
+            "System tab, at the bottom. Puts background, glow, "
+            "effects and widgets back to defaults on every screen "
+            "at once — the way out when a setup has been fiddled "
+            "with beyond repair.\n\n"
+            "**It keeps the things that are laborious to "
+            "recreate:** your preset slots, per-app profiles, the "
+            "image library, and every option in the System tab "
+            "itself (language, updates, OpenRGB, sACN, MQTT).\n\n"
+            "A copy of your configuration is saved next to it "
+            "first, named config.before-reset-<date>.json, so a "
+            "misclick is recoverable.\n\n"
+            "Resetting a single screen is still available from that "
+            "screen's own card.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Neu: Alle Bildschirm-Einstellungen zurücksetzen.**\n\n"
+            "Im System-Tab ganz unten. Setzt Hintergrund, Glow, "
+            "Effekte und Widgets auf allen Bildschirmen auf einmal "
+            "zurück — der Ausweg, wenn eine Konfiguration "
+            "verbastelt ist.\n\n"
+            "**Erhalten bleibt, was mühsam wiederherzustellen "
+            "wäre:** deine Voreinstellungs-Slots, App-Profile, die "
+            "Bildbibliothek und alle Optionen im System-Tab selbst "
+            "(Sprache, Updates, OpenRGB, sACN, MQTT).\n\n"
+            "Vorher wird eine Kopie deiner Konfiguration daneben "
+            "abgelegt, benannt config.before-reset-<Datum>.json — "
+            "ein Fehlklick lässt sich also rückgängig machen.\n\n"
+            "Einen einzelnen Bildschirm zurückzusetzen geht "
+            "weiterhin über dessen eigene Karte.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.20": {
         "title_en": "What\'s new in v2.4.4-beta.20",
         "title_de": "Was ist neu in v2.4.4-beta.20",
@@ -11235,6 +11273,55 @@ class BridgeRuntime:
             print(f"[reset] screen={screen} restored to defaults")
         return snap
 
+    def reset_all_screens(self) -> int:
+        """Reset every screen to defaults, after saving a copy of the
+        config next to it.
+
+        v2.4.4-beta.21. reset_screen() has existed for a while but only
+        ever applied to one screen, reachable from that screen's own
+        card — so recovering from a thoroughly mangled multi-screen
+        setup meant repeating it per screen, and there was no single
+        "put it back how it was" for someone who had lost track.
+
+        Deliberately narrower than a factory reset: presets, per-app
+        profiles, the image library and every bridge-level option
+        (language, update checks, OpenRGB/sACN/MQTT) are untouched.
+        Those are the things that are laborious to recreate, and none
+        of them is what someone means by "the wallpaper looks wrong
+        now".
+
+        The backup is a plain copy of config.json rather than a full
+        backup ZIP: the ZIP carries the whole image library, which can
+        be hundreds of megabytes, and none of it is at risk here.
+        Failing to write it does not block the reset — it is a safety
+        net, not a precondition — but it is reported either way.
+        """
+        backup = None
+        try:
+            src = config_path()
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            backup = src.with_name(f"config.before-reset-{stamp}.json")
+            with self.config_lock:
+                payload = json.dumps(self.config, indent=2)
+            backup.write_text(payload, encoding="utf-8")
+            print(f"[reset] config backed up to {backup}")
+        except Exception as e:
+            backup = None
+            print(f"[reset] backup failed (continuing anyway): {e}")
+
+        done = 0
+        for sc in range(N_SCREENS):
+            try:
+                # Mirrored screens are skipped by reset_screen itself —
+                # resetting one would immediately be overwritten by its
+                # source, and _block_if_mirror already says so.
+                if self.reset_screen(sc) is not None:
+                    done += 1
+            except Exception as e:
+                print(f"[reset] screen={sc} failed: {e}")
+        print(f"[reset] reset {done} screen(s) to defaults")
+        return done
+
     # Keys the wallpaper page / configurator are allowed to set via the
     # generic `setting-update` WS command. Whitelisted so a buggy page
     # can't write arbitrary garbage into config.json — anything not on
@@ -11974,7 +12061,9 @@ class BridgeRuntime:
                 # plugin rescan, open plugins folder) live OUTSIDE
                 # the tray namespace because they touch
                 # config/registry state directly.
-                if action == "regenerate-api-token":
+                if action == "reset-all-screens":
+                    self.reset_all_screens()
+                elif action == "regenerate-api-token":
                     new_tok = secrets.token_urlsafe(32)
                     with self.config_lock:
                         self.config["apiToken"] = new_tok

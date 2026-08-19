@@ -27,6 +27,7 @@ PY_SUITES = [
     ("Version ordering (python)", HERE / "test_version_order.py"),
     ("Port override (python)", HERE / "test_port_override.py"),
     ("Language setting (python)", HERE / "test_language_setting.py"),
+    ("Reset all screens (python)", HERE / "test_reset_all.py"),
 ]
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),

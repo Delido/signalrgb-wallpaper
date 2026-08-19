@@ -4,6 +4,52 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.21] - 2026-08-19
+
+### Added — "Reset all screen settings"
+
+Requested as "es fehlt noch ein Button wie Reset all Settings".
+`reset_screen()` has existed for a while but only ever applied to one
+screen, reached from that screen's own card, so recovering a thoroughly
+mangled multi-screen setup meant repeating it per screen.
+
+Scope is deliberately narrow. Reset: background, glow, effects and
+widgets, on every screen. Kept: preset slots, per-app profiles, the
+image library, and every bridge-level option (language, update checks,
+OpenRGB, sACN, MQTT). Those are the laborious things, and none of them
+is what someone means by "the wallpaper looks wrong now".
+
+Before resetting, the current config is copied to
+`config.before-reset-<timestamp>.json` beside `config.json`. A plain
+copy rather than the full backup ZIP, which carries the whole image
+library and would be hundreds of megabytes for state that is not at
+risk. A failed backup logs and continues — it is a safety net, not a
+precondition.
+
+The button is styled as destructive and confirms first, naming what
+survives; "reset all" otherwise reads as "erase everything" and nobody
+presses it.
+
+### Testing
+
+`test_reset_all.py` is mostly about what the reset must NOT reach — a
+version that quietly grew to clear presets would still "work", nothing
+would fail, and the user would simply lose data. 5/5 mutations caught,
+including that one.
+
+Verified against a live bridge in a sandboxed config directory:
+glowStrength set to 37, reset, back to the default 100, and the backup
+file written alongside contains 37 — i.e. the state from before the
+reset, which is the only thing that makes it useful.
+
+Two of my own mistakes on the way there, both caught by running it
+rather than reading it: the confirmation strings were written with real
+newlines instead of `\n` escapes, which broke the script outright (the
+boot smoke test caught that immediately), and the first live run tested
+a binary built *before* the reset code existed, which showed up as
+"unknown action" in the log. The suite now also asserts the branch is
+dispatched ahead of the unknown-action fallback.
+
 ## [2.4.4-beta.20] - 2026-08-19
 
 ### Fixed — per-screen lists rendered a single row

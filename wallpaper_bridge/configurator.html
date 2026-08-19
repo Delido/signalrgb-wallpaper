@@ -3478,6 +3478,23 @@
                 data-i18n="system.reimport_bundles">Re-import wallpaper bundles…</button>
       </div>
 
+      <!-- v2.4.4-beta.21: reset every screen at once. reset_screen has
+           existed for a while but only per screen, reached from that
+           screen's own card, so recovering a mangled multi-screen setup
+           meant repeating it. Sits apart from the maintenance row above
+           and is styled as destructive, because it is the only button
+           here that discards user state. -->
+      <div class="btn-row" style="margin-top: 14px;">
+        <button class="btn danger" id="sys-reset-all" type="button"
+                data-i18n="system.reset_all">Reset all screen settings…</button>
+      </div>
+      <div class="hint" style="margin-top: 6px;" data-i18n="system.reset_all_hint">
+        Puts background, glow, effects and widgets back to defaults on
+        every screen. Your presets, per-app profiles, image library and
+        the options above are kept. A copy of the configuration is saved
+        first.
+      </div>
+
       <!-- v1.4.0-beta: OpenRGB output channel. Optional; disabled by
            default. When enabled, the bridge connects to OpenRGB's
            network SDK (Settings → SDK Server in OpenRGB must be
@@ -4350,6 +4367,18 @@ const TRANSLATIONS = {
     en: "Every background image available to you. Click one to use it; drop your own files here to add them.",
     de: "Alle verfügbaren Hintergrundbilder. Klicke eins an, um es zu verwenden — eigene Dateien kannst du hier ablegen."
   },
+  "system.reset_all":       { en: "Reset all screen settings…",
+                              de: "Alle Bildschirm-Einstellungen zurücksetzen…" },
+  "system.reset_all_hint":  {
+    en: "Puts background, glow, effects and widgets back to defaults on every screen. Your presets, per-app profiles, image library and the options above are kept. A copy of the configuration is saved first.",
+    de: "Setzt Hintergrund, Glow, Effekte und Widgets auf allen Bildschirmen auf die Standardwerte zurück. Deine Voreinstellungen, App-Profile, die Bildbibliothek und die Optionen oben bleiben erhalten. Vorher wird eine Kopie der Konfiguration gesichert."
+  },
+  "system.reset_all_confirm": {
+    en: "Reset every screen to default settings?\n\nBackground, glow, effects and widgets go back to defaults on all screens. Presets, per-app profiles and your image library are kept, and a copy of the configuration is saved first.",
+    de: "Alle Bildschirme auf die Standardeinstellungen zurücksetzen?\n\nHintergrund, Glow, Effekte und Widgets werden auf allen Bildschirmen zurückgesetzt. Voreinstellungen, App-Profile und deine Bildbibliothek bleiben erhalten, und vorher wird eine Kopie der Konfiguration gesichert."
+  },
+  "system.reset_all_done":  { en: "All screens reset to defaults",
+                              de: "Alle Bildschirme zurückgesetzt" },
   "system.language":        { en: "Language",             de: "Sprache" },
   "system.language.auto":   { en: "Automatic (system)",   de: "Automatisch (System)" },
   "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },
@@ -8640,6 +8669,18 @@ function renderSystemSection() {
     langSel.addEventListener("change", () => {
       bridgeState.language = langSel.value;
       sendCmd({ type: "bridge-setting-update", key: "language", value: langSel.value });
+    });
+  }
+
+  // Reset is deliberately not in actionMap: everything there fires
+  // straight through, and this one needs a confirmation naming what it
+  // does and does not touch.
+  const resetBtn = document.getElementById("sys-reset-all");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      if (!confirm(t("system.reset_all_confirm"))) return;
+      sendCmd({ type: "system-action", action: "reset-all-screens" });
+      toast(t("system.reset_all_done"), "good");
     });
   }
 
