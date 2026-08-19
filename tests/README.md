@@ -16,6 +16,7 @@ every push and PR (`.github/workflows/smoke.yml`).
 | `test_logging.py` | Log formatting, rotation, the resume marker, UDP progress throttling |
 | `test_http_routing.py` | Which of the 32 routes answers what — dispatch decisions, not handler output |
 | `test_version_order.py` | Update-checker version comparison — beta.9 must not outrank beta.10 |
+| `test_port_override.py` | `SIGNALRGB_WP_PORT` — the override, its fallbacks, and that the CORS allowlist follows it |
 | `test_standby_card.mjs` | The standby-card state machine — models `connect()` and proves the issue-#2 latch is gone |
 | `test_wallpaper_source.mjs` | That the shipped `index.html` still contains those protections, and that its JS parses |
 | `test_tint_colour.mjs` | `rgbToRgba` across hex / rgb() / rgba() input |

@@ -6,6 +6,25 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2.4.4-beta.14] - 2026-08-19
 
+### Added — the port is overridable via `SIGNALRGB_WP_PORT`
+
+Developer-facing, but it fixes a real blind spot. The port was a
+hard-coded 17320, so a second instance could not start: it found the
+port taken, failed to bind, and exited without a window or a message.
+On any machine with the bridge installed, a freshly built EXE was
+therefore untestable — every HTTP probe was silently answered by
+the *installed* build still holding the port.
+
+That is not hypothetical. Verifying this very release, `/health`
+answered 404 and looked like a regression; the route was fine, the
+replies were simply coming from the older bridge on 17320.
+
+Set `SIGNALRGB_WP_PORT` to run a test instance alongside the real one.
+The CORS and WS-Origin allowlist is derived from it, so a test instance
+trusts its own origin and no other. Invalid values (non-numeric, below
+1024, above 65535) fall back to 17320 with a log line rather than
+stopping the bridge from starting.
+
 Two order-dependent bugs, both reported from real use.
 
 ### Changed — the glow's "Strength" slider is now called "Spread"

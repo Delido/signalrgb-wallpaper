@@ -1948,9 +1948,52 @@ APP_CREDITS_URL = f"{APP_REPO}/blob/main/docs/credits.md"
 APP_DONATE_URL  = "https://paypal.me/SMendyka"
 
 UDP_HOST = "127.0.0.1"
-UDP_PORT = 17320
 WS_HOST  = "127.0.0.1"
-WS_PORT  = 17320
+
+
+def _port_override(default=17320):
+    """The bridge's port, overridable via SIGNALRGB_WP_PORT.
+
+    v2.4.4-beta.14. The port was a hard-coded literal, so a second
+    instance could never start: it found 17320 taken, failed to bind and
+    exited. That makes a freshly built EXE untestable on a machine where
+    the installed one is running — which is every developer machine,
+    including the maintainer's. Verifying a build meant killing the
+    running bridge and blanking the desktop.
+
+    Deliberately an environment variable rather than a CLI flag: the
+    tray, the installer and the Lively/WE bundles all launch the exe
+    with no arguments, and a flag none of them pass would only be
+    testable by hand. An env var also inherits into whatever the tray
+    spawns.
+
+    Out-of-range or non-numeric values fall back to the default instead
+    of raising — a typo here should not stop the bridge from starting.
+    Ports below 1024 are refused: they need elevation on Windows and
+    would fail at bind time with a much less obvious error.
+    """
+    raw = os.environ.get("SIGNALRGB_WP_PORT", "").strip()
+    if not raw:
+        return default
+    try:
+        port = int(raw)
+    except ValueError:
+        print(f"[bridge] SIGNALRGB_WP_PORT={raw!r} is not a number — "
+              f"using {default}")
+        return default
+    if not (1024 <= port <= 65535):
+        print(f"[bridge] SIGNALRGB_WP_PORT={port} out of range 1024-65535 — "
+              f"using {default}")
+        return default
+    print(f"[bridge] port overridden to {port} via SIGNALRGB_WP_PORT")
+    return port
+
+
+# UDP and WS share one port; both move together when overridden, and the
+# CORS / WS-Origin allowlist below is built from WS_PORT, so a test
+# instance keeps the same same-origin guarantees as the real one.
+UDP_PORT = _port_override()
+WS_PORT  = UDP_PORT
 
 # v1.2.13: lock CORS / WS-Origin to the bridge's own loopback origins.
 # Pre-v1.2.13 every endpoint returned `Access-Control-Allow-Origin: *`

@@ -25,6 +25,7 @@ PY_SUITES = [
     ("Logging + diagnostics (python)", HERE / "test_logging.py"),
     ("HTTP routing (python)", HERE / "test_http_routing.py"),
     ("Version ordering (python)", HERE / "test_version_order.py"),
+    ("Port override (python)", HERE / "test_port_override.py"),
 ]
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
