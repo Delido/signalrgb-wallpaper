@@ -4,6 +4,40 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.20] - 2026-08-19
+
+### Fixed — per-screen lists rendered a single row
+
+Reported against the Connections tab: "müssten hier nicht 2 Screens
+sein?" — *Colour source per screen* listed one screen on a
+two-screen setup, and so did the two sACN universe lists and the OpenRGB
+source picker.
+
+All four sized themselves from `(settings && settings.screenCount) || 1`.
+That field does not exist. The bridge sends the count *beside* the
+payload — `{type:"settings", data:{…}, screenCount:2}` — and the
+Configurator assigns `settings = msg.data`, so `settings.screenCount` was
+always `undefined` and the `|| 1` fallback took over every time.
+
+Nothing errored, which is why it survived several releases: one row
+reads as a deliberate default rather than a wrong answer. The
+module-level `screenCount`, which `applyScreenCount()` refreshes on
+every push, is the value that was wanted.
+
+### Testing
+
+`test_screen_count_rows.mjs` runs the real `_renderSourcesList` in a
+sandbox and counts the rows it produces for 1, 2 and 4 screens, rather
+than grepping for the expression — a future site could reintroduce
+this with different wording, and the row count is what actually matters.
+It also pins the message shape on the bridge side, since the fix depends
+on `screenCount` staying beside `data` rather than moving into it.
+
+Both settings-message sites are checked separately. The first mutation
+run missed a site: the bridge emits that message twice (once on connect,
+once per update) and a single-site check passed while the other had lost
+the field. 4/4 caught after that.
+
 ## [2.4.4-beta.19] - 2026-08-19
 
 ### Added — a language picker

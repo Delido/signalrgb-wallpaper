@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.19"
+APP_VERSION = "2.4.4-beta.20"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,38 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.20": {
+        "title_en": "What\'s new in v2.4.4-beta.20",
+        "title_de": "Was ist neu in v2.4.4-beta.20",
+        "body_en": (
+            "**Fixed: per-screen lists only ever showed one "
+            "screen.**\n\n"
+            "With two or more screens, *Colour source per screen*, "
+            "the sACN universe list and the OpenRGB source picker "
+            "each showed a single row — so the second screen could "
+            "not be configured at all.\n\n"
+            "All four read the screen count from the wrong place "
+            "and quietly fell back to 1. Nothing errored, which is "
+            "why it lasted several releases: one row looks like a "
+            "deliberate default rather than a wrong answer.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Pro-Bildschirm-Listen zeigten immer nur "
+            "einen Bildschirm.**\n\n"
+            "Bei zwei oder mehr Bildschirmen zeigten *Farbquelle pro "
+            "Bildschirm*, die sACN-Universen und die "
+            "OpenRGB-Quellenauswahl jeweils nur eine Zeile — der "
+            "zweite Bildschirm ließ sich dort also gar nicht "
+            "einstellen.\n\n"
+            "Alle vier lasen die Bildschirmanzahl an der falschen "
+            "Stelle und fielen still auf 1 zurück. Es gab keinen "
+            "Fehler — deshalb blieb es über mehrere Versionen "
+            "unbemerkt: Eine Zeile sieht wie eine gewollte "
+            "Voreinstellung aus, nicht wie ein falsches Ergebnis.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.19": {
         "title_en": "What\'s new in v2.4.4-beta.19",
         "title_de": "Was ist neu in v2.4.4-beta.19",

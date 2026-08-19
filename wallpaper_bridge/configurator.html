@@ -8595,7 +8595,14 @@ function renderSystemSection() {
   if (ogHost) ogHost.value = og.host || "127.0.0.1";
   if (ogPort) ogPort.value = (og.port != null) ? og.port : 6742;
   if (ogSrc) {
-    const sc = Math.max(1, (settings && settings.screenCount) || 1);
+    // The screen count lives in the settings *message*, not in
+    // msg.data — the Configurator assigns `settings = msg.data`, so
+    // settings.screenCount was always undefined and every one of
+    // these fell back to 1. On a two-screen setup the colour-source
+    // list, the sACN universes and the OpenRGB source picker all
+    // showed a single row. applyScreenCount() keeps the module-level
+    // `screenCount` current on every push, so use that.
+    const sc = Math.max(1, screenCount || 1);   // v2.4.4-beta.20: was settings.screenCount, which never exists
     const want = (og.sourceScreen != null) ? og.sourceScreen : 0;
     if (ogSrc.options.length !== sc) {
       ogSrc.innerHTML = "";
@@ -9301,7 +9308,7 @@ function renderSystemSection() {
   function _renderSourcesList() {
     const wrap = document.getElementById("sources-list");
     if (!wrap) return;
-    const sc = Math.max(1, (settings && settings.screenCount) || 1);
+    const sc = Math.max(1, screenCount || 1);   // v2.4.4-beta.20: was settings.screenCount, which never exists
     const sources = (bridgeState && bridgeState.sources) || {};
     wrap.innerHTML = "";
     for (let n = 0; n < sc; n++) {
@@ -9411,7 +9418,7 @@ function renderSystemSection() {
   function _pushSacn(patch) {
     const cur = (bridgeState && bridgeState.sacnOutput) || {};
     const baseUniverses = {};
-    const sc = Math.max(1, (settings && settings.screenCount) || 1);
+    const sc = Math.max(1, screenCount || 1);   // v2.4.4-beta.20: was settings.screenCount, which never exists
     for (let i = 0; i < sc; i++) baseUniverses[String(i)] = i + 1;
     const next = Object.assign(
       { enabled: false, destination: "multicast", unicastHost: "", priority: 100,
@@ -9441,7 +9448,7 @@ function renderSystemSection() {
     const wrap = document.getElementById("sacn-universes");
     if (wrap) {
       wrap.innerHTML = "";
-      const sc = Math.max(1, (settings && settings.screenCount) || 1);
+      const sc = Math.max(1, screenCount || 1);   // v2.4.4-beta.20: was settings.screenCount, which never exists
       const universes = cur.universes || {};
       for (let n = 0; n < sc; n++) {
         const row = document.createElement("div");
