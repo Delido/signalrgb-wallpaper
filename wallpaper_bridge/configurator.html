@@ -2861,6 +2861,7 @@
       <h2 data-i18n="section.glow">Glow</h2>
     </header>
     <div class="body">
+      <div class="hint" data-i18n="glow.intro"></div>
       <div class="check-row">
         <input type="checkbox" id="glow-bars">
         <label for="glow-bars" data-i18n="glow.show">Show glow layer</label>
@@ -2989,6 +2990,7 @@
       <h2 data-i18n="section.library">Library</h2>
     </header>
     <div class="body">
+      <div class="hint" data-i18n="library.intro"></div>
       <!-- v2.2.0-beta wave 2: stripped the bordered hint box (visual
            noise). The Library tab name + section head already tell
            the user what they're looking at. -->
@@ -3093,6 +3095,7 @@
       <h2 data-i18n="section.effects">Effects</h2>
     </header>
     <div class="body">
+      <div class="hint" data-i18n="effects.intro"></div>
       <div class="row" style="margin-bottom: 4px;">
         <label style="flex:0 0 auto;" data-i18n="effects.ambient">Ambient preset</label>
       </div>
@@ -4312,6 +4315,22 @@ const TRANSLATIONS = {
   "tour.progress":          { en: "{n} / {total}",        de: "{n} / {total}" },
 
   // First-run wizard (v2.4.4-beta.16).
+  // v2.4.4-beta.16: one plain sentence per card saying what it is for.
+  // The cards were titled but never explained, so "Glow" and "Effects"
+  // read as two names for the same thing to anyone who had not already
+  // worked out the difference.
+  "glow.intro":             {
+    en: "The coloured light your SignalRGB layout casts across the screen. This is the part that actually reacts to your lighting.",
+    de: "Das farbige Licht, das dein SignalRGB-Layout über den Bildschirm wirft. Das ist der Teil, der wirklich auf deine Beleuchtung reagiert."
+  },
+  "effects.intro":          {
+    en: "Animations that run on top of the background — snow, rain, aurora and so on. They are decorative and independent of your lighting.",
+    de: "Animationen über dem Hintergrund — Schnee, Regen, Polarlicht und so weiter. Sie sind reine Deko und unabhängig von deiner Beleuchtung."
+  },
+  "library.intro":          {
+    en: "Every background image available to you. Click one to use it; drop your own files here to add them.",
+    de: "Alle verfügbaren Hintergrundbilder. Klicke eins an, um es zu verwenden — eigene Dateien kannst du hier ablegen."
+  },
   "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },
   "adv.hide":               { en: "Fewer settings",       de: "Weniger Einstellungen" },
   "wizard.step":            { en: "Step {n} of {total}",  de: "Schritt {n} von {total}" },

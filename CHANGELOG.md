@@ -4,6 +4,102 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.16] - 2026-08-19
+
+The task-oriented Configurator redesign, in five phases. No setting was
+removed and no stored state was invalidated: saved preset slots,
+profiles and Quick Looks all render exactly as before.
+
+### Changed — six technical tabs became four questions
+
+Look, Library, Effects, Widgets, Integrations and System named the
+machinery. That reads fine once you know what the machinery is, and not
+at all before — and three of the six answered the same question with
+different controls, so a newcomer had to guess which one held the thing
+they wanted.
+
+Now Appearance, Content, Connections and System, in the order people
+arrive with them. `LEGACY_TAB_ALIASES` maps every old key onto its
+successor, so a stored `cfg.activeSectionTab` or a bookmarked
+`#tab=look` still lands somewhere sensible.
+
+The biggest single win was splitting `card-system`. It carried 33
+controls — more than the entire Look tab — because seven beta
+integrations shared a container with the everyday system toggles.
+Opening "System" met OpenRGB, sACN, MQTT, a REST token and a plugin
+loader before the update checkbox. They now have their own card under
+Connections.
+
+### Added — a first-run wizard
+
+The tour explains where controls are, and it never stopped "my wallpaper
+is black and I do not know why" from being the most common report,
+because an explained blank screen is still a blank screen.
+
+The wizard produces a wallpaper instead: pick a Look (applies a real
+bundle), pick a background, then an offer to run the tour. It only
+appears on a genuinely fresh install — anyone who has already seen the
+tour is not greeted by a setup wizard on upgrade — and skipping it
+suppresses the tour too.
+
+### Changed — everyday settings first, the rest behind "More settings"
+
+Each heavy card now shows what people actually adjust and collapses the
+rest, remembered per card:
+
+| Card | Visible | Collapsed |
+|---|---|---|
+| Background | image, fit, tile scale, dim | slideshow, debug overlay |
+| Glow | show, layout, spread, grid blur | renderer, glass quality, frame rate, stripe + pill sizing |
+| Effects | tint, weather-reactive, density | quality, parallax, audio glow |
+
+Sixteen controls on first sight in Appearance instead of 32.
+
+### Added — plain-language intros
+
+Glow and Effects read as two names for the same thing to anyone who had
+not already worked out the difference. Each card now opens with one
+sentence saying what it is for.
+
+### Fixed — pill height and width had no control
+
+`barHeight` and `barWidth` have been settable on the bridge, read by the
+wallpaper as `--bar-h` / `--bar-w` and adjustable from the tray dialog
+for many versions, but the Configurator never exposed them. Pill size
+could only be changed from the tray. Found by the new reachability test,
+which asserts every key in `_SETTABLE_SCREEN_KEYS` is operable.
+
+### Fixed — a tour step that pointed at nothing
+
+`TOUR_STEPS` sent `card-presets` to the "system" tab while the card
+lives in "look", so activating that tab hid the very card the spotlight
+was about to highlight.
+
+### Testing
+
+Three new suites, all mutation-checked, because reorganising ~59
+controls is the kind of change whose mistakes are silent — nothing
+crashes when a slider lands in the wrong tab, it just becomes
+unfindable.
+
+- `test_settings_reachable.mjs` — written before anything moved and
+  unchanged since, in the same discipline as `test_http_routing.py`
+  before the `handle_client` split. Every card in a declared tab, every
+  tab revealed by CSS, every id the JS looks up present, every control
+  labelled, every bridge setting operable and actually written.
+- `test_configurator_boots.mjs` — runs the script in a `node:vm`
+  sandbox. beta.7 shipped a page that was structurally perfect and
+  completely dead; structural checks cannot catch that.
+- `test_first_run_wizard.mjs` — executes the wizard's gating logic
+  against a fake localStorage rather than describing it.
+
+Every mutation run found weaknesses in the tests before it found any in
+the code: a script scan that opened a block at an HTML comment
+mentioning `<script>`, an empty-tab check that counted the CSS rule as a
+card and so could never fail, a `<main>` boundary that matched prose
+inside a CSS comment, and a library-variable check that passed against
+an invented name.
+
 ## [2.4.4-beta.15] - 2026-08-19
 
 ### Fixed — Liquid Distortion stripped the glow of its blur

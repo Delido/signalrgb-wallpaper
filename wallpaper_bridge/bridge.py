@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.15"
+APP_VERSION = "2.4.4-beta.16"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,64 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.16": {
+        "title_en": "What\'s new in v2.4.4-beta.16",
+        "title_de": "Was ist neu in v2.4.4-beta.16",
+        "body_en": (
+            "**The Configurator has been reorganised.**\n\n"
+            "Six tabs named after the machinery — Look, Library, "
+            "Effects, Widgets, Integrations, System — have become "
+            "four named after what you want to do: **Appearance**, "
+            "**Content**, **Connections**, **System**.\n\n"
+            "**Nothing was removed.** Every setting is still there "
+            "and your saved presets, profiles and Quick Looks are "
+            "unchanged. Settings most people never touch now sit "
+            "behind a *More settings* link inside each card, which "
+            "stays open once you open it.\n\n"
+            "**New: a first-run setup.** On a fresh install the "
+            "Configurator now walks you through picking a look and a "
+            "background, so you end up with a working wallpaper "
+            "instead of an explained blank screen. The old tour is "
+            "still there — the *Tour* button in the header.\n\n"
+            "**Fixed: pill height and width were missing.** Both "
+            "have worked for a long time and were adjustable from "
+            "the tray, but the Configurator never had sliders for "
+            "them. They are in the Glow card under *More settings*.\n\n"
+            "**Fixed: a dead step in the tour**, which pointed at a "
+            "card in a tab that never showed it.\n\n"
+            "**No re-import needed** — the wallpaper itself is "
+            "unchanged since beta.15.\n"
+        ),
+        "body_de": (
+            "**Der Konfigurator wurde neu geordnet.**\n\n"
+            "Aus sechs Tabs, die nach der Technik benannt waren — "
+            "Look, Bibliothek, Effekte, Widgets, Integrationen, "
+            "System — sind vier geworden, die danach benannt sind, "
+            "was du vorhast: **Aussehen**, **Inhalte**, "
+            "**Verbindungen**, **System**.\n\n"
+            "**Es wurde nichts entfernt.** Alle Einstellungen sind "
+            "weiterhin da, und deine gespeicherten Voreinstellungen, "
+            "Profile und Quick Looks bleiben unver\u00e4ndert. Was die "
+            "meisten nie anfassen, liegt jetzt hinter einem Link "
+            "*Mehr Einstellungen* in der jeweiligen Karte — einmal "
+            "ge\u00f6ffnet, bleibt er offen.\n\n"
+            "**Neu: eine Ersteinrichtung.** Bei einer frischen "
+            "Installation f\u00fchrt dich der Konfigurator jetzt durch die "
+            "Wahl eines Looks und eines Hintergrunds. Am Ende hast du "
+            "ein fertiges Wallpaper statt eines erkl\u00e4rten schwarzen "
+            "Bildschirms. Die alte Tour gibt es weiterhin — \u00fcber den "
+            "*Tour*-Knopf oben.\n\n"
+            "**Behoben: Pillen-H\u00f6he und -Breite fehlten.** Beide "
+            "funktionieren seit Langem und waren \u00fcber das Tray "
+            "einstellbar, aber im Konfigurator gab es keine Regler "
+            "daf\u00fcr. Sie stehen jetzt in der Glow-Karte unter *Mehr "
+            "Einstellungen*.\n\n"
+            "**Behoben: ein toter Schritt in der Tour**, der auf eine "
+            "Karte zeigte, die der gew\u00e4hlte Tab nie anzeigt.\n\n"
+            "**Kein Neuimport n\u00f6tig** — das Wallpaper selbst ist "
+            "seit Beta 15 unver\u00e4ndert.\n"
+        ),
+    },
     "2.4.4-beta.15": {
         "title_en": "What\'s new in v2.4.4-beta.15",
         "title_de": "Was ist neu in v2.4.4-beta.15",

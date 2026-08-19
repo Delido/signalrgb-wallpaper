@@ -170,6 +170,31 @@ if (keyBlock) {
   check("every bridge setting is named in the Configurator",
         unhandled.length === 0,
         unhandled.length ? `unreachable: ${unhandled.join(", ")}` : "");
+
+  // Naming a key is weaker than writing it: a key could survive only in
+  // a comment or a preset table. Assert that all but a known few are
+  // actually pushed to the bridge by a control.
+  //
+  // The exceptions are set through their own paths rather than a
+  // labelled control, which is correct and not a gap:
+  //   bgImageUrl    — written by the library when a picture is applied
+  //   widgetsLocked — written by the padlock toggle in the widget bar
+  const writes = new Set([
+    ...[...HTML.matchAll(/setSetting\("(\w+)"/g)].map(m => m[1]),
+    ...[...HTML.matchAll(/bindRangeChange\(els\.\w+,\s*els\.\w+,\s*"(\w+)"/g)].map(m => m[1]),
+  ]);
+  const INDIRECT = new Set(["bgImageUrl", "widgetsLocked"]);
+  const neverWritten = keys.filter(k => !writes.has(k) && !INDIRECT.has(k));
+  check("every setting is written by some control",
+        neverWritten.length === 0,
+        neverWritten.length ? `named but never sent: ${neverWritten.join(", ")}` : "");
+
+  // And the indirect two must still be written somewhere, or the
+  // exemption above quietly becomes a hiding place.
+  for (const k of INDIRECT) {
+    check(`${k} is still assigned somewhere`,
+          new RegExp(`(?:settings\\.${k}\\s*=|"${k}"\\s*[,:\\]])`).test(HTML));
+  }
 }
 
 // --- collapsed "More settings" blocks ----------------------------------
