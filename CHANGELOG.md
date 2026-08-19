@@ -4,6 +4,48 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.19] - 2026-08-19
+
+### Added — a language picker
+
+Reported as "es sollte einstellbar sein ob man deutsch oder englisch
+haben will", and entirely fair: the language followed the OS locale with
+no way to override it.
+
+Everything except the control already existed. `config["language"]` has
+accepted `"auto" | "en" | "de"` for many versions, `init_language()`
+resolves it, and both translation tables are complete — but nothing
+could *write* the field. No control in the Configurator, no tray item.
+Choosing a language meant editing config.json by hand and restarting.
+
+The picker sits at the top of the System card and uses the same
+`bridge-setting-update` path as the other bridge-level toggles. Three
+pieces were missing on the way there:
+
+- `"language"` was not in `_SETTABLE_BRIDGE_KEYS`, so the WS dispatch
+  would have dropped the update **silently** — the exact failure the
+  `openrgbSdkServer` comment in that whitelist already records.
+- `update_bridge_setting` had no branch for it. The new one validates
+  against the three allowed values, persists, then calls
+  `init_language()` so `_CURRENT_LANG` changes without a restart, and
+  re-pushes settings so open pages re-translate themselves.
+- `_get_bridge_state` did not echo the field, so the picker would have
+  rendered empty. It returns the stored *preference*, not the resolved
+  language — echoing `_CURRENT_LANG` would turn "Automatic" into
+  "Deutsch" as soon as it round-tripped, and there would be no way back
+  to automatic.
+
+### Testing
+
+`test_language_setting.py` covers all four, including the two failure
+modes that produce a picker which looks fine and does nothing. 5/5
+mutations caught.
+
+Also verified against a running bridge over a real WebSocket:
+`auto` resolves to `de` on this machine while the preference stays
+`auto`, `en` switches immediately, and an invalid value is ignored
+rather than persisted.
+
 ## [2.4.4-beta.18] - 2026-08-19
 
 ### Fixed — the section tabs never got translated

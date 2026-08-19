@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.18"
+APP_VERSION = "2.4.4-beta.19"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,38 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.19": {
+        "title_en": "What\'s new in v2.4.4-beta.19",
+        "title_de": "Was ist neu in v2.4.4-beta.19",
+        "body_en": (
+            "**New: you can pick the language.**\n\n"
+            "System tab, right at the top: *Automatic*, English or "
+            "Deutsch. Automatic follows your Windows language, "
+            "which is what happened before — there was simply no "
+            "way to override it.\n\n"
+            "The change applies immediately. No restart.\n\n"
+            "Everything else was already in place: the setting has "
+            "been in the config file for many versions and both "
+            "translations were complete. The only missing piece was "
+            "a control to write it, so choosing a language meant "
+            "editing config.json by hand.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Neu: Du kannst die Sprache auswählen.**\n\n"
+            "Im System-Tab ganz oben: *Automatisch*, English oder "
+            "Deutsch. Automatisch richtet sich nach deiner "
+            "Windows-Sprache — genau das passierte auch vorher "
+            "schon, nur ließ es sich nicht ändern.\n\n"
+            "Die Änderung wirkt sofort. Kein Neustart nötig.\n\n"
+            "Alles Übrige war längst vorhanden: Die Einstellung "
+            "steht seit vielen Versionen in der Konfigurationsdatei, "
+            "und beide Übersetzungen sind vollständig. Es fehlte nur "
+            "die Bedienmöglichkeit — die Sprache zu wechseln hieß "
+            "bisher, config.json von Hand zu bearbeiten.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.18": {
         "title_en": "What\'s new in v2.4.4-beta.18",
         "title_de": "Was ist neu in v2.4.4-beta.18",
@@ -10289,6 +10321,11 @@ class BridgeRuntime:
                 "updateCheckEnabled":   bool(self.config.get("updateCheckEnabled", True)),
                 "allowBetas":           bool(self.config.get("allowBetas", False)),
                 "presetHotkeysEnabled": bool(self.config.get("presetHotkeysEnabled", False)),
+                # v2.4.4-beta.19: the stored preference ("auto"/"en"/"de"),
+                # not the resolved language. The picker has to show what
+                # the user chose — echoing _CURRENT_LANG would turn
+                # "Automatic" into "German" the moment it round-trips.
+                "language":             str(self.config.get("language") or "auto"),
                 "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
                 # v1.6.2-beta: SDK-server config block surfaced to the
                 # Configurator so the Integrations card can render the
@@ -11434,6 +11471,13 @@ class BridgeRuntime:
         # doesn't re-fire on every Configurator open after the user
         # has seen the current version's notes.
         "lastSeenAppVersion",
+        # v2.4.4-beta.19: UI language. The config field and the whole
+        # i18n machinery have existed since v1.x, but nothing could
+        # write the field — no control in the Configurator, no tray
+        # item — so the only way to pick a language was editing
+        # config.json by hand. Reported as "es sollte einstellbar sein
+        # ob man deutsch oder englisch haben will".
+        "language",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -11515,6 +11559,36 @@ class BridgeRuntime:
             except Exception as e:
                 print(f"[settings] save_config failed: {e}")
             print(f"[settings] lastSeenAppVersion -> {v!r}")
+        elif key == "language":
+            # "auto" follows the OS; "en"/"de" pin it. Anything else is
+            # dropped rather than persisted, so a malformed push cannot
+            # leave the UI in a language with no translation table.
+            lang = str(value or "auto").lower()
+            if lang not in ("auto", "en", "de"):
+                print(f"[settings] language value not recognised: {value!r}")
+                return
+            with self.config_lock:
+                if self.config.get("language") == lang:
+                    return
+                self.config["language"] = lang
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            # Re-resolve immediately: _CURRENT_LANG drives tray labels,
+            # the standby card and every t() call server-side, and a
+            # restart to apply a language change would be absurd.
+            init_language(snapshot)
+            # Push settings so every open Configurator and wallpaper
+            # page picks up the new language field on the same message
+            # they already listen to.
+            for sc in range(N_SCREENS):
+                try:
+                    self.push_settings(sc, snapshot["screens"][str(sc)])
+                except Exception:
+                    pass
+            print(f"[settings] language -> {lang} (resolved: {_CURRENT_LANG})")
         elif key in ("fullscreenPause", "updateCheckEnabled", "allowBetas"):
             # Plain boolean settings the bridge consumes elsewhere
             # (fullscreen-watcher reads fullscreenPause every poll;

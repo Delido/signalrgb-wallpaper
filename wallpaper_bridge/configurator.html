@@ -3410,6 +3410,20 @@
         in the tray menu's Advanced submenu.
       </div>
 
+      <!-- v2.4.4-beta.19: language picker. The config field, the
+           validation and the whole translation table have existed for
+           many versions, but nothing could write the field — no
+           control here, no tray item — so picking a language meant
+           editing config.json by hand. "Automatic" follows the OS. -->
+      <div class="row">
+        <label for="sys-language" data-i18n="system.language">Language</label>
+        <select id="sys-language">
+          <option value="auto" data-i18n="system.language.auto">Automatic</option>
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+        </select>
+      </div>
+
       <div class="check-row" style="margin-top: 10px;">
         <input type="checkbox" id="sys-preset-hotkeys">
         <label for="sys-preset-hotkeys" data-i18n="system.preset_hotkeys">
@@ -4336,6 +4350,8 @@ const TRANSLATIONS = {
     en: "Every background image available to you. Click one to use it; drop your own files here to add them.",
     de: "Alle verfügbaren Hintergrundbilder. Klicke eins an, um es zu verwenden — eigene Dateien kannst du hier ablegen."
   },
+  "system.language":        { en: "Language",             de: "Sprache" },
+  "system.language.auto":   { en: "Automatic (system)",   de: "Automatisch (System)" },
   "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },
   "adv.hide":               { en: "Fewer settings",       de: "Weniger Einstellungen" },
   "wizard.step":            { en: "Step {n} of {total}",  de: "Schritt {n} von {total}" },
@@ -8564,6 +8580,10 @@ function renderSystemSection() {
     if (!el) continue;
     el.checked = !!bridgeState[key];
   }
+  // Language is a <select>, not a checkbox, so it sits outside the map
+  // above. Falls back to "auto" when the bridge has not sent a value.
+  const langSel = document.getElementById("sys-language");
+  if (langSel) langSel.value = bridgeState.language || "auto";
   // v1.4.0-beta: OpenRGB output sub-section. bridgeState.openrgbOutput is
   // shipped by the bridge as { enabled, host, port, sourceScreen }.
   const og = (bridgeState && bridgeState.openrgbOutput) || {};
@@ -8605,6 +8625,17 @@ function renderSystemSection() {
       sendCmd({ type: "bridge-setting-update", key, value: el.checked });
     });
   }
+  // The language picker sends the same bridge-setting-update the
+  // checkboxes do; the bridge re-resolves _CURRENT_LANG and pushes
+  // settings back, which is what re-translates this page.
+  const langSel = document.getElementById("sys-language");
+  if (langSel) {
+    langSel.addEventListener("change", () => {
+      bridgeState.language = langSel.value;
+      sendCmd({ type: "bridge-setting-update", key: "language", value: langSel.value });
+    });
+  }
+
   const actionMap = {
     "sys-update-check-now": "check-updates-now",
     "sys-open-releases":    "open-releases",
