@@ -4,6 +4,44 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.18] - 2026-08-19
+
+### Fixed — the section tabs never got translated
+
+Reported from the running build: on a German UI the navigation read
+Appearance, Content, Connections, System while every card around it was
+in German.
+
+`buildSectionTabs` writes each label once, with `t(entry.i18n)`, into a
+`<span>` carrying no `data-i18n`. `applyI18n()` only re-translates
+elements that have the attribute, so the nav kept whatever language was
+active at build time — and it is built on a `setTimeout(…, 0)` that
+normally fires before the bridge has reported the language.
+
+The bug predates the redesign. It was invisible because the previous tab
+names — Look, Widgets, System — are spelled identically in German;
+renaming them to Appearance / Content / Connections made four English
+words appear in an otherwise-German UI.
+
+The label span now carries `data-i18n` and the button a
+`data-i18n-title`, so both take part in the normal translation pass.
+
+### Changed — two half-translated German strings
+
+`looks.hint` read "Pick einen aus, ersetzt die aktuelle
+Bildschirm-Konfiguration mit dem Bundle", and the screen-layout hint
+"Span wenn ein Canvas zwei Monitore deckt; Mirror um einen anderen
+Bildschirm zu klonen". Both are now plain German, and the quotation
+marks in the layout hint are typographic rather than a mix of `„` and an
+escaped `\"`.
+
+### Testing
+
+`test_settings_reachable.mjs` now asserts that tab labels carry
+`data-i18n`, that `title` is among the translatable attributes, and that
+every tab key resolves in both languages. Removing the attribute —
+i.e. restoring the reported bug — turns it red.
+
 ## [2.4.4-beta.17] - 2026-08-19
 
 ### Fixed — an empty collapsible box under the System card

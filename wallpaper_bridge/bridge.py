@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.17"
+APP_VERSION = "2.4.4-beta.18"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,42 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.18": {
+        "title_en": "What\'s new in v2.4.4-beta.18",
+        "title_de": "Was ist neu in v2.4.4-beta.18",
+        "body_en": (
+            "**Fixed: the four tab names stayed English.**\n\n"
+            "On a German UI the navigation still read Appearance, "
+            "Content, Connections, System while everything around "
+            "it was translated.\n\n"
+            "The tab labels were written once when the navigation "
+            "was built, before the language was known, and were "
+            "never refreshed afterwards. The bug is older than the "
+            "redesign — it simply could not be seen while the tabs "
+            "were called Look, Widgets and System, which are spelled "
+            "the same in German.\n\n"
+            "**Also: two German texts that were half-translated** "
+            "have been rewritten — the Quick Looks description and "
+            "the screen-layout hint.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Die vier Tab-Namen blieben englisch.**\n\n"
+            "Bei deutscher Oberfläche stand in der Navigation "
+            "weiterhin Appearance, Content, Connections, System, "
+            "während drumherum alles übersetzt war.\n\n"
+            "Die Beschriftungen wurden einmalig beim Aufbau der "
+            "Navigation gesetzt — bevor die Sprache feststand — und "
+            "danach nie wieder aktualisiert. Der Fehler ist älter als "
+            "der Umbau: Solange die Tabs Look, Widgets und System "
+            "hießen, fiel er nicht auf, weil sich diese Wörter im "
+            "Deutschen nicht unterscheiden.\n\n"
+            "**Außerdem: zwei halb übersetzte deutsche Texte** wurden "
+            "neu formuliert — die Beschreibung der Quick Looks und "
+            "der Hinweis zum Bildschirm-Layout.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.17": {
         "title_en": "What\'s new in v2.4.4-beta.17",
         "title_de": "Was ist neu in v2.4.4-beta.17",

@@ -278,6 +278,38 @@ for (const m of advBodies) {
 check("collapsed blocks actually contain controls", advIds.length > 5,
       `found ${advIds.length}`);
 
+// --- language switching must reach everything --------------------------
+// applyI18n() only re-translates elements carrying data-i18n. Anything
+// labelled once by JS keeps whatever language was active at build time,
+// and buildSectionTabs runs on a setTimeout(…, 0) that usually fires
+// before the bridge has reported the language — so the nav rendered in
+// English inside an otherwise-German UI.
+//
+// The bug predates the redesign and was invisible only because the old
+// tab names (Look, Widgets, System) are spelled the same in German.
+// Renaming them to Appearance / Content / Connections exposed it.
+check("applyI18n walks [data-i18n]",
+      /querySelectorAll\("\[data-i18n\]"\)/.test(HTML));
+check("section-tab labels carry data-i18n",
+      /'<span data-i18n="' \+ entry\.i18n/.test(HTML),
+      "a label written without data-i18n never gets re-translated");
+check("section-tab tooltips carry data-i18n-title",
+      /setAttribute\("data-i18n-title", entry\.i18n\)/.test(HTML));
+check("title is among the translatable attributes",
+      /I18N_ATTR_TARGETS\s*=\s*\[\s*"title"/.test(HTML));
+
+// Every tab must have its translation entry, in both languages, or the
+// nav falls back to printing the raw key.
+const tabKeys = [...HTML.matchAll(/\{\s*key:\s*"[\w-]+",\s*i18n:\s*"([\w.]+)"/g)].map(m => m[1]);
+check("tab i18n keys found", tabKeys.length >= 4, tabKeys.join(", "));
+for (const key of tabKeys) {
+  const entry = HTML.match(
+    new RegExp(`"${key.replace(/\./g, "\\.")}":\\s*\\{[^}]*\\}`));
+  check(`${key} is translated in both languages`,
+        !!entry && /en:\s*"/.test(entry[0]) && /de:\s*"/.test(entry[0]),
+        entry ? entry[0].slice(0, 70) : "no entry");
+}
+
 // --- the guided tour must point at things that exist -------------------
 // Each TOUR_STEPS entry names a card selector and, optionally, the tab
 // to switch to first. When the two disagree the step activates a tab

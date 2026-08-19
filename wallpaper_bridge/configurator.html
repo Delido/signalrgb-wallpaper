@@ -4280,7 +4280,7 @@ const TRANSLATIONS = {
                               de: "Wie viele Monitore die Bridge ansteuern soll. Jeder Bildschirm hat eigene Einstellungen — Wallpaper, Glow, Effekte, Widgets. Bei den meisten User bleibt das auf 1." },
   "setup.card_head":        { en: "Screen layout",           de: "Bildschirm-Layout" },
   "setup.card_hint":        { en: "Configure how this bridge screen maps to physical monitors. Span if one canvas covers two monitors; mirror to clone another screen.",
-                              de: "Wie dieser Bridge-Bildschirm auf die physischen Monitore abgebildet wird. Span wenn ein Canvas zwei Monitore deckt; Mirror um einen anderen Bildschirm zu klonen." },
+                              de: "Legt fest, auf welche echten Monitore dieser Bildschirm geht. „Aufteilen“ nutzt du, wenn ein Bild über zwei Monitore läuft; „Spiegeln“, um einen anderen Bildschirm zu klonen." },
   "setup.open_btn":         { en: "⚙ Configure layout…",     de: "⚙ Layout konfigurieren…" },
   "screens.label_with_res": { en: "Screen {n} — {w}×{h}", de: "Bildschirm {n} — {w}×{h}" },
   "overview.label":         { en: "Overview",             de: "Übersicht" },
@@ -4668,7 +4668,7 @@ const TRANSLATIONS = {
                                         de: "Zurück hier einbinden" },
   "section.looks":          { en: "Quick Looks",                de: "Quick Looks" },
   "looks.hint":             { en: "Pre-built combinations — background + effects + widgets — for the most common desktop archetypes. Pick one to replace the current screen's configuration with the bundle.",
-                              de: "Vorgebaute Kombinationen — Hintergrund + Effekte + Widgets — für die häufigsten Desktop-Archetypen. Pick einen aus, ersetzt die aktuelle Bildschirm-Konfiguration mit dem Bundle." },
+                              de: "Fertige Kombinationen aus Hintergrund, Effekten und Widgets für typische Anwendungsfälle. Ein Klick ersetzt die aktuelle Konfiguration dieses Bildschirms." },
   "looks.confirm":          { en: "Apply \"{name}\" to {screen}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.",
                               de: "„{name}\" auf {screen} anwenden? Ersetzt Effekte, Widget-Stil und das Widget-Layout. Bestehende Widgets werden entfernt. Der Hintergrund bleibt erhalten." },
   "looks.applied":          { en: "Applied {name}",             de: "{name} angewendet" },
@@ -8177,10 +8177,21 @@ function buildSectionTabs() {
     btn.type = "button";
     btn.className = "stab";
     btn.dataset.tab = entry.key;
+    // v2.4.4-beta.18: data-i18n on the label span and the title, so a
+    // later setLanguage() re-translates the nav like everything else.
+    // Without it the labels keep whatever language was active when the
+    // tabs were built — and buildSectionTabs runs on a setTimeout(…, 0)
+    // that usually fires before the bridge has reported the language.
+    //
+    // The bug predates the redesign; it was invisible because the old
+    // tab names (Look, Widgets, System) are spelled the same in German.
+    // Renaming them to Appearance / Content / Connections made an
+    // otherwise-German UI show four English words.
     btn.innerHTML =
       '<svg viewBox="0 0 24 24">' + entry.icon + '</svg>' +
-      '<span>' + escapeHtml(t(entry.i18n)) + '</span>';
+      '<span data-i18n="' + entry.i18n + '">' + escapeHtml(t(entry.i18n)) + '</span>';
     btn.title = t(entry.i18n);
+    btn.setAttribute("data-i18n-title", entry.i18n);
     btn.addEventListener("click", () => activateSectionTab(entry.key));
     nav.appendChild(btn);
   }
