@@ -38,6 +38,7 @@ JS_SUITES = [
     ("Plugin grid state (node)", HERE / "test_plugin_grid.mjs"),
     ("Glow spread slider (node)", HERE / "test_glow_spread.mjs"),
     ("Glow filter chain (node)", HERE / "test_filter_chain.mjs"),
+    ("Settings reachability (node)", HERE / "test_settings_reachable.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),

@@ -2847,6 +2847,27 @@
         <input type="range" id="stripes-blur" min="0" max="200" step="1">
         <span class="val" id="stripes-blur-val">60 px</span>
       </div>
+      <!-- v2.4.4-beta.16: barHeight / barWidth finally get a control.
+           The bridge has accepted both as settable screen keys since
+           v0.x, the wallpaper reads them (--bar-h / --bar-w) and the
+           tray dialog has always had sliders for them — but the
+           Configurator never did, so the only way to change the pill
+           size was the tray. Found by test_settings_reachable.mjs,
+           which asserts every key in _SETTABLE_SCREEN_KEYS is operable
+           from the Configurator. -->
+      <div class="row">
+        <label for="bar-height" data-i18n="glow.bar_height">Pill height</label>
+        <input type="range" id="bar-height" min="5" max="100" step="1">
+        <span class="val" id="bar-height-val">38 %</span>
+      </div>
+      <div class="row">
+        <label for="bar-width" data-i18n="glow.bar_width">Pill width</label>
+        <input type="range" id="bar-width" min="2" max="100" step="1">
+        <span class="val" id="bar-width-val">1.4 %</span>
+      </div>
+      <div class="hint" style="margin-top: 2px;" data-i18n="glow.bar_size_hint">
+        Pill height and width only apply to the Pills layout.
+      </div>
     </div>
   </section>
 
@@ -4352,6 +4373,12 @@ const TRANSLATIONS = {
   "bg.library.span.top":    { en: "Top half",    de: "Obere Hälfte" },
   "bg.library.span.bottom": { en: "Bottom half", de: "Untere Hälfte" },
   "glow.stripes_blur":      { en: "Stripes blur",         de: "Streifen-Unschärfe" },
+  "glow.bar_height":        { en: "Pill height",          de: "Pillen-Höhe" },
+  "glow.bar_width":         { en: "Pill width",           de: "Pillen-Breite" },
+  "glow.bar_size_hint":     {
+    en: "Pill height and width only apply to the Pills layout.",
+    de: "Pillen-Höhe und -Breite wirken nur im Layout „Pillen“."
+  },
 
   "effects.ambient":        { en: "Ambient preset",       de: "Umgebungseffekt" },
   "effects.tint":           { en: "Tint particles with the live glow colour",
@@ -5387,6 +5414,10 @@ const els = {
   pluginFpsVal:   $("plugin-fps-val"),
   stripesBlur:    $("stripes-blur"),
   stripesBlurVal: $("stripes-blur-val"),
+  barHeight:      $("bar-height"),
+  barHeightVal:   $("bar-height-val"),
+  barWidth:       $("bar-width"),
+  barWidthVal:    $("bar-width-val"),
   ambientTiles:   $("ambient-tiles"),
   ambientTint:    $("ambient-tint"),
   ambientWeatherReactive: $("ambient-weather-reactive"),
@@ -8101,7 +8132,8 @@ const SECTION_KEYS = {
                     keys: ["bgImage", "bgFit", "bgDim", "showStatus"] },
   "card-glow":    { i18n: "section.glow",
                     keys: ["showBars", "barLayout", "glowStrength",
-                           "gridBlur",  "stripesBlur"] },
+                           "gridBlur",  "stripesBlur",
+                           "barHeight", "barWidth"] },
   "card-effects": { i18n: "section.effects",
                     keys: ["ambientEffect", "ambientTint", "ambientDensity",
                            "weatherReactiveAmbient",
@@ -10559,13 +10591,25 @@ els.glowLayout .addEventListener("change", () => setSetting("barLayout",    els.
 els.gridRenderer.addEventListener("change", () => setSetting("gridRenderer", els.gridRenderer.value));
 els.glassQuality.addEventListener("change", () => setSetting("glassQuality", els.glassQuality.value));
 els.frameRate.addEventListener("change", () => setSetting("frameRate", parseInt(els.frameRate.value, 10)));
-function bindRangeChange(rangeEl, valEl, key, suffix) {
-  rangeEl.addEventListener("input",  () => { valEl.textContent = rangeEl.value + suffix; });
+// `format` is optional and only affects the readout, never the stored
+// value. Added for barWidth, which the wallpaper stores in tenths of a
+// vw (14 -> 1.4vw): without it the slider reads "14 %" while the pill
+// is 1.4 % wide.
+function bindRangeChange(rangeEl, valEl, key, suffix, format) {
+  const show = () => {
+    const raw = parseInt(rangeEl.value, 10);
+    valEl.textContent = (format ? format(raw) : rangeEl.value) + suffix;
+  };
+  rangeEl.addEventListener("input",  show);
   rangeEl.addEventListener("change", () => setSetting(key, parseInt(rangeEl.value, 10)));
 }
 bindRangeChange(els.glowStrength,   els.glowStrengthVal,   "glowStrength", " %");
 bindRangeChange(els.gridBlur,       els.gridBlurVal,       "gridBlur",     " px");
 bindRangeChange(els.stripesBlur,    els.stripesBlurVal,    "stripesBlur",  " px");
+// barWidth is stored in tenths of a vw (14 -> 1.4vw), so its readout
+// divides by 10 while barHeight maps straight to vh.
+bindRangeChange(els.barHeight,      els.barHeightVal,      "barHeight",    " %");
+bindRangeChange(els.barWidth,       els.barWidthVal,       "barWidth",     " %", (v) => (v / 10).toFixed(1));
 bindRangeChange(els.ambientDensity, els.ambientDensityVal, "ambientDensity", "");
 bindRangeChange(els.parallax3d,     els.parallax3dVal,     "parallax3d",     " px");
 bindRangeChange(els.audioGlowIntensity, els.audioGlowIntensityVal, "audioGlowIntensity", "");
@@ -12364,6 +12408,10 @@ function renderAll() {
   els.gridBlurVal.textContent     = (settings.gridBlur ?? 30) + " px";
   els.stripesBlur.value  = String(settings.stripesBlur ?? 60);
   els.stripesBlurVal.textContent  = (settings.stripesBlur ?? 60) + " px";
+  els.barHeight.value    = String(settings.barHeight ?? 38);
+  els.barHeightVal.textContent    = (settings.barHeight ?? 38) + " %";
+  els.barWidth.value     = String(settings.barWidth ?? 14);
+  els.barWidthVal.textContent     = ((settings.barWidth ?? 14) / 10).toFixed(1) + " %";
   // Effects
   const ambient = settings.ambientEffect || "off";
   els.ambientTiles.querySelectorAll(".ambient-tile").forEach((t) => {
