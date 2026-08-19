@@ -172,6 +172,51 @@ if (keyBlock) {
         unhandled.length ? `unreachable: ${unhandled.join(", ")}` : "");
 }
 
+// --- collapsed "More settings" blocks ----------------------------------
+// Phase 3 hides the controls most people never touch behind a per-card
+// toggle. Hidden is fine; unreachable is not. Every .adv-body needs a
+// toggle immediately before it, or its contents can never be opened —
+// and that failure is invisible, because the markup still parses and
+// the controls still exist.
+const advBodies = [...MARKUP.matchAll(/<div class="adv-body">/g)];
+const advToggles = [...MARKUP.matchAll(/<button class="adv-toggle"[^>]*>/g)];
+check("every advanced block has a toggle",
+      advBodies.length === advToggles.length,
+      `${advBodies.length} bodies vs ${advToggles.length} toggles`);
+
+for (const m of advBodies) {
+  const before = MARKUP.slice(Math.max(0, m.index - 260), m.index);
+  check("an adv-body is preceded by its toggle",
+        /<button class="adv-toggle"[\s\S]*<\/button>\s*$/.test(before),
+        before.slice(-90).replace(/\s+/g, " "));
+}
+
+// The toggle needs the label span the JS writes into, or the button
+// renders empty and reads as a stray line.
+for (const m of advToggles) {
+  const after = MARKUP.slice(m.index, m.index + 300);
+  check("an adv-toggle carries an .adv-label span",
+        /class="adv-label"/.test(after), after.slice(0, 90).replace(/\s+/g, " "));
+}
+
+// Both label strings must exist, since the button text is set from
+// them at runtime rather than living in the markup.
+for (const key of ["adv.show", "adv.hide"]) {
+  const entry = HTML.match(new RegExp(`"${key.replace(".", "\\.")}":\\s*\\{[^}]*\\}`));
+  check(`${key} is translated in both languages`,
+        !!entry && /en:\s*"/.test(entry[0]) && /de:\s*"/.test(entry[0]));
+}
+
+// Whatever is collapsed must still be a control the bridge knows about
+// — the point is to tidy, not to bury something that then looks broken.
+const advIds = [];
+for (const m of advBodies) {
+  const seg = MARKUP.slice(m.index, m.index + 4000);
+  for (const c of seg.matchAll(/<(?:input|select)\b[^>]*id="([\w-]+)"/g)) advIds.push(c[1]);
+}
+check("collapsed blocks actually contain controls", advIds.length > 5,
+      `found ${advIds.length}`);
+
 // --- the guided tour must point at things that exist -------------------
 // Each TOUR_STEPS entry names a card selector and, optionally, the tab
 // to switch to first. When the two disagree the step activates a tab

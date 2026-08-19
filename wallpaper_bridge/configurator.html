@@ -614,6 +614,29 @@
      larger refactor for v1.2.1. */
   .mirror-bar { display: none !important; }
 
+  /* ── Advanced sections (v2.4.4-beta.16) ───────────────────────────
+     A second collapse level, inside a card. The card header already
+     collapses the whole card; this hides the controls most people
+     never touch while leaving the everyday ones visible.
+
+     Closed by default and remembered per card in localStorage, so a
+     power user opens them once. The summary is a real <button> rather
+     than <details>/<summary> because the surrounding cards are already
+     hand-rolled and <details> would bring its own marker and focus
+     behaviour into a layout that does not expect it. */
+  .adv-toggle {
+    display: flex; align-items: center; gap: 7px;
+    width: 100%; margin-top: 12px; padding: 7px 2px 0;
+    background: none; border: none; border-top: 1px solid var(--border, #2a3550);
+    color: var(--muted); font: inherit; font-size: 12.5px;
+    cursor: pointer; text-align: left;
+  }
+  .adv-toggle:hover { color: var(--fg, #dfe6f5); }
+  .adv-toggle .chev { transition: transform .15s; display: inline-block; }
+  .adv-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+  .adv-body { display: none; padding-top: 4px; }
+  .adv-body.show { display: block; }
+
   /* ── First-run wizard (v2.4.4-beta.16) ────────────────────────────
      Runs BEFORE the tour and does something different: the tour
      explains where controls are, the wizard produces a finished
@@ -2790,6 +2813,11 @@
         <input type="range" id="bg-dim" min="0" max="100" step="1">
         <span class="val" id="bg-dim-val">0 %</span>
       </div>
+      <button class="adv-toggle" type="button" aria-expanded="false">
+        <span class="chev">›</span>
+        <span class="adv-label">More settings</span>
+      </button>
+      <div class="adv-body">
       <div class="check-row">
         <input type="checkbox" id="bg-debug">
         <label for="bg-debug" data-i18n="bg.debug_overlay">Show debug overlay (top-left status line on the wallpaper)</label>
@@ -2821,6 +2849,7 @@
           </select>
         </div>
         <div class="hint" id="cycle-hint" style="margin-top: 6px;"></div>
+      </div>
       </div>
     </div>
   </section>
@@ -2869,6 +2898,11 @@
         Too little blur and the glow grid's individual cells become
         visible as blocks; raise Grid blur to compensate.
       </div>
+      <button class="adv-toggle" type="button" aria-expanded="false">
+        <span class="chev">›</span>
+        <span class="adv-label">More settings</span>
+      </button>
+      <div class="adv-body">
       <!-- v1.2.12: grid renderer pick. DOM is the default and the
            cheaper-on-GPU path for solid-coloured zones; Canvas trades
            a small GPU bump for a noticeably lower CPU under heavy
@@ -2939,6 +2973,7 @@
       </div>
       <div class="hint" style="margin-top: 2px;" data-i18n="glow.bar_size_hint">
         Pill height and width only apply to the Pills layout.
+      </div>
       </div>
     </div>
   </section>
@@ -3085,6 +3120,11 @@
            audio-glow canvases. Default "performance" matches the
            v1.6.1-beta GPU-sweep settings; pick higher to trade GPU
            for sharper particle / glow edges. -->
+      <button class="adv-toggle" type="button" aria-expanded="false">
+        <span class="chev">›</span>
+        <span class="adv-label">More settings</span>
+      </button>
+      <div class="adv-body">
       <div class="row">
         <label for="effect-quality" data-i18n="effects.quality">Quality</label>
         <select id="effect-quality">
@@ -3196,6 +3236,7 @@
         widget uses. Requires Lively / Wallpaper Engine to be actively
         playing audio through the system mixer — silent input means no
         visible effect.
+      </div>
       </div>
     </div>
   </section>
@@ -4271,6 +4312,8 @@ const TRANSLATIONS = {
   "tour.progress":          { en: "{n} / {total}",        de: "{n} / {total}" },
 
   // First-run wizard (v2.4.4-beta.16).
+  "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },
+  "adv.hide":               { en: "Fewer settings",       de: "Weniger Einstellungen" },
   "wizard.step":            { en: "Step {n} of {total}",  de: "Schritt {n} von {total}" },
   "wizard.next":            { en: "Next",                 de: "Weiter" },
   "wizard.skip":            { en: "Skip setup",           de: "Überspringen" },
@@ -8035,6 +8078,30 @@ function summariseSnapshot(snap) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Collapsible sections
 // ─────────────────────────────────────────────────────────────────────────────
+// Advanced blocks inside cards. Each <button class="adv-toggle"> is
+// followed by its .adv-body; state is remembered per card so someone
+// who opens "more settings" once does not have to keep reopening it.
+document.querySelectorAll("button.adv-toggle").forEach((btn) => {
+  const body = btn.nextElementSibling;
+  if (!body || !body.classList.contains("adv-body")) return;
+  const card = btn.closest("section.card");
+  const key = "cfg.adv." + (card ? card.id : "x");
+  let open = false;
+  try { open = localStorage.getItem(key) === "1"; } catch (_) {}
+  const paint = () => {
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    body.classList.toggle("show", open);
+    const label = btn.querySelector(".adv-label");
+    if (label) label.textContent = t(open ? "adv.hide" : "adv.show");
+  };
+  paint();
+  btn.addEventListener("click", () => {
+    open = !open;
+    try { localStorage.setItem(key, open ? "1" : "0"); } catch (_) {}
+    paint();
+  });
+});
+
 document.querySelectorAll("section.card > header.section-head[data-toggle]").forEach((h) => {
   h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed"));
 });
