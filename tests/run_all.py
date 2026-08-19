@@ -40,6 +40,7 @@ JS_SUITES = [
     ("Glow filter chain (node)", HERE / "test_filter_chain.mjs"),
     ("Settings reachability (node)", HERE / "test_settings_reachable.mjs"),
     ("Configurator boots (node)", HERE / "test_configurator_boots.mjs"),
+    ("First-run wizard (node)", HERE / "test_first_run_wizard.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),

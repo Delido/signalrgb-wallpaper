@@ -614,6 +614,62 @@
      larger refactor for v1.2.1. */
   .mirror-bar { display: none !important; }
 
+  /* ── First-run wizard (v2.4.4-beta.16) ────────────────────────────
+     Runs BEFORE the tour and does something different: the tour
+     explains where controls are, the wizard produces a finished
+     wallpaper. Three questions, each with an immediate visible
+     effect, then it hands over. A newcomer who closes the
+     Configurator after the wizard has a working setup; one who
+     closed it after the old tour had an explained empty screen. */
+  .wiz-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.78);
+    z-index: 9800;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .wiz-overlay.show { display: flex; }
+  .wiz-panel {
+    background: var(--panel-2);
+    border: 1px solid #5b8fd1;
+    border-radius: 12px;
+    width: min(720px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 26px 28px 22px;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  }
+  .wiz-step-label {
+    font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .wiz-title { font-size: 21px; font-weight: 600; margin: 0 0 6px; }
+  .wiz-sub   { color: var(--muted); margin: 0 0 18px; line-height: 1.5; }
+  .wiz-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    margin-bottom: 18px;
+  }
+  .wiz-choice {
+    text-align: left; cursor: pointer;
+    background: var(--panel); color: inherit;
+    border: 1px solid var(--border, #2a3550);
+    border-radius: 9px; padding: 12px 13px;
+    transition: border-color .12s, background .12s;
+  }
+  .wiz-choice:hover { border-color: #5b8fd1; }
+  .wiz-choice.sel   { border-color: #5b8fd1; background: rgba(91,143,209,0.14); }
+  .wiz-choice-name  { font-weight: 600; display: block; margin-bottom: 3px; }
+  .wiz-choice-desc  { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .wiz-actions {
+    display: flex; gap: 10px; align-items: center;
+    border-top: 1px solid var(--border, #2a3550);
+    padding-top: 14px;
+  }
+  .wiz-actions .spacer { flex: 1; }
+  .wiz-progress { font-size: 12px; color: var(--muted); }
+
   /* First-run onboarding tour — overlay + spotlight ring + tooltip.
      Activates once on first Configurator open; the spotlight points
      at the live element being highlighted in each step. */
@@ -2450,6 +2506,24 @@
        routine in <script> appends its DOM into this anchor instead
        of into the tab strip. -->
   <span id="header-screencount-anchor" class="header-screencount-anchor"></span>
+
+<!-- First-run wizard. Built empty; renderWizardStep() fills it. Kept
+     out of <main> so the tab CSS never hides it. -->
+<div class="wiz-overlay" id="wiz-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="wiz-title">
+  <div class="wiz-panel">
+    <div class="wiz-step-label" id="wiz-step-label"></div>
+    <h2 class="wiz-title" id="wiz-title"></h2>
+    <p class="wiz-sub" id="wiz-sub"></p>
+    <div class="wiz-grid" id="wiz-grid"></div>
+    <div class="wiz-actions">
+      <button class="btn" type="button" id="wiz-skip"></button>
+      <span class="spacer"></span>
+      <span class="wiz-progress" id="wiz-progress"></span>
+      <button class="btn primary" type="button" id="wiz-next"></button>
+    </div>
+  </div>
+</div>
   <button class="btn" id="header-toggle-preview" type="button"
           title="Live preview"
           data-i18n-title="header.toggle_preview.title"
@@ -2548,7 +2622,7 @@
 <div class="app-shell">
 <nav id="section-tabs" aria-label="Section tabs"></nav>
 
-<main data-active-tab="look">
+<main data-active-tab="appearance">
 
   <!-- ── Setup status ──────────────────────────────────────────────────
        v2.4.11. Getting a working wallpaper takes six steps, and two of
@@ -4195,6 +4269,28 @@ const TRANSLATIONS = {
   "tour.next":              { en: "Next",                 de: "Weiter" },
   "tour.done":              { en: "Got it",               de: "Verstanden" },
   "tour.progress":          { en: "{n} / {total}",        de: "{n} / {total}" },
+
+  // First-run wizard (v2.4.4-beta.16).
+  "wizard.step":            { en: "Step {n} of {total}",  de: "Schritt {n} von {total}" },
+  "wizard.next":            { en: "Next",                 de: "Weiter" },
+  "wizard.skip":            { en: "Skip setup",           de: "Überspringen" },
+  "wizard.finish":          { en: "Show me around",       de: "Kurze Tour zeigen" },
+  "wizard.look.title":      { en: "Pick a starting look",
+                              de: "Wähle einen Startpunkt" },
+  "wizard.look.body":       {
+    en: "Each one sets up the glow, an ambient effect and a few widgets for you. You can change anything afterwards — and pick a different one any time from the Looks card.",
+    de: "Jeder richtet Glow, einen Ambient-Effekt und ein paar Widgets für dich ein. Du kannst danach alles ändern — und jederzeit über die Looks-Karte einen anderen wählen."
+  },
+  "wizard.bg.title":        { en: "Choose a background",  de: "Wähle einen Hintergrund" },
+  "wizard.bg.body":         {
+    en: "Optional. These come with the bundle; the Library tab has the full set, and you can add your own images there.",
+    de: "Optional. Diese sind im Bundle enthalten; die Bibliothek zeigt alle — dort kannst du auch eigene Bilder hinzufügen."
+  },
+  "wizard.done.title":      { en: "That's the setup done", de: "Fertig eingerichtet" },
+  "wizard.done.body":       {
+    en: "Your wallpaper is live. If it still looks black, open the System tab — the status banner there says which step is missing. Want a quick tour of where everything lives?",
+    de: "Dein Wallpaper läuft. Falls es noch schwarz ist, schau in den System-Tab — das Status-Banner dort sagt, welcher Schritt fehlt. Möchtest du eine kurze Tour?"
+  },
   "tour.welcome.title":     { en: "Welcome to SignalRGB Wallpaper",
                               de: "Willkommen bei SignalRGB Wallpaper" },
   "tour.welcome.body":      { en: "30-second tour of the Configurator. Hit Skip any time to dismiss.",
@@ -5131,7 +5227,10 @@ function renderLookBundles() {
   }
 }
 
-function applyLookBundle(bundle) {
+// `skipConfirm` is passed by the first-run wizard, which has already
+// asked the question in its own words — a second confirm() dialog on
+// top of the wizard reads as an error rather than a safeguard.
+function applyLookBundle(bundle, skipConfirm) {
   // v2.3.13-beta: localised screen label + bundle name in the
   // confirm prompt. Falls back to the original English literal
   // if the i18n keys aren't populated.
@@ -5140,7 +5239,7 @@ function applyLookBundle(bundle) {
   const localName = bundle.nameKey ? t(bundle.nameKey) : bundle.name;
   const msg = t("looks.confirm", { name: localName, screen: screenLabel })
             || `Apply "${localName}" to ${screenLabel}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.`;
-  if (!confirm(msg)) return;
+  if (!skipConfirm && !confirm(msg)) return;
 
   // v1.2.16: single atomic Quick Look apply. The bridge wraps the
   // current-state snapshot + non-widget settings + widget replace
@@ -10226,12 +10325,188 @@ function replayTour() {
 const _replayBtn = document.getElementById("header-replay-tour");
 if (_replayBtn) _replayBtn.addEventListener("click", replayTour);
 
+// ── First-run wizard ──────────────────────────────────────────────────
+// Runs before the tour, and answers a different question. The tour says
+// where things are; the wizard produces a finished wallpaper. Someone
+// who closed the Configurator after the old tour had an explained blank
+// screen, which is why "the wallpaper is black and I do not know why"
+// kept coming back as a report.
+//
+// Three steps, each with an immediate visible effect and each skippable:
+//   1. a Look   — applies a real bundle, so the screen stops being empty
+//   2. a background — the single most visible setting there is
+//   3. an offer to open the tour for the rest
+//
+// It writes the same TOUR_KEY the tour uses, so finishing or skipping
+// the wizard means neither reappears on the next open.
+const WIZ_KEY = "signalrgb.wizard_seen";
+
+// The four Looks offered on step 1. Deliberately not all ten: a
+// first-run choice with ten options is the same paralysis the tab
+// layout had. These four span the obvious intents; the Looks card has
+// the rest.
+const WIZ_LOOK_IDS = ["minimal", "gaming", "cyberpunk", "music"];
+
+let _wizStep = 0;
+let _wizPick = { look: null, bg: null };
+
+function _wizEl(id) { return document.getElementById(id); }
+
+function wizardSteps() {
+  const looks = WIZ_LOOK_IDS
+    .map((id) => LOOK_BUNDLES.find((b) => b.id === id))
+    .filter(Boolean);
+  return [
+    {
+      key: "look",
+      choices: looks.map((b) => ({
+        id: b.id,
+        name: b.nameKey ? t(b.nameKey) : b.name,
+        desc: b.descKey ? t(b.descKey) : b.desc,
+      })),
+      onPick: (id) => { _wizPick.look = id; },
+    },
+    {
+      key: "bg",
+      // Populated from the library at render time — the bundle ships
+      // images, but how many depends on what the user has added.
+      choices: [],
+      onPick: (id) => { _wizPick.bg = id; },
+    },
+    { key: "done", choices: [], onPick: () => {} },
+  ];
+}
+
+function renderWizardStep() {
+  const steps = wizardSteps();
+  const step = steps[_wizStep];
+  if (!step) return closeWizard(true);
+
+  _wizEl("wiz-step-label").textContent =
+    t("wizard.step", { n: _wizStep + 1, total: steps.length });
+  _wizEl("wiz-title").textContent = t("wizard." + step.key + ".title");
+  _wizEl("wiz-sub").textContent   = t("wizard." + step.key + ".body");
+  _wizEl("wiz-progress").textContent =
+    t("tour.progress", { n: _wizStep + 1, total: steps.length });
+  _wizEl("wiz-skip").textContent  = t("wizard.skip");
+  _wizEl("wiz-next").textContent  =
+    (_wizStep === steps.length - 1) ? t("wizard.finish") : t("wizard.next");
+
+  const grid = _wizEl("wiz-grid");
+  grid.innerHTML = "";
+
+  let choices = step.choices;
+  if (step.key === "bg") {
+    // Offer what the library actually holds, newest first, capped so
+    // the panel stays one screenful.
+    const items = (Array.isArray(libraryCatalogue) ? libraryCatalogue : []).slice(0, 6);
+    choices = items.map((it) => ({
+      id: it.id || it.path || it.name,
+      name: it.name || it.title || "",
+      desc: "",
+      item: it,
+    }));
+  }
+
+  if (!choices.length) {
+    grid.style.display = "none";
+  } else {
+    grid.style.display = "";
+    for (const c of choices) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "wiz-choice";
+      if (_wizPick[step.key] === c.id) btn.classList.add("sel");
+      const name = document.createElement("span");
+      name.className = "wiz-choice-name";
+      name.textContent = c.name;
+      btn.appendChild(name);
+      if (c.desc) {
+        const d = document.createElement("span");
+        d.className = "wiz-choice-desc";
+        d.textContent = c.desc;
+        btn.appendChild(d);
+      }
+      btn.addEventListener("click", () => {
+        step.onPick(c.id);
+        // Apply immediately. The point of the wizard is that each
+        // answer changes the wallpaper while the user is looking at
+        // it, rather than everything landing at the end.
+        if (step.key === "look") {
+          const bundle = LOOK_BUNDLES.find((b) => b.id === c.id);
+          if (bundle) applyLookBundle(bundle, true);
+        } else if (step.key === "bg" && c.item) {
+          try { applyLibraryItem(c.item); } catch (_) {}
+        }
+        renderWizardStep();
+      });
+      grid.appendChild(btn);
+    }
+  }
+}
+
+function openWizard() {
+  const ov = _wizEl("wiz-overlay");
+  if (!ov) return;
+  _wizStep = 0;
+  _wizPick = { look: null, bg: null };
+  ov.classList.add("show");
+  renderWizardStep();
+}
+
+function closeWizard(alsoSuppressTour) {
+  const ov = _wizEl("wiz-overlay");
+  if (ov) ov.classList.remove("show");
+  try {
+    localStorage.setItem(WIZ_KEY, "1");
+    // Finishing the wizard counts as onboarding done; the tour is
+    // offered from its last step and by the header button.
+    if (alsoSuppressTour) localStorage.setItem(TOUR_KEY, "1");
+  } catch (_) {}
+}
+
+function maybeShowWizard() {
+  try {
+    if (localStorage.getItem(WIZ_KEY)) return false;
+    // Someone who already used an older build has seen the tour; do
+    // not greet them with a wizard on upgrade.
+    if (localStorage.getItem(TOUR_KEY)) return false;
+  } catch (_) { return false; }
+  setTimeout(openWizard, 600);
+  return true;
+}
+
+// Wire the wizard's two buttons once. "Skip" leaves immediately and
+// suppresses the tour too — someone who dismissed one intro does not
+// want the other one next.
+{
+  const _wizNext = document.getElementById("wiz-next");
+  const _wizSkip = document.getElementById("wiz-skip");
+  if (_wizNext) _wizNext.addEventListener("click", () => {
+    const total = wizardSteps().length;
+    if (_wizStep >= total - 1) {
+      closeWizard(false);
+      // The last step offers the tour; run it now that the overlay is
+      // gone, otherwise the spotlight would measure a covered layout.
+      try { localStorage.removeItem(TOUR_KEY); } catch (_) {}
+      setTimeout(() => { try { replayTour(); } catch (_) {} }, 250);
+      return;
+    }
+    _wizStep += 1;
+    renderWizardStep();
+  });
+  if (_wizSkip) _wizSkip.addEventListener("click", () => closeWizard(true));
+}
+
 // Fire once when the first settings push arrives (so the screenCount
 // and any overview thumbnails are in place when the tour highlights them).
 let _tourTriedOnce = false;
 function _tryFirstRunTour() {
   if (_tourTriedOnce) return;
   _tourTriedOnce = true;
+  // The wizard takes precedence on a genuinely fresh install; the tour
+  // is reachable from its final step and from the header button.
+  if (maybeShowWizard()) return;
   maybeShowTour();
 }
 
