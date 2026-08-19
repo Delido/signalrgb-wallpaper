@@ -9989,7 +9989,9 @@ const TOUR_STEPS = [
   { selector: "#card-looks",         i18n: "looks",   tab: "look" },
   { selector: "#card-bg",            i18n: "bg",      tab: "look" },
   { selector: "#card-widgets",       i18n: "widgets", optional: true, tab: "widgets" },
-  { selector: "#card-presets",       i18n: "presets", tab: "system" },
+  // The card lives in the Look tab, not System. Sending the tour to
+  // "system" left the step pointing at a card that tab never shows.
+  { selector: "#card-presets",       i18n: "presets", tab: "look" },
   { selector: "#card-system",        i18n: "system",  optional: true, tab: "integrations" },
   { selector: ".btn[href='/builder']", i18n: "builder", optional: true },
   { selector: null,                  i18n: "done" },

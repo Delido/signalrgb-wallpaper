@@ -172,6 +172,27 @@ if (keyBlock) {
         unhandled.length ? `unreachable: ${unhandled.join(", ")}` : "");
 }
 
+// --- the guided tour must point at things that exist -------------------
+// Each TOUR_STEPS entry names a card selector and, optionally, the tab
+// to switch to first. When the two disagree the step activates a tab
+// that never shows that card, so the spotlight lands on nothing and the
+// tour silently degrades. card-presets did exactly this: the step named
+// tab "system" while the card lives in "look".
+const cardTab = new Map(cards.filter(c => c.id).map(c => [c.id, c.tab]));
+const tourBlock = HTML.slice(HTML.indexOf("const TOUR_STEPS"));
+const steps = [...tourBlock.slice(0, tourBlock.indexOf("];")).matchAll(
+  /selector:\s*"#([\w-]+)"(?:[^}\n]*?tab:\s*"([\w-]+)")?/g)];
+check("TOUR_STEPS parsed", steps.length > 3, `found ${steps.length}`);
+
+const badTarget = steps.filter(m => !presentIds.has(m[1]));
+check("every tour step points at an element that exists",
+      badTarget.length === 0, badTarget.map(m => "#" + m[1]).join(", "));
+
+const wrongTab = steps.filter(m => m[2] && cardTab.has(m[1]) && cardTab.get(m[1]) !== m[2]);
+check("every tour step names the tab its card actually lives in",
+      wrongTab.length === 0,
+      wrongTab.map(m => `#${m[1]}: step says "${m[2]}", card is in "${cardTab.get(m[1])}"`).join("; "));
+
 console.error("\n" + "=".repeat(68));
 console.error(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
