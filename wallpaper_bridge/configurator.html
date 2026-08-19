@@ -237,12 +237,10 @@
   }
   /* Filter: only the cards belonging to the active tab render. */
   main[data-active-tab] section.card[data-section-tab] { display: none; }
-  main[data-active-tab="look"]         section.card[data-section-tab="look"],
-  main[data-active-tab="library"]      section.card[data-section-tab="library"],
-  main[data-active-tab="effects"]      section.card[data-section-tab="effects"],
-  main[data-active-tab="widgets"]      section.card[data-section-tab="widgets"],
-  main[data-active-tab="integrations"] section.card[data-section-tab="integrations"],
-  main[data-active-tab="system"]       section.card[data-section-tab="system"] { display: block; }
+  main[data-active-tab="appearance"] section.card[data-section-tab="appearance"],
+  main[data-active-tab="content"] section.card[data-section-tab="content"],
+  main[data-active-tab="connect"] section.card[data-section-tab="connect"],
+  main[data-active-tab="system"]     section.card[data-section-tab="system"] { display: block; }
   /* Narrow viewports — horizontal scroll for the tab row. */
   @media (max-width: 720px) {
     #section-tabs {
@@ -2609,7 +2607,7 @@
        configure…" opens the same popover anchored under this
        button, so users without the tooltip discovery still find
        span / mirror / reset. -->
-  <section class="card" id="card-screen-setup" data-section-tab="look">
+  <section class="card" id="card-screen-setup" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="setup.card_head">Screen layout</h2>
@@ -2627,7 +2625,7 @@
     </div>
   </section>
 
-  <section class="card" id="card-looks" data-section-tab="look">
+  <section class="card" id="card-looks" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.looks">Quick Looks</h2>
@@ -2643,7 +2641,7 @@
   </section>
 
   <!-- ── Background ─────────────────────────────────────────────────── -->
-  <section class="card" id="card-bg" data-section-tab="look">
+  <section class="card" id="card-bg" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.bg">Background</h2>
@@ -2754,7 +2752,7 @@
   </section>
 
   <!-- ── Glow ───────────────────────────────────────────────────────── -->
-  <section class="card" id="card-glow" data-section-tab="look">
+  <section class="card" id="card-glow" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.glow">Glow</h2>
@@ -2876,7 +2874,7 @@
        Moved out of the Background card's strip when the bundled set
        crossed ~20 items and the strip became unusable. Tag-aware
        search, sort dropdown, double-click apply, larger tiles. -->
-  <section class="card" id="card-library" data-section-tab="library">
+  <section class="card" id="card-library" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.library">Library</h2>
@@ -2980,7 +2978,7 @@
   </section>
 
   <!-- ── Effects ────────────────────────────────────────────────────── -->
-  <section class="card" id="card-effects" data-section-tab="effects">
+  <section class="card" id="card-effects" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.effects">Effects</h2>
@@ -3129,7 +3127,7 @@
   </section>
 
   <!-- ── Widgets ────────────────────────────────────────────────────── -->
-  <section class="card" id="card-widgets" data-section-tab="widgets">
+  <section class="card" id="card-widgets" data-section-tab="content">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.widgets">Widgets</h2>
@@ -3263,7 +3261,7 @@
        data-section-tab; CSS hides anything that doesn't match the
        active tab so the order on screen is: screen-setup → looks →
        bg → glow → presets. -->
-  <section class="card" id="card-presets" data-section-tab="look">
+  <section class="card" id="card-presets" data-section-tab="appearance">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.presets">Presets</h2>
@@ -3283,7 +3281,7 @@
        tray menu's "Advanced" submenu. Same handlers — they now POST
        to bridge endpoints over WS instead of being invoked via
        pystray callbacks. -->
-  <section class="card" id="card-system" data-section-tab="integrations">
+  <section class="card" id="card-system" data-section-tab="system">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.system">System</h2>
@@ -3354,7 +3352,27 @@
            switched on) and pushes the source-screen's averaged glow
            colour to every enumerated device at 30 Hz. -->
       <details class="integration-block">
-      <summary><h3 data-i18n="openrgb.header">OpenRGB output (beta)</h3></summary>
+      <summary>    </div>
+  </section>
+
+  <!-- v2.4.4-beta.16: split out of card-system. That card carried 33
+       controls — more than the entire Look tab — because seven beta
+       integrations shared a container with the everyday system
+       toggles. A first-time user opening "System" met OpenRGB, sACN,
+       MQTT, a REST token and a plugin loader before finding the update
+       checkbox. The integrations keep their markup verbatim; only the
+       container around them is new. -->
+  <section class="card" id="card-integrations" data-section-tab="connect">
+    <header class="card-head">
+      <h2 data-i18n="section.integrations">Connections</h2>
+    </header>
+    <div class="body">
+      <div class="hint" data-i18n="integrations.hint">
+        Optional. Send your lighting to other software, or let other
+        software drive this wallpaper. Everything here is beta — none of
+        it is needed for the wallpaper itself.
+      </div>
+<h3 data-i18n="openrgb.header">OpenRGB output (beta)</h3></summary>
       <div class="hint" data-i18n="openrgb.hint">
         Mirror the wallpaper's live glow colour onto your OpenRGB-
         controlled hardware (RAM, fans, keyboards, …). Requires
@@ -4269,6 +4287,16 @@ const TRANSLATIONS = {
   "tab.widgets":            { en: "Widgets",              de: "Widgets" },
   "tab.integrations":       { en: "Integrations",         de: "Integrationen" },
   "tab.system":             { en: "System",               de: "System" },
+  // v2.4.4-beta.16 task-oriented tabs. The old tab.* keys stay because
+  // section headings and the tour still reference them.
+  "tab.appearance":         { en: "Appearance",           de: "Aussehen" },
+  "tab.content":            { en: "Content",              de: "Inhalte" },
+  "tab.connect":            { en: "Connections",          de: "Verbindungen" },
+  "section.integrations":   { en: "Connections",          de: "Verbindungen" },
+  "integrations.hint":      {
+    en: "Optional. Send your lighting to other software, or let other software drive this wallpaper. Everything here is beta — none of it is needed for the wallpaper itself.",
+    de: "Optional. Schicke deine Beleuchtung an andere Software oder lass andere Software dieses Wallpaper steuern. Alles hier ist Beta — für das Wallpaper selbst wird nichts davon gebraucht."
+  },
   "tour.looks.title":       { en: "Quick Looks",          de: "Quick Looks" },
   "tour.looks.body":        { en: "Pre-built bundles: streamer overlay, focus mode, pomodoro, news desk, … One click swaps effects + widgets without touching your background. Auto-snapshots current state to preset 1 so you can revert.",
                               de: "Vorgebaute Bundles: Streamer-Overlay, Focus-Mode, Pomodoro, News-Desk, … Ein Klick tauscht Effekte + Widgets ohne den Hintergrund anzufassen. Auto-Snapshot in Preset 1 — wenn's nicht gefällt: revert." },
@@ -7919,23 +7947,36 @@ document.querySelectorAll("section.card > header.section-head[data-toggle]").for
 // #section-nav (sidebar + IntersectionObserver were deleted).
 // ─────────────────────────────────────────────────────────────────────────────
 const SECTION_TABS = [
-  { key: "look", i18n: "tab.look",
+  // v2.4.4-beta.16: six technical tabs became four questions.
+  //
+  // The old set named the machinery — Look, Library, Effects, Widgets,
+  // Integrations, System — which reads fine once you know what the
+  // machinery is, and not at all before. Library and Effects in
+  // particular are the same question as Look ("how should it look?"),
+  // just answered with different controls, so a newcomer had to guess
+  // which of three tabs held the thing they wanted.
+  //
+  // These four are phrased as the questions someone actually arrives
+  // with. Order matters: Appearance is where everyone starts, Content
+  // is the second thing they want, Connections is optional extras, and
+  // System is maintenance almost nobody opens.
+  { key: "appearance", i18n: "tab.appearance",
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4-4 3 3 4-5 3 4"/>' },
-  // v1.7.5: dedicated Library tab. Used to live as a strip inside
-  // the Background card in the Look tab; with the bundle growing
-  // past ~20 items the strip was unusable. The new tab gives it
-  // search + sort + tags + a proper grid.
-  { key: "library", i18n: "tab.library",
-    icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
-  { key: "effects", i18n: "tab.effects",
-    icon: '<path d="M5 12l3-3 3 3 3-6 3 6 2-2"/><circle cx="18" cy="6" r="1.4"/>' },
-  { key: "widgets", i18n: "tab.widgets",
+  { key: "content", i18n: "tab.content",
     icon: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>' },
-  { key: "integrations", i18n: "tab.integrations",
+  { key: "connect", i18n: "tab.connect",
     icon: '<path d="M9 12h6"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/>' },
   { key: "system", i18n: "tab.system",
     icon: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
 ];
+
+// Old tab keys, so a stored "cfg.activeSectionTab" or a #tab=… link
+// from before the redesign still lands somewhere sensible instead of
+// silently falling back to the first tab.
+const LEGACY_TAB_ALIASES = {
+  look: "appearance", library: "appearance", effects: "appearance",
+  widgets: "content", integrations: "connect", system: "system",
+};
 
 function buildSectionTabs() {
   const nav = document.getElementById("section-tabs");
@@ -7955,14 +7996,17 @@ function buildSectionTabs() {
   }
   // Restore last-active tab. URL hash (#tab=…) overrides storage —
   // lets the Tour or external links jump straight to a tab.
-  let initial = "look";
+  let initial = "appearance";
   try {
     const stored = localStorage.getItem("cfg.activeSectionTab");
     if (stored) initial = stored;
   } catch (_) {}
   const m = /^#tab=([a-z]+)/i.exec(location.hash || "");
   if (m) initial = m[1];
-  if (!SECTION_TABS.some((e) => e.key === initial)) initial = "look";
+  // A tab key stored before the redesign, or a bookmarked #tab=look
+  // link, maps onto its successor rather than silently resetting.
+  if (LEGACY_TAB_ALIASES[initial]) initial = LEGACY_TAB_ALIASES[initial];
+  if (!SECTION_TABS.some((e) => e.key === initial)) initial = "appearance";
   activateSectionTab(initial);
 }
 
@@ -9983,16 +10027,16 @@ const TOUR_STEPS = [
   { selector: "#tabs",               i18n: "tabs" },
   // v2.2.0-beta: gear button hidden; tour now points at the
   // Bildschirm-Layout card (lives in the Look tab) directly.
-  { selector: "#card-screen-setup",  i18n: "tab_gear", optional: true, tab: "look" },
+  { selector: "#card-screen-setup",  i18n: "tab_gear", optional: true, tab: "appearance" },
   { selector: "#header-toggle-preview", i18n: "preview_toggle", optional: true },
   { selector: "#section-tabs",       i18n: "section_tabs", optional: true },
-  { selector: "#card-looks",         i18n: "looks",   tab: "look" },
-  { selector: "#card-bg",            i18n: "bg",      tab: "look" },
-  { selector: "#card-widgets",       i18n: "widgets", optional: true, tab: "widgets" },
+  { selector: "#card-looks",         i18n: "looks",   tab: "appearance" },
+  { selector: "#card-bg",            i18n: "bg",      tab: "appearance" },
+  { selector: "#card-widgets",       i18n: "widgets", optional: true, tab: "content" },
   // The card lives in the Look tab, not System. Sending the tour to
   // "system" left the step pointing at a card that tab never shows.
-  { selector: "#card-presets",       i18n: "presets", tab: "look" },
-  { selector: "#card-system",        i18n: "system",  optional: true, tab: "integrations" },
+  { selector: "#card-presets",       i18n: "presets", tab: "appearance" },
+  { selector: "#card-system",        i18n: "system",  optional: true, tab: "system" },
   { selector: ".btn[href='/builder']", i18n: "builder", optional: true },
   { selector: null,                  i18n: "done" },
 ];

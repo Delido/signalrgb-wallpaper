@@ -26,6 +26,8 @@ every push and PR (`.github/workflows/smoke.yml`).
 | `test_plugin_grid.mjs` | SignalRGB plugin: per-device grid state — a settings change must reach every screen |
 | `test_glow_spread.mjs` | The glow Spread slider: its labelling, and that `--glow` still only scales blur — never brightness |
 | `test_filter_chain.mjs` | CSS `filter` collisions — an effect must never replace the glow's blur |
+| `test_settings_reachable.mjs` | Characterisation for the redesign — every setting stays operable, every card sits in a real tab |
+| `test_configurator_boots.mjs` | Runs the Configurator script in a sandbox — catches the beta.7 class of dead-page bug |
 | `test_reimport_workshop.ps1` | Workshop-subscription detection and its exit codes |
 | `test_release_tooling.ps1` | `release.ps1` preflight + the winget publish path |
 | `harness.py` | Shared fakes and helpers (python) |
