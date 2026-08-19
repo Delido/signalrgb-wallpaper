@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.13"
+APP_VERSION = "2.4.4-beta.14"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,9 +851,9 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
-    "2.4.4-beta.13": {
-        "title_en": "What's new in v2.4.4-beta.13",
-        "title_de": "Was ist neu in v2.4.4-beta.13",
+    "2.4.4-beta.14": {
+        "title_en": "What's new in v2.4.4-beta.14",
+        "title_de": "Was ist neu in v2.4.4-beta.14",
         "body_en": (
             "**Fixed: changing the glow grid size did nothing on one "
             "monitor.**\n\n"
