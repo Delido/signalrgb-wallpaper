@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.24"
+APP_VERSION = "2.4.4-beta.25"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,38 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.25": {
+        "title_en": "What\'s new in v2.4.4-beta.25",
+        "title_de": "Was ist neu in v2.4.4-beta.25",
+        "body_en": (
+            "**Fixed: the setup banner flashed on every "
+            "Configurator start.**\n\n"
+            "The first check ran before the wallpaper pages had "
+            "finished connecting, so for a moment it looked like no "
+            "wallpaper was running — and the red banner appeared "
+            "briefly even on a perfectly working setup.\n\n"
+            "A problem now has to still be there on the following "
+            "check before anything is shown. Real problems still "
+            "appear within a couple of seconds, and a fixed setup "
+            "clears the banner immediately.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Das Setup-Banner blitzte bei jedem Start "
+            "des Konfigurators kurz auf.**\n\n"
+            "Die erste Pr\u00fcfung lief, bevor die Wallpaper-Seiten "
+            "ihre Verbindung aufgebaut hatten. Einen Moment lang sah "
+            "es deshalb so aus, als liefe kein Wallpaper — und das "
+            "rote Banner erschien kurz, auch wenn alles korrekt "
+            "eingerichtet war.\n\n"
+            "Ein Problem muss jetzt bei der n\u00e4chsten Pr\u00fcfung noch "
+            "bestehen, bevor etwas angezeigt wird. Echte Probleme "
+            "erscheinen weiterhin innerhalb von ein paar Sekunden, "
+            "und sobald die Einrichtung stimmt, verschwindet das "
+            "Banner sofort.\n\n"
+            "**Kein Neuimport n\u00f6tig.**\n"
+        ),
+    },
     "2.4.4-beta.24": {
         "title_en": "What\'s new in v2.4.4-beta.24",
         "title_de": "Was ist neu in v2.4.4-beta.24",

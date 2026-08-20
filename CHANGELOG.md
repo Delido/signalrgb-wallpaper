@@ -4,6 +4,39 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.25] - 2026-08-19
+
+### Fixed — the setup banner flashed on every Configurator start
+
+Reported as "das kommt jetzt aber immer kurz wenn ich den configurator
+starte", on a healthy install.
+
+`refreshSetupStatus()` fires immediately on load, which lands within
+milliseconds of the page opening — before the wallpaper pages have
+completed their WebSocket handshake. `pages_per_screen` is legitimately
+zero at that instant, so the `assigned` step failed and the red banner
+rendered before the first real poll had a chance to see the truth.
+
+A failing step now has to survive two consecutive polls before the
+banner is shown, with a fast confirming poll 1.2s after the first so a
+genuine problem is not held back for a whole 5s interval. Recovery stays
+immediate: one clean poll clears the banner and resets the counter.
+
+That reset matters more than it looks. Without it the threshold protects
+only the very first blip — after any earlier problem the counter
+stays above it and every later one-poll hiccup is announced instantly.
+
+### Testing
+
+`test_setup_status.mjs` drives the real `refreshSetupStatus` against
+scripted `/health` sequences: a one-poll blip must never reach the
+banner, a persistent problem must, a fixed setup must clear on the next
+clean poll, and a blip *after* a recovery must be suppressed again.
+
+The first mutation run missed the missing-reset case entirely — the
+sequence being tested never recovered, so a counter that only ever grew
+behaved identically. 4/4 caught once the recovery case was added.
+
 ## [2.4.4-beta.24] - 2026-08-19
 
 ### Fixed — the setup banner fired while the wallpaper was paused

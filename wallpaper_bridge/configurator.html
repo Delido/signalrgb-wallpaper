@@ -5987,14 +5987,46 @@ function renderSetupStatus(h) {
   }
 }
 
+// v2.4.4-beta.25: a problem has to persist before it is announced.
+//
+// The first /health lands within milliseconds of the page opening,
+// before the wallpaper pages have finished their WebSocket handshake,
+// so pages_per_screen is legitimately zero for a moment on every single
+// Configurator start. The banner flashed red on a perfectly healthy
+// install every time. Reported as "das kommt jetzt aber immer kurz wenn
+// ich den configurator starte".
+//
+// Requiring two consecutive failing polls costs at most one extra
+// interval before a real problem is shown, and removes the entire class
+// of startup-race false positives. Recovery stays immediate: one clean
+// poll clears the banner and resets the counter, so a fixed setup does
+// not linger behind a confirmation delay.
+const SETUP_CONFIRM_POLLS = 2;
+let _setupFailStreak = 0;
+
 async function refreshSetupStatus() {
   try {
     const r = await fetch("/health", { cache: "no-store" });
     if (!r.ok) return;
-    renderSetupStatus(await r.json());
+    const h = await r.json();
+    const broken = h && h.available !== false
+      && SETUP_STEPS.some((st) => !st.ok(h));
+    if (broken) {
+      _setupFailStreak += 1;
+      // Hold the banner back until the same problem is still there on
+      // the next poll. Passing a synthetic all-clear keeps the render
+      // path single — renderSetupStatus decides visibility, not this.
+      if (_setupFailStreak < SETUP_CONFIRM_POLLS) return;
+    } else {
+      _setupFailStreak = 0;
+    }
+    renderSetupStatus(h);
   } catch (_) { /* bridge down — the conn pill already says so */ }
 }
 refreshSetupStatus();
+// The confirming poll comes quickly so a genuine problem is not held
+// back for a full interval; steady-state polling stays at 5s.
+setTimeout(refreshSetupStatus, 1200);
 setInterval(refreshSetupStatus, 5000);
 
 // Multi-monitor overview — one mini-thumb per screen, clicking jumps to

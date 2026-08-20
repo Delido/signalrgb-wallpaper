@@ -192,6 +192,86 @@ console.log("\nthe banner is wired into the page");
         /paused = bool\(self\.broadcaster\.get_paused\(\)\)/.test(BRIDGE));
 }
 
+// --- the startup flash -------------------------------------------------
+// The first /health lands before the wallpaper pages have finished
+// their WebSocket handshake, so pages_per_screen is legitimately zero
+// for a moment on every Configurator start and the banner flashed red
+// on a healthy install. Reported as "das kommt jetzt aber immer kurz
+// wenn ich den configurator starte".
+//
+// The rule: a problem has to survive two consecutive polls before it is
+// announced, and one clean poll clears it again. Run the real function
+// against a scripted sequence of /health responses rather than assert
+// on its source.
+{
+  const src = CFG.match(/const SETUP_CONFIRM_POLLS[\s\S]*?\n\}/);
+  check("the confirm-threshold logic is present", !!src);
+
+  if (src) {
+    const healthy = {
+      available: true, plugin_present: true, signalrgb_running: true,
+      frames_arriving: true, pages_per_screen: [1, 1], paused: false,
+    };
+    // What the very first poll sees: pages have not connected yet.
+    const starting = { ...healthy, frames_arriving: false, pages_per_screen: [0, 0] };
+
+    async function drive(sequence) {
+      const shown = [];
+      const ctx = {
+        SETUP_STEPS: STEPS,
+        renderSetupStatus: (h) => shown.push(h),
+        fetch: async () => ({ ok: true, json: async () => sequence.shift() }),
+        console: { log() {}, warn() {}, error() {} },
+      };
+      const fn = new Function("ctx", `
+        with (ctx) {
+          ${src[0]}
+          return refreshSetupStatus;
+        }
+      `)(ctx);
+      for (let i = 0; i < 4 && sequence.length; i++) await fn();
+      return shown;
+    }
+
+    // One transient bad poll followed by a good one: nothing shown.
+    const flash = await drive([starting, healthy, healthy]);
+    check("a one-poll blip never reaches the banner",
+          flash.length === 0 || flash.every((h) => STEPS.every((st) => st.ok(h))),
+          `renders: ${flash.length}`);
+
+    // A real, persistent problem still gets through.
+    const persistent = await drive([starting, starting, starting]);
+    check("a problem that persists is reported",
+          persistent.length > 0,
+          "two failing polls in a row must show the banner");
+
+    // Recovery is immediate — no lingering banner behind the delay.
+    const recovered = await drive([starting, starting, healthy]);
+    const last = recovered[recovered.length - 1];
+    check("a fixed setup clears on the next clean poll",
+          !!last && STEPS.every((st) => st.ok(last)),
+          "the healthy snapshot has to reach renderSetupStatus");
+
+    // The streak must reset on a clean poll, or the threshold protects
+    // only the first blip: after any earlier problem the counter stays
+    // above it and every later one-poll hiccup is announced instantly.
+    // Sequence: real problem (shown) → recovered → single blip.
+    const afterRecovery = await drive([starting, starting, healthy, starting]);
+    const tail = afterRecovery[afterRecovery.length - 1];
+    check("a blip after a recovery is suppressed again",
+          !!tail && STEPS.every((st) => st.ok(tail)),
+          "the fail counter has to reset on a clean poll");
+  }
+
+  // A confirming poll soon after the first, so a genuine problem is not
+  // hidden for a whole 5s interval.
+  check("a fast confirming poll is scheduled",
+        /setTimeout\(refreshSetupStatus, \d{3,4}\)/.test(CFG),
+        "otherwise the first real report waits a full interval");
+  check("steady-state polling is unchanged",
+        /setInterval\(refreshSetupStatus, 5000\)/.test(CFG));
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 if (results.failed.length) {
