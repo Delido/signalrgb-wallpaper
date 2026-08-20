@@ -212,6 +212,126 @@ check("the layout preview re-render uses the current tab key",
       /if \(key === "content" && typeof renderLayoutPreview/.test(HTML),
       'a stale "widgets" here means the preview keeps its 0x0 layout');
 
+// --- Connections is grouped by direction -------------------------------
+// "Colour source per screen" decides what the wallpaper follows, and it
+// sat third of seven collapsed blocks, between OpenRGB output and the
+// OpenRGB SDK server — an input in the middle of the outputs, with
+// nothing marking the difference. Reported as "der source per Screen ist
+// einfach mitten in den Optionen und nicht sauber ersichtlich".
+//
+// The order carries the meaning here, so the order is what gets pinned.
+{
+  const cardAt = HTML.indexOf('id="card-integrations"');
+  const card = HTML.slice(cardAt, HTML.indexOf("</section>", cardAt));
+
+  const heads = [...card.matchAll(/<h3(?: class="(conn-group)")? data-i18n="([\w.]+)"/g)]
+    .map(m => ({ group: !!m[1], key: m[2] }));
+  check("Connections headings found", heads.length >= 8, `${heads.length}`);
+
+  const groups = heads.filter(h => h.group).map(h => h.key);
+  check("three group headings exist", groups.length === 3, groups.join(", "));
+  check("groups run input, output, other",
+        groups.join(",") === "conn.group.input,conn.group.output,conn.group.other",
+        groups.join(","));
+
+  // The colour source has to lead the input group, not sit among the
+  // outputs.
+  const inputAt = heads.findIndex(h => h.key === "conn.group.input");
+  const firstAfterInput = heads[inputAt + 1];
+  check("the colour source leads the input group",
+        !!firstAfterInput && firstAfterInput.key === "sources.header",
+        firstAfterInput ? firstAfterInput.key : "nothing follows the heading");
+
+  // And before every output block — that is the whole point of the move.
+  const order = heads.filter(h => !h.group).map(h => h.key);
+  const iSources = order.indexOf("sources.header");
+  check("the colour source is present", iSources >= 0, order.join(" > "));
+  for (const out of ["openrgb.header", "openrgb_sdk.header",
+                     "sacn.header", "mqtt.header"]) {
+    check(`${out} comes after the colour source`,
+          iSources >= 0 && order.indexOf(out) > iSources, order.join(" > "));
+  }
+
+  for (const key of ["conn.group.input", "conn.group.output", "conn.group.other"]) {
+    const esc = key.replace(/\./g, "\\.");
+    const entry = HTML.match(new RegExp(`"${esc}":\\s*\\{[\\s\\S]{0,240}?\\}`));
+    check(`${key} is translated in both languages`,
+          !!entry && /en:\s*"/.test(entry[0]) && /de:\s*"/.test(entry[0]));
+  }
+
+  // Moving seven blocks is the same cut that tore a <summary> in half in
+  // beta.22, so the pairing and the control count are checked here too.
+  const dOpen = (card.match(/<details\b/g) || []).length;
+  const dClose = (card.match(/<\/details>/g) || []).length;
+  check("details tags stayed balanced after the reorder",
+        dOpen === dClose && dOpen === 7, `${dOpen}/${dClose}`);
+  const sOpen = (card.match(/<summary\b/g) || []).length;
+  const sClose = (card.match(/<\/summary>/g) || []).length;
+  check("summary tags stayed balanced", sOpen === sClose && sOpen === 7,
+        `${sOpen}/${sClose}`);
+  const ctrls = (card.match(/<(?:input|select|button)\b[^>]*id="[\w-]+"/g) || []).length;
+  check("no control was lost in the move", ctrls === 24, `${ctrls}, expected 24`);
+}
+
+// --- sticky navs must not be scrolled through -------------------------
+// A sticky element with no background and no z-index still sticks, but
+// the cards scroll straight over it. The sidebar rule that ships (the
+// last #section-tabs block, overriding the horizontal-band defaults
+// further up) dropped both, so card headings appeared on top of the
+// sidebar, the screen strip and the page header. Reported as
+// "kattegorie Ueberschriften ueberblenden auch die Screens oder auch
+// den header".
+//
+// CSS here has no cascade resolution, so take the LAST matching rule —
+// which is what the browser does for equal specificity, and is exactly
+// the rule that was wrong.
+{
+  const cssEnd = HTML.indexOf("</style>");
+  // @media blocks are stripped: the narrow-viewport override for .tabs
+  // only adjusts padding, and treating it as "the last rule" made this
+  // report a correctly positioned bar as having no position at all.
+  const CSS = HTML.slice(0, cssEnd > 0 ? cssEnd : HTML.length)
+    .replace(/@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/g, "");
+
+  const lastRule = (sel) => {
+    const esc = sel.replace(/[.#]/g, (c) => "\\" + c);
+    const all = [...CSS.matchAll(new RegExp(`${esc}\\s*\\{([^}]*)\\}`, "g"))];
+    return all.length ? all[all.length - 1][1] : null;
+  };
+  const prop = (body, name) => {
+    if (!body) return null;
+    const m = body.match(new RegExp(`(?:^|;|\\s)${name}:\\s*([^;]+)`));
+    return m ? m[1].trim() : null;
+  };
+
+  for (const sel of ["#section-tabs", ".tabs"]) {
+    const body = lastRule(sel);
+    check(`${sel} rule found`, !!body);
+    if (!body) continue;
+    check(`${sel} is sticky`, /sticky/.test(prop(body, "position") || ""),
+          prop(body, "position") || "no position");
+    // Opaque, or the page shows through a bar that is supposed to cover
+    // it. `transparent` is the specific value that shipped.
+    const bg = prop(body, "background");
+    check(`${sel} has an opaque background`,
+          !!bg && !/transparent|none/.test(bg), bg || "no background");
+    // Without a z-index a sticky element sits in the normal flow and
+    // later content paints over it.
+    const z = prop(body, "z-index");
+    check(`${sel} declares a z-index`, !!z, "cards paint over it otherwise");
+    if (z) {
+      check(`${sel} sits below the page header`, Number(z) < 10,
+            `z-index ${z}, header is 10`);
+    }
+  }
+
+  // Both navs occupy the same band and must not fight each other.
+  const zNav = prop(lastRule("#section-tabs"), "z-index");
+  const zStrip = prop(lastRule(".tabs"), "z-index");
+  check("both navs share the same layer", zNav === zStrip,
+        `sidebar ${zNav} vs strip ${zStrip}`);
+}
+
 console.error("\n" + "=".repeat(68));
 console.error(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

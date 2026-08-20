@@ -4,6 +4,50 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.31] - 2026-08-20
+
+### Changed — Connections is grouped by direction
+
+Reported as "der source per Screen ist einfach mitten in den Optionen
+und nicht sauber ersichtlich".
+
+The order was OpenRGB output, OpenRGB SDK server, **colour source per
+screen**, sACN output, MQTT, REST token, plugins — output, output,
+*input*, output, output. The one setting that decides what the wallpaper
+follows sat third of seven collapsed blocks with nothing marking it as a
+different kind of thing.
+
+Three group headings now:
+
+- **Where the colour comes from** — colour source per screen
+- **Where the colour goes** — OpenRGB output, SDK server, sACN, MQTT
+- **Other** — REST API token, 3rd-party widget plugins
+
+Nothing was removed, renamed or rewired; the blocks moved and grew
+headings above them.
+
+### Fixed — card headings scrolled over the navigation
+
+The sidebar rule that ships overrides the horizontal-band defaults
+further up, and it dropped both `background` and `z-index`. A sticky
+element with neither still sticks, but content scrolls straight over it:
+card headings appeared on top of the section list, the screen tabs and
+the page header. Reported as "kattegorie Ueberschriften ueberblenden
+auch die Screens oder auch den header".
+
+Opaque now, at `z-index: 8` — the same layer as the screen strip
+beside it, both below the header's 10.
+
+### Testing
+
+`test_tab_scope.mjs` pins the ordering rather than the presence of the
+headings: the colour source must lead the input group and precede every
+output block, which is the whole point of the change. It also re-checks
+`<details>` / `<summary>` pairing and the control count, since moving
+seven blocks is the same kind of cut that tore a `<summary>` in half in
+beta.22. 3/3 mutations caught, including moving the source back among
+the outputs.
+
 ## [2.4.4-beta.30] - 2026-08-20
 
 ### Fixed — the WebGL overlay double-counted alpha

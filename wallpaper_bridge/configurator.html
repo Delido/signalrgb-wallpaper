@@ -625,6 +625,23 @@
      larger refactor for v1.2.1. */
   .mirror-bar { display: none !important; }
 
+  /* Group headings inside Connections (v2.4.4-beta.31).
+     The colour source was the third of seven collapsed blocks, between
+     two OpenRGB ones — an input sitting in the middle of the outputs,
+     with nothing saying so. Reported as "der source per Screen ist
+     einfach mitten in den Optionen und nicht sauber ersichtlich".
+     Splitting by direction makes the one setting that decides what the
+     wallpaper follows the first thing on the tab. */
+  .conn-group {
+    margin: 22px 0 2px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .conn-group:first-of-type { margin-top: 8px; }
+
   /* ── Advanced sections (v2.4.4-beta.16) ───────────────────────────
      A second collapse level, inside a card. The card header already
      collapses the whole card; this hides the controls most people
@@ -2096,7 +2113,17 @@
     gap: 2px;
     max-width: none;
     border: none;
-    background: transparent;
+    /* v2.4.4-beta.31: opaque, and above the cards.
+       This rule overrides the horizontal-band defaults further up, and
+       it dropped both the background and the z-index. A sticky element
+       with neither still sticks, but cards scroll straight through it:
+       the card headings appeared over the sidebar, the screen strip and
+       the page header. Reported as "kattegorie Ueberschriften
+       ueberblenden auch die Screens oder auch den header".
+       z-index 8 matches .tabs — same band, same layer, both below the
+       header's 10. */
+    background: var(--bg);
+    z-index: 8;
   }
   #section-tabs .stab {
     width: 100%;
@@ -3547,7 +3574,28 @@
         software drive this wallpaper. Everything here is beta — none of
         it is needed for the wallpaper itself.
       </div>
-      <!-- v1.4.0-beta: OpenRGB output channel. Optional; disabled by
+            <h3 class="conn-group" data-i18n="conn.group.input">Where the colour comes from</h3>
+<!-- v1.5.0-beta: per-screen colour source picker. Each screen
+           can independently take its glow colour from SignalRGB UDP
+           (default), an OpenRGB device, or an incoming sACN/E1.31
+           universe. The bridge enforces the routing — only frames
+           from the configured source for a given screen are forwarded
+           to the wallpaper page. -->
+      <details class="integration-block">
+      <summary><h3 data-i18n="sources.header">Colour source per screen (beta)</h3></summary>
+      <div class="hint" data-i18n="sources.hint">
+        Picks where each screen's live glow colour comes from.
+        SignalRGB is the default — the wallpaper follows whatever
+        effect SignalRGB is running. Switch a screen to OpenRGB to
+        mirror the current LEDs of an OpenRGB device, or to sACN to
+        listen for an incoming E1.31 universe.
+      </div>
+      <div id="sources-list" style="margin-top: 10px;"></div>
+
+      </details>
+
+      <h3 class="conn-group" data-i18n="conn.group.output">Where the colour goes</h3>
+<!-- v1.4.0-beta: OpenRGB output channel. Optional; disabled by
            default. When enabled, the bridge connects to OpenRGB's
            network SDK (Settings → SDK Server in OpenRGB must be
            switched on) and pushes the source-screen's averaged glow
@@ -3604,7 +3652,7 @@
 
       </details>
 
-      <!-- v1.6.2-beta: OpenRGB-SDK SERVER (inverse of the OpenRGB
+<!-- v1.6.2-beta: OpenRGB-SDK SERVER (inverse of the OpenRGB
            output above). Exposes the bridge to the OpenRGB GUI as
            virtual matrix devices, one per screen. Any OpenRGB effect
            (Rainbow Wave, Audio Visualizer, …) can then drive the
@@ -3640,26 +3688,7 @@
 
       </details>
 
-      <!-- v1.5.0-beta: per-screen colour source picker. Each screen
-           can independently take its glow colour from SignalRGB UDP
-           (default), an OpenRGB device, or an incoming sACN/E1.31
-           universe. The bridge enforces the routing — only frames
-           from the configured source for a given screen are forwarded
-           to the wallpaper page. -->
-      <details class="integration-block">
-      <summary><h3 data-i18n="sources.header">Colour source per screen (beta)</h3></summary>
-      <div class="hint" data-i18n="sources.hint">
-        Picks where each screen's live glow colour comes from.
-        SignalRGB is the default — the wallpaper follows whatever
-        effect SignalRGB is running. Switch a screen to OpenRGB to
-        mirror the current LEDs of an OpenRGB device, or to sACN to
-        listen for an incoming E1.31 universe.
-      </div>
-      <div id="sources-list" style="margin-top: 10px;"></div>
-
-      </details>
-
-      <!-- v1.5.0-beta: sACN/E1.31 output. Hooks the broadcaster's
+<!-- v1.5.0-beta: sACN/E1.31 output. Hooks the broadcaster's
            frame-tap and emits one universe per screen on the standard
            multicast group (port 5568). Receivers: xLights, QLC+,
            Hyperion, any hardware ArtNet/sACN node, etc. Disabled by
@@ -3696,7 +3725,7 @@
 
       </details>
 
-      <!-- v1.5.0-beta: HA / MQTT bridge. Publishes per-screen state
+<!-- v1.5.0-beta: HA / MQTT bridge. Publishes per-screen state
            (active preset, manual-pause, glow colour, current
            background) to a configurable topic prefix; subscribes to
            `*/set` topics for control. Disabled by default. -->
@@ -3747,7 +3776,8 @@
 
       </details>
 
-      <!-- v1.5.0-beta: REST API token (auto-generated). Loopback
+      <h3 class="conn-group" data-i18n="conn.group.other">Other</h3>
+<!-- v1.5.0-beta: REST API token (auto-generated). Loopback
            requests bypass auth; remote integrations (future LAN-bind
            opt-in) must supply this as `Authorization: Bearer <token>`. -->
       <details class="integration-block">
@@ -3782,7 +3812,7 @@
 
       </details>
 
-      <!-- v1.5.0-beta: Plugins. Bridge scans
+<!-- v1.5.0-beta: Plugins. Bridge scans
            %LOCALAPPDATA%\SignalRGBWallpaper\plugins\ at startup +
            on demand. Each discovered manifest.json becomes a new
            `plugin/<name>` widget type in the picker. -->
@@ -4411,6 +4441,11 @@ const TRANSLATIONS = {
     en: "These settings apply to the whole app, not to a single screen.",
     de: "Diese Einstellungen gelten für die ganze Anwendung, nicht für einen einzelnen Bildschirm."
   },
+  "conn.group.input":       { en: "Where the colour comes from",
+                              de: "Woher die Farbe kommt" },
+  "conn.group.output":      { en: "Where the colour goes",
+                              de: "Wohin die Farbe geht" },
+  "conn.group.other":       { en: "Other",                de: "Sonstiges" },
   "system.language":        { en: "Language",             de: "Sprache" },
   "system.language.auto":   { en: "Automatic (system)",   de: "Automatisch (System)" },
   "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },

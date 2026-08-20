@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.30"
+APP_VERSION = "2.4.4-beta.31"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -949,6 +949,44 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.31": {
+        "title_en": "What\'s new in v2.4.4-beta.31",
+        "title_de": "Was ist neu in v2.4.4-beta.31",
+        "body_en": (
+            "**Connections is sorted by direction now.**\n\n"
+            "*Colour source per screen* decides what the wallpaper "
+            "follows, but it sat third of seven collapsed blocks, "
+            "between two OpenRGB sections — an input in the middle "
+            "of the outputs, with nothing saying so.\n\n"
+            "The tab now has three headings: **where the colour comes "
+            "from**, **where the colour goes**, and **other**. The "
+            "source is the first thing on the tab; nothing was "
+            "removed or renamed.\n\n"
+            "**Also fixed: card headings scrolled over the "
+            "navigation.** The section list on the left was "
+            "see-through, so cards slid across it ' + D + ' and across the "
+            "screen tabs and the top bar ' + D + ' while scrolling.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Verbindungen ist jetzt nach Richtung sortiert.**\n\n"
+            "*Farbquelle pro Bildschirm* entscheidet, wonach sich das "
+            "Wallpaper richtet — stand aber als dritter von sieben "
+            "Abschnitten zwischen zwei OpenRGB-Blöcken. Ein Eingang "
+            "mitten unter den Ausgängen, ohne dass etwas darauf "
+            "hinwies.\n\n"
+            "Der Tab hat jetzt drei Überschriften: **Woher die Farbe "
+            "kommt**, **Wohin die Farbe geht** und **Sonstiges**. Die "
+            "Quelle steht ganz oben; entfernt oder umbenannt wurde "
+            "nichts.\n\n"
+            "**Außerdem behoben: Karten-Überschriften schoben sich "
+            "beim Scrollen über die Navigation.** Die Bereichsliste "
+            "links war durchsichtig, dadurch wanderten Karten darüber "
+            "hinweg ' + D + ' und ebenso über die Bildschirm-Tabs und die "
+            "Kopfzeile.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.30": {
         "title_en": "What\'s new in v2.4.4-beta.30",
         "title_de": "Was ist neu in v2.4.4-beta.30",
