@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.23"
+APP_VERSION = "2.4.4-beta.24"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,48 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.24": {
+        "title_en": "What\'s new in v2.4.4-beta.24",
+        "title_de": "Was ist neu in v2.4.4-beta.24",
+        "body_en": (
+            "**Fixed: a false \"Setup isn\\\'t finished yet\" while a "
+            "game was running.**\n\n"
+            "Lively closes the wallpaper page when a fullscreen app "
+            "takes over — that is the auto-pause working. The setup "
+            "banner read the missing page as \"no wallpaper is "
+            "running on at least one screen\" and turned red on a "
+            "perfectly configured install, for as long as the game "
+            "was open.\n\n"
+            "The two checks that depend on a live page are now "
+            "suspended while the wallpaper is paused. A missing "
+            "plugin or a closed SignalRGB is still reported, "
+            "because a pause says nothing about either.\n\n"
+            "**Also: the screen tabs stay visible when you "
+            "scroll.** They lost that when they moved into the page "
+            "in the previous release.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: fälschliches \"Einrichtung noch nicht "
+            "abgeschlossen\" während ein Spiel lief.**\n\n"
+            "Lively schließt die Wallpaper-Seite, sobald eine "
+            "Vollbild-Anwendung übernimmt — genau so soll die "
+            "Auto-Pause funktionieren. Das Setup-Banner deutete die "
+            "fehlende Seite als \"Auf mindestens einem Bildschirm "
+            "läuft kein Wallpaper\" und wurde bei einer völlig "
+            "korrekten Installation rot, solange das Spiel offen "
+            "war.\n\n"
+            "Die beiden Prüfungen, die eine laufende Seite "
+            "voraussetzen, ruhen jetzt während der Pause. Ein "
+            "fehlendes Plugin oder ein geschlossenes SignalRGB wird "
+            "weiterhin gemeldet — darüber sagt eine Pause nichts "
+            "aus.\n\n"
+            "**Außerdem: Die Bildschirm-Tabs bleiben beim Scrollen "
+            "sichtbar.** Das ging beim Umzug in die Seite in der "
+            "vorigen Version verloren.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.23": {
         "title_en": "What\'s new in v2.4.4-beta.23",
         "title_de": "Was ist neu in v2.4.4-beta.23",
@@ -11305,11 +11347,29 @@ class BridgeRuntime:
             fps_per_screen.append(round(f, 1))
         frames_arriving = any(f > 0 for f in fps_per_screen)
 
+        # v2.4.4-beta.24: whether the fullscreen watcher currently has
+        # the wallpaper paused.
+        #
+        # Lively drops the wallpaper page while a fullscreen app is in
+        # the foreground, so pages_per_screen goes to zero and the
+        # "assigned" setup step read that as "no wallpaper is running on
+        # at least one screen" — a red banner on a perfectly configured
+        # install, every time a game was open. Reported as "das kommt
+        # auch wenn alles eingerichtet ist, aber auf ein Screen eine
+        # Fullscreen Anwendung aktiv ist, so das es pausiert ist".
+        paused = False
+        try:
+            if self.broadcaster is not None:
+                paused = bool(self.broadcaster.get_paused())
+        except Exception:
+            pass
+
         return {
             "plugin_present":    plugin_present,
             "plugin_path":       str(plugin_path) if plugin_path else "",
             "plugin_dir":        str(plugin_path.parent) if plugin_path else "",
             "signalrgb_running": signalrgb_running,
+            "paused":            paused,
             "pages_connected":   pages_connected,
             "screen_count":      screen_count,
             "pages_per_screen":  pages_per_screen,

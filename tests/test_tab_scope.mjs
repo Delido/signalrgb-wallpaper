@@ -170,6 +170,41 @@ check("sidebar sticky offsets were updated for the new layout",
       stickyOffsets.length > 0 && stickyOffsets.every(v => v < 100),
       `offsets: ${stickyOffsets.join(", ")} — 100px allowed for the old band`);
 
+// --- both navigations must survive scrolling ---------------------------
+// Moving the strip into the page dropped the sticky positioning it had
+// as page chrome, so it scrolled away while the section nav beside it
+// stayed put. Reported as "die beiden Tabs sollten auch sichtbar sein
+// wenn man runter scrollt".
+const tabsRule = HTML.match(/(?<![\w-])\.tabs\s*\{([^}]*)\}/);
+check(".tabs rule found", !!tabsRule);
+if (tabsRule) {
+  check("the screen strip is sticky",
+        /position:\s*sticky/.test(tabsRule[1]),
+        "it scrolls out of reach otherwise");
+  const top = tabsRule[1].match(/top:\s*(\d+)px/);
+  check("the screen strip has a sticky offset", !!top, tabsRule[1].trim());
+  // Both navs clear the same ~53px header, and they occupy different
+  // columns, so they should use the same offset — a mismatch makes one
+  // sit visibly lower than the other.
+  const navTop = HTML.match(/#section-tabs \{[\s\S]*?top:\s*(\d+)px/);
+  check("both navs use the same sticky offset",
+        !!top && !!navTop && top[1] === navTop[1],
+        `strip ${top && top[1]}px vs nav ${navTop && navTop[1]}px`);
+  check("the screen strip has an opaque background",
+        /background:\s*var\(--bg\)/.test(tabsRule[1]),
+        "cards would show through while scrolling under it");
+}
+
+// sticky silently stops working if an ancestor clips or constrains the
+// scroll container, and the failure is invisible in the markup.
+for (const sel of [".app-shell", ".shell-main"]) {
+  const rule = HTML.match(new RegExp(`(?<![\\w-])\\${sel}\\s*\\{([^}]*)\\}`));
+  if (!rule) continue;
+  check(`${sel} does not clip its children`,
+        !/overflow(-y)?:\s*(hidden|auto|scroll)/.test(rule[1]),
+        "an overflow ancestor kills position:sticky");
+}
+
 // --- the stale tab key found on the way --------------------------------
 // The redesign renamed "widgets" to "content"; the layout-preview
 // re-render still tested for the old key, so it never fired.

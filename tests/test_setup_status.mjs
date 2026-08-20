@@ -141,6 +141,57 @@ console.log("\nthe banner is wired into the page");
         /sendCmd\(\{ type: "system-action", action: "open-plugins-folder" \}\)/.test(CFG));
 }
 
+// --- the fullscreen-pause false alarm ---------------------------------
+// Lively drops the wallpaper page while a fullscreen app is focused, so
+// pages_per_screen goes to zero and the frame flow stops. Both are
+// normal for a paused wallpaper, but the banner read them as "no
+// wallpaper is running on at least one screen" and stayed red for as
+// long as the game was open. Reported against a fully working install.
+{
+  const healthy = {
+    plugin_present: true, signalrgb_running: true,
+    frames_arriving: true, pages_per_screen: [1, 1], paused: false,
+  };
+  const pausedNow = {
+    ...healthy, paused: true,
+    // What a pause actually looks like from the bridge's side.
+    frames_arriving: false, pages_per_screen: [0, 0],
+  };
+  const failing = (h) => STEPS.filter((st) => !st.ok(h)).map((st) => st.id);
+
+  check("a healthy install reports no failed steps",
+        failing(healthy).length === 0, failing(healthy).join(", "));
+  check("a paused wallpaper is not reported as broken setup",
+        failing(pausedNow).length === 0,
+        `still failing: ${failing(pausedNow).join(", ")}`);
+
+  // The pause must not mask the two problems it has nothing to do with,
+  // or "paused" becomes a blanket excuse and the banner stops working.
+  const noPluginPaused = { ...pausedNow, plugin_present: false };
+  check("a missing plugin is still reported while paused",
+        failing(noPluginPaused).includes("plugin"),
+        failing(noPluginPaused).join(", "));
+  const noSignalPaused = { ...pausedNow, signalrgb_running: false };
+  check("SignalRGB not running is still reported while paused",
+        failing(noSignalPaused).includes("signalrgb"),
+        failing(noSignalPaused).join(", "));
+
+  // And with no pause, the original detections must still fire.
+  check("no frames is still reported when not paused",
+        failing({ ...healthy, frames_arriving: false }).includes("frames"));
+  check("an unassigned screen is still reported when not paused",
+        failing({ ...healthy, pages_per_screen: [1, 0] }).includes("assigned"));
+
+  // The bridge has to actually send the field, or every check above is
+  // reasoning about a value that is permanently undefined.
+  const BRIDGE = readFileSync(join(repo, "wallpaper_bridge", "bridge.py"), "utf8");
+  check("get_health_status reports the paused flag",
+        /"paused":\s+paused,/.test(BRIDGE),
+        "without it h.paused is undefined and the guard never triggers");
+  check("the paused flag comes from the broadcaster",
+        /paused = bool\(self\.broadcaster\.get_paused\(\)\)/.test(BRIDGE));
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 if (results.failed.length) {

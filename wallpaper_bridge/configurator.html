@@ -72,14 +72,25 @@
 
   /* ── Screen tabs ───────────────────────────────────────────────────── */
   /* v2.4.4-beta.23: the strip sits inside the app shell now, under the
-     section nav, so it no longer sticks to the header offset. Left
-     padding lines it up with the cards rather than the window edge. */
+     section nav. Left padding lines it up with the cards rather than
+     the window edge.
+
+     v2.4.4-beta.24: sticky again. Moving it into the page dropped the
+     sticky positioning it had while it was page chrome, so it scrolled
+     away while the section nav beside it stayed put — reported as "die
+     beiden Tabs sollten auch sichtbar sein wenn man runter scrollt".
+
+     Same 56px offset as #section-tabs: both clear the ~53px header and
+     they sit in different columns, so they cannot overlap each other.
+     z-index 8 matches the nav for the same reason. The background is
+     opaque so cards scroll under it rather than showing through. */
   .tabs {
     display: flex; gap: 4px; align-items: flex-end;
     padding: 0 4px;
     margin: 0 0 10px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
+    position: sticky; top: 56px; z-index: 8;
   }
   .tab {
     padding: 10px 16px;
@@ -5917,14 +5928,23 @@ const SETUP_STEPS = [
   // The silent black screen. SignalRGB is running and the plugin is
   // installed, but the device was never placed on the canvas, so no
   // frames are sent and nothing anywhere says so.
-  { id: "frames", ok: (h) => h.frames_arriving },
+  //
+  // v2.4.4-beta.24: both this and "assigned" are suspended while the
+  // fullscreen watcher has the wallpaper paused. Lively drops the
+  // wallpaper page for a fullscreen app, which zeroes pages_per_screen
+  // and stops the frame flow — a correctly configured install then
+  // showed "Setup isn't finished yet" for the entire time a game was
+  // open. Pausing is the feature working, not a broken setup, and the
+  // two steps below are the only ones whose signal a pause destroys:
+  // the plugin file and the SignalRGB process are unaffected.
+  { id: "frames", ok: (h) => h.paused || h.frames_arriving },
   // Per screen, because a total cannot say WHICH monitor is missing
   // its wallpaper.
   {
     id: "assigned",
-    ok: (h) => Array.isArray(h.pages_per_screen)
+    ok: (h) => h.paused || (Array.isArray(h.pages_per_screen)
       ? h.pages_per_screen.every((n) => n > 0)
-      : (h.pages_connected || 0) > 0,
+      : (h.pages_connected || 0) > 0),
   },
 ];
 

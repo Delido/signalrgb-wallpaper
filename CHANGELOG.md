@@ -4,6 +4,49 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.24] - 2026-08-19
+
+### Fixed — the setup banner fired while the wallpaper was paused
+
+Reported against a fully working install: "das kommt auch wenn alles
+eingerichtet ist, aber auf ein Screen eine Fullscreen Anwendung aktiv
+ist, so das es pausiert ist".
+
+Lively closes the wallpaper page when a fullscreen app takes the
+foreground, which is exactly what `fullscreenPause` is for. That zeroes
+`pages_per_screen` and stops the frame flow, and the `assigned` and
+`frames` setup steps read those as a broken install — so the red
+"Setup isn't finished yet" banner stayed up for the whole time a game
+was open.
+
+`get_health_status()` now reports `paused`, taken from the broadcaster's
+existing `get_paused()`, and those two steps are suspended while it is
+true. Deliberately only those two: a pause destroys their signal and
+says nothing about whether the plugin file exists or SignalRGB is
+running, so those keep reporting. Otherwise "paused" becomes a blanket
+excuse and the banner stops being worth anything.
+
+### Fixed — the screen tabs scrolled out of view
+
+Moving the strip into the page in beta.23 dropped the `position: sticky`
+it had as page chrome, so it scrolled away while the section nav beside
+it stayed put. Sticky again, at the same 56 px offset as the section nav
+— they clear the same header and sit in different columns, so they
+cannot overlap.
+
+### Testing
+
+`test_setup_status.mjs` runs the real decision table against a paused
+snapshot and asserts both directions: a paused wallpaper reports
+nothing, and a missing plugin or closed SignalRGB is still reported
+*while* paused. 3/3 mutations caught, including making the pause excuse
+everything.
+
+`test_tab_scope.mjs` now pins the sticky positioning, the shared offset,
+the opaque background, and that no ancestor clips the scroll container
+— `overflow` on `.app-shell` or `.shell-main` would silently kill
+sticky with nothing visible in the markup to explain it. 4/4 caught.
+
 ## [2.4.4-beta.23] - 2026-08-19
 
 ### Changed — the screen picker moved into the page
