@@ -44,6 +44,7 @@ JS_SUITES = [
     ("Configurator boots (node)", HERE / "test_configurator_boots.mjs"),
     ("First-run wizard (node)", HERE / "test_first_run_wizard.mjs"),
     ("Per-screen row counts (node)", HERE / "test_screen_count_rows.mjs"),
+    ("Tab scope (node)", HERE / "test_tab_scope.mjs"),
 ]
 PS_SUITES = [
     ("Re-import / Workshop detection (pwsh)", HERE / "test_reimport_workshop.ps1"),

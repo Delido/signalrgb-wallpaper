@@ -614,6 +614,15 @@
      larger refactor for v1.2.1. */
   .mirror-bar { display: none !important; }
 
+  /* Scope note replacing the screen tabs on bridge-global tabs. */
+  .global-scope-note {
+    padding: 9px 14px;
+    margin: 0 0 2px;
+    color: var(--muted);
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--border, #2a3550);
+  }
+
   /* ── Advanced sections (v2.4.4-beta.16) ───────────────────────────
      A second collapse level, inside a card. The card header already
      collapses the whole card; this hides the controls most people
@@ -2566,6 +2575,11 @@
 </header>
 
 <nav class="tabs" id="tabs"></nav>
+<!-- Shown instead of the screen tabs on tabs whose settings are
+     bridge-global. Without it the tabs simply vanish, which reads as a
+     glitch rather than as "this section is not per-screen". -->
+<div id="global-scope-note" class="global-scope-note" style="display:none"
+     data-i18n="scope.global">These settings apply to the whole app, not to a single screen.</div>
 
 <div id="overview-card" class="overview-card hidden">
   <span class="overview-label" data-i18n="overview.label">Overview</span>
@@ -4379,6 +4393,10 @@ const TRANSLATIONS = {
   },
   "system.reset_all_done":  { en: "All screens reset to defaults",
                               de: "Alle Bildschirme zurückgesetzt" },
+  "scope.global":           {
+    en: "These settings apply to the whole app, not to a single screen.",
+    de: "Diese Einstellungen gelten für die ganze Anwendung, nicht für einen einzelnen Bildschirm."
+  },
   "system.language":        { en: "Language",             de: "Sprache" },
   "system.language.auto":   { en: "Automatic (system)",   de: "Automatisch (System)" },
   "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },
@@ -8259,9 +8277,28 @@ function buildSectionTabs() {
 // activateSectionTab(key) — flip <main data-active-tab>, mark the
 // matching tab button active, persist. Exposed globally so the Tour +
 // the screen-tab gear popovers can deep-link into a specific tab.
+// Tabs whose cards are bridge-global rather than per-screen. Everything
+// in them applies to the whole app, so the screen picker above is not
+// just useless there — it actively misleads, implying screen 2 has its
+// own language or its own OpenRGB connection. Reported as "praktisch
+// ist es falsch das das system Bereich in dem Monitor Tab vorhanden ist
+// oder?", and the same is true of Connections.
+const GLOBAL_TABS = new Set(["system", "connect"]);
+
+function _applyScreenScopeChrome(key) {
+  const global = GLOBAL_TABS.has(key);
+  // The screen tab strip and the header screen-count picker both stop
+  // meaning anything on a global tab.
+  const strip = document.getElementById("tabs");
+  if (strip) strip.style.display = global ? "none" : "";
+  const note = document.getElementById("global-scope-note");
+  if (note) note.style.display = global ? "" : "none";
+}
+
 function activateSectionTab(key) {
   const mainEl = document.querySelector("main");
   if (mainEl) mainEl.dataset.activeTab = key;
+  _applyScreenScopeChrome(key);
   document.querySelectorAll("#section-tabs .stab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === key);
   });
@@ -8279,7 +8316,10 @@ function activateSectionTab(key) {
   // listen on it) fixes the XOR where one tab works only because the
   // other was hidden during init.
   requestAnimationFrame(() => {
-    if (key === "widgets" && typeof renderLayoutPreview === "function"
+    // v2.4.4-beta.22: "widgets" became "content" in the redesign. The
+    // stale key meant the layout preview was never re-rendered on tab
+    // switch, so it kept whatever 0x0 layout it was initialised with.
+    if (key === "content" && typeof renderLayoutPreview === "function"
         && els.layoutPreview) {
       try { renderLayoutPreview(); } catch (_) {}
     }

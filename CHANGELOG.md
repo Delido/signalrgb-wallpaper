@@ -4,6 +4,47 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.22] - 2026-08-19
+
+### Fixed — per-screen chrome on tabs that are not per-screen
+
+Reported as "praktisch ist es falsch das das system Bereich in dem
+Monitor Tab vorhanden ist oder?", and extended to Connections in the
+same breath. Correct on both counts.
+
+The screen tab strip wraps the whole page, so System and Connections
+appeared under *Screen 1 / Screen 2* despite being bridge-global to the
+last control: language, update checks, the API token, OpenRGB, sACN and
+MQTT are one setting each for the entire app. The picker implied screen
+2 had its own values and that selecting the right screen first mattered.
+
+The strip is now hidden on those tabs, replaced by a line stating the
+settings are app-wide — hiding it silently would read as a glitch
+rather than as an explanation.
+
+### Fixed — the widget layout preview was never re-rendered
+
+`activateSectionTab` re-renders the layout preview on becoming visible,
+because a card initialised while `display:none` ends up with a 0×0
+layout. It tested for `key === "widgets"`, a tab that stopped existing
+when beta.16 renamed it to `content`, so the re-render never fired.
+
+### Testing
+
+`test_tab_scope.mjs` derives which tabs are global from the markup
+rather than restating the list: a tab is global when none of its
+controls writes a per-screen setting. If a per-screen control is later
+dropped into System, that is a real design question and the test forces
+it to be answered instead of silently keeping the strip hidden. 5/5
+mutations caught, including listing Appearance as global — the
+inverse mistake, which would leave the user able to edit only screen 1.
+
+Classifying controls by id prefix was the first attempt and was wrong:
+`profile-add-btn` (sends `profile-add` with `screen: null`) and
+`restore-upload` (a backup file input) are both app-wide but match no
+bridge-level prefix, so a correct System tab failed the test. What
+actually distinguishes them is whether the control calls `setSetting()`.
+
 ## [2.4.4-beta.21] - 2026-08-19
 
 ### Added — "Reset all screen settings"

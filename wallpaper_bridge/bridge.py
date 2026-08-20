@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.21"
+APP_VERSION = "2.4.4-beta.22"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,45 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.22": {
+        "title_en": "What\'s new in v2.4.4-beta.22",
+        "title_de": "Was ist neu in v2.4.4-beta.22",
+        "body_en": (
+            "**Fixed: System and Connections sat under a screen "
+            "picker they have nothing to do with.**\n\n"
+            "Both tabs are app-wide to the last control — the "
+            "language, update checks, OpenRGB, sACN, MQTT and the "
+            "API token are one setting each for the whole "
+            "program. Showing *Screen 1 / Screen 2* above them "
+            "implied screen 2 had its own, and that picking the "
+            "right screen first mattered.\n\n"
+            "The screen tabs are now hidden on those two, replaced "
+            "by a line saying the settings are app-wide.\n\n"
+            "**Also fixed: the widget layout preview** was never "
+            "re-rendered when switching to the Content tab, so it "
+            "could stay blank until something else nudged it. "
+            "Left over from the tab rename in beta.16.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: System und Verbindungen standen unter einer "
+            "Bildschirm-Auswahl, mit der sie nichts zu tun "
+            "haben.**\n\n"
+            "Beide Tabs gelten bis zum letzten Regler für die ganze "
+            "Anwendung — Sprache, Update-Prüfung, OpenRGB, sACN, "
+            "MQTT und der API-Token sind jeweils eine einzige "
+            "Einstellung. Die Anzeige *Bildschirm 1 / Bildschirm 2* "
+            "darüber suggerierte, Bildschirm 2 hätte eigene Werte "
+            "und man müsse vorher den richtigen auswählen.\n\n"
+            "Die Bildschirm-Leiste wird dort jetzt ausgeblendet und "
+            "durch einen Hinweis ersetzt.\n\n"
+            "**Außerdem behoben: die Widget-Layout-Vorschau** wurde "
+            "beim Wechsel auf den Inhalte-Tab nie neu gezeichnet und "
+            "konnte leer bleiben. Ein Überbleibsel der "
+            "Tab-Umbenennung aus Beta 16.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.21": {
         "title_en": "What\'s new in v2.4.4-beta.21",
         "title_de": "Was ist neu in v2.4.4-beta.21",
