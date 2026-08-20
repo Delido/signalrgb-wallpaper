@@ -303,6 +303,73 @@ console.log("\nboth SVG filters are primed before they can be applied");
         /if \(!probe\(\)\) return false;/.test(src));
 }
 
+// --- premultiplied alpha ----------------------------------------------
+// The overlay drew half-transparent pixels twice as bright, for as long
+// as water ripple or Liquid Distortion was animating. Reported as
+// "wasserwelle fuehrt nun auf 2ten Monitor wieder dazu das es heller
+// ist ... waehrend der animation", eventually on both screens.
+//
+// The cause was a mismatched trio: the shader emitted straight colour,
+// blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA) multiplied alpha by itself,
+// and the context declared premultipliedAlpha:false so the browser
+// divided colour by alpha again when compositing. Net effect at alpha a:
+// (rgb*a)/(a*a) = rgb/a. At a=1 that is exactly 1, which is why an
+// opaque background never showed it.
+//
+// The three settings are one decision. Rather than assert on each in
+// isolation, model the pipeline and check what reaches the screen.
+{
+  const shader = (src2) => {
+    const straight = /gl_FragColor = vec4\(c\.rgb, c\.a \* uAlpha\)/.test(src2);
+    const premul = /gl_FragColor = vec4\(c\.rgb \* a, a\)/.test(src2);
+    return straight ? "straight" : (premul ? "premultiplied" : "unknown");
+  };
+  const blendSrcFactor = (src2) =>
+    /blendFuncSeparate\(gl\.ONE, gl\.ONE_MINUS_SRC_ALPHA/.test(src2) ? 1
+      : (/blendFunc\(gl\.SRC_ALPHA, gl\.ONE_MINUS_SRC_ALPHA\)/.test(src2) ? "a" : "?");
+  // Match the option inside the opts object literal, not the word
+  // anywhere in the file: the comment above it explains both settings
+  // and contains "premultipliedAlpha:true" as prose, which made this
+  // check pass against code that said false.
+  const ctxPremul = (src2) =>
+    /var opts = \{[^}]*premultipliedAlpha:\s*true/.test(src2);
+
+  check("the shader emits premultiplied colour",
+        shader(mod) === "premultiplied", shader(mod));
+  check("the colour blend factor is ONE, not SRC_ALPHA",
+        blendSrcFactor(mod) === 1,
+        "SRC_ALPHA on premultiplied colour multiplies alpha in twice");
+  check("the context declares premultipliedAlpha: true", ctxPremul(mod),
+        "false makes the browser divide colour by alpha again");
+
+  // What actually reaches the screen for a half-transparent pixel.
+  const onScreen = () => {
+    const a = 0.5, rgb = 0.8;
+    const srcRgb = shader(mod) === "premultiplied" ? rgb * a : rgb;
+    const factor = blendSrcFactor(mod) === 1 ? 1 : a;
+    const fbRgb = srcRgb * factor;
+    const fbA = a * factor;
+    // premultipliedAlpha:false means the browser un-premultiplies.
+    return ctxPremul(mod) ? fbRgb : (fbA ? fbRgb / fbA : 0);
+  };
+  const want = 0.8 * 0.5;   // rgb * a, composited over black
+  check("a half-transparent pixel composites at its true brightness",
+        Math.abs(onScreen() - want) < 1e-9,
+        `on screen ${onScreen().toFixed(3)}, expected ${want.toFixed(3)}`);
+
+  // Opaque pixels must be untouched — this is the case that always
+  // worked and must keep working.
+  const opaque = () => {
+    const a = 1, rgb = 0.8;
+    const srcRgb = shader(mod) === "premultiplied" ? rgb * a : rgb;
+    const factor = blendSrcFactor(mod) === 1 ? 1 : a;
+    const fbRgb = srcRgb * factor, fbA = a * factor;
+    return ctxPremul(mod) ? fbRgb : (fbA ? fbRgb / fbA : 0);
+  };
+  check("an opaque pixel is unchanged", Math.abs(opaque() - 0.8) < 1e-9,
+        `${opaque()}`);
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 process.exit(results.failed.length ? 1 : 0);

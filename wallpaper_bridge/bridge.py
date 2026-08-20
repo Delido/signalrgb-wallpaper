@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.29"
+APP_VERSION = "2.4.4-beta.30"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -902,7 +902,7 @@ APP_VERSION = "2.4.4-beta.29"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.13"
+WALLPAPER_VERSION = "2.4.14"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -949,6 +949,37 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.30": {
+        "title_en": "What\'s new in v2.4.4-beta.30",
+        "title_de": "Was ist neu in v2.4.4-beta.30",
+        "body_en": (
+            "**Fixed: water ripple and Liquid Distortion made the "
+            "background brighter while animating.**\n\n"
+            "Only visible with a background that has transparent or "
+            "soft-edged areas — those parts were drawn at up to twice "
+            "their real brightness for as long as the effect ran. A "
+            "fully opaque photo never showed it, which is why it took "
+            "a while to pin down.\n\n"
+            "The overlay was mixing transparency into the picture "
+            "twice over. It now composites the same way the rest of "
+            "the page does.\n\n"
+            "**Re-import needed** — the wallpaper itself changed.\n"
+        ),
+        "body_de": (
+            "**Behoben: Wasserwelle und Flüssige Verzerrung machten "
+            "den Hintergrund während der Animation heller.**\n\n"
+            "Sichtbar nur bei Hintergründen mit transparenten oder "
+            "weich auslaufenden Bereichen — diese Stellen wurden bis "
+            "zu doppelt so hell gezeichnet, solange der Effekt lief. "
+            "Bei einem vollständig deckenden Foto trat es nie auf, "
+            "deshalb hat es gedauert, es einzugrenzen.\n\n"
+            "Die Overlay-Ebene hat die Transparenz doppelt "
+            "eingerechnet. Sie mischt sich jetzt genauso wie der Rest "
+            "der Seite.\n\n"
+            "**Neuimport nötig** — das Wallpaper selbst hat sich "
+            "geändert.\n"
+        ),
+    },
     "2.4.4-beta.29": {
         "title_en": "What\'s new in v2.4.4-beta.29",
         "title_de": "Was ist neu in v2.4.4-beta.29",

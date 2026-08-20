@@ -71,7 +71,11 @@
     "    uv = fract(uv);",
     "  }",
     "  vec4 c = texture2D(uImage, uv);",
-    "  gl_FragColor = vec4(c.rgb, c.a * uAlpha);",
+    // Premultiplied: the blend function above expects colour already
+    // scaled by alpha. Emitting straight colour here is what made
+    // half-transparent pixels twice as bright.
+    "  float a = c.a * uAlpha;",
+    "  gl_FragColor = vec4(c.rgb * a, a);",
     "}"
   ].join("\n");
 
@@ -159,7 +163,12 @@
 
   GLRipple.prototype.init = function () {
     var self = this;
-    var opts = { alpha: true, premultipliedAlpha: false, antialias: false,
+    // premultipliedAlpha:true to match what the shader emits. With
+    // `false` the browser divides colour by alpha when compositing, and
+    // premultiplied output would be darkened by exactly that factor —
+    // the mirror image of the brightness bug this pair replaces. The
+    // two settings are one decision: shader and context must agree.
+    var opts = { alpha: true, premultipliedAlpha: true, antialias: false,
                  depth: false, stencil: false, preserveDrawingBuffer: false };
     var gl = null;
     try {
@@ -231,7 +240,27 @@
     gl.uniform1i(this.u.image, 0);
     gl.uniform1i(this.u.map, 1);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // v2.4.4-beta.30: separate blending, and premultiplied colour.
+    //
+    // The old SRC_ALPHA / ONE_MINUS_SRC_ALPHA pair multiplied alpha by
+    // itself: clearing to (0,0,0,0) and blending a pixel (rgb, a) left
+    // rgb*a in colour but a*a in alpha. The context is created with
+    // premultipliedAlpha:false, so the browser divides colour by alpha
+    // when compositing — (rgb*a)/(a*a) = rgb/a, i.e. a half-transparent
+    // pixel came out twice as bright.
+    //
+    // Invisible on a fully opaque background, which is why it survived:
+    // at a=1 the error term is 1. Every background with soft edges or a
+    // transparent region showed it as a brightness lift for as long as
+    // water ripple or Liquid Distortion was animating. Reported as
+    // "wasserwelle führt nun auf 2ten Monitor wieder dazu das es heller
+    // ist ... während der animation".
+    //
+    // ONE for the colour term because the shader now emits premultiplied
+    // colour; alpha keeps ONE_MINUS_SRC_ALPHA so overlapping draws still
+    // accumulate coverage correctly.
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA,
+                         gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this._imgTex = null;
     this._mapTex = null;
   };

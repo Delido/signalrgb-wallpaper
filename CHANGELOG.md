@@ -4,6 +4,47 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.30] - 2026-08-20
+
+### Fixed — the WebGL overlay double-counted alpha
+
+Reported as water ripple making one screen brighter during the
+animation, later on both. The beta.29 diagnostics ruled out the fallback
+path — `gl=297 svg=0 tex_ok=2`, everything clean — which moved the
+search to the WebGL path itself.
+
+Three settings disagreed:
+
+- the fragment shader emitted straight (non-premultiplied) colour
+- `blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)` multiplied alpha in again
+- the context declared `premultipliedAlpha: false`, so the browser
+  divided colour by alpha when compositing
+
+Net result for a pixel at alpha `a`: `(rgb*a)/(a*a)` = `rgb/a`. At
+`a = 1` that is exactly `1`, so an opaque background looked perfect and
+every background with a transparent region was lifted — a
+half-transparent pixel came out twice as bright. All three of this
+install's backgrounds have alpha ranging 0..255.
+
+The shader now emits premultiplied colour, the blend uses
+`blendFuncSeparate(ONE, ONE_MINUS_SRC_ALPHA, ...)`, and the context
+declares `premultipliedAlpha: true`. The three are one decision and only
+agree together.
+
+### Testing
+
+`test_glripple.mjs` models the pipeline rather than asserting on each
+setting in isolation: shader output, blend factor and context flag feed
+a small calculation, and the check is what reaches the screen for a
+half-transparent pixel. 4/4 mutations caught, including the mirror-image
+mistake (context `false` with a premultiplied shader, which darkens
+instead).
+
+One of those mutations initially passed. The context check matched
+`premultipliedAlpha:\s*true` anywhere in the file, and the comment above
+the option explains both settings — so it was matching prose while
+the code said `false`. Now anchored inside the opts literal.
+
 ## [2.4.4-beta.29] - 2026-08-20
 
 ### Added — texture-upload diagnostics
