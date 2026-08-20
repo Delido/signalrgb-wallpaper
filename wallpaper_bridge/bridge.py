@@ -313,10 +313,17 @@ def _fullscreen_on_any_monitor() -> bool:
                 mi.cbSize = ctypes.sizeof(mi)
                 if not _user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
                     return True
-                if (rect.left   == mi.rcMonitor.left  and
-                        rect.top    == mi.rcMonitor.top   and
-                        rect.right  == mi.rcMonitor.right and
-                        rect.bottom == mi.rcMonitor.bottom):
+                # A couple of pixels of slack. Exact equality looks
+                # right and is not: a fullscreen browser video reports
+                # 2560x1439 on a 2560x1440 monitor, and the NVIDIA
+                # overlay 2559 wide. Both are fullscreen as far as
+                # Lively is concerned, and both were missed. 4px is
+                # comfortably below any real window decoration.
+                SLACK = 4
+                if (abs(rect.left   - mi.rcMonitor.left)   <= SLACK and
+                        abs(rect.top    - mi.rcMonitor.top)    <= SLACK and
+                        abs(rect.right  - mi.rcMonitor.right)  <= SLACK and
+                        abs(rect.bottom - mi.rcMonitor.bottom) <= SLACK):
                     # Untitled windows are shell surfaces; skip them.
                     buf = ctypes.create_unicode_buffer(256)
                     _user32.GetWindowTextW(hwnd, buf, 256)
@@ -336,8 +343,22 @@ def _fullscreen_on_any_monitor() -> bool:
                             ctypes.byref(cloaked), ctypes.sizeof(cloaked))
                     except Exception:
                         cloaked = ctypes.c_int(0)
-                    if cloaked.value == 0:
-                        hits.append(hwnd)
+                    if cloaked.value != 0:
+                        return True
+                    # Overlays announce themselves through the extended
+                    # style. WS_EX_TOOLWINDOW marks a window that is
+                    # not a taskbar application, and WS_EX_NOACTIVATE
+                    # one that never takes focus: the NVIDIA GeForce
+                    # Overlay is both, sits at full monitor size the
+                    # whole time the driver runs, and would otherwise
+                    # pin this to True permanently — disabling the
+                    # setup banner as effectively as the cloaked case.
+                    ex_style = _user32.GetWindowLongW(hwnd, -20)  # GWL_EXSTYLE
+                    WS_EX_TOOLWINDOW = 0x00000080
+                    WS_EX_NOACTIVATE = 0x08000000
+                    if ex_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE):
+                        return True
+                    hits.append(hwnd)
             except Exception:
                 pass
             return True
@@ -858,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.27"
+APP_VERSION = "2.4.4-beta.28"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -928,6 +949,39 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.28": {
+        "title_en": "What\'s new in v2.4.4-beta.28",
+        "title_de": "Was ist neu in v2.4.4-beta.28",
+        "body_en": (
+            "**Fixed: the fullscreen check missed by one pixel.**\n\n"
+            "beta.27 started looking for a fullscreen app on every "
+            "monitor, but required the window to match the screen "
+            "exactly. A fullscreen browser video is 2560x1439 on a "
+            "2560x1440 monitor, so it was never recognised and the "
+            "setup banner still appeared.\n\n"
+            "A few pixels of slack are allowed now. Two things that "
+            "are always full-screen — the NVIDIA overlay and a "
+            "Windows input surface — are filtered out, so the check "
+            "does not simply stay on forever.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Die Vollbild-Erkennung scheiterte an einem "
+            "Pixel.**\n\n"
+            "Beta 27 sucht auf jedem Monitor nach einer "
+            "Vollbild-Anwendung, verlangte aber exakte Überdeckung "
+            "des Bildschirms. Ein Vollbild-Video im Browser ist auf "
+            "einem 2560x1440-Monitor 2560x1439 groß — es wurde "
+            "also nie erkannt, und das Setup-Banner erschien "
+            "weiterhin.\n\n"
+            "Jetzt sind ein paar Pixel Toleranz erlaubt. Zwei Fenster, "
+            "die dauerhaft bildschirmfüllend sind — das "
+            "NVIDIA-Overlay und eine Windows-Eingabefläche — werden "
+            "ausgefiltert, damit die Erkennung nicht einfach "
+            "dauerhaft anschlägt.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.27": {
         "title_en": "What\'s new in v2.4.4-beta.27",
         "title_de": "Was ist neu in v2.4.4-beta.27",

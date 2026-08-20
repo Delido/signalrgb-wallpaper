@@ -4,6 +4,46 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.28] - 2026-08-20
+
+### Fixed — the fullscreen detector missed by one pixel
+
+Fourth report of the same banner. beta.27 added detection of a
+fullscreen app on any monitor, and it did not fire: `/health` on the
+running install said `fullscreen_anywhere: false` while a fullscreen
+YouTube video was open on screen 1.
+
+Enumerating the windows showed why. The video reports `2560x1439` on a
+`2560x1440` monitor — one pixel short — and the comparison
+demanded exact equality. The NVIDIA overlay is `2559` wide, likewise
+missed. Both are fullscreen as far as Lively is concerned.
+
+The comparison now allows 4px of slack per edge, comfortably below any
+real window decoration. That admits two windows that are full-size
+permanently, and both had to be excluded or the detector would sit at
+true forever and disable the banner as thoroughly as never firing:
+
+- `Windows.UI.Core.CoreWindow` ("Windows Input Experience") — caught
+  by DWM's cloaked attribute, already handled in beta.27.
+- The NVIDIA GeForce Overlay — `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`,
+  the extended styles that mark a window as not-a-taskbar-application
+  and never-takes-focus. A real fullscreen app has neither.
+
+Verified against the live desktop: with the video open exactly one
+window matches, and it is the video.
+
+### Note on the diagnosis
+
+This is the fourth attempt at this banner, and the first three each
+fixed a real but different bug: a startup race (beta.25), the
+Configurator counting as a wallpaper page (beta.26), and foreground-only
+fullscreen detection (beta.27). All three fixes stand.
+
+What shortened this one was the user's own observation — "ich habe
+durchgehend eine Fullscreen anwendung aktiv, denke das liegt daran nach
+install und restart der bridge bekommt er den status nicht" — which
+pointed straight at the detector rather than at the banner.
+
 ## [2.4.4-beta.27] - 2026-08-20
 
 ### Fixed — fullscreen on an unfocused monitor read as a broken setup

@@ -318,6 +318,24 @@ console.log("\nthe banner is wired into the page");
   // monitor-sized, titled and nominally visible on an idle desktop.
   // Without the DWM cloaked check this returns true permanently and
   // the banner is silently disabled for everyone.
+  // Three separate ways this detector can be wrong, all found by
+  // running it against a real desktop rather than reasoning about it:
+  //
+  //   * exact rect equality misses the actual case. A fullscreen
+  //     browser video reports 2560x1439 on a 2560x1440 monitor.
+  //   * Windows.UI.Core.CoreWindow is monitor-sized, titled and
+  //     nominally visible when idle (cloaked catches it).
+  //   * the NVIDIA GeForce Overlay is full-size the entire time the
+  //     driver runs (WS_EX_TOOLWINDOW / NOACTIVATE catch it).
+  //
+  // The last two would pin the detector to true forever, which
+  // disables the banner for everyone rather than fixing anything.
+  check("the size comparison allows a few pixels of slack",
+        /SLACK[\s\S]{0,200}?abs\(rect\.left/.test(BRIDGE2),
+        "a fullscreen video is often one pixel short of the monitor");
+  check("overlay windows are filtered by extended style",
+        /WS_EX_TOOLWINDOW[\s\S]{0,200}?WS_EX_NOACTIVATE/.test(BRIDGE2),
+        "the NVIDIA overlay is monitor-sized whenever the driver runs");
   check("cloaked system windows are filtered out",
         /DWMWA_CLOAKED|DwmGetWindowAttribute/.test(BRIDGE2),
         "an always-true detector disables the banner entirely");
