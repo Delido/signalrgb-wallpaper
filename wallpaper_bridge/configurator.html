@@ -71,12 +71,15 @@
   .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
   /* ── Screen tabs ───────────────────────────────────────────────────── */
+  /* v2.4.4-beta.23: the strip sits inside the app shell now, under the
+     section nav, so it no longer sticks to the header offset. Left
+     padding lines it up with the cards rather than the window edge. */
   .tabs {
     display: flex; gap: 4px; align-items: flex-end;
-    padding: 0 22px;
+    padding: 0 4px;
+    margin: 0 0 10px;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
-    position: sticky; top: 53px; z-index: 9;
   }
   .tab {
     padding: 10px 16px;
@@ -198,14 +201,11 @@
     padding: 0 22px;
     display: flex; gap: 2px;
     border-bottom: 1px solid var(--border);
-    /* v1.6.4-beta: top was 84px which sat INSIDE the .tabs (screen-
-       picker) sticky band — when scrolling, section-tabs overlapped
-       the lower half of .tabs and the top edge of section-tabs
-       slipped under .tabs. header (~46px) + .tabs (~50px) ≈ 96px,
-       so 100 clears both with a small buffer. Also bumped z-index so
-       drop-shadow / hover hits the right element when both are
-       stacked. */
-    position: sticky; top: 100px; z-index: 8;
+    /* The sidebar rule further down overrides `top` for the layout
+       that actually ships; this is the base for the narrow-viewport
+       fallback. Since beta.23 only the header sits above the shell,
+       so the offset no longer has to clear a screen-picker band. */
+    position: sticky; top: 56px; z-index: 8;
     background: var(--bg);
   }
   #section-tabs .stab {
@@ -613,15 +613,6 @@
      it; matching JS keeps writing to it as a no-op view to avoid a
      larger refactor for v1.2.1. */
   .mirror-bar { display: none !important; }
-
-  /* Scope note replacing the screen tabs on bridge-global tabs. */
-  .global-scope-note {
-    padding: 9px 14px;
-    margin: 0 0 2px;
-    color: var(--muted);
-    font-size: 12.5px;
-    border-bottom: 1px solid var(--border, #2a3550);
-  }
 
   /* ── Advanced sections (v2.4.4-beta.16) ───────────────────────────
      A second collapse level, inside a card. The card header already
@@ -2066,6 +2057,7 @@
     margin: 14px auto 0;
     padding: 0 22px;
   }
+  .app-shell > .shell-main > main,
   .app-shell > main {
     flex: 1 1 auto;
     min-width: 0;
@@ -2074,15 +2066,18 @@
     padding: 0;
   }
 
-  /* Sidebar — replaces the horizontal section-tabs band. The sticky
-     `top` has to clear every sticky element rendered above the
-     app-shell: header (~46 px) + #tabs screen-picker (~50 px) plus
-     a small breathing gap. Using 100 px mirrors what the legacy
-     horizontal band was already doing pre-redesign. */
+  /* v2.4.4-beta.23: the screen picker moved into .shell-main, so the
+     only sticky element left above the app-shell is the header
+     (~46 px). The old 100 px allowed for a screen-picker band that is
+     no longer there and left a visible gap. */
+  .shell-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
   #section-tabs {
     flex: 0 0 196px;
     position: sticky;
-    top: 100px;
+    top: 56px;
     margin: 0;
     padding: 8px 0;
     display: flex;
@@ -2574,12 +2569,6 @@
   <a class="btn" href="/builder" target="_blank" data-i18n="header.open_builder">Open Builder…</a>
 </header>
 
-<nav class="tabs" id="tabs"></nav>
-<!-- Shown instead of the screen tabs on tabs whose settings are
-     bridge-global. Without it the tabs simply vanish, which reads as a
-     glitch rather than as "this section is not per-screen". -->
-<div id="global-scope-note" class="global-scope-note" style="display:none"
-     data-i18n="scope.global">These settings apply to the whole app, not to a single screen.</div>
 
 <div id="overview-card" class="overview-card hidden">
   <span class="overview-label" data-i18n="overview.label">Overview</span>
@@ -2658,6 +2647,19 @@
      attribute. Replaces the v1.2.1 left-rail aside. -->
 <div class="app-shell">
 <nav id="section-tabs" aria-label="Section tabs"></nav>
+
+<!-- v2.4.4-beta.23: the screen picker moved inside the app shell and
+     below the section nav.
+
+     It used to sit above everything, which put System and Connections
+     under a "Screen 1 / Screen 2" chooser they have nothing to do with.
+     beta.22 hid the strip on those tabs; that fixed the wrong thing —
+     chrome that appears and disappears is a workaround, not a
+     structure. The hierarchy now matches the meaning: pick a section
+     first, then a screen, and only where a screen is a real dimension
+     of the settings below. -->
+<div class="shell-main">
+<nav class="tabs" id="tabs"></nav>
 
 <main data-active-tab="appearance">
 
@@ -3843,6 +3845,7 @@
   </section>
 
 </main>
+</div><!-- /.shell-main -->
 </div><!-- /.app-shell -->
 
 <div class="modal-backdrop" id="modal">
@@ -8286,13 +8289,16 @@ function buildSectionTabs() {
 const GLOBAL_TABS = new Set(["system", "connect"]);
 
 function _applyScreenScopeChrome(key) {
-  const global = GLOBAL_TABS.has(key);
-  // The screen tab strip and the header screen-count picker both stop
-  // meaning anything on a global tab.
+  // The screen picker only means something where a screen is a real
+  // dimension of the settings below it. On System and Connections it is
+  // not: language, updates, the API token, OpenRGB, sACN and MQTT are
+  // one setting each for the whole app.
+  //
+  // Since beta.23 the strip lives below the section nav, so hiding it
+  // reads as "this section has no screens" rather than as chrome
+  // flickering away above the page.
   const strip = document.getElementById("tabs");
-  if (strip) strip.style.display = global ? "none" : "";
-  const note = document.getElementById("global-scope-note");
-  if (note) note.style.display = global ? "" : "none";
+  if (strip) strip.style.display = GLOBAL_TABS.has(key) ? "none" : "";
 }
 
 function activateSectionTab(key) {

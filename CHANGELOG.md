@@ -4,6 +4,40 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.23] - 2026-08-19
+
+### Changed — the screen picker moved into the page
+
+beta.22 hid the screen tab strip on System and Connections because
+neither is per-screen. That fixed the symptom and left the cause: "find
+ich blöd gelöst. Connection und System sollten einfach nicht dort
+sein." Correct — chrome that appears and disappears is a workaround,
+not a structure, and the strip still sat above everything claiming to
+scope the whole page.
+
+The strip now lives inside the app shell, below the section nav and
+above the cards, in the main column. The hierarchy matches the meaning:
+pick a section, then a screen, and only where a screen is a real
+dimension of the settings below. System and Connections simply have no
+picker, the way a section without screens should look.
+
+The `global-scope-note` line added in beta.22 is gone with it. It
+existed to explain a disappearing row; the structure explains itself.
+
+Two layout consequences, both handled: `.tabs` no longer sticks at the
+header offset, and `#section-tabs` dropped its sticky `top` from 100 px
+to 56 px — that 100 px allowed for a screen-picker band above the
+shell which is no longer there. Both `#section-tabs` rules were updated;
+they have equal specificity, so leaving the stale one behind would make
+the winner depend on source order.
+
+### Testing
+
+`test_tab_scope.mjs` now pins the ordering rather than only the
+visibility: the strip must be inside the shell, after the section nav,
+before the cards, and in the main column. 4/4 mutations caught, the
+first of which restores exactly the beta.22 arrangement.
+
 ## [2.4.4-beta.22] - 2026-08-19
 
 ### Fixed — per-screen chrome on tabs that are not per-screen

@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.22"
+APP_VERSION = "2.4.4-beta.23"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,35 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.23": {
+        "title_en": "What\'s new in v2.4.4-beta.23",
+        "title_de": "Was ist neu in v2.4.4-beta.23",
+        "body_en": (
+            "**The screen picker moved.**\n\n"
+            "It now sits inside the page, under the section list "
+            "and above the cards it applies to — so you pick a "
+            "section first, then a screen.\n\n"
+            "The previous release hid the screen tabs on System and "
+            "Connections, because neither is per-screen. That "
+            "papered over the problem: a row that appears and "
+            "disappears looks broken. With the picker where it "
+            "belongs, those two sections simply do not have one.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Die Bildschirm-Auswahl ist umgezogen.**\n\n"
+            "Sie steht jetzt innerhalb der Seite, unter der "
+            "Bereichsliste und über den Karten, für die sie gilt — "
+            "du wählst also erst den Bereich, dann den Bildschirm.\n\n"
+            "Die vorige Version hat die Bildschirm-Leiste bei "
+            "System und Verbindungen nur ausgeblendet, weil beide "
+            "nicht bildschirmabhängig sind. Das hat das Problem "
+            "übertüncht: Eine Leiste, die mal da ist und mal nicht, "
+            "wirkt kaputt. An der richtigen Stelle haben diese "
+            "beiden Bereiche schlicht keine.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.22": {
         "title_en": "What\'s new in v2.4.4-beta.22",
         "title_de": "Was ist neu in v2.4.4-beta.22",

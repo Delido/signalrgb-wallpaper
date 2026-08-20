@@ -14,6 +14,17 @@
 // as "praktisch ist es falsch das das system Bereich in dem Monitor Tab
 // vorhanden ist oder?", extended to Connections in the same breath.
 //
+// The first fix hid the strip on those tabs and left it where it was,
+// above everything. That was the wrong fix — "find ich blöd gelöst" —
+// because chrome that appears and disappears is a workaround, not a
+// structure, and the strip still claimed to scope the whole page.
+//
+// The strip now lives inside the app shell, below the section nav and
+// above the cards: pick a section, then a screen, and only where a
+// screen is a real dimension of the settings below. Hiding it then
+// reads as "this section has no screens" rather than as a glitch. So
+// this suite pins the ordering, not just the visibility.
+//
 // The classification is derived from the markup rather than restated
 // here: a tab counts as global when none of its controls writes a
 // per-screen setting. If someone later drops a per-screen control into
@@ -112,19 +123,52 @@ check("it is called from activateSectionTab",
         .test(HTML),
       "declaring it without calling it changes nothing");
 check("it hides the screen tab strip",
-      /getElementById\("tabs"\)[\s\S]{0,200}?display = global \? "none" : ""/.test(HTML));
+      /getElementById\("tabs"\)[\s\S]{0,200}?display = GLOBAL_TABS\.has\(key\) \? "none" : ""/
+        .test(HTML),
+      "the strip is the only chrome that has to react to the tab");
 
-// Hiding the strip with no explanation reads as a glitch, so a note
-// takes its place.
-check("a replacement note exists in the markup",
-      /id="global-scope-note"/.test(HTML));
-check("the note is hidden by default",
-      /id="global-scope-note"[^>]*style="display:none"/.test(HTML),
-      "it must only appear on global tabs");
-check("the note is shown on global tabs",
-      /global-scope-note[\s\S]{0,200}?display = global \? "" : "none"/.test(HTML));
-check("the note is translated in both languages",
-      /"scope\.global":\s*\{[\s\S]{0,400}?en:\s*"[\s\S]{0,300}?de:\s*"/.test(HTML));
+// --- structure, not just visibility -----------------------------------
+// beta.22 hid the strip where it did not belong but left it above
+// everything, so it flickered away as chrome. beta.23 moved it into the
+// main column below the section nav: sections first, then a screen, and
+// only where a screen is a real dimension of the settings below.
+//
+// Ordering is what makes the hiding read as "this section has no
+// screens" rather than as a glitch, so it is worth pinning.
+const iShell = HTML.indexOf('<div class="app-shell">');
+const iSectionNav = HTML.indexOf('<nav id="section-tabs"');
+const iScreenStrip = HTML.indexOf('<nav class="tabs" id="tabs">');
+const iMain = HTML.indexOf('<main data-active-tab');
+
+check("the screen strip is inside the app shell",
+      iScreenStrip > iShell && iShell > 0,
+      "above the shell it is page chrome, not part of a section");
+check("the section nav comes before the screen strip",
+      iSectionNav > 0 && iSectionNav < iScreenStrip,
+      "picking a section has to come first");
+check("the screen strip comes before the cards",
+      iScreenStrip < iMain);
+check("the strip shares the main column",
+      /<div class="shell-main">\s*<nav class="tabs" id="tabs">/.test(HTML),
+      "it must sit over the cards it applies to, not beside the nav");
+
+// The old scope note belonged to the workaround and should be gone —
+// leaving it would mean two mechanisms explaining the same thing.
+check("the beta.22 scope note is gone",
+      !/id="global-scope-note"/.test(HTML),
+      "the structure explains itself now; the note was the workaround");
+
+// The sidebar's sticky offset allowed for a screen-picker band above
+// the shell. That band moved, so the offset had to shrink or the nav
+// floats with a gap under the header.
+// Every #section-tabs rule has to use the smaller offset: the two have
+// equal specificity, so leaving a stale 100px behind means the winner
+// depends on source order rather than on intent.
+const stickyOffsets = [...HTML.matchAll(/#section-tabs \{[\s\S]*?top:\s*(\d+)px/g)]
+  .map(m => Number(m[1]));
+check("sidebar sticky offsets were updated for the new layout",
+      stickyOffsets.length > 0 && stickyOffsets.every(v => v < 100),
+      `offsets: ${stickyOffsets.join(", ")} — 100px allowed for the old band`);
 
 // --- the stale tab key found on the way --------------------------------
 // The redesign renamed "widgets" to "content"; the layout-preview
