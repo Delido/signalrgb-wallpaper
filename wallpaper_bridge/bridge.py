@@ -272,6 +272,83 @@ else:
     _MONITORINFO = None  # type: ignore[assignment,misc]
 
 
+def _fullscreen_on_any_monitor() -> bool:
+    """True if ANY visible window covers a whole monitor, not just the
+    focused one.
+
+    v2.4.4-beta.27. `_is_fullscreen_active()` only looks at the
+    foreground window, which is the right question for "should the
+    bridge pause?" — but the wrong one for "is a screen legitimately
+    without a wallpaper page?".
+
+    Lively pauses per monitor and closes the wallpaper page on the
+    screen a fullscreen app occupies, whether or not that app has
+    focus. Alt-tab to a browser on the other monitor and the page stays
+    closed while the foreground window is now an ordinary window: the
+    bridge reports paused=False, pages_per_screen shows a zero, and the
+    setup banner calls a working install broken.
+
+    Only used to suppress that banner. The pause behaviour itself still
+    keys off the foreground window, because pausing the whole wallpaper
+    because a video is fullscreen on a monitor nobody is looking at
+    would be wrong.
+    """
+    if not _user32 or _MONITORINFO is None:
+        return False
+    try:
+        shell = _user32.GetShellWindow()
+        hits = []
+
+        def _cb(hwnd, _lparam):
+            try:
+                if hwnd == shell or not _user32.IsWindowVisible(hwnd):
+                    return True
+                rect = wintypes.RECT()
+                if not _user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    return True
+                hmon = _user32.MonitorFromWindow(hwnd, 2)
+                if not hmon:
+                    return True
+                mi = _MONITORINFO()
+                mi.cbSize = ctypes.sizeof(mi)
+                if not _user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+                    return True
+                if (rect.left   == mi.rcMonitor.left  and
+                        rect.top    == mi.rcMonitor.top   and
+                        rect.right  == mi.rcMonitor.right and
+                        rect.bottom == mi.rcMonitor.bottom):
+                    # Untitled windows are shell surfaces; skip them.
+                    buf = ctypes.create_unicode_buffer(256)
+                    _user32.GetWindowTextW(hwnd, buf, 256)
+                    if not buf.value.strip():
+                        return True
+                    # ...but a title is not enough. "Windows Input
+                    # Experience" (Windows.UI.Core.CoreWindow) is
+                    # monitor-sized, titled, and reports as visible on
+                    # an idle desktop — it would make this return True
+                    # permanently and quietly disable the setup banner.
+                    # DWM knows better: cloaked != 0 means the window is
+                    # composited away and not actually on screen.
+                    cloaked = ctypes.c_int(0)
+                    try:
+                        ctypes.windll.dwmapi.DwmGetWindowAttribute(
+                            hwnd, 14,  # DWMWA_CLOAKED
+                            ctypes.byref(cloaked), ctypes.sizeof(cloaked))
+                    except Exception:
+                        cloaked = ctypes.c_int(0)
+                    if cloaked.value == 0:
+                        hits.append(hwnd)
+            except Exception:
+                pass
+            return True
+
+        proto = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        _user32.EnumWindows(proto(_cb), 0)
+        return bool(hits)
+    except Exception:
+        return False
+
+
 def _is_fullscreen_active() -> bool:
     """True if the foreground window covers its entire monitor and isn't
     the shell/desktop. Catches both exclusive fullscreen and borderless-
@@ -781,7 +858,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.26"
+APP_VERSION = "2.4.4-beta.27"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +928,39 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.27": {
+        "title_en": "What\'s new in v2.4.4-beta.27",
+        "title_de": "Was ist neu in v2.4.4-beta.27",
+        "body_en": (
+            "**Fixed: the setup banner appeared while a game ran on "
+            "the other monitor.**\n\n"
+            "Lively closes the wallpaper on whichever screen a "
+            "fullscreen app covers. If you then click over to a "
+            "window on your other monitor, that screen still has no "
+            "wallpaper page — and the banner announced it as a "
+            "setup problem.\n\n"
+            "The bridge now notices a fullscreen app on any monitor, "
+            "not only the focused one, and holds the banner back "
+            "while one is open. A missing plugin or a closed "
+            "SignalRGB is still reported.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Das Setup-Banner erschien, während auf dem "
+            "anderen Monitor ein Spiel lief.**\n\n"
+            "Lively schließt das Wallpaper auf dem Bildschirm, den "
+            "eine Vollbild-Anwendung bedeckt. Klickst du dann auf ein "
+            "Fenster auf deinem anderen Monitor, hat dieser Bildschirm "
+            "weiterhin keine Wallpaper-Seite — und das Banner meldete "
+            "das als Einrichtungsproblem.\n\n"
+            "Die Bridge erkennt eine Vollbild-Anwendung jetzt auf "
+            "jedem Monitor, nicht nur auf dem gerade aktiven, und "
+            "hält das Banner so lange zurück. Ein fehlendes Plugin "
+            "oder ein geschlossenes SignalRGB wird weiterhin "
+            "gemeldet.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.26": {
         "title_en": "What\'s new in v2.4.4-beta.26",
         "title_de": "Was ist neu in v2.4.4-beta.26",
@@ -11450,7 +11560,19 @@ class BridgeRuntime:
         except Exception:
             pass
 
+        # v2.4.4-beta.27: reported separately from `paused` because it
+        # answers a different question. `paused` is "is the bridge
+        # throttling?"; this is "could a screen be legitimately without
+        # a page right now?". Lively closes the wallpaper on whichever
+        # monitor a fullscreen app occupies, focused or not.
+        fullscreen_anywhere = False
+        try:
+            fullscreen_anywhere = _fullscreen_on_any_monitor()
+        except Exception:
+            pass
+
         return {
+            "fullscreen_anywhere": fullscreen_anywhere,
             "plugin_present":    plugin_present,
             "plugin_path":       str(plugin_path) if plugin_path else "",
             "plugin_dir":        str(plugin_path.parent) if plugin_path else "",

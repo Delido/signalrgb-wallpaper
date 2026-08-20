@@ -272,6 +272,60 @@ console.log("\nthe banner is wired into the page");
         /setInterval\(refreshSetupStatus, 5000\)/.test(CFG));
 }
 
+// --- fullscreen on a monitor that is not focused ----------------------
+// Lively pauses per monitor: it closes the wallpaper page on whichever
+// screen a fullscreen app occupies, focused or not. The bridge's own
+// pause keys off the FOREGROUND window, so alt-tabbing to a browser on
+// the other monitor leaves paused=false while that screen still has no
+// page — and the banner called a working install broken. Reported three
+// times before the cause was found, the last time with the detail that
+// mattered: "aber da läuft gerade eine fullscreen anwenduing".
+{
+  const base = {
+    available: true, plugin_present: true, signalrgb_running: true,
+    frames_arriving: true, pages_per_screen: [1, 1],
+    paused: false, fullscreen_anywhere: false,
+  };
+  const failing = (h) => STEPS.filter((st) => !st.ok(h)).map((st) => st.id);
+
+  // The reported situation: fullscreen app on screen 1, focus
+  // elsewhere, so the bridge is not paused.
+  const unfocusedFullscreen = {
+    ...base, fullscreen_anywhere: true,
+    pages_per_screen: [0, 1], frames_arriving: false,
+  };
+  check("an unfocused fullscreen app does not trigger the banner",
+        failing(unfocusedFullscreen).length === 0,
+        `still failing: ${failing(unfocusedFullscreen).join(", ")}`);
+
+  // It must not become a blanket excuse either.
+  check("a missing plugin is still reported during fullscreen",
+        failing({ ...unfocusedFullscreen, plugin_present: false }).includes("plugin"));
+  check("SignalRGB not running is still reported during fullscreen",
+        failing({ ...unfocusedFullscreen, signalrgb_running: false }).includes("signalrgb"));
+
+  // And with nothing fullscreen, a missing page is still a real problem.
+  check("a missing page is still reported with no fullscreen app",
+        failing({ ...base, pages_per_screen: [0, 1] }).includes("assigned"));
+
+  const BRIDGE2 = readFileSync(join(repo, "wallpaper_bridge", "bridge.py"), "utf8");
+  check("the bridge reports fullscreen_anywhere",
+        /"fullscreen_anywhere":\s+fullscreen_anywhere,/.test(BRIDGE2));
+  check("it scans every window, not just the foreground one",
+        /def _fullscreen_on_any_monitor[\s\S]*?EnumWindows/.test(BRIDGE2),
+        "GetForegroundWindow alone is what missed this case");
+  // Windows.UI.Core.CoreWindow ("Windows Input Experience") is
+  // monitor-sized, titled and nominally visible on an idle desktop.
+  // Without the DWM cloaked check this returns true permanently and
+  // the banner is silently disabled for everyone.
+  check("cloaked system windows are filtered out",
+        /DWMWA_CLOAKED|DwmGetWindowAttribute/.test(BRIDGE2),
+        "an always-true detector disables the banner entirely");
+  check("the bridge's own pause still keys off the foreground window",
+        /def _is_fullscreen_active[\s\S]{0,600}?GetForegroundWindow/.test(BRIDGE2),
+        "pausing on an unwatched monitor's video would be wrong");
+}
+
 const total = results.passed + results.failed.length;
 console.log(`\n  ${results.passed}/${total} passed`);
 if (results.failed.length) {

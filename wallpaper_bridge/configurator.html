@@ -5937,12 +5937,17 @@ const SETUP_STEPS = [
   // open. Pausing is the feature working, not a broken setup, and the
   // two steps below are the only ones whose signal a pause destroys:
   // the plugin file and the SignalRGB process are unaffected.
-  { id: "frames", ok: (h) => h.paused || h.frames_arriving },
+  { id: "frames", ok: (h) => h.paused || h.fullscreen_anywhere || h.frames_arriving },
   // Per screen, because a total cannot say WHICH monitor is missing
   // its wallpaper.
   {
     id: "assigned",
-    ok: (h) => h.paused || (Array.isArray(h.pages_per_screen)
+    // v2.4.4-beta.27: fullscreen_anywhere as well as paused. Lively
+    // closes the wallpaper page on whichever monitor a fullscreen app
+    // occupies even when that app is not focused, so the bridge is not
+    // paused and a screen still legitimately has no page.
+    ok: (h) => h.paused || h.fullscreen_anywhere
+      || (Array.isArray(h.pages_per_screen)
       ? h.pages_per_screen.every((n) => n > 0)
       : (h.pages_connected || 0) > 0),
   },

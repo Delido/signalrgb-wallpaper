@@ -4,6 +4,58 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.27] - 2026-08-20
+
+### Fixed — fullscreen on an unfocused monitor read as a broken setup
+
+Third report of the same banner, and the one that carried the missing
+detail: "aber da läuft gerade eine fullscreen anwenduing".
+
+Lively pauses per monitor and closes the wallpaper page on whichever
+screen a fullscreen app covers, focused or not. The bridge's own pause
+detection keys off `GetForegroundWindow()`, which is the right question
+for "should the bridge throttle?" but the wrong one here: alt-tab to a
+browser on the other monitor and the foreground window is ordinary, so
+`paused` is false while that screen legitimately has no page. Measured
+on the running install: `pages_per_screen: [0, 1]`, `paused: false`,
+both wallpapers configured correctly.
+
+`_fullscreen_on_any_monitor()` enumerates every visible window and
+reports whether any of them covers a whole monitor. `get_health_status`
+surfaces it as `fullscreen_anywhere`, separate from `paused` because the
+two answer different questions, and the `frames` and `assigned` setup
+steps are suspended while it is true.
+
+The pause behaviour itself is unchanged and still foreground-only —
+pausing the whole wallpaper because a video is fullscreen on a monitor
+nobody is watching would be wrong.
+
+One trap on the way: "Windows Input Experience"
+(`Windows.UI.Core.CoreWindow`) is monitor-sized, titled and reports as
+visible on an idle desktop, so a title check alone made the detector
+return true permanently, which would have disabled the banner for
+everyone. DWM's `DWMWA_CLOAKED` attribute distinguishes it — cloaked
+windows are composited away and not actually on screen.
+
+### Diagnosis note
+
+beta.25 and beta.26 both attributed this banner to something else: a
+startup race, then the Configurator being counted as a wallpaper page.
+Both were real bugs and both fixes stand, but neither was this. What
+identified it was measuring `/health` on the running install while the
+banner was up, rather than reasoning about what could produce it.
+
+### Testing
+
+`test_setup_status.mjs` covers the unfocused-fullscreen snapshot and,
+just as importantly, that fullscreen does not become a blanket excuse:
+a missing plugin and a closed SignalRGB are still reported while one is
+open. 4/4 mutations caught.
+
+The detector was also exercised against the live desktop: false with
+nothing fullscreen, true with a real fullscreen window open, false again
+after closing it.
+
 ## [2.4.4-beta.26] - 2026-08-20
 
 ### Fixed — pages_per_screen counted the Configurator as a wallpaper
