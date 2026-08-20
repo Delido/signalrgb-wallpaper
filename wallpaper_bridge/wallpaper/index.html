@@ -1791,6 +1791,19 @@ const _diag = {
   usableFalseNoImg: 0,  // usable() false because no texture is loaded
   ctxLost: 0,
   ctxRestored: 0,
+  // v2.4.4-beta.29: why the texture never loaded.
+  //
+  // usableFalseNoImg says "no texture" and nothing more, which is where
+  // the investigation stalled: on a two-screen setup one screen sat on
+  // the SVG path with no_img climbing forever while WebGL was
+  // available (no_gl=0) and the bridge served the image with the right
+  // CORS header. Three different failures produce that same counter and
+  // need different fixes, so they are counted apart:
+  texErr: 0,        // <img> onerror — CORS refusal or a corrupt/undecodable file
+  texNotReady: 0,   // setImage() returned false: GL context not ready, or lost
+  texThrew: 0,      // texImage2D threw — size limit, out of memory, tainted canvas
+  texOk: 0,         // uploads that succeeded, so the ratio is readable
+  texBytes: 0,      // size of the last image handed to the loader, for scale
 };
 
 // Ships the counters above to the bridge once a minute so the answer
@@ -2706,9 +2719,14 @@ const glRipple = (function () {
 
     /** Called from _setImageBg once the probe Image has decoded. */
     setImage(img, w, h) {
-      if (!probe()) return;
+      // v2.4.4-beta.29: returns whether the upload took. It used to
+      // return undefined, which the caller could not distinguish from
+      // failure — and the diagnostic counter added alongside this would
+      // have recorded every successful upload as "context not ready".
+      if (!probe()) return false;
       hasImage = renderer.setImage(img, w, h);
       if (hasImage) renderer.setFit(currentBgFit, currentBgTileScale);
+      return hasImage;
     },
 
     /** Video backgrounds have no texture path — make sure we stay off. */
@@ -2889,6 +2907,10 @@ let _glRippleLastW = 0;
 let _glRippleLastH = 0;
 
 function _glRippleLoadTexture(src, w, h) {
+  // Pixel count of what we are about to upload. The stalled screen had
+  // a 6.2 MB 2560x1440 PNG while the working one had a 1 MB WebP, so
+  // scale is worth recording alongside the failure mode.
+  try { _diag.texBytes = Math.round(((w || 0) * (h || 0)) / 1000); } catch (_) {}
   _glRippleLastSrc = src;
   _glRippleLastW = w;
   _glRippleLastH = h;
@@ -2897,13 +2919,19 @@ function _glRippleLoadTexture(src, w, h) {
   tex.crossOrigin = "anonymous";
   tex.onload = () => {
     try {
-      glRipple.setImage(tex, w || tex.naturalWidth, h || tex.naturalHeight);
+      // setImage returns false when the GL context is not ready or has
+      // been lost — a silent no-op that looked identical to a CORS
+      // refusal in the old counters.
+      const ok = glRipple.setImage(tex, w || tex.naturalWidth, h || tex.naturalHeight);
+      if (ok) _diag.texOk++; else _diag.texNotReady++;
     } catch (e) {
+      _diag.texThrew++;
       console.warn("[glripple] texture upload failed:", e);
       glRipple.clearImage();
     }
   };
   tex.onerror = () => {
+    _diag.texErr++;
     // Most likely a CORS refusal. Not worth surfacing to the user: the
     // background itself is already on screen and the affected effects
     // fall back to the SVG filter path.

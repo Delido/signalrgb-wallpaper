@@ -4,6 +4,56 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.29] - 2026-08-20
+
+### Added — texture-upload diagnostics
+
+Reported as water ripple looking brighter on one screen during the
+animation, and only on one of two otherwise identical screens.
+
+Measuring `/health` and the `[diag]` counters located the difference:
+one screen draws through the WebGL path (`gl=1288, svg=0`), the other
+through the SVG fallback (`svg=1330, no_img=1392`). The brightness
+difference is a property of that fallback, so the question became why
+the WebGL texture never loads there — and `no_img` could not say.
+WebGL itself was available (`no_gl=0`) and the bridge served the image
+with the correct CORS header for a `null` origin; both were checked
+directly.
+
+Three different failures all end at `no_img` and need different fixes:
+
+- `tex_err` — the `<img>` fired `onerror`: CORS refusal, or a file the
+  decoder rejects
+- `tex_notready` — `setImage()` returned false because the GL context
+  was not ready or had been lost. Previously indistinguishable from a
+  CORS refusal.
+- `tex_threw` — `texImage2D` threw: size limit, out of memory, tainted
+  canvas
+
+`tex_ok` and `tex_kpx` come along so the ratio and the image scale are
+readable.
+
+Writing this turned up a real defect in the path being measured: the
+`glRipple.setImage` wrapper returned `undefined` rather than whether the
+upload succeeded. The new counter would have recorded every successful
+upload as "context not ready", and the diagnostic would have pointed at
+the wrong cause with total confidence. It returns `hasImage` now.
+
+### What this does not do
+
+It does not fix the brightness difference. Two hypotheses remain open
+— image size (6.2 MB PNG vs 1.0 MB WebP) and a context that is not
+ready when the texture arrives — and picking between them without
+evidence is what the previous four attempts at the setup banner already
+demonstrated the cost of. One day of normal use and the log answers it.
+
+### Testing
+
+`test_glripple.mjs` runs the real loader against a stubbed image and
+renderer and asserts each failure mode moves its own counter and no
+other. The wrapper's return value is pinned too, since that is what
+makes `tex_notready` mean anything.
+
 ## [2.4.4-beta.28] - 2026-08-20
 
 ### Fixed — the fullscreen detector missed by one pixel

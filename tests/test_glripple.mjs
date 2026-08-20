@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
+import vm from "node:vm";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..");
@@ -238,6 +239,68 @@ console.log("\nboth SVG filters are primed before they can be applied");
   // apply the previous session's map for a frame on re-enable.
   check("disable() drops the amplitude back to 0",
         /feDisp\.setAttribute\("scale", "0"\)/.test(src));
+}
+
+// --- texture-upload diagnostics ---------------------------------------
+// no_img said "no texture" and nothing more, which is where a real
+// investigation stalled: one screen sat on the SVG path with no_img
+// climbing past 1300 while WebGL was available (no_gl=0) and the bridge
+// served the image with the right CORS header. Three different failures
+// produce that same counter and need different fixes, so the loader
+// counts them apart. Run it rather than grep for it — the interesting
+// part is which counter moves.
+{
+  const body = (src.match(/function _glRippleLoadTexture\(src, w, h\)[\s\S]*?\n\}/) || [])[0];
+  check("the texture loader was extracted", !!body);
+
+  if (body) {
+    const drive = (mode) => {
+      const _diag = { texOk: 0, texErr: 0, texNotReady: 0, texThrew: 0, texBytes: 0 };
+      const made = [];
+      const ctx = {
+        _diag, Math,
+        console: { warn() {}, error() {} },
+        glRipple: {
+          setImage() {
+            if (mode === "throw") throw new Error("texImage2D failed");
+            return mode === "ok";
+          },
+          clearImage() {},
+        },
+        Image: function () {
+          const o = { set src(_v) { made.push(o); },
+                      naturalWidth: 2560, naturalHeight: 1440 };
+          return o;
+        },
+      };
+      vm.runInNewContext(body + "\n_glRippleLoadTexture('x.png', 2560, 1440);",
+                         ctx, { timeout: 4000 });
+      const img = made[0];
+      if (mode === "err") img.onerror(); else img.onload();
+      return _diag;
+    };
+
+    const only = (d, key) =>
+      d[key] === 1 && Object.entries(d)
+        .filter(([k]) => k !== key && k !== "texBytes")
+        .every(([, v]) => v === 0);
+
+    check("a successful upload counts as texOk", only(drive("ok"), "texOk"));
+    check("a not-ready GL context counts separately",
+          only(drive("notready"), "texNotReady"),
+          "this is the case that used to look like a CORS refusal");
+    check("a throwing texImage2D counts separately", only(drive("throw"), "texThrew"));
+    check("an image load error counts separately", only(drive("err"), "texErr"));
+    check("the image scale is recorded", drive("ok").texBytes > 0);
+  }
+
+  // The wrapper has to report the outcome, or texNotReady would fire on
+  // every successful upload — setImage() returned undefined before.
+  check("the glRipple wrapper returns whether the upload took",
+        /hasImage = renderer\.setImage\(img, w, h\);[\s\S]{0,140}?return hasImage;/.test(src),
+        "an undefined return makes the counter meaningless");
+  check("the wrapper returns false when WebGL is unavailable",
+        /if \(!probe\(\)\) return false;/.test(src));
 }
 
 const total = results.passed + results.failed.length;

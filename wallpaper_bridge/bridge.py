@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.28"
+APP_VERSION = "2.4.4-beta.29"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -902,7 +902,7 @@ APP_VERSION = "2.4.4-beta.28"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.12"
+WALLPAPER_VERSION = "2.4.13"
 
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
@@ -949,6 +949,41 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.29": {
+        "title_en": "What\'s new in v2.4.4-beta.29",
+        "title_de": "Was ist neu in v2.4.4-beta.29",
+        "body_en": (
+            "**Diagnostics for the water-ripple brightness "
+            "difference.**\n\n"
+            "On a two-screen setup one screen can end up drawing "
+            "water and Liquid Distortion through the older fallback "
+            "path, which looks brighter during the animation. The log "
+            "showed that it happens but not why: the background "
+            "texture never loaded, and three different failures look "
+            "identical from outside the browser.\n\n"
+            "They are now counted separately, so the next log says "
+            "which one it is instead of leaving it to guesswork.\n\n"
+            "**Re-import needed** — the wallpaper itself changed. In "
+            "Lively, remove the wallpaper and import the new zip; in "
+            "Wallpaper Engine, re-subscribe or re-import.\n"
+        ),
+        "body_de": (
+            "**Diagnose für den Helligkeitsunterschied bei der "
+            "Wasserwelle.**\n\n"
+            "Bei zwei Bildschirmen kann einer die Wasserwelle und die "
+            "Flüssige Verzerrung über den älteren Ersatzpfad "
+            "zeichnen — der sieht während der Animation heller aus. "
+            "Das Log zeigte bisher nur, dass es passiert, nicht warum: "
+            "Die Hintergrund-Textur wurde nicht geladen, und drei "
+            "verschiedene Ursachen sehen von außen gleich aus.\n\n"
+            "Sie werden jetzt getrennt gezählt. Das nächste Log sagt "
+            "also, welche es ist, statt Raten zu erfordern.\n\n"
+            "**Neuimport nötig** — das Wallpaper selbst hat sich "
+            "geändert. In Lively das Wallpaper entfernen und die neue "
+            "Zip importieren; in Wallpaper Engine neu abonnieren bzw. "
+            "neu importieren.\n"
+        ),
+    },
     "2.4.4-beta.28": {
         "title_en": "What\'s new in v2.4.4-beta.28",
         "title_de": "Was ist neu in v2.4.4-beta.28",
@@ -7578,6 +7613,16 @@ class Broadcaster:
                             f"no_img={int(msg.get('usableFalseNoImg') or 0)} "
                             f"ctx_lost={int(msg.get('ctxLost') or 0)} "
                             f"ctx_restored={int(msg.get('ctxRestored') or 0)} "
+                            # v2.4.4-beta.29: why a texture upload failed.
+                            # no_img alone could not distinguish a CORS
+                            # refusal from a not-ready GL context from a
+                            # texImage2D throw, and all three look the
+                            # same from outside the browser.
+                            f"tex_ok={int(msg.get('texOk') or 0)} "
+                            f"tex_err={int(msg.get('texErr') or 0)} "
+                            f"tex_notready={int(msg.get('texNotReady') or 0)} "
+                            f"tex_threw={int(msg.get('texThrew') or 0)} "
+                            f"tex_kpx={int(msg.get('texBytes') or 0)} "
                             f"heap={int(msg.get('heapMb') or 0)}MB"
                         )
                     except Exception as e:
