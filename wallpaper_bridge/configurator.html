@@ -2162,7 +2162,17 @@
     margin-bottom: 4px;
     border-bottom: none;
     cursor: pointer;
+    /* position:relative is only here to anchor the ::before accent bar.
+       Without a z-index it still creates a positioned element, which
+       paints above the sticky navs (they carry z-index 8 but sit
+       earlier in the document) — so card headings slid over the section
+       list, the screen tabs and the page header while scrolling.
+       Reported twice: "kattegorie Ueberschriften ueberblenden auch die
+       Screens oder auch den header" and "ueber screens das gleiche".
+       z-index 0 keeps the anchor and puts the heading back under both
+       navs. */
     position: relative;
+    z-index: 0;
   }
   main section.card > header.section-head::before {
     content: "";

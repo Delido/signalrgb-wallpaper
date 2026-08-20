@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.31"
+APP_VERSION = "2.4.4-beta.32"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -949,6 +949,28 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.32": {
+        "title_en": "What\'s new in v2.4.4-beta.32",
+        "title_de": "Was ist neu in v2.4.4-beta.32",
+        "body_en": (
+            "**Fixed: card headings slid over the navigation while "
+            "scrolling.**\n\n"
+            "The previous release fixed half of this — the section "
+            "list on the left was see-through. The other half was the "
+            "card headings themselves, which were drawn above both "
+            "the screen tabs and the top bar.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Karten-Überschriften schoben sich beim "
+            "Scrollen über die Navigation.**\n\n"
+            "Die vorige Version hat davon nur die Hälfte behoben — "
+            "die durchsichtige Bereichsliste links. Die andere Hälfte "
+            "waren die Karten-Überschriften selbst, die über den "
+            "Bildschirm-Tabs und der Kopfzeile gezeichnet wurden.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.31": {
         "title_en": "What\'s new in v2.4.4-beta.31",
         "title_de": "Was ist neu in v2.4.4-beta.31",

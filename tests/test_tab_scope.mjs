@@ -332,6 +332,51 @@ check("the layout preview re-render uses the current tab key",
         `sidebar ${zNav} vs strip ${zStrip}`);
 }
 
+// --- card content must not paint over the navs ------------------------
+// The sticky navs carry z-index 8, which only wins against
+// non-positioned content. `main section.card > header.section-head` is
+// position:relative (it anchors the ::before accent bar) with no
+// z-index, and a positioned element paints above them regardless —
+// they sit earlier in the document. Card headings therefore slid over
+// the section list, the screen tabs and the page header while
+// scrolling. Reported twice, the second time after a fix that only
+// addressed the sidebar's transparency: "kattegorie Ueberschriften
+// ueberblenden auch die Screens oder auch den header" and then "ueber
+// screens das gleiche".
+{
+  const cssEnd2 = HTML.indexOf("</style>");
+  const RAW = HTML.slice(0, cssEnd2 > 0 ? cssEnd2 : HTML.length)
+    .replace(/@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+
+  const headRule = [...RAW.matchAll(
+    /main section\.card > header\.section-head\s*\{([^}]*)\}/g)].pop();
+  check("the card-heading rule was found", !!headRule);
+  if (headRule) {
+    const body = headRule[1];
+    const z = (body.match(/z-index:\s*([^;]+)/) || [])[1];
+    check("the card heading declares a z-index", !!z,
+          "positioned content without one paints over the sticky navs");
+    if (z) {
+      check("the card heading sits below the navs", Number(z.trim()) < 8,
+            `z-index ${z.trim()}, navs are 8`);
+    }
+  }
+
+  // Same trap anywhere else inside the cards: anything positioned with
+  // no z-index will climb over the navs the moment it scrolls past.
+  const offenders = [];
+  for (const m of RAW.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const sel = m[1].replace(/\s+/g, " ").trim();
+    if (!/card|^main /.test(sel)) continue;
+    if (!/position:\s*(relative|absolute)/.test(m[2])) continue;
+    if (/z-index:/.test(m[2])) continue;
+    offenders.push(sel);
+  }
+  check("no positioned card element is missing a z-index",
+        offenders.length === 0, offenders.slice(0, 4).join(" | "));
+}
+
 console.error("\n" + "=".repeat(68));
 console.error(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

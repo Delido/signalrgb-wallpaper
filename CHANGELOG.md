@@ -4,6 +4,37 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.32] - 2026-08-20
+
+### Fixed — card headings painted over the sticky navs
+
+Reported again right after beta.31 shipped a partial fix: "hat nicht
+ganz geklappt?!", then "ueber screens das gleiche" with the heading
+covering the screen strip as well.
+
+beta.31 made the sidebar opaque and gave it a z-index, which was a real
+defect but only half of this one. The other half is that
+`main section.card > header.section-head` is `position: relative` —
+it anchors the `::before` accent bar — with no `z-index`. The navs
+carry `z-index: 8`, but that only wins against non-positioned content:
+a positioned element with no z-index paints above them anyway, because
+they sit earlier in the document.
+
+`z-index: 0` keeps the anchor and puts the heading back below both navs.
+
+My first diagnosis stopped at the sidebar's `background: transparent`
+and did not check what was painting over the header, which has been
+opaque at `z-index: 10` all along. The second report is what forced the
+question "then what is on top of it?".
+
+### Testing
+
+`test_tab_scope.mjs` checks the resolved z-index of the card heading and
+sweeps every rule inside the cards for positioned elements with no
+z-index — the same trap, one selector away. 3/3 mutations caught,
+including restoring the reported state and the inverse mistake of
+lifting the heading above the navs.
+
 ## [2.4.4-beta.31] - 2026-08-20
 
 ### Changed — Connections is grouped by direction
