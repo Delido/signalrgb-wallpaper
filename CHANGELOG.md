@@ -4,6 +4,43 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.26] - 2026-08-20
+
+### Fixed — pages_per_screen counted the Configurator as a wallpaper
+
+Still reported after beta.25: "mhm immer noch" — then, a minute
+later, "jetzt ists weg, hat aber gut ne minute gebraucht". That second
+message is what identified it: the banner was not a rendering artefact,
+it was reporting a state that really did look broken and then resolved.
+
+`/health` on the running install returned `pages_per_screen: [2, 1]` on
+a two-screen setup with both wallpapers live. The count included every
+WebSocket client on a screen, and the Configurator is one of them —
+so screen 1 was inflated by the open Configurator tab while screen 2
+showed its single real page. During startup the Configurator connects
+first, so the other screen genuinely read as pageless until Lively
+finished bringing its wallpaper up.
+
+Wrong in both directions: a screen whose wallpaper had died would also
+have counted as fine as long as a Configurator tab sat on it.
+
+`pages_connected` beside it already filtered by role, and the comment on
+`client_roles` in `Broadcaster.add` says outright that the side-table
+exists "so the Status dialog can count only the actual wallpaper pages
+and not e.g. the user's own open Configurator tab". This count never
+used it. It does now, falling back to the raw count when no role table
+exists so an older client cannot make every screen report zero.
+
+### Testing
+
+`test_pages_per_screen.py` executes the counting block against
+constructed client sets rather than matching its source — the
+question is what number comes out, which reading the code does not
+answer. 4/4 mutations caught.
+
+Also verified against a live bridge: a lone `role=configurator` client
+reports 0 pages, and adding a real wallpaper page takes it to 1.
+
 ## [2.4.4-beta.25] - 2026-08-19
 
 ### Fixed — the setup banner flashed on every Configurator start

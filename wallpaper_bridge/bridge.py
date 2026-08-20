@@ -781,7 +781,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.25"
+APP_VERSION = "2.4.4-beta.26"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -851,6 +851,39 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.26": {
+        "title_en": "What\'s new in v2.4.4-beta.26",
+        "title_de": "Was ist neu in v2.4.4-beta.26",
+        "body_en": (
+            "**Fixed: the setup banner still appeared on a working "
+            "install.**\n\n"
+            "The check for \"is a wallpaper running on every "
+            "screen?\" counted every open connection, and the "
+            "Configurator itself is one of them. With the "
+            "Configurator on one monitor, the other looked short of a "
+            "page until its wallpaper had connected — which is why "
+            "the banner appeared and then cleared itself a minute "
+            "later.\n\n"
+            "It now counts wallpaper pages only. A screen that really "
+            "has no wallpaper is still reported.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Das Setup-Banner erschien weiterhin bei "
+            "funktionierender Einrichtung.**\n\n"
+            "Die Prüfung \"Läuft auf jedem Bildschirm ein "
+            "Wallpaper?\" zählte jede offene Verbindung mit — und der "
+            "Konfigurator ist selbst eine davon. Mit dem Konfigurator "
+            "auf einem Monitor fehlte dem anderen scheinbar eine "
+            "Seite, bis dessen Wallpaper verbunden war. Genau deshalb "
+            "erschien das Banner und verschwand eine Minute später "
+            "von selbst.\n\n"
+            "Gezählt werden jetzt nur noch Wallpaper-Seiten. Ein "
+            "Bildschirm, auf dem wirklich keins läuft, wird "
+            "weiterhin gemeldet.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.25": {
         "title_en": "What\'s new in v2.4.4-beta.25",
         "title_de": "Was ist neu in v2.4.4-beta.25",
@@ -11359,13 +11392,34 @@ class BridgeRuntime:
             screen_count = max(1, int(self._get_screen_count()))
         except Exception:
             pass
+        # v2.4.4-beta.26: count wallpaper pages, not every client.
+        #
+        # This counted the whole clients_by_screen set, so an open
+        # Configurator counted as a wallpaper page on whichever screen
+        # it was connected to. On a two-screen setup that reads as
+        # [2, 1] — screen 1 inflated by the Configurator, screen 2
+        # showing its single real page — and any screen whose wallpaper
+        # had not connected yet was masked on one side while being
+        # reported on the other. pages_connected already filtered by
+        # role; this did not.
+        roles = {}
+        if self.broadcaster:
+            roles = getattr(self.broadcaster, "client_roles", {}) or {}
         pages_per_screen = []
         fps_per_screen = []
         for i in range(screen_count):
             n = 0
             if self.broadcaster:
                 try:
-                    n = len(self.broadcaster.clients_by_screen.get(i, ()) or ())
+                    clients = self.broadcaster.clients_by_screen.get(i, ()) or ()
+                    if roles:
+                        n = sum(1 for c in clients
+                                if roles.get(c, "wallpaper") == "wallpaper")
+                    else:
+                        # No role table (older client, or nothing has
+                        # registered yet) — fall back to the raw count
+                        # rather than reporting zero pages everywhere.
+                        n = len(clients)
                 except Exception:
                     pass
             pages_per_screen.append(n)
