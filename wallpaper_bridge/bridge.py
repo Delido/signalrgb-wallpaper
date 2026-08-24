@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.33"
+APP_VERSION = "2.4.4-beta.34"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -975,6 +975,34 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.34": {
+        "title_en": "What\'s new in v2.4.4-beta.34",
+        "title_de": "Was ist neu in v2.4.4-beta.34",
+        "body_en": (
+            "**The System tab now shows both versions.**\n\n"
+            "Bridge and wallpaper bundle, on one line, always — not "
+            "only when they disagree. Since the two are allowed to "
+            "differ on purpose, \"which am I actually running?\" "
+            "needed an answer that is not the tray's About "
+            "dialog.\n\n"
+            "If a running wallpaper is behind the bundle the bridge "
+            "ships, a second line says so — in amber, not red: it "
+            "keeps working.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Der System-Tab zeigt jetzt beide Versionen.**\n\n"
+            "Bridge und Wallpaper-Bundle in einer Zeile, dauerhaft — "
+            "nicht nur bei Abweichung. Da beide bewusst "
+            "auseinanderlaufen dürfen, brauchte \"was läuft bei mir "
+            "eigentlich?\" eine Antwort, die nicht der Über-Dialog "
+            "im Tray ist.\n\n"
+            "Ist ein laufendes Wallpaper älter als das Bundle der "
+            "Bridge, steht das in einer zweiten Zeile — in Gelb, "
+            "nicht Rot: es funktioniert weiter.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.33": {
         "title_en": "What\'s new in v2.4.4-beta.33",
         "title_de": "Was ist neu in v2.4.4-beta.33",
@@ -11871,6 +11899,11 @@ class BridgeRuntime:
                 pass
 
         return {
+            # v2.5.0: both numbers, so the Configurator can show them
+            # together. They are allowed to drift on purpose now, which
+            # makes "which am I running?" a real question — and the
+            # tray's About dialog was the only place either appeared.
+            "app_version":           APP_VERSION,
             "wallpaper_version":     WALLPAPER_VERSION,
             "wallpaper_version_min": MIN_WALLPAPER_VERSION,
             "pages_wallpaper_versions": pages_wallpaper_versions,

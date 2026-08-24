@@ -165,9 +165,29 @@ def main():
     check("the Configurator renders a note", 'id="wallpaper-version-note"' in CONF)
     check("the note is driven by the health payload",
           "pages_wallpaper_versions" in CONF)
-    check("the note is hidden when versions match",
-          re.search(r"if \(!stale\.length\).*?display = \"none\"", CONF)
-          is not None)
+    # v2.5.0: both numbers are shown permanently. They are allowed to
+    # drift on purpose now, so "which am I running?" needs an answer
+    # that does not involve the tray's About dialog — which was the only
+    # place either number appeared.
+    check("health reports the bridge version too", '"app_version":' in BRIDGE)
+    check("the note names both versions",
+          re.search(r'"system\.versions":\s*\{[\s\S]{0,300}?\{app\}[\s\S]{0,200}?\{wallpaper\}',
+                    CONF) is not None,
+          "one number alone does not answer the question")
+    check("the version line is always visible",
+          re.search(r'id="wallpaper-version-note"[\s\S]{0,80}?style="margin-top',
+                    CONF) is not None,
+          "it must not start hidden any more")
+    check("the mismatch warning is styled apart from the line",
+          '.hint .warn' in CONF and 'class="warn"' in CONF,
+          "the factual line and the warning must be distinguishable")
+    check("the warn colour is not danger red",
+          re.search(r"--warn:\s*#(?!ff7575)", CONF) is not None,
+          "an older-but-working bundle is not an error")
+
+    check("only the warning is conditional, not the whole line",
+          re.search(r"if \(stale\.length\)", CONF) is not None,
+          "the version line itself stays regardless")
     check("the note is translated in both languages",
           re.search(r'"system\.bundle_outdated":\s*\{[\s\S]{0,600}?en:[\s\S]{0,400}?de:',
                     CONF) is not None)

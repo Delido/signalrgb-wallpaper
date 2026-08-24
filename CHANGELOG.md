@@ -4,6 +4,22 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.34] - 2026-08-24
+
+### Added — both versions are visible in the System tab
+
+Follow-up to beta.33, which added a note that only appeared when a
+running bundle was behind the bridge's. On a matching install that meant
+nothing was shown at all — and the question the change created,
+"which of the two am I running?", still had no answer outside the tray's
+About dialog.
+
+The System card now carries a permanent line: `Bridge <app> · Wallpaper
+bundle <version>`. A mismatch adds a second line below it, in amber
+rather than red, because an older-but-supported bundle is not an error.
+
+`/health` gained `app_version` alongside the wallpaper fields.
+
 ## [2.4.4-beta.33] - 2026-08-24
 
 ### Changed — an older wallpaper bundle keeps working, and keeps quiet
