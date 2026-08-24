@@ -20,6 +20,7 @@ every push and PR (`.github/workflows/smoke.yml`).
 | `test_language_setting.py` | The UI language picker — whitelist, validation, live re-resolve, and that the picker shows the preference |
 | `test_reset_all.py` | "Reset all screen settings" — its scope, the config backup, and that the action is reachable |
 | `test_pages_per_screen.py` | The per-screen page count — an open Configurator must not count as a wallpaper |
+| `test_wallpaper_compat.py` | An older bundle keeps working — the desktop banner only fires below MIN_WALLPAPER_VERSION |
 | `test_standby_card.mjs` | The standby-card state machine — models `connect()` and proves the issue-#2 latch is gone |
 | `test_wallpaper_source.mjs` | That the shipped `index.html` still contains those protections, and that its JS parses |
 | `test_tint_colour.mjs` | `rgbToRgba` across hex / rgb() / rgba() input |

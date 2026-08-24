@@ -3474,6 +3474,15 @@
         in the tray menu's Advanced submenu.
       </div>
 
+      <!-- v2.5.0: bundle-version note. Deliberately NOT part of the
+           red setup banner: an older-but-working bundle is not a
+           broken install, and the wallpaper itself no longer says
+           anything unless it drops below MIN_WALLPAPER_VERSION. This
+           is where someone who wonders "why don't I have the new
+           effect?" will look. -->
+      <div class="hint" id="wallpaper-version-note"
+           style="display:none; margin-top:10px;"></div>
+
       <!-- v2.4.4-beta.19: language picker. The config field, the
            validation and the whole translation table have existed for
            many versions, but nothing could write the field — no
@@ -4456,6 +4465,10 @@ const TRANSLATIONS = {
   "conn.group.output":      { en: "Where the colour goes",
                               de: "Wohin die Farbe geht" },
   "conn.group.other":       { en: "Other",                de: "Sonstiges" },
+  "system.bundle_outdated": {
+    en: "A wallpaper bundle in use is version {have}; this bridge ships {want}. It keeps working — re-import the bundle to pick up newer effects and fixes.",
+    de: "Ein verwendetes Wallpaper-Bundle hat Version {have}, diese Bridge liefert {want}. Es funktioniert weiter — für neuere Effekte und Korrekturen das Bundle neu importieren."
+  },
   "system.language":        { en: "Language",             de: "Sprache" },
   "system.language.auto":   { en: "Automatic (system)",   de: "Automatisch (System)" },
   "adv.show":               { en: "More settings",        de: "Mehr Einstellungen" },
@@ -5998,7 +6011,27 @@ const SETUP_STEPS = [
   },
 ];
 
+// v2.5.0: an out-of-date-but-working bundle gets a line in the System
+// card, not a banner on the desktop. The bridge only pushes
+// version-mismatch to the wallpaper below MIN_WALLPAPER_VERSION now.
+function renderWallpaperVersionNote(h) {
+  const el = document.getElementById("wallpaper-version-note");
+  if (!el) return;
+  const running = Array.isArray(h && h.pages_wallpaper_versions)
+    ? h.pages_wallpaper_versions : [];
+  const current = h && h.wallpaper_version;
+  // Nothing connected, or the bridge is too old to report it.
+  if (!current || !running.length) { el.style.display = "none"; return; }
+  const stale = running.filter((v) => v !== current);
+  if (!stale.length) { el.style.display = "none"; return; }
+  el.textContent = t("system.bundle_outdated", {
+    have: stale.join(", "), want: current,
+  });
+  el.style.display = "";
+}
+
 function renderSetupStatus(h) {
+  renderWallpaperVersionNote(h);
   const el = document.getElementById("setup-status");
   if (!el) return;
   if (!h || h.available === false) { el.classList.add("hidden"); return; }

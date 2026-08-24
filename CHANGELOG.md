@@ -4,6 +4,59 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed — an older wallpaper bundle keeps working, and keeps quiet
+
+`WALLPAPER_VERSION` rises whenever anything under `wallpaper/` changes,
+which is often and usually cosmetic. The bridge treated every one of
+those as "your bundle is out of date" and pushed a banner onto the
+desktop — four times during the 2.4.4 beta run alone, each time for a
+page that was working perfectly.
+
+That banner is on the desktop. There is no close button on a wallpaper,
+so the question it answers has to be worth interrupting for, and "a
+newer bundle exists" is not.
+
+`MIN_WALLPAPER_VERSION` (2.4.0) answers the narrower question: is the
+page too old to *work*? It moves only when a change actually breaks
+older pages — a message type changing shape, a setting the page must
+understand to render correctly, a removed endpoint. A new effect or a
+new optional setting does not qualify.
+
+- Below the floor — desktop banner, as before.
+- At or above it but behind current — no banner. The System card
+  says so, and the log records it.
+
+This works because an older page already tolerates the future:
+`applyProperty` is a `switch` with no `default`, so unknown setting keys
+fall through, and unknown message types fall out of the `else if` chain.
+Both are now asserted, because they are the compatibility guarantee —
+if either changes, the floor becomes the only protection.
+
+`/health` gained `wallpaper_version`, `wallpaper_version_min` and
+`pages_wallpaper_versions`; the last is keyed by connection and cleared
+on disconnect, so a long-running bridge does not report pages that
+closed hours ago.
+
+### Testing
+
+`test_wallpaper_compat.py` runs the decision with the bridge's own
+version parser rather than a second implementation, and pins both
+directions: a supported-but-older bundle stays silent, one below the
+floor still reports. 6/6 mutations caught.
+
+Two of those initially slipped through and are worth recording. A
+mutation that replaced the floor check with `if False:` passed, because
+the test only asserted the constant was *mentioned*; it now checks the
+guard actually returns. And a thrown `default:` added to `applyProperty`
+passed, because the regex bounding that function stopped 861 characters
+in, at the first nested brace — it is brace-matched now.
+
+Verified against a live bridge: 2.4.11 and 2.4.0 connect silently,
+1.9.0 gets the banner, and the reported version appears in `/health`
+while connected and disappears when the page closes.
+
 ## [2.4.4-beta.32] - 2026-08-20
 
 ### Fixed — card headings painted over the sticky navs

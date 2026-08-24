@@ -904,6 +904,32 @@ APP_VERSION = "2.4.4-beta.32"
 # are bridge-only.
 WALLPAPER_VERSION = "2.4.14"
 
+# v2.5.0: the oldest wallpaper bundle this bridge still considers
+# fully functional.
+#
+# WALLPAPER_VERSION goes up whenever anything under wallpaper/ changes,
+# which is often and usually cosmetic. Treating every one of those as
+# "your bundle is out of date" put a banner on the desktop after
+# updates that changed nothing the old page depended on — four times
+# during the 2.4.4 beta run alone.
+#
+# This constant answers a narrower question: is the installed page too
+# old to WORK? It only moves when a change actually breaks older pages
+# — a message type changing shape, a setting the page must understand
+# to render correctly, a removed endpoint. A new effect or a new
+# optional setting does not qualify: the page ignores unknown setting
+# keys (applyProperty's switch has no default branch) and unknown
+# message types, so it keeps doing exactly what it did before.
+#
+# Below it  → the desktop banner, as before. The page genuinely cannot
+#             do what the bridge expects of it.
+# Above it, but older than WALLPAPER_VERSION → no banner. The
+#             Configurator and the log mention it; the wallpaper itself
+#             stays clean.
+#
+# Bump this ONLY together with a note in CHANGELOG saying what breaks.
+MIN_WALLPAPER_VERSION = "2.4.0"
+
 # v1.2.13: WS protocol version. Sent on every settings push so a
 # wallpaper page (or Configurator tab) loaded from an older bundle
 # can detect a breaking change before it dispatches a malformed
@@ -4956,6 +4982,12 @@ class Broadcaster:
         async with self._lock:
             if hasattr(self, "client_roles"):
                 self.client_roles.pop(writer, None)
+            # v2.5.0: same lifetime as client_roles. Without this the
+            # table keeps every writer that ever connected, and a
+            # long-running bridge reports versions of pages that closed
+            # hours ago.
+            if hasattr(self, "client_wallpaper_versions"):
+                self.client_wallpaper_versions.pop(writer, None)
             # v2.2.2: drop any pending slow-client skip counter so the
             # dict doesn't grow over a long uptime as clients churn.
             self._client_skip_count.pop(writer, None)
@@ -7577,6 +7609,19 @@ class Broadcaster:
             wv = ""
         if not wv or wv == "dev":
             return
+
+        # v2.5.0: remember what each page reports, keyed by its writer
+        # so it disappears with the connection. get_health_status()
+        # surfaces this, which is how the Configurator can mention an
+        # out-of-date bundle now that the wallpaper itself stays quiet
+        # for anything above MIN_WALLPAPER_VERSION.
+        try:
+            if not hasattr(self, "client_wallpaper_versions"):
+                self.client_wallpaper_versions = {}
+            self.client_wallpaper_versions[writer] = wv
+        except Exception:
+            pass
+
         try:
             target_t = _parse_version(WALLPAPER_VERSION)
             wp_t = _parse_version(wv)
@@ -7584,7 +7629,26 @@ class Broadcaster:
             return
         if wp_t >= target_t:
             return
-        # Older bundle → push the mismatch on the same writer.
+
+        # v2.5.0: older than current, but is it too old to work?
+        #
+        # Anything at or above MIN_WALLPAPER_VERSION keeps running as it
+        # always did — it simply does not know about whatever was added
+        # since. Putting a banner on the desktop for that is noise, and
+        # it is the desktop, not an app window: the user cannot dismiss
+        # it. Record it where someone looking for it will find it, and
+        # leave the wallpaper alone.
+        try:
+            min_t = _parse_version(MIN_WALLPAPER_VERSION)
+        except Exception:
+            min_t = None
+        if min_t is not None and wp_t >= min_t:
+            print(f"[ws] wallpaper bundle older than current on screen={screen}: "
+                  f"bundle={wv} current={WALLPAPER_VERSION} "
+                  f"(min={MIN_WALLPAPER_VERSION}, still supported — no banner)")
+            return
+
+        # Too old to work → push the mismatch on the same writer.
         payload = {
             "type":      "version-mismatch",
             # "bridge" key kept for back-compat with v1.2.12+ wallpaper
@@ -11761,7 +11825,23 @@ class BridgeRuntime:
         except Exception:
             pass
 
+        # v2.5.0: what the connected pages actually report, so the
+        # Configurator can mention an out-of-date bundle in a place the
+        # user can dismiss — the wallpaper itself no longer says
+        # anything unless the bundle is below MIN_WALLPAPER_VERSION.
+        pages_wallpaper_versions = []
+        if self.broadcaster:
+            try:
+                seen = getattr(self.broadcaster, "client_wallpaper_versions", {}) or {}
+                pages_wallpaper_versions = sorted(
+                    {str(v) for v in seen.values() if v and str(v) != "dev"})
+            except Exception:
+                pass
+
         return {
+            "wallpaper_version":     WALLPAPER_VERSION,
+            "wallpaper_version_min": MIN_WALLPAPER_VERSION,
+            "pages_wallpaper_versions": pages_wallpaper_versions,
             "fullscreen_anywhere": fullscreen_anywhere,
             "plugin_present":    plugin_present,
             "plugin_path":       str(plugin_path) if plugin_path else "",

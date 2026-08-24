@@ -29,6 +29,7 @@ PY_SUITES = [
     ("Language setting (python)", HERE / "test_language_setting.py"),
     ("Reset all screens (python)", HERE / "test_reset_all.py"),
     ("Pages per screen (python)", HERE / "test_pages_per_screen.py"),
+    ("Wallpaper compatibility (python)", HERE / "test_wallpaper_compat.py"),
 ]
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
