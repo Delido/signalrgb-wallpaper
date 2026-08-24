@@ -170,7 +170,8 @@ def main():
     # that does not involve the tray's About dialog — which was the only
     # place either number appeared.
     check("health reports the bridge version too", '"app_version":' in BRIDGE)
-    check("the line names the bridge version", '"system.versions.bridge"' in CONF)
+    check("the line names the bridge version",
+          '"system.versions.bridge_prefix"' in CONF)
     # The wallpaper number has to be MEASURED, not the constant this
     # bridge happens to ship. On a machine where the bundle was never
     # re-imported those differ, and printing the shipped one states
@@ -191,7 +192,7 @@ def main():
                     CONF) is not None,
           "it floated between the description and the first control")
     check("the mismatch warning is styled apart from the line",
-          '.ver-line .warn' in CONF and 'class="warn"' in CONF,
+          '.ver-line.is-warn' in CONF and 'class="mark"' in CONF,
           "the factual line and the warning must be distinguishable")
     check("the warn colour is not danger red",
           re.search(r"--warn:\s*#(?!ff7575)", CONF) is not None,
@@ -200,6 +201,31 @@ def main():
     check("only the warning is conditional, not the whole line",
           re.search(r"if \(stale\.length", CONF) is not None,
           "the bridge version and the running one are stated either way")
+    # v2.5.0: the row reads as a status, not as two numbers in grey.
+    # Two versions side by side in the same colour made the reader
+    # compare strings to find out whether anything was wrong; the mark
+    # carries the verdict now. Reported twice as "sieht kacke aus".
+    for state in ("is-ok", "is-warn", "is-idle"):
+        check(f"the {state} state is styled",
+              f".ver-line.{state}" in CONF,
+              "each state needs its own colour or the mark says nothing")
+    check("the state class is set from the data",
+          re.search(r'el\.className = "ver-line " \+ cls', CONF) is not None)
+    # Declaring the string is not using it: a mutation that dropped the
+    # push while leaving the translation in place slipped past the
+    # first version of this check.
+    check("up to date is stated, not left implied",
+          re.search(r't\("system\.versions\.uptodate"\)', CONF) is not None,
+          "a green mark alone still asks the reader to interpret it")
+    check("the warning does not repeat the numbers above it",
+          re.search(r'"system\.bundle_outdated":[\s\S]{0,400}?\{have\}', CONF)
+          is None,
+          "the line already shows both; this should say what to do")
+    check("the marks are distinct per state",
+          re.search(r'cls = "is-idle"[\s\S]{0,120}?cls = "is-warn"[\s\S]{0,120}?cls = "is-ok"',
+                    CONF) is not None,
+          "all three branches must assign a different mark")
+
     check("the note is translated in both languages",
           re.search(r'"system\.bundle_outdated":\s*\{[\s\S]{0,600}?en:[\s\S]{0,400}?de:',
                     CONF) is not None)

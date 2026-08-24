@@ -633,8 +633,34 @@
      card grid like every other row, so it lines up with the Language
      picker instead of floating between the description and the first
      control. */
+  /* v2.5.0: the versions row reads as a status, not as two numbers in
+     grey. Three states, each with its own mark and colour:
+       ok    green check   nothing to do
+       warn  amber dot     running bundle is behind the shipped one
+       idle  grey dash     no wallpaper connected, nothing measured
+     The numbers keep the dim colour; only the mark and the verdict
+     carry it, so the line says what it means at a glance instead of
+     asking the reader to compare two strings. */
   .ver-line { flex: 1; min-width: 0; font-size: 12px; color: var(--text-dim); }
-  .ver-line .warn { color: var(--warn, #e0a33e); }
+  .ver-line .mark {
+    display: inline-block;
+    width: 1.1em;
+    margin-right: 4px;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .ver-line.is-ok   .mark { color: var(--good); }
+  .ver-line.is-warn .mark { color: var(--warn); }
+  .ver-line.is-idle .mark { color: var(--text-dim); }
+  .ver-line .num { color: var(--text); font-variant-numeric: tabular-nums; }
+  .ver-line .verdict { color: var(--good); }
+  .ver-line.is-warn .verdict { color: var(--warn); }
+  .ver-line .sub {
+    display: block;
+    margin-top: 3px;
+    padding-left: calc(1.1em + 4px);
+    color: var(--warn);
+  }
 
   /* Inline warning inside a .hint — used by the version line when a
      connected bundle is behind the one the bridge ships. */
@@ -4483,18 +4509,19 @@ const TRANSLATIONS = {
                               de: "Wohin die Farbe geht" },
   "conn.group.other":       { en: "Other",                de: "Sonstiges" },
   "system.versions.label":  { en: "Versions",             de: "Versionen" },
-  "system.versions.bridge": { en: "Bridge {app}",         de: "Bridge {app}" },
-  "system.versions.running": {
-    en: "wallpaper running {wallpaper}",
-    de: "Wallpaper läuft mit {wallpaper}"
-  },
+  "system.versions.bridge_prefix":    { en: "Bridge",    de: "Bridge" },
+  "system.versions.wallpaper_prefix": { en: "wallpaper", de: "Wallpaper" },
+  "system.versions.uptodate": { en: "— up to date",
+                                de: "— aktuell" },
   "system.versions.none":   {
     en: "no wallpaper connected right now",
     de: "gerade kein Wallpaper verbunden"
   },
+  // The line above already shows both numbers, so this says what to do
+  // about them rather than repeating them.
   "system.bundle_outdated": {
-    en: "A wallpaper bundle in use is version {have}; this bridge ships {want}. It keeps working — re-import the bundle to pick up newer effects and fixes.",
-    de: "Ein verwendetes Wallpaper-Bundle hat Version {have}, diese Bridge liefert {want}. Es funktioniert weiter — für neuere Effekte und Korrekturen das Bundle neu importieren."
+    en: "{want} is available. It keeps working as it is — re-import the bundle for newer effects and fixes.",
+    de: "{want} ist verfügbar. Es läuft weiter wie es ist — für neuere Effekte und Korrekturen das Bundle neu importieren."
   },
   "system.language":        { en: "Language",             de: "Sprache" },
   "system.language.auto":   { en: "Automatic (system)",   de: "Automatisch (System)" },
@@ -6047,36 +6074,38 @@ function renderWallpaperVersionNote(h) {
   const app = (h && h.app_version) || (bridgeState && bridgeState.appVersion);
   const shipped = h && h.wallpaper_version;
 
-  // v2.5.0 (revised): report what is RUNNING, not what this bridge
-  // happens to ship.
-  //
-  // The first version of this line printed WALLPAPER_VERSION, which is
-  // the constant baked into the bridge — "the bundle this installer
-  // carries". On a machine where the bundle was never re-imported that
-  // is precisely the wrong number: the desktop still runs the old one
-  // and the line claims otherwise. Asked directly: "ermittelt es die
-  // Wallpaper Version oder ist das einfach festgesetzt?" — it was
-  // festgesetzt.
-  //
-  // pages_wallpaper_versions is the measured value, collected from each
-  // page's hello. When nothing is connected there is no measurement,
-  // and saying so is better than printing a number nobody verified.
+  // v2.5.0: reports what is RUNNING, never the constant this bridge
+  // ships. On a machine where the bundle was never re-imported those
+  // differ, and printing the shipped one states something nobody
+  // checked — which is what the first version of this line did.
   const running = Array.isArray(h && h.pages_wallpaper_versions)
     ? h.pages_wallpaper_versions : [];
+  const stale = shipped ? running.filter((v) => v !== shipped) : [];
 
-  const parts = [];
-  parts.push(escapeHtml(t("system.versions.bridge", { app: app || "?" })));
+  // Three states, each with a mark that carries the verdict. Two
+  // numbers side by side in the same grey made the reader compare
+  // strings to find out whether anything was wrong.
+  let cls, mark;
+  if (!running.length)      { cls = "is-idle"; mark = "–"; }
+  else if (stale.length)    { cls = "is-warn"; mark = "●"; }
+  else                      { cls = "is-ok";   mark = "✓"; }
+  el.className = "ver-line " + cls;
+
+  const num = (v) => '<span class="num">' + escapeHtml(String(v)) + "</span>";
+  const parts = ['<span class="mark">' + mark + "</span>"];
+
+  parts.push(escapeHtml(t("system.versions.bridge_prefix")) + " " + num(app || "?"));
 
   if (!running.length) {
     parts.push(" · " + escapeHtml(t("system.versions.none")));
   } else {
-    parts.push(" · " + escapeHtml(t("system.versions.running", {
-      wallpaper: running.join(", "),
-    })));
-    // Behind what this bridge ships: worth mentioning, not an error.
-    const stale = running.filter((v) => v !== shipped);
-    if (stale.length && shipped) {
-      parts.push('<br><span class="warn">'
+    parts.push(" · " + escapeHtml(t("system.versions.wallpaper_prefix"))
+               + " " + num(running.join(", ")));
+    if (!stale.length) {
+      parts.push(' <span class="verdict">'
+                 + escapeHtml(t("system.versions.uptodate")) + "</span>");
+    } else {
+      parts.push('<span class="sub">'
         + escapeHtml(t("system.bundle_outdated", {
             have: stale.join(", "), want: shipped,
           }))
@@ -6085,6 +6114,7 @@ function renderWallpaperVersionNote(h) {
   }
   el.innerHTML = parts.join("");
 }
+
 
 
 function renderSetupStatus(h) {

@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.35"
+APP_VERSION = "2.4.4-beta.36"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -975,6 +975,31 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.36": {
+        "title_en": "What\'s new in v2.4.4-beta.36",
+        "title_de": "Was ist neu in v2.4.4-beta.36",
+        "body_en": (
+            "**The versions row now reads as a status.**\n\n"
+            "A green check when everything is current, an amber dot "
+            "with a short note when the running wallpaper is behind, "
+            "and a grey dash when no wallpaper is connected.\n\n"
+            "Before it was two version numbers in the same grey, "
+            "leaving you to compare them yourself to find out "
+            "whether anything needed doing.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Die Versionszeile ist jetzt eine Statusanzeige.**\n\n"
+            "Grüner Haken, wenn alles aktuell ist. Gelber Punkt mit "
+            "kurzem Hinweis, wenn das laufende Wallpaper älter ist. "
+            "Grauer Strich, wenn gerade kein Wallpaper verbunden "
+            "ist.\n\n"
+            "Vorher standen dort zwei Versionsnummern in derselben "
+            "grauen Farbe — du musstest selbst vergleichen, um zu "
+            "sehen, ob etwas zu tun ist.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.35": {
         "title_en": "What\'s new in v2.4.4-beta.35",
         "title_de": "Was ist neu in v2.4.4-beta.35",

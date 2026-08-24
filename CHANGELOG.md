@@ -4,6 +4,35 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.36] - 2026-08-24
+
+### Changed — the versions row reads as a status
+
+Reported twice as "sieht kacke aus", the second time with the useful
+suggestion: "vllt. mit Grünen Haken in Szene Setzen?"
+
+The row printed two version numbers in the same dim grey, which asked
+the reader to compare two strings to find out whether anything was
+wrong. Three states now, each with its own mark and colour:
+
+| | |
+|---|---|
+| green check | everything current, and it says "up to date" |
+| amber dot | running bundle is behind, with one line on what to do |
+| grey dash | nothing connected, so nothing measured |
+
+The mismatch text no longer repeats the numbers shown directly above it
+— it says what is available and that the current one keeps working.
+
+### Testing
+
+`test_wallpaper_compat.py` pins each state's styling, that the class is
+derived from the data, and that "up to date" is actually rendered rather
+than merely declared. 4/4 mutations caught — the last one only after
+tightening a check that looked for the translation key in the file
+instead of a call to it, which a mutation that dropped the render passed
+happily.
+
 ## [2.4.4-beta.35] - 2026-08-24
 
 ### Fixed — the version line reported a constant, not a measurement
