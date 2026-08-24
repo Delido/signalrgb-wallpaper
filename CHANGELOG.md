@@ -4,7 +4,7 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.4.4-beta.33] - 2026-08-24
 
 ### Changed — an older wallpaper bundle keeps working, and keeps quiet
 

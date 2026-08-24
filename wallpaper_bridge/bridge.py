@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.32"
+APP_VERSION = "2.4.4-beta.33"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -975,6 +975,38 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.33": {
+        "title_en": "What\'s new in v2.4.4-beta.33",
+        "title_de": "Was ist neu in v2.4.4-beta.33",
+        "body_en": (
+            "**An older wallpaper keeps working, without a banner on "
+            "your desktop.**\n\n"
+            "Until now every wallpaper update put an \"out of date\" "
+            "notice on the wallpaper itself — even when the "
+            "installed one worked perfectly and only lacked a new "
+            "effect. There is no way to close a notice on your "
+            "desktop.\n\n"
+            "Now it only appears when the installed wallpaper is "
+            "genuinely too old to work. Otherwise you get a line in "
+            "the System tab telling you a newer bundle exists, and "
+            "the desktop stays clean.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Ein älteres Wallpaper läuft weiter — ohne Hinweis "
+            "auf dem Desktop.**\n\n"
+            "Bisher setzte jede Wallpaper-Aktualisierung einen "
+            "\"veraltet\"-Hinweis auf das Wallpaper selbst — auch "
+            "dann, wenn das installierte einwandfrei lief und nur "
+            "einen neuen Effekt nicht kannte. Einen Hinweis auf dem "
+            "Desktop kann man nicht wegklicken.\n\n"
+            "Jetzt erscheint er nur noch, wenn das installierte "
+            "Wallpaper wirklich zu alt zum Funktionieren ist. "
+            "Ansonsten steht im System-Tab eine Zeile, dass ein "
+            "neueres Bundle vorliegt — der Desktop bleibt sauber.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.32": {
         "title_en": "What\'s new in v2.4.4-beta.32",
         "title_de": "Was ist neu in v2.4.4-beta.32",
