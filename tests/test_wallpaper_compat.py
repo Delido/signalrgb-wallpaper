@@ -170,24 +170,36 @@ def main():
     # that does not involve the tray's About dialog — which was the only
     # place either number appeared.
     check("health reports the bridge version too", '"app_version":' in BRIDGE)
-    check("the note names both versions",
-          re.search(r'"system\.versions":\s*\{[\s\S]{0,300}?\{app\}[\s\S]{0,200}?\{wallpaper\}',
+    check("the line names the bridge version", '"system.versions.bridge"' in CONF)
+    # The wallpaper number has to be MEASURED, not the constant this
+    # bridge happens to ship. On a machine where the bundle was never
+    # re-imported those differ, and printing the shipped one states
+    # something nobody checked. The first version of this line did
+    # exactly that.
+    check("the wallpaper version comes from the connected pages",
+          re.search(r"const running = Array\.isArray\(h && h\.pages_wallpaper_versions\)",
                     CONF) is not None,
-          "one number alone does not answer the question")
-    check("the version line is always visible",
-          re.search(r'id="wallpaper-version-note"[\s\S]{0,80}?style="margin-top',
+          "printing WALLPAPER_VERSION would be a claim, not a reading")
+    check("the shipped constant is not printed as the running version",
+          not re.search(r'system\.versions\.running"[^)]*wallpaper:\s*shipped', CONF),
+          "shipped is only used for the mismatch comparison")
+    check("no measurement says so in words",
+          '"system.versions.none"' in CONF,
+          "better than a number nobody verified")
+    check("the row uses the card grid",
+          re.search(r'<div class="row">[\s\S]{0,40}?<label data-i18n="system\.versions\.label"',
                     CONF) is not None,
-          "it must not start hidden any more")
+          "it floated between the description and the first control")
     check("the mismatch warning is styled apart from the line",
-          '.hint .warn' in CONF and 'class="warn"' in CONF,
+          '.ver-line .warn' in CONF and 'class="warn"' in CONF,
           "the factual line and the warning must be distinguishable")
     check("the warn colour is not danger red",
           re.search(r"--warn:\s*#(?!ff7575)", CONF) is not None,
           "an older-but-working bundle is not an error")
 
     check("only the warning is conditional, not the whole line",
-          re.search(r"if \(stale\.length\)", CONF) is not None,
-          "the version line itself stays regardless")
+          re.search(r"if \(stale\.length", CONF) is not None,
+          "the bridge version and the running one are stated either way")
     check("the note is translated in both languages",
           re.search(r'"system\.bundle_outdated":\s*\{[\s\S]{0,600}?en:[\s\S]{0,400}?de:',
                     CONF) is not None)

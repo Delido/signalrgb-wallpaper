@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.34"
+APP_VERSION = "2.4.4-beta.35"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -975,6 +975,38 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.4.4-beta.35": {
+        "title_en": "What\'s new in v2.4.4-beta.35",
+        "title_de": "Was ist neu in v2.4.4-beta.35",
+        "body_en": (
+            "**Fixed: the version line stated something it had not "
+            "checked.**\n\n"
+            "It printed the bundle version this bridge *ships*, not "
+            "the one actually running on your desktop. On a machine "
+            "where the bundle was never re-imported those are "
+            "different, and the line showed the wrong one.\n\n"
+            "It now reports what the running wallpaper reports, or "
+            "says plainly that no wallpaper is connected. It also "
+            "sits in the card properly instead of floating between "
+            "the description and the first setting.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Die Versionszeile behauptete etwas, das sie "
+            "nicht geprüft hatte.**\n\n"
+            "Angezeigt wurde die Bundle-Version, die diese Bridge "
+            "*mitbringt* — nicht die, die tatsächlich auf deinem "
+            "Desktop läuft. Wenn das Bundle nie neu importiert wurde, "
+            "sind das zwei verschiedene Dinge, und die Zeile zeigte "
+            "das falsche.\n\n"
+            "Jetzt steht dort, was das laufende Wallpaper meldet — "
+            "oder im Klartext, dass gerade keins verbunden ist. "
+            "Außerdem sitzt die Zeile jetzt sauber in der Karte, "
+            "statt zwischen Beschreibung und erster Einstellung zu "
+            "hängen.\n\n"
+            "**Kein Neuimport nötig.**\n"
+        ),
+    },
     "2.4.4-beta.34": {
         "title_en": "What\'s new in v2.4.4-beta.34",
         "title_de": "Was ist neu in v2.4.4-beta.34",

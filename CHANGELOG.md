@@ -4,6 +4,30 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4-beta.35] - 2026-08-24
+
+### Fixed — the version line reported a constant, not a measurement
+
+Asked directly after seeing beta.34: "ermittelt es die Wallpaper Version
+oder ist das einfach festgesetzt?" — festgesetzt. The line printed
+`WALLPAPER_VERSION`, the constant baked into the bridge, which means
+"the bundle this installer carries". On a machine where the bundle was
+never re-imported that is exactly the wrong number: the desktop runs the
+old one and the line claims otherwise.
+
+It now reads `pages_wallpaper_versions`, collected from each page's
+hello handshake. With nothing connected — fullscreen pause, Lively
+closed — it says so in words rather than printing a number nobody
+verified. The shipped constant is still used, but only for the
+comparison behind the mismatch warning.
+
+### Changed — the line sits in the card grid
+
+It was a bare `.hint` between the card description and the Language
+picker, in the same colour and size as the description above it, with no
+visual relationship to either. Reported as "sieht kacke aus". It is a
+normal row now: label left, value right, aligned with Language.
+
 ## [2.4.4-beta.34] - 2026-08-24
 
 ### Added — both versions are visible in the System tab

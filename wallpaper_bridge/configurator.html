@@ -629,6 +629,13 @@
      larger refactor for v1.2.1. */
   .mirror-bar { display: none !important; }
 
+  /* Value column of the versions row. Not a .hint: it sits in the
+     card grid like every other row, so it lines up with the Language
+     picker instead of floating between the description and the first
+     control. */
+  .ver-line { flex: 1; min-width: 0; font-size: 12px; color: var(--text-dim); }
+  .ver-line .warn { color: var(--warn, #e0a33e); }
+
   /* Inline warning inside a .hint — used by the version line when a
      connected bundle is behind the one the bridge ships. */
   .hint .warn { color: var(--warn, #e0a33e); }
@@ -3488,8 +3495,10 @@
            anything unless it drops below MIN_WALLPAPER_VERSION. This
            is where someone who wonders "why don't I have the new
            effect?" will look. -->
-      <div class="hint" id="wallpaper-version-note"
-           style="margin-top:10px;"></div>
+      <div class="row">
+        <label data-i18n="system.versions.label">Versions</label>
+        <span id="wallpaper-version-note" class="ver-line"></span>
+      </div>
 
       <!-- v2.4.4-beta.19: language picker. The config field, the
            validation and the whole translation table have existed for
@@ -4473,9 +4482,15 @@ const TRANSLATIONS = {
   "conn.group.output":      { en: "Where the colour goes",
                               de: "Wohin die Farbe geht" },
   "conn.group.other":       { en: "Other",                de: "Sonstiges" },
-  "system.versions":        {
-    en: "Bridge {app} · Wallpaper bundle {wallpaper}",
-    de: "Bridge {app} · Wallpaper-Bundle {wallpaper}"
+  "system.versions.label":  { en: "Versions",             de: "Versionen" },
+  "system.versions.bridge": { en: "Bridge {app}",         de: "Bridge {app}" },
+  "system.versions.running": {
+    en: "wallpaper running {wallpaper}",
+    de: "Wallpaper läuft mit {wallpaper}"
+  },
+  "system.versions.none":   {
+    en: "no wallpaper connected right now",
+    de: "gerade kein Wallpaper verbunden"
   },
   "system.bundle_outdated": {
     en: "A wallpaper bundle in use is version {have}; this bridge ships {want}. It keeps working — re-import the bundle to pick up newer effects and fixes.",
@@ -6030,33 +6045,47 @@ function renderWallpaperVersionNote(h) {
   const el = document.getElementById("wallpaper-version-note");
   if (!el) return;
   const app = (h && h.app_version) || (bridgeState && bridgeState.appVersion);
-  const current = h && h.wallpaper_version;
-  if (!app && !current) { el.style.display = "none"; return; }
+  const shipped = h && h.wallpaper_version;
 
-  // v2.5.0: the versions are shown permanently, not only when they
-  // disagree. Bridge and wallpaper are now allowed to drift on purpose
-  // (see MIN_WALLPAPER_VERSION), so "which of the two am I running?"
-  // became a question worth being able to answer without opening the
-  // tray's About dialog — the only place either number appeared.
+  // v2.5.0 (revised): report what is RUNNING, not what this bridge
+  // happens to ship.
+  //
+  // The first version of this line printed WALLPAPER_VERSION, which is
+  // the constant baked into the bridge — "the bundle this installer
+  // carries". On a machine where the bundle was never re-imported that
+  // is precisely the wrong number: the desktop still runs the old one
+  // and the line claims otherwise. Asked directly: "ermittelt es die
+  // Wallpaper Version oder ist das einfach festgesetzt?" — it was
+  // festgesetzt.
+  //
+  // pages_wallpaper_versions is the measured value, collected from each
+  // page's hello. When nothing is connected there is no measurement,
+  // and saying so is better than printing a number nobody verified.
   const running = Array.isArray(h && h.pages_wallpaper_versions)
     ? h.pages_wallpaper_versions : [];
-  const stale = running.filter((v) => v !== current);
 
   const parts = [];
-  parts.push(escapeHtml(t("system.versions", {
-    app: app || "?", wallpaper: current || "?",
-  })));
-  if (stale.length) {
-    // Only the mismatch is called out; the line above stays factual.
-    parts.push('<br><span class="warn">'
-      + escapeHtml(t("system.bundle_outdated", {
-          have: stale.join(", "), want: current,
-        }))
-      + "</span>");
+  parts.push(escapeHtml(t("system.versions.bridge", { app: app || "?" })));
+
+  if (!running.length) {
+    parts.push(" · " + escapeHtml(t("system.versions.none")));
+  } else {
+    parts.push(" · " + escapeHtml(t("system.versions.running", {
+      wallpaper: running.join(", "),
+    })));
+    // Behind what this bridge ships: worth mentioning, not an error.
+    const stale = running.filter((v) => v !== shipped);
+    if (stale.length && shipped) {
+      parts.push('<br><span class="warn">'
+        + escapeHtml(t("system.bundle_outdated", {
+            have: stale.join(", "), want: shipped,
+          }))
+        + "</span>");
+    }
   }
   el.innerHTML = parts.join("");
-  el.style.display = "";
 }
+
 
 function renderSetupStatus(h) {
   renderWallpaperVersionNote(h);
