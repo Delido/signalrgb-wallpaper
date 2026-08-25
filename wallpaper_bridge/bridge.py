@@ -879,7 +879,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.4.4-beta.36"
+APP_VERSION = "2.5.0"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -975,6 +975,77 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.0": {
+        "title_en": "What\'s new in v2.5.0",
+        "title_de": "Was ist neu in v2.5.0",
+        "body_en": (
+            "**The Configurator has been reorganised.**\n\n"
+            "Six tabs became four, named after what you want to do: "
+            "**Appearance**, **Content**, **Connections**, "
+            "**System**. The settings most people never touch now "
+            "sit behind *More settings* — 16 controls at a glance "
+            "instead of 32.\n\n"
+            "**Nothing was removed.** Your presets, profiles and "
+            "Quick Looks are unchanged.\n\n"
+            "**New:**\n"
+            "- A **first-run setup** that walks you through picking "
+            "a look and a background\n"
+            "- **Language picker** (Automatic / English / Deutsch), "
+            "applied immediately\n"
+            "- **Reset all screen settings**, with a backup saved "
+            "first\n"
+            "- A **status banner** naming the setup step that is "
+            "still missing\n"
+            "- Sliders for **pill height and width**, previously "
+            "tray-only\n\n"
+            "**Water ripple and Liquid Distortion** run on a new "
+            "render path — they now work in Wallpaper Engine too.\n\n"
+            "**Fixed, among others:** Aurora and Plasma were "
+            "effectively invisible \u00b7 Waves stopped partway across "
+            "the desktop \u00b7 tinted gradients lost their colour \u00b7 "
+            "the glow grid only responded on one of two monitors \u00b7 "
+            "the update check ranked beta 9 above beta 10.\n\n"
+            "**Re-import the wallpaper bundles** — the wallpaper "
+            "itself changed. In Lively, remove the wallpaper and "
+            "import the new zip; in Wallpaper Engine, re-subscribe "
+            "or re-import.\n"
+        ),
+        "body_de": (
+            "**Der Konfigurator wurde neu geordnet.**\n\n"
+            "Aus sechs Tabs sind vier geworden, benannt nach dem, "
+            "was du vorhast: **Aussehen**, **Inhalte**, "
+            "**Verbindungen**, **System**. Die Einstellungen, die "
+            "die meisten nie anfassen, liegen jetzt hinter *Mehr "
+            "Einstellungen* — 16 Regler auf den ersten Blick statt "
+            "32.\n\n"
+            "**Es wurde nichts entfernt.** Deine Voreinstellungen, "
+            "Profile und Quick Looks bleiben unver\u00e4ndert.\n\n"
+            "**Neu dabei:**\n"
+            "- Eine **Ersteinrichtung**, die durch Look und "
+            "Hintergrund f\u00fchrt\n"
+            "- **Sprachauswahl** (Automatisch / English / Deutsch), "
+            "wirkt sofort\n"
+            "- **Alle Bildschirm-Einstellungen zur\u00fccksetzen**, mit "
+            "automatischer Sicherung vorher\n"
+            "- Ein **Status-Banner**, das den fehlenden "
+            "Einrichtungsschritt benennt\n"
+            "- Regler f\u00fcr **Pillen-H\u00f6he und -Breite**, vorher nur "
+            "im Tray\n\n"
+            "**Wasserwelle und Fl\u00fcssige Verzerrung** laufen \u00fcber "
+            "einen neuen Renderpfad — sie funktionieren damit auch "
+            "in Wallpaper Engine.\n\n"
+            "**Behoben, unter anderem:** Aurora und Plasma waren "
+            "praktisch unsichtbar \u00b7 Wellen liefen nicht \u00fcber den "
+            "ganzen Desktop \u00b7 get\u00f6nte Verl\u00e4ufe verloren ihre Farbe "
+            "\u00b7 das Glow-Raster reagierte nur auf einem von zwei "
+            "Monitoren \u00b7 die Update-Pr\u00fcfung hielt Beta 9 f\u00fcr neuer "
+            "als Beta 10.\n\n"
+            "**Wallpaper-Bundles neu importieren** — das Wallpaper "
+            "selbst hat sich ge\u00e4ndert. In Lively das Wallpaper "
+            "entfernen und die neue Zip importieren; in Wallpaper "
+            "Engine neu abonnieren bzw. neu importieren.\n"
+        ),
+    },
     "2.4.4-beta.36": {
         "title_en": "What\'s new in v2.4.4-beta.36",
         "title_de": "Was ist neu in v2.4.4-beta.36",

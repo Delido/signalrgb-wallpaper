@@ -4,6 +4,123 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-08-24
+
+First stable release since v2.4.2 (5 August): 36 betas, 79 individual
+changes. Roughly a third of those were regressions introduced and fixed
+inside the beta run itself and never existed in a shipped build — they
+are recorded in the beta sections below but not repeated here.
+
+**Re-import the wallpaper bundles.** `WALLPAPER_VERSION` moved 2.4.0 →
+2.4.14.
+
+### The Configurator was reorganised
+
+Six technical tabs — Look, Library, Effects, Widgets, Integrations,
+System — became four questions: **Appearance · Content · Connections ·
+System**. Three of the old six answered the same question with different
+controls, so a newcomer had to guess which one held the thing they
+wanted.
+
+The largest single win was splitting the System card. It carried 33
+controls, more than the entire Look tab, because seven beta integrations
+(OpenRGB, its SDK server, per-screen colour source, sACN, MQTT, REST
+token, plugin loader) shared a container with the everyday toggles.
+Opening "System" met all of that before the update checkbox.
+
+Each heavy card now shows what people actually adjust and collapses the
+rest behind *More settings*, remembered per card. Sixteen controls at a
+glance in Appearance instead of 32, with nothing removed.
+
+Stored state stays valid: old tab keys and `#tab=` bookmarks map onto
+their successors.
+
+### Added
+
+- **First-run wizard** — pick a look, pick a background, done. The tour
+  explained where controls were and never stopped "my wallpaper is black
+  and I do not know why" from being the most common report; an explained
+  blank screen is still a blank screen.
+- **Language picker** — Automatic / English / Deutsch, applied without a
+  restart. The config field, the validation and both translation tables
+  had existed for many versions; nothing could write the field.
+- **Reset all screen settings** — every screen back to defaults, with
+  the configuration copied to `config.before-reset-<timestamp>.json`
+  first. Presets, per-app profiles, the image library and every
+  bridge-level option are kept.
+- **Setup status** — names the *first* missing step rather than all
+  four, and suspends the connection-dependent checks while the wallpaper
+  is paused or a fullscreen app covers any monitor.
+- **WebGL render path** for water ripple and Liquid Distortion. The SVG
+  `feImage` step those effects relied on produces nothing at all in
+  Wallpaper Engine's bundled CEF; measured at 0.36 ms/frame on the real
+  GPU, all six background-fit modes within 0–3 % of a Canvas2D
+  reference.
+- **Pill height and width** finally have controls. Both have been
+  settable on the bridge and adjustable from the tray for many versions,
+  but the Configurator never exposed them.
+- **Connections grouped by direction** — where the colour comes from,
+  where it goes, other. The colour source sat third of seven collapsed
+  blocks, between two OpenRGB sections.
+- **Version status** in the System tab: bridge and running wallpaper
+  bundle, with a green check, an amber dot or a grey dash.
+- `SIGNALRGB_WP_PORT` to run a second bridge instance for testing.
+
+### Changed
+
+- **An older wallpaper bundle keeps working, and keeps quiet.**
+  `WALLPAPER_VERSION` rises whenever anything under `wallpaper/`
+  changes, and the bridge used to treat every one of those as "your
+  bundle is out of date" — a banner on the desktop, where there is no
+  close button. `MIN_WALLPAPER_VERSION` (2.4.0) answers the narrower
+  question: is the page too old to *work*? Below it the banner stands;
+  above it, the System tab mentions it and the desktop stays clean.
+- **The glow "Strength" slider is now "Spread".** It never affected
+  brightness: all six uses of `--glow` scale a blur radius or a shadow
+  spread. Turning it down does not dim the glow, it shrinks the blur
+  until the grid cells stop overlapping and their edges show — which is
+  what "pixelated" turned out to mean.
+- Plain-language intros on the cards. "Glow" and "Effects" read as two
+  names for the same thing to anyone who had not already worked out the
+  difference.
+
+### Fixed
+
+- **Aurora and Plasma were effectively invisible** — their alpha was low
+  enough to disappear against most backgrounds.
+- **Waves stopped partway across the desktop.**
+- **`rgbToRgba()` ignored hex input**, flattening every tinted gradient.
+- **Wallpaper Engine's own pause left the glow running**, and a paused
+  wallpaper kept waking the compositor.
+- **A lost WebGL context killed water and Liquid Distortion for good.**
+  `_build()` nulls the texture on restore, but nothing re-uploaded the
+  background — and `hasImage` stayed true, so the effects never fell
+  back to the SVG path either.
+- **The WebGL overlay double-counted alpha**, drawing half-transparent
+  pixels at up to twice their brightness for as long as an effect
+  animated. Invisible on a fully opaque background, which is why it took
+  four reports to place.
+- **Applying an image to the second half of a spanned screen wiped the
+  first half.**
+- **The plugin's grid-dirty flag was global, not per device**, so
+  changing the glow grid size only took effect on whichever monitor
+  redrew first.
+- **The update checker compared versions as text**, ranking beta.9 above
+  beta.10.
+- **`POST /screen/<N>/settings` never worked** — it called a method that
+  lives on a different class.
+- **Widgets could sit at "loading" indefinitely.**
+- **A tour step pointed at a card in a tab that never showed it.**
+
+### Internal
+
+- Test suite from 13 to 26 suites, every new one mutation-checked.
+- `Broadcaster.handle_client` split from 1611 lines into 32 route
+  methods, behind a characterisation test written first and passing
+  unmodified before and after.
+- `pyproject.toml` with real dependency declarations, and an Ubuntu CI
+  job that imports the bridge headlessly.
+
 ## [2.4.4-beta.36] - 2026-08-24
 
 ### Changed — the versions row reads as a status
