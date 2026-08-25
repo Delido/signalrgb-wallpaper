@@ -1,4 +1,4 @@
-# Exercises the v2.4.3 Workshop-detection block from
+﻿# Exercises the v2.4.3 Workshop-detection block from
 # reimport-wallpaper-bundles.ps1 against synthetic Steam trees, so we can
 # cover cases this machine doesn't have (a real SignalRGB subscription)
 # without touching the user's actual Lively/WE install.

@@ -4,6 +4,43 @@ All notable changes to **SignalRGB Desktop Wallpaper** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed — the build restores the Workshop linkage itself
+
+The Inno installer copies our `project.json` over Wallpaper Engine's
+`myprojects` copy, and ours carries no `workshopid` — so every install
+silently unlinks the local project from the Steam Workshop item. The
+next "Share on Workshop" would then create a *new* item and orphan
+every subscriber.
+
+The documented answer was "run `maintainer-restore-workshopid.ps1`
+after each install". That is the part that keeps failing: during the
+v2.5.0 release the id was lost twice, the second time by a rebuild that
+followed a manual restore.
+
+`build.ps1` now checks at the end whether the id is missing and restores
+it if so. A normal build stays silent; it only writes when something
+actually stripped the field. Deliberately in the build rather than in
+`release.ps1`, because the damage is done by running the installer —
+which can happen at any point — and the build is the step that
+reliably follows.
+
+### Fixed — three PowerShell scripts shipped without a UTF-8 BOM
+
+Found while verifying the change above. `release.ps1` had 403
+non-ASCII characters and no BOM, and parsed with 15 errors; the two
+PowerShell test suites were missing theirs too.
+
+PowerShell 5.1 on a cp1252 locale decodes UTF-8 bytes as Latin-1, so
+em-dashes inside strings swallow the closing quote and the script dies
+before doing anything. v1.7.1 shipped exactly this once before. It went
+unnoticed because the maintainer runs PowerShell 7, which is UTF-8 by
+default.
+
+`test_release_tooling.ps1` now checks every `.ps1` under `installer/`,
+`tests/` and `tools/` for the BOM — nine files today.
+
 ## [2.5.0] - 2026-08-24
 
 First stable release since v2.4.2 (5 August): 36 betas, 79 individual

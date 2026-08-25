@@ -1,4 +1,4 @@
-# Cut a release: verify, build, tag, publish.
+﻿# Cut a release: verify, build, tag, publish.
 #
 # Replaces the hand-run sequence — run tests, build, commit, push, tag,
 # gh release create, write notes — that the v2.4.x line was cut with.
@@ -254,6 +254,7 @@ if ($isPrerelease) {
 }
 if ($wallpaperVersion -eq $baseVersion) {
     Write-Host "  Workshop: WALLPAPER_VERSION changed — the WE item needs re-uploading." -ForegroundColor Yellow
-    Write-Host "            Run installer\maintainer-restore-workshopid.ps1 FIRST, or WE" -ForegroundColor Yellow
-    Write-Host "            creates a new Workshop item instead of updating the existing one." -ForegroundColor Yellow
+    Write-Host "            The build restores the workshopid automatically; if you" -ForegroundColor Yellow
+    Write-Host "            install again afterwards, run build.ps1 (or the restore" -ForegroundColor Yellow
+    Write-Host "            script) before submitting, and check WE says 'Update'." -ForegroundColor Yellow
 }

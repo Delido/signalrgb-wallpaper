@@ -1,4 +1,4 @@
-# Release + winget tooling: the decisions that are easy to get subtly
+﻿# Release + winget tooling: the decisions that are easy to get subtly
 # wrong and hard to notice afterwards.
 #
 # Both scripts under test have a history of exactly that:
@@ -114,6 +114,33 @@ Write-Host "`nwinget-publish.ps1 — fork sync"
     Check "falls back to well-known gh.exe locations" ($src -match 'GitHub CLI\\\\gh\.exe|GitHub CLI\\gh\.exe')
 }
 
+# --- every shipped .ps1 needs a UTF-8 BOM ------------------------------------
+#
+# Without one, PowerShell 5.1 on a cp1252 locale decodes UTF-8 bytes as
+# Latin-1: em-dashes and umlauts turn into mojibake, and where they sit
+# inside a string the parser loses the closing quote and the script dies
+# before doing anything. v1.7.1 shipped that once already.
+#
+# It resurfaced during the v2.5.0 release: release.ps1 itself had no BOM
+# and 403 non-ASCII characters, parsing with 15 errors. PowerShell 7 -
+# what the maintainer runs - is UTF-8 by default and never noticed.
+Write-Host "`nevery .ps1 carries a UTF-8 BOM"
+$psFiles = @()
+foreach ($dir in @("installer", "tests", "tools")) {
+    $full = Join-Path $repo $dir
+    if (Test-Path $full) {
+        $psFiles += Get-ChildItem $full -Recurse -Filter *.ps1 -File
+    }
+}
+Check "found the shipped scripts" ($psFiles.Count -ge 5) "$($psFiles.Count) files"
+foreach ($f in $psFiles) {
+    $bytes  = [System.IO.File]::ReadAllBytes($f.FullName)
+    $hasBom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
+    $rel    = $f.FullName.Substring($repo.Path.Length).TrimStart([char]92, [char]47)
+    Check "$rel starts with a UTF-8 BOM" $hasBom
+}
+
+# Counted here, after every section has run.
 $total = $pass + $fail.Count
 Write-Host "`n  $pass/$total passed"
 if ($fail.Count) { exit 1 } else { exit 0 }

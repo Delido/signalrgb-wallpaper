@@ -265,9 +265,13 @@ Set-Content -Path (Join-Path $weSingle "project.json") -Value $singleProject -En
 # this project.json has NO `workshopid` / `workshopurl` fields, so
 # whenever the Inno installer copies it over WE's myprojects copy,
 # the existing workshopid linkage is destroyed. WE's next "Share on
-# Workshop" submit then creates a NEW Steam Workshop item instead of
-# updating the existing one. Run `installer\maintainer-restore-workshopid.ps1`
-# after each install to put the workshopid back before opening WE.
+# Workshop" submit would then create a NEW Steam Workshop item instead
+# of updating the existing one, orphaning every subscriber.
+#
+# v2.5.0: step 6 at the end of this script repairs that automatically,
+# so the manual `maintainer-restore-workshopid.ps1` run is no longer
+# something you have to remember. It is still there for the case where
+# you install without building afterwards.
 
 # --- 3b. (retired in 0.7.2-beta) ----------------------------------------------
 # We used to stage four per-screen WE bundles here so each monitor got its
@@ -322,4 +326,46 @@ if (Test-Path $out) {
     Write-Host ("[OK] {0}  (sha256={1})" -f $shaPath, $hash) -ForegroundColor Green
 } else {
     throw "Expected output not found: $out"
+}
+
+# --- 6. Restore the Workshop linkage if an install stripped it ----------------
+#
+# The Inno installer copies our project.json over Wallpaper Engine's
+# myprojects copy, and ours carries no `workshopid` / `workshopurl` —
+# so every install silently unlinks the local project from the Steam
+# Workshop item. The next "Share on Workshop" then creates a NEW item
+# and orphans every existing subscriber.
+#
+# That is a one-way mistake, and it fired twice during the v2.5.0
+# release: once after the release build, once more after a rebuild that
+# followed a manual restore. Relying on the maintainer to remember the
+# ordering (install -> restore -> upload) is the part that keeps
+# failing, so the build repairs it instead of printing a reminder.
+#
+# Deliberately at the END of the build and not in release.ps1: the
+# damage is done by running the installer, which can happen at any
+# point, and the build is the one step that always runs afterwards.
+# Checking costs a file read; it only writes when the id is actually
+# missing, so a normal build stays silent.
+$restoreScript = Join-Path $PSScriptRoot "maintainer-restore-workshopid.ps1"
+$weProject = "C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\projects\myprojects\signalrgb-glow\project.json"
+if ((Test-Path $restoreScript) -and (Test-Path $weProject)) {
+    try {
+        $wp = Get-Content $weProject -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $wp.workshopid) {
+            Write-Host "[workshop] project.json lost its workshopid - restoring" -ForegroundColor Yellow
+            & pwsh -NoProfile -File $restoreScript | Out-Null
+            $wp2 = Get-Content $weProject -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($wp2.workshopid) {
+                Write-Host ("[workshop] workshopid restored: {0}" -f $wp2.workshopid) -ForegroundColor Green
+            } else {
+                # Not fatal: the build artifact is fine either way. But
+                # say so loudly, because the next upload is the thing
+                # that cannot be undone.
+                Write-Host "[workshop] RESTORE FAILED - do not submit to Workshop until fixed" -ForegroundColor Red
+            }
+        }
+    } catch {
+        Write-Host ("[workshop] could not check project.json: {0}" -f $_.Exception.Message) -ForegroundColor DarkGray
+    }
 }
