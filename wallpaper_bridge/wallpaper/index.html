@@ -2297,6 +2297,15 @@ const STANDBY_RECONCILE_MS = 500;
 // that it is briefly idle. Generous enough to ride out a paused
 // wallpaper resuming or SignalRGB switching effects.
 const NOFRAME_GRACE_MS = 15000;
+// v2.5.1: set from the bridge's `fullscreen` message. A fullscreen app
+// anywhere on the desktop is reason enough for frames to stop — either
+// SignalRGB is in the background, or the host closed the page on that
+// monitor. Blaming the user's SignalRGB setup for it is wrong, and
+// the card cannot be dismissed because it sits on the desktop.
+//
+// Reported as: "wenn ich eine Fullscreen anwendung an habe aber nicht
+// im vordergrund poppt das jede sekunde auf".
+let _fullscreenAnywhere = false;
 setInterval(() => {
   if (PREVIEW_MODE || !standbyCardEl) return;
   const live = ws && ws.readyState === 1;      // 1 = OPEN
@@ -2308,9 +2317,20 @@ setInterval(() => {
   // Before this, the card stayed hidden precisely BECAUSE the bridge
   // was reachable, which is the one case a user cannot diagnose alone.
   //
-  // Only while unpaused: a paused wallpaper legitimately receives
-  // nothing, and blaming SignalRGB for that would be wrong.
-  const starved = live && !isPaused && _lastFrameAtMs > 0
+  // Suppressed in two cases where a frame drought is expected and
+  // SignalRGB is not at fault:
+  //   isPaused           — a paused wallpaper legitimately receives
+  //                        nothing (tray toggle, host pause, fullscreen
+  //                        app in the FOREGROUND).
+  //   _fullscreenAnywhere — a fullscreen app on any monitor, focused or
+  //                        not. The bridge does not pause for this, so
+  //                        isPaused stays false while frames still stop:
+  //                        SignalRGB is backgrounded, or the host closed
+  //                        the page on that monitor. This was the gap
+  //                        that made the card flash once a second on a
+  //                        perfectly configured install.
+  const starved = live && !isPaused && !_fullscreenAnywhere
+                  && _lastFrameAtMs > 0
                   && (Date.now() - _lastFrameAtMs) > NOFRAME_GRACE_MS;
 
   if (live && starved) {
@@ -2455,6 +2475,14 @@ function connect() {
           }
         } else if (msg && msg.type === "paused") {
           setPaused(!!msg.paused);
+        } else if (msg && msg.type === "fullscreen") {
+          // v2.5.1: advisory only — a fullscreen app somewhere on the
+          // desktop. Explicitly does NOT pause: the bridge keeps
+          // sending and we keep rendering exactly as before. It only
+          // suppresses the "SignalRGB isn't sending anything" card,
+          // which would otherwise blame a correct install for a frame
+          // drought the game caused.
+          _fullscreenAnywhere = !!msg.active;
         } else if (msg && msg.type === "version-mismatch") {
           // v1.2.12: bridge spotted our wallpaper bundle is older than
           // its APP_VERSION. Light up the bottom-right banner so the

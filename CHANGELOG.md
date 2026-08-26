@@ -6,6 +6,8 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-08-26
+
 ### Fixed — the build restores the Workshop linkage itself
 
 The Inno installer copies our `project.json` over Wallpaper Engine's
@@ -40,6 +42,63 @@ default.
 
 `test_release_tooling.ps1` now checks every `.ps1` under `installer/`,
 `tests/` and `tools/` for the BOM — nine files today.
+
+
+### Fixed — the standby card accused SignalRGB while a game was running
+
+Reported as "wenn ich eine Fullscreen anwendung an habe aber nicht im
+vordergrund poppt das jede sekunde auf".
+
+The card added in v2.4.11 says "SignalRGB isn't sending anything" when
+the socket is live but no frame has arrived for `NOFRAME_GRACE_MS`
+(15 s). That inference holds for exactly one cause — the *Desktop
+Wallpaper* device is not on SignalRGB's canvas — and the card names
+it, on the desktop, where there is no way to dismiss it.
+
+A fullscreen app that is **not focused** produces the same silence for a
+different reason. The gap is that two functions answer "is a fullscreen
+app running?" differently, on purpose:
+
+| | used by | inspects |
+|---|---|---|
+| `_is_fullscreen_active()` | the pause watcher | `GetForegroundWindow()` only |
+| `_fullscreen_on_any_monitor()` | `/health` | every visible window |
+
+Alt-tab away from a game and the first goes false, so the bridge does
+not pause and the page's `isPaused` stays false — while frames stop
+anyway, because SignalRGB is backgrounded or the host closed the page on
+that monitor. `starved` was then true on a correct install, and the
+500 ms reconciler re-raised the card as fast as it was cleared, which is
+the once-a-second flashing in the report.
+
+The watcher now makes a second, independent observation on the same
+poll and pushes `{type:"fullscreen"}` to the pages; `starved` gains
+`!_fullscreenAnywhere`. The two observations stay separate deliberately.
+
+### Unchanged on purpose — pausing
+
+Making the watcher pause on any fullscreen window was considered and
+rejected: the pause is bridge-global, so a fullscreen video on a second
+monitor would freeze the wallpaper on **every** screen. The new signal
+is advisory — and only silences a card; frames flow exactly as before.
+
+`MIN_WALLPAPER_VERSION` stays at 2.4.0. A bundle that predates this
+release ignores the unknown message type and behaves as it always did
+— it just keeps showing the card in this one case.
+
+### Testing
+
+`test_standby_card.mjs` grew nine checks covering both halves and both
+directions, including that the page never routes the fullscreen message
+into `setPaused` and that `_poll_anywhere` does not call the
+foreground-only check. 8/8 mutations caught.
+
+Two of those checks were toothless when first written and are recorded
+here because the failure mode recurs: one asserted a function *name*
+appeared somewhere in a 14k-line file, which a mutation swapping the
+call for `_is_fullscreen_active()` sailed past; the other compared
+`indexOf` positions without checking for `-1`, so deleting the call
+outright compared as "earlier" and passed.
 
 ## [2.5.0] - 2026-08-24
 

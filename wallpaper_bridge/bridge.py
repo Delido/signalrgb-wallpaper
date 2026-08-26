@@ -407,13 +407,22 @@ class FullscreenWatcher:
     `is_enabled` callable so the user's "pause on fullscreen" toggle in
     the tray can disable the feature without restarting the bridge."""
 
-    def __init__(self, on_state_change, is_enabled):
+    def __init__(self, on_state_change, is_enabled, on_anywhere_change=None):
         self._on = on_state_change   # callable(active: bool)
         self._enabled = is_enabled   # callable() -> bool
+        # v2.5.1: a SECOND, independent observation on the same poll.
+        # `_last` answers "should the bridge pause?" (foreground only).
+        # `_last_anywhere` answers "is a fullscreen app running at all?",
+        # which is what decides whether a starved wallpaper page is
+        # worth complaining about. Deliberately not merged: pausing
+        # because a video is fullscreen on a monitor nobody is looking
+        # at would be wrong, but blaming SignalRGB for it is worse.
+        self._on_anywhere = on_anywhere_change   # callable(active: bool)|None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True,
                                         name="fullscreen-watcher")
         self._last = False
+        self._last_anywhere = False
 
     def start(self):
         if self._thread.is_alive():
@@ -430,6 +439,11 @@ class FullscreenWatcher:
     def _run(self):
         while not self._stop.wait(1.0):
             try:
+                # The anywhere-check runs even when auto-pause is off:
+                # a user who disabled pausing still must not be told
+                # that SignalRGB stopped sending when a game merely
+                # took over a monitor.
+                self._poll_anywhere()
                 if not self._enabled():
                     if self._last:
                         self._last = False
@@ -441,6 +455,23 @@ class FullscreenWatcher:
                     self._on(current)
             except Exception as e:
                 print(f"[fullscreen] watch error: {e}")
+
+    def _poll_anywhere(self):
+        """Edge-detect a fullscreen app on ANY monitor and report it.
+        Kept in its own try so an enumeration failure cannot stop the
+        pause watcher, which is the more important of the two."""
+        if self._on_anywhere is None:
+            return
+        try:
+            now = _fullscreen_on_any_monitor()
+        except Exception:
+            return
+        if now != self._last_anywhere:
+            self._last_anywhere = now
+            try:
+                self._on_anywhere(now)
+            except Exception as e:
+                print(f"[fullscreen] anywhere notify failed: {e}")
 
 # ============================================================================
 # Update checker
@@ -879,7 +910,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.5.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -902,7 +933,7 @@ APP_VERSION = "2.5.0"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.14"
+WALLPAPER_VERSION = "2.4.15"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -975,6 +1006,43 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.1": {
+        "title_en": "What\'s new in v2.5.1",
+        "title_de": "Was ist neu in v2.5.1",
+        "body_en": (
+            "**Fixed: \"SignalRGB isn\'t sending anything\" appeared "
+            "while a game was running.**\n\n"
+            "The wallpaper says so when the bridge is connected but "
+            "no colours arrive for 15 seconds — normally that means "
+            "the *Desktop Wallpaper* device is not on SignalRGB\'s "
+            "canvas.\n\n"
+            "A fullscreen app that is **not** in the foreground "
+            "produced the same silence for a completely different "
+            "reason, and the card blamed a correct setup — on the "
+            "desktop, where there is no close button.\n\n"
+            "The bridge now tells the wallpaper when a fullscreen "
+            "app is running on any monitor, and the card stays "
+            "quiet. **Nothing about pausing changed:** the wallpaper "
+            "keeps rendering exactly as before.\n"
+        ),
+        "body_de": (
+            "**Behoben: \"SignalRGB sendet nichts\" erschien, "
+            "w\u00e4hrend ein Spiel lief.**\n\n"
+            "Das Wallpaper meldet das, wenn die Bridge verbunden ist, "
+            "aber 15 Sekunden lang keine Farben ankommen — "
+            "normalerweise hei\u00dft das, dass das Ger\u00e4t *Desktop "
+            "Wallpaper* nicht auf der SignalRGB-Canvas liegt.\n\n"
+            "Eine Vollbild-Anwendung, die **nicht** im Vordergrund "
+            "ist, erzeugte dieselbe Stille aus einem ganz anderen "
+            "Grund — und die Karte beschuldigte eine korrekte "
+            "Einrichtung. Auf dem Desktop, wo es keinen "
+            "Schlie\u00dfen-Knopf gibt.\n\n"
+            "Die Bridge meldet dem Wallpaper jetzt, wenn auf "
+            "irgendeinem Monitor eine Vollbild-Anwendung l\u00e4uft, und "
+            "die Karte bleibt still. **Am Pausieren \u00e4ndert sich "
+            "nichts:** das Wallpaper l\u00e4uft genau wie bisher weiter.\n"
+        ),
+    },
     "2.5.0": {
         "title_en": "What\'s new in v2.5.0",
         "title_de": "Was ist neu in v2.5.0",
@@ -4953,12 +5021,16 @@ class Broadcaster:
     cross-thread calls (e.g. tray->push_settings) use call_soon_threadsafe.
     """
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused, on_widget_command, get_bridge_state=None):
+    def __init__(self, loop: asyncio.AbstractEventLoop, get_settings, get_screen_count, update_background, get_paused, on_widget_command, get_bridge_state=None, get_fullscreen_anywhere=None):
         self.loop = loop
         self.get_settings = get_settings        # callable(screen:int)->dict
         self.get_screen_count = get_screen_count  # callable()->int (1..N_SCREENS)
         self.update_background = update_background  # callable(screen:int, png_bytes:bytes)->bool
         self.get_paused = get_paused            # callable()->bool (fullscreen-induced pause)
+        # v2.5.1: callable()->bool — is a fullscreen app on ANY monitor?
+        # Optional and None-safe: distinct from get_paused, which only
+        # covers the foreground window. Advisory only; never gates frames.
+        self.get_fullscreen_anywhere = get_fullscreen_anywhere
         self.on_widget_command = on_widget_command  # callable(screen:int, msg:dict)->None
         # v1.2.1: callable()->dict of bridge-scoped (non-per-screen)
         # booleans the Configurator's System section reads (fullscreenPause,
@@ -5165,6 +5237,18 @@ class Broadcaster:
             writer.write(encode_text_frame(json.dumps({"type": "paused", "paused": bool(self.get_paused())})))
         except Exception as e:
             print(f"[ws] initial paused push failed: {e}")
+        # v2.5.1: and the fullscreen-anywhere state, for the same
+        # reason — a page that connects while a game is already running
+        # would otherwise wait for the next flip before it learns why
+        # no frames are arriving, and show the wrong card until then.
+        try:
+            fs = False
+            if self.get_fullscreen_anywhere:
+                fs = bool(self.get_fullscreen_anywhere())
+            writer.write(encode_text_frame(json.dumps(
+                {"type": "fullscreen", "active": fs})))
+        except Exception as e:
+            print(f"[ws] initial fullscreen push failed: {e}")
 
     async def remove(self, writer):
         async with self._lock:
@@ -5372,6 +5456,32 @@ class Broadcaster:
 
     def push_pause_threadsafe(self, paused: bool):
         asyncio.run_coroutine_threadsafe(self.push_pause(paused), self.loop)
+
+    async def push_fullscreen(self, active: bool):
+        """v2.5.1: tell every page whether a fullscreen app is running
+        on some monitor. Purely advisory — the page uses it to decide
+        whether a frame drought is worth reporting, never to stop
+        rendering. An older bundle ignores the unknown message type."""
+        async with self._lock:
+            all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
+        if not all_clients:
+            return
+        frame = encode_text_frame(json.dumps(
+            {"type": "fullscreen", "active": bool(active)}))
+        dead = []
+        for w in all_clients:
+            try:
+                if self._client_should_skip(w):
+                    continue
+                w.write(frame)
+            except Exception:
+                dead.append(w)
+        for w in dead:
+            await self.remove(w)
+        print(f"[push] fullscreen={active} -> {len(all_clients)} client(s)")
+
+    def push_fullscreen_threadsafe(self, active: bool):
+        asyncio.run_coroutine_threadsafe(self.push_fullscreen(active), self.loop)
 
     async def push_reload_all(self):
         """Tell every connected wallpaper page to `location.reload()`.
@@ -11020,9 +11130,15 @@ class BridgeRuntime:
         # see _is_paused(). v1.2.3.
         self._paused = False
         self._manual_paused = False
+        # v2.5.1: tracked separately from _paused. See the watcher's
+        # docstring — this one never affects whether frames flow, it
+        # only tells the wallpaper page not to accuse SignalRGB of
+        # having stopped when a fullscreen app is the actual reason.
+        self._fullscreen_anywhere = False
         self.fullscreen_watcher = FullscreenWatcher(
             on_state_change=self._on_fullscreen_state,
             is_enabled=self._is_fullscreen_pause_enabled,
+            on_anywhere_change=self._on_fullscreen_anywhere,
         )
         # v1.2.1: tray-app reference, set by main() after both the
         # bridge runtime and the tray app exist. Used by the
@@ -11156,6 +11272,18 @@ class BridgeRuntime:
         self._paused = bool(paused)
         if self.broadcaster:
             self.broadcaster.push_pause_threadsafe(self._is_paused())
+
+    def _on_fullscreen_anywhere(self, active: bool):
+        """Watcher thread: a fullscreen app appeared on / left some
+        monitor. Pushed to the wallpaper pages so the "SignalRGB isn't
+        sending anything" card can stay quiet, and cached for /health
+        so the Configurator does not have to enumerate windows itself.
+
+        Deliberately does NOT touch _paused: frames keep flowing and
+        the page keeps rendering exactly as before."""
+        self._fullscreen_anywhere = bool(active)
+        if self.broadcaster:
+            self.broadcaster.push_fullscreen_threadsafe(bool(active))
 
     @staticmethod
     def _sniff_bg_ext(data: bytes) -> str:
@@ -12007,6 +12135,13 @@ class BridgeRuntime:
         # throttling?"; this is "could a screen be legitimately without
         # a page right now?". Lively closes the wallpaper on whichever
         # monitor a fullscreen app occupies, focused or not.
+        #
+        # v2.5.1: read live rather than from the watcher's cached
+        # `_fullscreen_anywhere`. /health is polled by an open
+        # Configurator at most every few seconds, so the enumeration
+        # cost is irrelevant, and a live reading stays correct even if
+        # the watcher thread died. The wallpaper page gets the cached
+        # value instead, because it has no way to enumerate windows.
         fullscreen_anywhere = False
         try:
             fullscreen_anywhere = _fullscreen_on_any_monitor()
@@ -13016,6 +13151,7 @@ class BridgeRuntime:
             self._is_paused,
             self._on_widget_command,
             self._get_bridge_state,
+            get_fullscreen_anywhere=lambda: self._fullscreen_anywhere,
         )
         # System-stats poller pushes 1 Hz snapshots over the WS once the
         # broadcaster is up. No-op if psutil wasn't bundled into this build.

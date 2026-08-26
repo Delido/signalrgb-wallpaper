@@ -278,6 +278,91 @@ async function main() {
           /window._wallpaperLang = msg.language/.test(src));
   }
 
+  // -- v2.5.1: a fullscreen app is not SignalRGB's fault --------------
+  //
+  // Reported as: "wenn ich eine Fullscreen anwendung an habe aber nicht
+  // im vordergrund poppt das jede sekunde auf".
+  //
+  // The pause watcher only inspects GetForegroundWindow(), so a
+  // fullscreen app that is NOT focused leaves the bridge unpaused --
+  // isPaused stays false on the page while frames stop anyway
+  // (SignalRGB backgrounded, or the host closed the page on that
+  // monitor). The card then accused a perfectly configured install,
+  // once every 500 ms, on a surface with no close button.
+  {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..",
+           "wallpaper_bridge", "wallpaper", "index.html"), "utf8");
+    const bridge = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..",
+           "wallpaper_bridge", "bridge.py"), "utf8");
+
+    // The page side. Naming the flag is not the same as consulting it:
+    // assert it is part of the starvation conjunction itself, in the
+    // same statement, so a mutation that declares it and forgets the
+    // guard fails.
+    check("the flag is declared before the reconciler reads it",
+          src.indexOf("let _fullscreenAnywhere") !== -1 &&
+          src.indexOf("let _fullscreenAnywhere") <
+            src.indexOf("!_fullscreenAnywhere"));
+    check("a fullscreen app suppresses the starvation card",
+          /const starved = live && !isPaused && !_fullscreenAnywhere/.test(src),
+          "the flag must gate `starved`, not merely exist");
+    check("the flag is set from the bridge message",
+          /msg\.type === "fullscreen"/.test(src) &&
+          /_fullscreenAnywhere = !!msg\.active/.test(src));
+
+    // The whole point of option A: this must not become a pause. If a
+    // future edit routes it into setPaused/_externalPaused, a
+    // fullscreen video on an unwatched monitor would freeze the
+    // wallpaper on every screen, because the pause is bridge-global.
+    const fsAt = src.indexOf('msg.type === "fullscreen"');
+    const fsEnd = src.indexOf("} else if", fsAt + 10);
+    const fsBody = src.slice(fsAt, fsEnd === -1 ? fsAt + 800 : fsEnd);
+    check("the fullscreen message never pauses the page",
+          !/setPaused|_externalPaused|_recomputePaused/.test(fsBody),
+          "advisory only -- pausing here would stop every screen");
+
+    // The bridge side. Same distinction, and it is the one that was
+    // wrong: two questions, two functions.
+    // Scoped to _poll_anywhere's own body. Asserting the name appears
+    // somewhere in a 14k-line file is not an assertion: a mutation
+    // that swapped this for the foreground-only check sailed past the
+    // first version of this line.
+    const chr10 = String.fromCharCode(10);
+    const paAt = bridge.indexOf("def _poll_anywhere(self):");
+    const paEnd = bridge.indexOf(chr10 + chr10 + "# ====", paAt);
+    const paBody = bridge.slice(paAt, paEnd === -1 ? paAt + 900 : paEnd);
+    check("the anywhere-poll exists", paAt !== -1);
+    check("it asks about all monitors, not just the foreground",
+          /_fullscreen_on_any_monitor\(\)/.test(paBody) &&
+          !/_is_fullscreen_active\(\)/.test(paBody),
+          "the foreground check is the bug this fixes");
+    // Both the presence AND the position matter: an indexOf that finds
+    // nothing returns -1, which compares as "earlier" and passed a
+    // mutation that deleted the call outright.
+    const pollAt = bridge.indexOf("self._poll_anywhere()");
+    const gateAt2 = bridge.indexOf("if not self._enabled():");
+    check("the anywhere-poll runs even when auto-pause is disabled",
+          pollAt !== -1 && gateAt2 !== -1 && pollAt < gateAt2,
+          "a user who turned pausing off still must not be misinformed");
+    check("the state reaches the pages",
+          /def push_fullscreen\(/.test(bridge) &&
+          /"type": "fullscreen"/.test(bridge));
+    check("a page connecting mid-game is told immediately",
+          /initial fullscreen push failed/.test(bridge),
+          "otherwise it shows the wrong card until the next flip");
+
+    // The pause path must keep keying off the foreground window.
+    const onFsAt = bridge.indexOf("def _on_fullscreen_anywhere");
+    const onFsEnd = bridge.indexOf(chr10 + "    @staticmethod", onFsAt);
+    const onFsBody = bridge.slice(onFsAt, onFsEnd === -1 ? onFsAt + 1200 : onFsEnd);
+    check("the anywhere handler does not touch the pause flag",
+          onFsAt !== -1 && !/self\._paused\s*=/.test(onFsBody) &&
+          !/push_pause/.test(onFsBody),
+          "frames must keep flowing -- this only silences a card");
+  }
+
   const total = results.passed + results.failed.length;
   console.log(`\n  ${results.passed}/${total} passed`);
   process.exit(results.failed.length ? 1 : 0);
