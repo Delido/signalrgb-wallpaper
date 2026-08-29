@@ -910,7 +910,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.2-beta.1"
+APP_VERSION = "2.5.2-beta.2"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1006,6 +1006,46 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.2-beta.2": {
+        "title_en": "What\'s new in v2.5.2-beta.2",
+        "title_de": "Was ist neu in v2.5.2-beta.2",
+        "body_en": (
+            "**Fixed: switching away from the Ambilight look left "
+            "the background black.**\n\n"
+            "A Quick Look only sent the settings it names, so "
+            "anything the previous look had set and the new one did "
+            "not simply stayed. Only Ambilight mentions the black "
+            "background, so nothing ever switched it back off.\n\n"
+            "Two more settings had the same problem for the same "
+            "reason: the heavy blur and the pixel effects stayed as "
+            "Ambilight left them.\n\n"
+            "A look now defines the complete visual state, so the "
+            "result no longer depends on which look you had "
+            "before. Your wallpaper, presets and performance "
+            "settings are untouched, as always.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Beim Wechsel weg vom Ambilight-Look blieb "
+            "der Hintergrund schwarz.**\n\n"
+            "Ein Quick Look hat nur die Einstellungen gesendet, die "
+            "er selbst nennt — alles, was der vorherige Look "
+            "gesetzt hatte und der neue nicht, blieb einfach "
+            "stehen. Nur Ambilight nennt den schwarzen Hintergrund, "
+            "also hat ihn nie wieder etwas abgeschaltet.\n\n"
+            "Zwei weitere Einstellungen hatten aus demselben Grund "
+            "dasselbe Problem: die starke Weichzeichnung und die "
+            "Pixel-Effekte blieben so, wie Ambilight sie "
+            "hinterlassen hat.\n\n"
+            "Ein Look legt jetzt den vollst\u00e4ndigen visuellen "
+            "Zustand fest, das Ergebnis h\u00e4ngt also nicht mehr "
+            "davon ab, welcher Look vorher aktiv war. Dein "
+            "Hintergrundbild, deine Voreinstellungen und die "
+            "Leistungs-Einstellungen bleiben wie immer "
+            "unber\u00fchrt.\n\n"
+            "**Kein Neuimport n\u00f6tig.**\n"
+        ),
+    },
     "2.5.2-beta.1": {
         "title_en": "What\'s new in v2.5.2-beta.1",
         "title_de": "Was ist neu in v2.5.2-beta.1",
@@ -3357,6 +3397,41 @@ PRESET_SNAPSHOT_KEYS = (
     "pixelfx", "parallax3d",
     "audioGlow", "audioGlowIntensity", "audioGlowTint",
 )
+# v2.5.2-beta.2: the keys a Quick Look owns.
+#
+# quick_look_apply resets every one of these that the bundle does not
+# mention back to its default, so a look defines a complete visual state
+# instead of layering on top of whatever the last one left behind.
+#
+# What is NOT here matters as much as what is:
+#   * bg* keys        -- the user's wallpaper survives a look (the
+#                        SKIP_BG_KEYS filter in the Configurator makes
+#                        the same promise from the other side).
+#   * gridRenderer, glassQuality, frameRate -- hardware-perf choices,
+#     owned by the user, already in _BUNDLE_FORBIDDEN_KEYS.
+#   * widgets, presets, cycle, mirrorOf, monitorSetup -- structural
+#     state with its own dispatch paths.
+#
+# Adding a visual setting to a bundle means adding it here too, or it
+# will stick when the user switches away. test_quick_look_reset.py
+# fails if a bundle names a key this tuple does not carry.
+# Kept to exactly the keys the bundles actually set. Adding one
+# "just in case" is not free: it would silently reset a setting the
+# user configured and no look ever touches. effectQuality, mouseEffects,
+# widgetTheme, barHeight/barWidth and stripesBlur are all in that
+# category -- they travel with PRESETS, which is a different thing from
+# a Quick Look, and effectQuality in particular is documented as the
+# user's own perf trade-off.
+QUICK_LOOK_VISUAL_KEYS = (
+    "ambientMode",
+    "glowStrength", "gridBlur",
+    "barLayout", "showBars",
+    "ambientEffect", "ambientTint", "ambientDensity",
+    "pixelfx", "parallax3d",
+    "audioGlow", "audioGlowIntensity", "audioGlowTint",
+    "widgetTileStyle",
+)
+
 # v1.6.1-beta R2.2: user-configuration subset of the `cycle` dict that
 # travels with a preset. Runtime state (lastApplyMs, nextIdx) stays
 # live across Apply so the rotation keeps its current position
@@ -11601,6 +11676,32 @@ class BridgeRuntime:
                     presets.append(None)
                 presets[slot] = snapshot
                 s["presets"] = presets
+            # 1b. v2.5.2-beta.2: fill in the VISUAL keys the bundle
+            # does not mention, from the defaults.
+            #
+            # A Quick Look is meant to define the whole visual identity
+            # of a screen. Applying only the keys a bundle happens to
+            # list means anything the previous look set and this one
+            # does not stays behind, so the result depends on the order
+            # the user clicked -- "Cyberpunk after Ambilight" and
+            # "Cyberpunk on a fresh screen" produce different screens.
+            #
+            # Reported for ambientMode: switching away from Ambilight
+            # left the background pure black, because no other bundle
+            # names that key. The same was true of gridBlur (260 px)
+            # and pixelfx, and would silently be true of every future
+            # key added to one bundle.
+            #
+            # Scope is deliberately narrow. Only keys that already
+            # appear in some bundle are reset, so this cannot reach
+            # settings Quick Looks were never about. Background and
+            # hardware-perf keys are excluded for the reasons their
+            # own lists document -- the user's wallpaper and their
+            # renderer choice are not part of a look.
+            for key in QUICK_LOOK_VISUAL_KEYS:
+                if key in settings or key not in DEFAULT_SCREEN_SETTINGS:
+                    continue
+                settings[key] = copy.deepcopy(DEFAULT_SCREEN_SETTINGS[key])
             # 2. Apply non-widget settings. Bridge-side whitelist
             # mirrors what setting-update would accept; unknown keys
             # are ignored. monitorSetup goes through the dedicated

@@ -6,6 +6,58 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.2-beta.2] - 2026-08-29
+
+### Fixed — a Quick Look defined a partial visual state
+
+Reported one release after the Ambilight look shipped: "die anderen
+Looks setzen Pure black nicht wieder zurueck".
+
+`applyLookBundle` sends only the keys a bundle actually lists, and only
+the Ambilight bundle names `ambientMode` — so switching to any other
+look left the background pure black with no way back except the
+checkbox.
+
+Auditing the bundles against each other found the same latent bug in
+two more keys the previous release introduced, `gridBlur: 260` and
+`pixelfx: "off"`, plus `barLayout`, which the `minimal` bundle has never
+set. None of those had been reported yet; they would have been.
+
+The general shape is worth stating, because the individual keys are not
+the point: any key some bundles set and others do not sticks when the
+user switches between them, so the result depends on the order things
+were clicked. "Cyberpunk after Ambilight" and "Cyberpunk on a fresh
+screen" were different screens.
+
+`quick_look_apply` now backfills every key in the new
+`QUICK_LOOK_VISUAL_KEYS` that the bundle does not mention, from
+`DEFAULT_SCREEN_SETTINGS`, before the whitelist loop runs.
+
+### What the reset deliberately does not touch
+
+The tuple was first drafted with six extra keys added "in case a future
+bundle uses them" — `effectQuality`, `mouseEffects`, `widgetTheme`,
+`barHeight`, `barWidth`, `stripesBlur`. That was wrong and was pulled
+back before shipping: no look sets any of them, so every entry would
+silently reset something the user configured themselves on the next
+look click. `effectQuality` is documented in this file as the user's
+own performance trade-off.
+
+Background keys and hardware-perf preferences stay excluded for the
+reasons their own lists already document.
+
+### Testing
+
+`test_quick_look_reset.py` derives the required coverage from the
+shipped bundles rather than restating it, and pins both directions:
+every key a bundle sets must be in the tuple, and the tuple must not
+reach past what looks own. A bundle that gains a key without a matching
+entry fails the test — which is exactly how this bug got in.
+
+9/9 mutations caught, including a re-run of the original defect
+(dropping `ambientMode` from the tuple) and both inverse mistakes
+(a background key or a hardware key added to it).
+
 ## [2.5.2-beta.1] - 2026-08-29
 
 ### Added — Ambilight mode
