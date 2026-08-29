@@ -33,6 +33,7 @@ PY_SUITES = [
 ]
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
+    ("Ambilight mode (node)", HERE / "test_ambient_mode.mjs"),
     ("Wallpaper source (node)", HERE / "test_wallpaper_source.mjs"),
     ("Tint colour helper (node)", HERE / "test_tint_colour.mjs"),
     ("glRipple WebGL path (node)", HERE / "test_glripple.mjs"),

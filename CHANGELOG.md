@@ -6,6 +6,84 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.2-beta.1] - 2026-08-29
+
+### Added — Ambilight mode
+
+A user mentioned in passing that he runs his additional monitors as
+ambilights while watching something on the main screen, and that he had
+made "a 1x1 transparent png for the wallpaper" to get there. A canvas
+screenshot showed the real setup: four devices in SignalRGB, one large
+area for the main screen and thin strips for the monitors either side,
+picking up the edge colours.
+
+The PNG is a workaround for a missing setting, and a fragile one — it
+depends on a transparent image surviving upload, format sniffing and
+rendering untouched, none of which is tested for transparency.
+
+Two separate things fight an ambilight, and both had to go:
+
+* `html, body` paint a radial gradient (`#0a0a14` -> `#000`). It is
+  *lighter* than black in the middle, so a dim glow reads as washed-out
+  grey rather than colour on black.
+* `#bg` sits at `z-index: 2` and the glow at `z-index: 1` — the image
+  layer is **on top of** the glow and dilutes it.
+
+`ambientMode` (per screen, default off) overrides both. Existing
+installs are untouched. `Hidden (image only)` was not an option here:
+it hides the bars, so nothing lights up at all.
+
+The Configurator dims the background controls the mode overrides rather
+than hiding them, so the user's image is visibly still there and comes
+back when the mode goes off.
+
+### Added — an Ambilight quick look
+
+Sets the mode, full-surface glow, heavy blur, and switches off every
+overlay — ambient effects, audio glow, pixel effects, parallax. Each
+of those is a dark shape in what is supposed to be flat light. It is
+the only bundle with an empty widget list, for the same reason.
+
+Deliberately **not** offered in the first-run wizard: someone setting
+the product up for the first time would read a black glowing screen as
+broken.
+
+### Changed — grid blur ceiling 120 -> 400 px
+
+At a typical 32x32 SignalRGB canvas the zones are large, and 120 px left
+the cell edges visible on a wide panel — the "pixelated glow"
+complaint, from the other direction than the v2.5.0 Spread rename.
+
+No performance concern: v2.4.7 measured switching the entire glow grid
+off on a 5120x1440 span at 2.24 % -> 2.42 % GPU, i.e. no difference.
+The bridge never clamped this value server-side; the slider was the
+only limit.
+
+### Compatibility
+
+`MIN_WALLPAPER_VERSION` stays at 2.4.0. A bundle from before this
+release ignores the unknown `ambientMode` key — `applyProperty` is a
+`switch` with no `default` — and behaves exactly as it did.
+
+### Testing
+
+`test_ambient_mode.mjs` walks the whole chain rather than testing one
+end: default, settable whitelist, preset keys, not forbidden to quick
+looks, the page handler, both CSS overrides, the control, its read-back,
+and both translations. That shape is deliberate — the failure mode for
+a setting like this is not a crash but silent filtering, which this
+project has shipped twice (pill height/width settable with no UI;
+`language` with a config field, validation and translations that nothing
+could write).
+
+It also pins the *premise* of the `#bg` rule by comparing the two
+z-indices: if the image layer ever moves behind the glow, hiding it
+stops being the right fix and the test should say so rather than keep
+asserting a stale reason.
+
+17/17 mutations caught, including the two inverse mistakes — defaulting
+the mode on, and dimming the toggle that switches it back off.
+
 ## [2.5.1] - 2026-08-26
 
 ### Fixed — the build restores the Workshop linkage itself

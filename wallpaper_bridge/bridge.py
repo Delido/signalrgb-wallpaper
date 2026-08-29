@@ -910,7 +910,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.5.2-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -933,7 +933,7 @@ APP_VERSION = "2.5.1"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.15"
+WALLPAPER_VERSION = "2.4.16"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1006,6 +1006,49 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.2-beta.1": {
+        "title_en": "What\'s new in v2.5.2-beta.1",
+        "title_de": "Was ist neu in v2.5.2-beta.1",
+        "body_en": (
+            "**New: Ambilight mode.**\n\n"
+            "Turns a screen into a light source instead of a "
+            "wallpaper — pure black behind the glow, no image, "
+            "nothing drawn on top. Built for the side monitors of a "
+            "multi-screen setup while you watch something on the "
+            "main one.\n\n"
+            "Find it as the first option under **Background**, or "
+            "pick the new **Ambilight** quick look, which also sets "
+            "a heavy blur and switches the effects off.\n\n"
+            "**Grid blur now goes up to 400 px** (was 120). On a "
+            "wide panel the old ceiling left the grid cells "
+            "visible at their edges.\n\n"
+            "Thanks to the user who described running his extra "
+            "monitors as ambilights — he had been faking this "
+            "with a 1\u00d71 transparent PNG.\n\n"
+            "**Re-import the wallpaper bundles.**\n"
+        ),
+        "body_de": (
+            "**Neu: Ambilight-Modus.**\n\n"
+            "Macht aus einem Bildschirm eine Lichtquelle statt eines "
+            "Wallpapers — reines Schwarz hinter dem Glow, kein "
+            "Bild, nichts dar\u00fcber. Gedacht f\u00fcr die Nebenmonitore "
+            "eines Mehrschirm-Aufbaus, w\u00e4hrend auf dem Hauptschirm "
+            "etwas l\u00e4uft.\n\n"
+            "Zu finden als erste Option unter **Hintergrund**, oder "
+            "\u00fcber den neuen Quick Look **Ambilight**, der "
+            "zus\u00e4tzlich eine starke Weichzeichnung setzt und die "
+            "Effekte abschaltet.\n\n"
+            "**Die Raster-Weichzeichnung geht jetzt bis 400 px** "
+            "(vorher 120). Auf einem breiten Bildschirm blieben mit "
+            "der alten Grenze die Kanten der Rasterzellen "
+            "sichtbar.\n\n"
+            "Danke an den Nutzer, der beschrieben hat, wie er seine "
+            "Nebenmonitore als Ambilight nutzt — er hatte sich "
+            "bisher mit einem 1\u00d71 transparenten PNG "
+            "beholfen.\n\n"
+            "**Wallpaper-Bundles neu importieren.**\n"
+        ),
+    },
     "2.5.1": {
         "title_en": "What\'s new in v2.5.1",
         "title_de": "Was ist neu in v2.5.1",
@@ -3068,6 +3111,16 @@ DEFAULT_SCREEN_SETTINGS = {
     # background-size implicitly.
     "bgTileScale":  100,
     "bgDim":        0,
+    # v2.5.2-beta.1: drop the page's background entirely so nothing sits
+    # between the glow and the panel. Built for ambilight setups: the
+    # wallpaper is a light source, not a picture.
+    #
+    # Two things fight that by default. The body paints a radial
+    # gradient (#0a0a14 -> #000), which is lighter than black at the
+    # centre and visibly greys out a dim glow; and #bg sits at z-index 2,
+    # ON TOP of the glow at z-index 1, so any image dilutes it. Users
+    # were working around both by uploading a 1x1 transparent PNG.
+    "ambientMode":  False,
     "barLayout":    "lay-grid",
     "showBars":     True,
     "glowStrength": 100,
@@ -3281,7 +3334,7 @@ _NON_MIRRORED_KEYS = frozenset({
 # siblings).
 PRESET_SNAPSHOT_KEYS = (
     "bgImage", "bgImageUrl", "bgFit", "bgTileScale", "bgDim",
-    "barLayout", "showBars", "glowStrength",
+    "barLayout", "showBars", "glowStrength", "ambientMode",
     "gridBlur", "stripesBlur", "barHeight", "barWidth",
     "showStatus",
     "widgets", "widgetTileStyle",
@@ -12264,7 +12317,7 @@ class BridgeRuntime:
         "bgImage", "bgImageUrl", "bgFit", "bgTileScale", "bgDim",
         "barLayout", "showBars", "glowStrength",
         "gridBlur", "stripesBlur", "barHeight", "barWidth",
-        "gridRenderer", "glassQuality", "frameRate",
+        "gridRenderer", "glassQuality", "frameRate", "ambientMode",
         # v1.6.3-beta: effect-canvas quality bucket (performance /
         # balanced / quality). Controls ambient + pixelfx + audio-glow
         # canvas backing resolution + DPR + frame cap. Missing from

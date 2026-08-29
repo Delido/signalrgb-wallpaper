@@ -693,6 +693,16 @@
      than <details>/<summary> because the surrounding cards are already
      hand-rolled and <details> would bring its own marker and focus
      behaviour into a layout that does not expect it. */
+  /* v2.5.2-beta.1: ambilight mode overrides the background, so the
+     controls it overrides are dimmed rather than hidden -- the user can
+     still see what they had set, and it comes straight back when the
+     mode goes off. The ambilight row itself is excluded, or there would
+     be no way to switch back. */
+  #card-bg.ambient-on .body > *:not(#ambient-mode-row) {
+    opacity: .4;
+    pointer-events: none;
+  }
+
   .adv-toggle {
     display: flex; align-items: center; gap: 7px;
     width: 100%; margin-top: 12px; padding: 7px 2px 0;
@@ -2849,6 +2859,15 @@
       <h2 data-i18n="section.bg">Background</h2>
     </header>
     <div class="body">
+      <!-- v2.5.2-beta.1: first row in the card because it switches the
+           rest of it off. Built for ambilight setups, where the glow is
+           the point and any background dilutes it. -->
+      <div class="row" id="ambient-mode-row">
+        <label for="ambient-mode" data-i18n="bg.ambient_mode">Ambilight mode</label>
+        <input type="checkbox" id="ambient-mode">
+        <span class="hint" data-i18n="bg.ambient_mode_hint">Pure black behind the
+          glow, no image. For using a screen as a light source.</span>
+      </div>
       <!-- v2.2.0-beta: prominent current-background preview tile +
            Library entry point. Replaces the v1.7.5 plain-row link so
            the user sees WHAT is set and HOW to change it at a glance.
@@ -2996,7 +3015,7 @@
       </div>
       <div class="row">
         <label for="grid-blur" data-i18n="glow.grid_blur">Grid blur</label>
-        <input type="range" id="grid-blur" min="0" max="120" step="1">
+        <input type="range" id="grid-blur" min="0" max="400" step="1">
         <span class="val" id="grid-blur-val">30 px</span>
       </div>
       <div class="hint" style="margin-top: 2px;" data-i18n="glow.spread_hint">
@@ -4405,6 +4424,9 @@ const TRANSLATIONS = {
   "bg.fit.tilex":           { en: "tile X (repeat horizontally)", de: "tile X (horizontal wiederholen)" },
   "bg.fit.tiley":           { en: "tile Y (repeat vertically)",   de: "tile Y (vertikal wiederholen)" },
   "bg.dim":                 { en: "Dim",                  de: "Abdunkeln" },
+  "bg.ambient_mode":        { en: "Ambilight mode",       de: "Ambilight-Modus" },
+  "bg.ambient_mode_hint":   { en: "Pure black behind the glow, no image. For using a screen as a light source.",
+                              de: "Reines Schwarz hinter dem Glow, kein Bild. Für Bildschirme, die als Lichtquelle dienen." },
   "bg.debug_overlay":       { en: "Show debug overlay (top-left status line on the wallpaper)",
                               de: "Debug-Overlay anzeigen (Status-Zeile oben links im Wallpaper)" },
   "cycle.enable":           { en: "Auto-cycle through library wallpapers",
@@ -4875,6 +4897,9 @@ const TRANSLATIONS = {
                               de: "Minimal Produktiv" },
   "looks.minimal.desc":     { en: "No effects, just clock + calendar + sticky note. The wallpaper-disappears-and-you-just-see-content look.",
                               de: "Keine Effekte, nur Uhr + Kalender + Notiz. Das „Wallpaper verschwindet und nur der Inhalt bleibt\"-Setup." },
+  "looks.ambilight.name":   { en: "Ambilight",                   de: "Ambilight" },
+  "looks.ambilight.desc":   { en: "Turns a screen into a light source: full-surface glow, heavy blur, black background, nothing else drawn. Built for side monitors next to the one you are actually watching.",
+                              de: "Macht aus einem Bildschirm eine Lichtquelle: flächiges Glow, starke Weichzeichnung, schwarzer Hintergrund, sonst nichts. Für Nebenmonitore neben dem, auf den du eigentlich schaust." },
   "looks.gaming.name":      { en: "Gaming",                      de: "Gaming" },
   "looks.gaming.desc":      { en: "Vortex effect, only CPU/GPU/RAM meters in the corner. Stays out of the way of the game.",
                               de: "Vortex-Effekt, nur CPU/GPU/RAM-Meter in der Ecke. Bleibt aus dem Spielgeschehen raus." },
@@ -5403,6 +5428,40 @@ const LOOK_BUNDLES = [
         options: { tintFromGlow: true, showHeader: false } },
     ],
   },
+  // v2.5.2-beta.1: for a screen used as a light source rather than as a
+  // wallpaper -- typically the side monitors of a multi-screen setup,
+  // with SignalRGB's own Soft Ambience picking up the main screen.
+  //
+  // No widgets on purpose: this is the only bundle whose widget list is
+  // empty, because anything drawn on top of the panel is a dark patch
+  // in the light it is supposed to cast. applyLookBundle handles an
+  // empty array as "remove everything", which is what we want.
+  {
+    id: "ambilight",
+    nameKey: "looks.ambilight.name",
+    descKey: "looks.ambilight.desc",
+    name: "Ambilight",
+    desc: "Turns a screen into a light source: full-surface glow, heavy blur, black background, nothing else drawn. Built for side monitors next to the one you are actually watching.",
+    tint: "rgb(150, 130, 255)",
+    settings: {
+      ambientMode:     true,
+      glowStrength:    100,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      // Far above the old 120 ceiling. At a typical 32x32 SignalRGB
+      // canvas the zones are large, and anything less leaves visible
+      // cell edges on a wide panel -- the "pixelated glow" complaint.
+      gridBlur:        260,
+      // Everything that draws on top of the glow is off: each one is a
+      // dark shape in what is meant to be flat light.
+      ambientEffect:   "off",
+      audioGlow:       "off",
+      pixelfx:         "off",
+      parallax3d:      0,
+      widgetTileStyle: "clear",
+    },
+    widgets: [],
+  },
   {
     id: "pomodoro",
     nameKey: "looks.pomodoro.name",
@@ -5779,6 +5838,7 @@ const els = {
   bgDim:          $("bg-dim"),
   bgDimVal:       $("bg-dim-val"),
   bgDebug:        $("bg-debug"),
+  ambientMode:    $("ambient-mode"),
   cycleEnabled:   $("cycle-enabled"),
   cycleConfig:    $("cycle-config"),
   cycleInterval:  $("cycle-interval"),
@@ -11098,6 +11158,23 @@ els.bgDim  .addEventListener("input",  () => {
 });
 els.bgDim  .addEventListener("change", () => setSetting("bgDim", parseInt(els.bgDim.value, 10)));
 els.bgDebug.addEventListener("change", () => setSetting("showStatus", els.bgDebug.checked));
+// v2.5.2-beta.1: ambilight mode. Also greys out the background controls
+// it overrides, so the card does not offer settings that now do nothing.
+// Dims every background control EXCEPT the ambilight row itself, which
+// has to stay clickable to turn the mode back off. Deliberately styles
+// the container rather than listing control ids: a row added to this
+// card later is covered automatically, where a hard-coded list would
+// silently leave it live and confusing.
+function _syncAmbientModeChrome() {
+  const card = document.getElementById("card-bg");
+  if (!card || !els.ambientMode) return;
+  card.classList.toggle("ambient-on", !!els.ambientMode.checked);
+}
+
+els.ambientMode.addEventListener("change", () => {
+  setSetting("ambientMode", els.ambientMode.checked);
+  _syncAmbientModeChrome();
+});
 
 // Auto-cycle controls. Each change sends a partial cycle dict to the
 // bridge; bridge merges it into the existing cycle config so scheduler
@@ -13152,6 +13229,8 @@ function renderAll() {
   els.bgDim.value   = String(settings.bgDim ?? 0);
   els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";
   els.bgDebug.checked = !!settings.showStatus;
+  els.ambientMode.checked = !!settings.ambientMode;
+  _syncAmbientModeChrome();
   renderCycleBar();
   // Glow
   els.glowBars.checked   = settings.showBars !== false;

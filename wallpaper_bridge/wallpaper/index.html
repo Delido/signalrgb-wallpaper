@@ -26,6 +26,29 @@
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   }
 
+  /* v2.5.2-beta.1: ambilight mode. The wallpaper stops being a picture
+     and becomes a light source, so everything that sits between the
+     glow and the panel goes away.
+
+     Two separate obstacles, which is why this needs both rules:
+       1. body paints a radial gradient (#0a0a14 -> #000). It is
+          LIGHTER than black in the middle, so a dim glow reads as
+          washed-out grey rather than as colour on black.
+       2. #bg is at z-index 2, the glow at z-index 1 — the image sits
+          ON TOP of the glow and dilutes it.
+     Users were solving both by uploading a 1x1 transparent PNG.
+
+     Kept as an override rather than changing the defaults: the normal
+     wallpaper case wants that gradient, and it is what every existing
+     install already looks like. */
+  /* Both elements carry the gradient, so both have to be overridden.
+     body covers html at 100% height today, but that is incidental —
+     a browser zoom or a fractional DPR can leave a hairline of html
+     showing, and a grey seam on a black ambilight is exactly the kind
+     of thing that only appears on someone else's monitor. */
+  html.ambient-mode, body.ambient-mode { background: #000; }
+  body.ambient-mode #bg { display: none; }
+
   /* Stacking order (back → front):
      1. body gradient
      2. #bars  (glow zones)           z-index: 1
@@ -3099,6 +3122,13 @@ function applyProperty(name, val) {
       break;
     case "bgTileScale":
       applyBgTileScale(val);
+      break;
+    case "ambientMode":
+      // Deliberately a body class rather than inline styles: the two
+      // rules above have to beat #bg's own `display` and the body
+      // gradient, and a class keeps that in one place in the CSS.
+      document.body.classList.toggle("ambient-mode", !!val);
+      document.documentElement.classList.toggle("ambient-mode", !!val);
       break;
     case "bgDim":
       dimEl.style.opacity = String((parseInt(val) || 0) / 100);
