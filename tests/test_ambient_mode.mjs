@@ -131,6 +131,59 @@ check("the ambilight row itself stays usable",
       "dimming it would leave no way to switch the mode back off");
 check("the row carries that id", /id="ambient-mode-row"/.test(conf));
 
+// -- v2.5.2-beta.3: it has to look like the mode switch it is --------
+// "ambilight muss hier auch viel schoener designt werden, das echt nur
+// dahin geklatscht". It was a bare checkbox in a column of checkboxes,
+// which misrepresented a control that disables the rest of the card.
+console.log("\nthe control reads as a mode switch");
+
+check("it is its own block, not a settings row",
+      /<div class="mode-toggle" id="ambient-mode-row">/.test(conf),
+      "a peer of the rows it disables understates what it does");
+check("the whole block is the label",
+      /<label class="mode-toggle-main" for="ambient-mode">/.test(conf),
+      "clicking the description should toggle it too");
+// Scoped to the block's MARKUP. A class name still present in the
+// stylesheet says nothing about whether the element exists -- three
+// mutations that stripped elements from the HTML passed a whole-file
+// check on the class name alone.
+const mt = conf.slice(conf.indexOf('<div class="mode-toggle" id="ambient-mode-row">'),
+                      conf.indexOf('<!-- v2.2.0-beta: prominent current-background'));
+check("the block markup was located", mt.length > 300 && mt.length < 4000,
+      `${mt.length} chars -- anchor moved, the checks below are blind`);
+check("title and description are separate elements in the markup",
+      /class="mode-toggle-title"/.test(mt) && /class="mode-toggle-desc"/.test(mt),
+      "one run-on line was the original complaint");
+check("there is an icon in the markup",
+      /class="mode-toggle-icon"/.test(mt) && /<svg/.test(mt));
+check("the active state is visible on the block",
+      /#card-bg\.ambient-on \.mode-toggle\s*\{/.test(conf),
+      "the switch alone is a small target for 'is this on?'");
+
+// The native checkbox has to survive: every binding, the i18n pass and
+// the checks above address it by id. display:none would take it out of
+// the tab order and off screen readers, so it is moved out of view
+// with opacity instead.
+check("the native checkbox is still in the DOM",
+      /<input type="checkbox" id="ambient-mode"/.test(conf));
+const mtCss = conf.slice(conf.indexOf(".mode-toggle-input {"),
+                         conf.indexOf(".mode-toggle-switch {"));
+check("it is hidden without leaving the tab order",
+      /opacity:\s*0/.test(mtCss) && !/display:\s*none/.test(mtCss),
+      "display:none would make the control unreachable by keyboard");
+check("keyboard focus stays visible",
+      /\.mode-toggle-input:focus-visible ~ \.mode-toggle-switch/.test(conf),
+      "an invisible checkbox with no focus ring is unusable by keyboard");
+// Both halves of the checked state: the track AND the knob. Dropping
+// only the track rule left the switch visually dead while the knob
+// still moved, and a single check passed it.
+check("the switch track reflects the checked state",
+      /\.mode-toggle-input:checked ~ \.mode-toggle-switch \{/.test(conf),
+      "the visible control must follow the real one");
+check("the switch knob moves when checked",
+      /\.mode-toggle-input:checked ~ \.mode-toggle-switch::after/.test(conf),
+      "a track that changes colour without the knob moving reads as broken");
+
 console.log("\nthe Ambilight quick look");
 
 const bundleAt = conf.indexOf('id: "ambilight"');

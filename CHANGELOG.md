@@ -6,6 +6,61 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.2-beta.3] - 2026-08-30
+
+### Fixed — the starvation card flashed at 1 Hz
+
+Reported as "aber das rumflashen ist unschoen", with SignalRGB's
+devices disabled — so the card was telling the truth, it just could
+not hold still.
+
+Two handlers disagreed about what an inbound message proves:
+
+* `ws.onmessage` cleared the card on **any** message. Correct in
+  v2.4.2, when the card only ever meant "the bridge is unreachable".
+* The 500 ms reconciler re-raised it while no **glow frame** had
+  arrived for 15 s — the second meaning, added in v2.4.11.
+
+The bridge pushes `sysstats` once a second regardless of whether
+SignalRGB is feeding it, so the two fought at 1 Hz: cleared by the
+stats push, restored by the reconciler, forever.
+
+The two reasons need different evidence. Reachability is proved by any
+message; a live colour stream is proved only by a frame. `onmessage`
+now leaves the `noframes` card alone, and `renderFrame` still clears it
+the moment real data returns.
+
+### Changed — Ambilight mode is presented as a mode
+
+"das echt nur dahin geklatscht": it shipped as a bare checkbox in a
+column of checkboxes, which said nothing about a control that disables
+the rest of the card. It now sits in its own bordered block with an
+icon, a title, a description and a switch, and the block itself picks
+up the accent colour while active. The whole block is the label, so
+clicking the description toggles it.
+
+The native checkbox stays in the DOM under the same id — every
+binding, the i18n pass and the tests address it — hidden with
+`opacity` rather than `display: none`, which would have taken it out of
+the tab order and off screen readers. `:focus-visible` keeps a ring on
+the visible switch.
+
+### Testing
+
+The flashing is covered by simulating both timers and counting
+transitions, not by reading either handler: the bug is an interaction
+between two of them and neither looks wrong alone. The test asserts
+first that the old logic *does* flash, so the fix's check cannot pass
+vacuously.
+
+Three mutations initially escaped, all the same mistake in the tests
+rather than in the code — a whole-file regex where the string occurs
+twice (`_standbyReason !== "noframes"` also lives in the reconciler, so
+reverting the fix still matched), and class names checked against the
+whole file when the question was whether an element exists in the
+markup. Both are now scoped to the block they are about. 13/13 caught
+after that.
+
 ## [2.5.2-beta.2] - 2026-08-29
 
 ### Fixed — a Quick Look defined a partial visual state

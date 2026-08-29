@@ -910,7 +910,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.2-beta.2"
+APP_VERSION = "2.5.2-beta.3"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -933,7 +933,7 @@ APP_VERSION = "2.5.2-beta.2"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.16"
+WALLPAPER_VERSION = "2.4.17"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1006,6 +1006,41 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.2-beta.3": {
+        "title_en": "What\'s new in v2.5.2-beta.3",
+        "title_de": "Was ist neu in v2.5.2-beta.3",
+        "body_en": (
+            "**Fixed: the \"SignalRGB isn\'t sending anything\" "
+            "card flashed once a second.**\n\n"
+            "When the card was up, any message from the bridge "
+            "cleared it — including the system-stats update sent "
+            "every second whether or not SignalRGB is feeding it. "
+            "Half a second later the card came back. It now stays "
+            "put until real colour data arrives.\n\n"
+            "**Ambilight mode looks like the switch it is.** It was "
+            "a plain checkbox in a row of checkboxes, which said "
+            "nothing about the fact that it turns off everything "
+            "below it. It now has its own panel, an icon and a "
+            "proper switch.\n\n"
+            "**Re-import the wallpaper bundles.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Die Karte \"SignalRGB sendet nichts\" "
+            "blinkte im Sekundentakt.**\n\n"
+            "Solange die Karte zu sehen war, hat jede Nachricht der "
+            "Bridge sie ausgeblendet — auch die "
+            "System-Statistik, die jede Sekunde gesendet wird, ganz "
+            "egal ob SignalRGB liefert. Eine halbe Sekunde sp\u00e4ter "
+            "war sie wieder da. Jetzt bleibt sie stehen, bis "
+            "wirklich Farbdaten ankommen.\n\n"
+            "**Der Ambilight-Modus sieht jetzt aus wie der Schalter, "
+            "der er ist.** Vorher war es ein schlichtes H\u00e4kchen "
+            "zwischen anderen H\u00e4kchen — das hat nicht "
+            "verraten, dass er alles darunter abschaltet. Jetzt mit "
+            "eigenem Feld, Symbol und richtigem Schalter.\n\n"
+            "**Wallpaper-Bundles neu importieren.**\n"
+        ),
+    },
     "2.5.2-beta.2": {
         "title_en": "What\'s new in v2.5.2-beta.2",
         "title_de": "Was ist neu in v2.5.2-beta.2",

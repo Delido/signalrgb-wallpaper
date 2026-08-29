@@ -693,6 +693,85 @@
      than <details>/<summary> because the surrounding cards are already
      hand-rolled and <details> would bring its own marker and focus
      behaviour into a layout that does not expect it. */
+  /* v2.5.2-beta.3: a mode switch that owns the card it sits in.
+     Bordered so it reads as a container rather than a peer of the rows
+     it disables, and the whole block is the label, so clicking anywhere
+     in it toggles the mode. */
+  .mode-toggle {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    margin-bottom: 14px;
+    transition: border-color .15s, background .15s;
+  }
+  .mode-toggle-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 13px;
+    cursor: pointer;
+    /* Overrides `.row > label`'s fixed 130px column: this label is the
+       whole block, not the left-hand caption of a settings row. */
+    flex: 1 1 auto;
+  }
+  .mode-toggle-icon {
+    flex: 0 0 auto;
+    display: flex;
+    color: var(--text-dim);
+    transition: color .15s;
+  }
+  .mode-toggle-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .mode-toggle-title { color: var(--text); font-size: 13px; font-weight: 600; }
+  .mode-toggle-desc  { color: var(--text-dim); font-size: 11.5px; line-height: 1.4; }
+  /* The real checkbox stays in the DOM and keeps its id -- every
+     binding, the i18n pass and the test all address it -- but the
+     visible control is the track below. Not display:none: that removes
+     it from the tab order and from screen readers. */
+  .mode-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+  }
+  .mode-toggle-switch {
+    flex: 0 0 auto;
+    position: relative;
+    width: 38px; height: 21px;
+    border-radius: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    transition: background .15s, border-color .15s;
+  }
+  .mode-toggle-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: transform .15s, background .15s;
+  }
+  .mode-toggle-input:checked ~ .mode-toggle-switch {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+  }
+  .mode-toggle-input:checked ~ .mode-toggle-switch::after {
+    transform: translateX(17px);
+    background: var(--accent);
+  }
+  /* Keyboard focus has to stay visible now that the native box is
+     invisible -- :focus-visible so a mouse click does not draw a ring. */
+  .mode-toggle-input:focus-visible ~ .mode-toggle-switch {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  #card-bg.ambient-on .mode-toggle {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  #card-bg.ambient-on .mode-toggle-icon { color: var(--accent); }
+
   /* v2.5.2-beta.1: ambilight mode overrides the background, so the
      controls it overrides are dimmed rather than hidden -- the user can
      still see what they had set, and it comes straight back when the
@@ -2859,14 +2938,35 @@
       <h2 data-i18n="section.bg">Background</h2>
     </header>
     <div class="body">
-      <!-- v2.5.2-beta.1: first row in the card because it switches the
-           rest of it off. Built for ambilight setups, where the glow is
-           the point and any background dilutes it. -->
-      <div class="row" id="ambient-mode-row">
-        <label for="ambient-mode" data-i18n="bg.ambient_mode">Ambilight mode</label>
-        <input type="checkbox" id="ambient-mode">
-        <span class="hint" data-i18n="bg.ambient_mode_hint">Pure black behind the
-          glow, no image. For using a screen as a light source.</span>
+      <!-- v2.5.2-beta.3: a mode switch, not a setting.
+           It disables everything below it, so presenting it as one more
+           checkbox in a column of checkboxes misrepresented what it
+           does. Given its own bordered block, a switch instead of a
+           bare box, and an icon that shows the idea (a panel radiating
+           light) so it reads before the label does. -->
+      <div class="mode-toggle" id="ambient-mode-row">
+        <label class="mode-toggle-main" for="ambient-mode">
+          <span class="mode-toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 32 24" width="30" height="23">
+              <defs>
+                <radialGradient id="amb-halo" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%"   stop-color="currentColor" stop-opacity=".55"/>
+                  <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+                </radialGradient>
+              </defs>
+              <ellipse cx="16" cy="12" rx="15" ry="11" fill="url(#amb-halo)"/>
+              <rect x="9" y="6" width="14" height="11" rx="1.5"
+                    fill="none" stroke="currentColor" stroke-width="1.6"/>
+            </svg>
+          </span>
+          <span class="mode-toggle-text">
+            <span class="mode-toggle-title" data-i18n="bg.ambient_mode">Ambilight mode</span>
+            <span class="mode-toggle-desc" data-i18n="bg.ambient_mode_hint">Pure black
+              behind the glow, no image. For using a screen as a light source.</span>
+          </span>
+          <input type="checkbox" id="ambient-mode" class="mode-toggle-input">
+          <span class="mode-toggle-switch" aria-hidden="true"></span>
+        </label>
       </div>
       <!-- v2.2.0-beta: prominent current-background preview tile +
            Library entry point. Replaces the v1.7.5 plain-row link so

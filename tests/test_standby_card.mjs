@@ -363,6 +363,139 @@ async function main() {
           "frames must keep flowing -- this only silences a card");
   }
 
+  // -- v2.5.2-beta.3: the card must not flash ------------------------
+  //
+  // Reported as "aber das rumflashen ist unschoen", with SignalRGB's
+  // devices disabled -- so the card was RIGHT, it just could not hold
+  // still.
+  //
+  // Two handlers disagreed. ws.onmessage cleared the card on any
+  // inbound message (correct in v2.4.2, when the card only ever meant
+  // "bridge unreachable"); the 500 ms reconciler re-raised it while no
+  // GLOW frame had arrived for 15 s. The bridge pushes sysstats once a
+  // second regardless of whether SignalRGB feeds it, so the two fought
+  // at 1 Hz.
+  //
+  // Simulated rather than grepped: the bug is an interaction between
+  // two timers, and no amount of reading either one in isolation shows
+  // it. This models both and counts transitions.
+  {
+    const NOFRAME_GRACE = 60;    // scaled down from 15 s
+    const RECONCILE = 10;        // from 500 ms
+    const STATS_EVERY = 20;      // the bridge's 1 Hz sysstats push
+
+    function makeStandby({ scopedDisarm }) {
+      const st = { on: false, reason: "offline", flips: 0, lastFrameAt: 0 };
+      const show = (reason) => {
+        if (!st.on) st.flips++;
+        st.on = true; st.reason = reason;
+      };
+      const disarm = () => { if (st.on) st.flips++; st.on = false; };
+
+      // ws.onmessage — every inbound message, glow frame or not.
+      const onMessage = (isGlowFrame) => {
+        if (st.on) {
+          // The fix: a non-frame message is no evidence about frames.
+          if (!scopedDisarm || st.reason !== "noframes") disarm();
+        }
+        if (isGlowFrame) st.lastFrameAt = Date.now();
+      };
+
+      const tick = () => {
+        const starved = st.lastFrameAt > 0 &&
+                        (Date.now() - st.lastFrameAt) > NOFRAME_GRACE;
+        if (starved) {
+          if (!st.on || st.reason !== "noframes") show("noframes");
+        } else if (st.on) {
+          disarm();
+        }
+      };
+      return { st, onMessage, tick };
+    }
+
+    async function run({ scopedDisarm }) {
+      const c = makeStandby({ scopedDisarm });
+      c.st.lastFrameAt = Date.now();          // a frame arrived once
+      const recon = setInterval(c.tick, RECONCILE);
+      // SignalRGB is dead, but the bridge keeps pushing sysstats.
+      const stats = setInterval(() => c.onMessage(false), STATS_EVERY);
+      await sleep(NOFRAME_GRACE + 20);        // let the card come up
+      const flipsBefore = c.st.flips;
+      await sleep(200);                        // ~10 sysstats pushes
+      clearInterval(recon); clearInterval(stats);
+      return { settled: c.st.flips - flipsBefore, on: c.st.on,
+               reason: c.st.reason };
+    }
+
+    const before = await run({ scopedDisarm: false });
+    const after  = await run({ scopedDisarm: true });
+
+    check("the flashing reproduces against the old logic",
+          before.settled > 4,
+          `only ${before.settled} transitions — the model is not `
+          + "reproducing the bug, so the next check proves nothing");
+    check("the card holds still once it is up",
+          after.settled === 0,
+          `${after.settled} transitions while SignalRGB stayed silent`);
+    check("and it is still showing the right thing",
+          after.on === true && after.reason === "noframes",
+          "holding still must not mean giving up on the message");
+
+    // The other direction: real frames must still clear it, or the fix
+    // trades a flashing card for a stuck one.
+    {
+      const c = makeStandby({ scopedDisarm: true });
+      c.st.lastFrameAt = Date.now();
+      const recon = setInterval(c.tick, RECONCILE);
+      await sleep(NOFRAME_GRACE + 30);
+      const wasUp = c.st.on;
+      c.onMessage(true);                       // SignalRGB comes back
+      await sleep(RECONCILE * 3);
+      clearInterval(recon);
+      check("a real glow frame still clears the card",
+            wasUp === true && c.st.on === false,
+            `up=${wasUp} then on=${c.st.on}`);
+    }
+
+    // And the offline card must keep its original behaviour: any
+    // message proves reachability, which is what v2.4.2 fixed.
+    {
+      const c = makeStandby({ scopedDisarm: true });
+      c.st.on = true; c.st.reason = "offline";
+      c.onMessage(false);
+      check("an offline card is still cleared by any message",
+            c.st.on === false,
+            "narrowing the disarm must not regress issue #2");
+    }
+
+    // Finally, pin it in the shipped source.
+    //
+    // Scoped to ws.onmessage's body. `_standbyReason !== "noframes"`
+    // appears TWICE in the file -- the reconciler has its own copy at
+    // the noframes branch -- so a whole-file regex matches the OTHER
+    // one and passes even with this fix fully reverted. It did exactly
+    // that: two mutations walked straight through the first version of
+    // this check.
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..",
+                "wallpaper_bridge", "wallpaper", "index.html"), "utf8");
+    const omAt = src.indexOf("ws.onmessage = (ev) => {");
+    const omEnd = src.indexOf("ws.onerror", omAt);
+    const om = omAt === -1 ? "" : src.slice(omAt, omEnd === -1 ? omAt + 6000 : omEnd);
+    check("ws.onmessage was located", om.length > 200,
+          `${om.length} chars — the anchor moved, this check is blind`);
+    check("onmessage clears the card only when it is not about frames",
+          /_standbyReason !== "noframes"/.test(om) &&
+          /disarmStandbyCard\(\)/.test(om),
+          "an unconditional disarm here fights the reconciler at 1 Hz");
+    // And that the guard actually gates the call rather than sitting
+    // in some unrelated statement in the same function.
+    check("the guard is on the disarm itself",
+          /_standbyReason !== "noframes"\) \{/.test(om) &&
+          om.indexOf('_standbyReason !== "noframes"') <
+            om.indexOf("disarmStandbyCard();"),
+          "the condition and the call must be one statement");
+  }
+
   const total = results.passed + results.failed.length;
   console.log(`\n  ${results.passed}/${total} passed`);
   process.exit(results.failed.length ? 1 : 0);

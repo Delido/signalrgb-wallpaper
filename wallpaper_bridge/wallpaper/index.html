@@ -2458,7 +2458,19 @@ function connect() {
     // clear the standby card even if we never saw a clean onopen — a
     // host that restores the page from a bfcache-style snapshot can
     // land us here with a live socket and a stale card.
-    if (_standbyTimer || (standbyCardEl && standbyCardEl.classList.contains("on"))) {
+    //
+    // v2.5.2-beta.3: but ONLY the "bridge offline" card. When the card
+    // is up for lack of GLOW frames, an inbound message is no evidence
+    // at all — the bridge pushes sysstats once a second whether or not
+    // SignalRGB is feeding it, so this cleared the card every second
+    // and the 500 ms reconciler put it straight back. That is the
+    // flashing: "aber das rumflashen ist unschoen".
+    //
+    // The two reasons need different evidence. Reachability is proved
+    // by any message; a live colour stream is proved only by a frame,
+    // which renderFrame() stamps a few lines below.
+    const _cardUp = standbyCardEl && standbyCardEl.classList.contains("on");
+    if ((_standbyTimer || _cardUp) && _standbyReason !== "noframes") {
       disarmStandbyCard();
     }
     // Binary frame = one rendered frame from the plugin via the bridge.
