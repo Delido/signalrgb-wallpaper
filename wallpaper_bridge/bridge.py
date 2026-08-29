@@ -910,7 +910,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.2-beta.3"
+APP_VERSION = "2.5.2-beta.4"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1006,6 +1006,36 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.2-beta.4": {
+        "title_en": "What\'s new in v2.5.2-beta.4",
+        "title_de": "Was ist neu in v2.5.2-beta.4",
+        "body_en": (
+            "**Fixed: clicking the background thumbnail emptied "
+            "the whole Configurator.**\n\n"
+            "It asked for the *Library* tab, which stopped "
+            "existing when six tabs became four in v2.5.0. Cards "
+            "are only shown for a tab the page knows, so an "
+            "unknown one hid every card at once — with no error "
+            "message to explain it.\n\n"
+            "The thumbnail opens Appearance again, and an "
+            "unrecognised tab now falls back instead of blanking "
+            "the page.\n\n"
+            "**No re-import needed.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Ein Klick auf das Hintergrundbild hat den "
+            "kompletten Konfigurator geleert.**\n\n"
+            "Er wollte den Tab *Bibliothek* \u00f6ffnen — den gibt es "
+            "nicht mehr, seit in v2.5.0 aus sechs Tabs vier "
+            "wurden. Karten werden nur f\u00fcr bekannte Tabs "
+            "eingeblendet, ein unbekannter hat also alle auf "
+            "einmal versteckt. Ohne Fehlermeldung.\n\n"
+            "Das Vorschaubild \u00f6ffnet wieder *Aussehen*, und ein "
+            "unbekannter Tab f\u00e4llt jetzt auf die Startseite "
+            "zur\u00fcck, statt die Seite leer zu lassen.\n\n"
+            "**Kein Neuimport n\u00f6tig.**\n"
+        ),
+    },
     "2.5.2-beta.3": {
         "title_en": "What\'s new in v2.5.2-beta.3",
         "title_de": "Was ist neu in v2.5.2-beta.3",

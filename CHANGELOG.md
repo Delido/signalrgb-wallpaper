@@ -6,6 +6,55 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.2-beta.4] - 2026-08-30
+
+### Fixed — clicking the background thumbnail blanked the page
+
+Reported as "wenn ich auf das hintergrundbild klicke, kommt ein hauch
+von nix": the Configurator went completely empty, header and nav
+intact, not a single card left.
+
+The thumbnail called `activateSectionTab("library")`. That tab was
+folded into Appearance when v2.5.0 turned six tabs into four.
+
+What turns a stale string into a blank page is that the card
+visibility CSS is a **whitelist**:
+
+```
+main[data-active-tab] section.card[data-section-tab] { display: none; }
+main[data-active-tab="appearance"] section.card[...="appearance"],
+...four known values... { display: block; }
+```
+
+The first rule hides everything; only a recognised value switches
+anything back on. An unknown key matches no second rule, so every card
+stays hidden — silently, with nothing in the console.
+
+`LEGACY_TAB_ALIASES` already mapped `library -> appearance`, but only
+the startup path consulted it, where the key comes from localStorage or
+the URL hash. Calls from inside the page went straight through.
+
+The resolution moved into `activateSectionTab` itself, so every caller
+is covered including future ones, plus a fallback to the landing tab
+for a key that is neither current nor a known alias. The two callers
+now say `appearance` outright.
+
+### Testing
+
+`test_tab_scope.mjs` gained nine checks that walk the path a click
+takes: the declared tabs, the CSS whitelist read from the stylesheet,
+the alias table, and every literal `activateSectionTab("...")` in the
+page. A caller whose key survives neither the alias pass nor the
+whitelist now fails the build.
+
+Two of those checks needed narrowing first. `key: "..."` matched every
+widget option in the file until it was scoped to the `SECTION_TABS`
+literal, and an existing check bounded by `[\s\S]{0,300}` broke merely
+because a comment was added above the line it was looking for —
+replaced with brace matching. 6/6 mutations caught, including a caller
+asking for a tab that exists nowhere and removing `library` from the
+alias table.
+
 ## [2.5.2-beta.3] - 2026-08-30
 
 ### Fixed — the starvation card flashed at 1 Hz

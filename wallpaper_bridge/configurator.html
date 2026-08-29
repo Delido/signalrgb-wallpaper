@@ -8684,6 +8684,26 @@ function _applyScreenScopeChrome(key) {
 }
 
 function activateSectionTab(key) {
+  // v2.5.2-beta.4: resolve legacy keys HERE, not only at startup.
+  //
+  // The redesign folded six tabs into four and mapped the old names in
+  // LEGACY_TAB_ALIASES — but only where the startup code reads the
+  // stored/hash key. Calls from inside the page passed the old name
+  // straight through, and the card visibility CSS is a whitelist:
+  // `main[data-active-tab] section.card` hides everything, and only
+  // the four known values switch anything back on. An unknown key
+  // therefore hid the ENTIRE page with no error anywhere.
+  //
+  // Reported as "wenn ich auf das hintergrundbild klicke, kommt ein
+  // hauch von nix" — the background thumbnail still asked for
+  // "library", a tab that stopped existing in v2.5.0.
+  //
+  // Doing it here covers every caller, including any added later.
+  if (LEGACY_TAB_ALIASES[key]) key = LEGACY_TAB_ALIASES[key];
+  // And a key that is neither current nor a known alias must not blank
+  // the page either: fall back to the landing tab, the same rule
+  // startup already applies.
+  if (!SECTION_TABS.some((e) => e.key === key)) key = "appearance";
   const mainEl = document.querySelector("main");
   if (mainEl) mainEl.dataset.activeTab = key;
   _applyScreenScopeChrome(key);
@@ -8746,7 +8766,8 @@ setTimeout(() => {
   const gotoBtn = document.getElementById("bg-goto-library");
   if (gotoBtn && typeof window.activateSectionTab === "function") {
     gotoBtn.addEventListener("click", () => {
-      window.activateSectionTab("library");
+      // The library lives in Appearance since the v2.5.0 redesign.
+      window.activateSectionTab("appearance");
     });
   }
   // v2.2.0-beta: the BG thumbnail in the Look tab also routes to the
@@ -8754,7 +8775,8 @@ setTimeout(() => {
   const thumbBtn = document.getElementById("bg-current-thumb");
   if (thumbBtn && typeof window.activateSectionTab === "function") {
     thumbBtn.addEventListener("click", () => {
-      window.activateSectionTab("library");
+      // The library lives in Appearance since the v2.5.0 redesign.
+      window.activateSectionTab("appearance");
     });
   }
 }, 0);

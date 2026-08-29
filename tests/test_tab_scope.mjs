@@ -118,10 +118,17 @@ if (declared) {
 
 // --- the chrome actually gets hidden ------------------------------------
 check("a scope helper exists", /function _applyScreenScopeChrome\(/.test(HTML));
-check("it is called from activateSectionTab",
-      /function activateSectionTab\(key\)\s*\{[\s\S]{0,300}?_applyScreenScopeChrome\(key\)/
-        .test(HTML),
-      "declaring it without calling it changes nothing");
+// Brace-matched rather than bounded by a character count: a {0,300}
+// window broke the moment a comment was added at the top of the
+// function, reporting a missing call that was still right there.
+{
+  const _at = HTML.indexOf("function activateSectionTab(key)");
+  const _end = HTML.indexOf("\nfunction ", _at + 10);
+  const _fn = _at === -1 ? "" : HTML.slice(_at, _end === -1 ? _at + 3000 : _end);
+  check("it is called from activateSectionTab",
+        /_applyScreenScopeChrome\(key\)/.test(_fn),
+        "declaring it without calling it changes nothing");
+}
 check("it hides the screen tab strip",
       /getElementById\("tabs"\)[\s\S]{0,200}?display = GLOBAL_TABS\.has\(key\) \? "none" : ""/
         .test(HTML),
@@ -375,6 +382,73 @@ check("the layout preview re-render uses the current tab key",
   }
   check("no positioned card element is missing a z-index",
         offenders.length === 0, offenders.slice(0, 4).join(" | "));
+}
+
+// -- v2.5.2-beta.4: every reachable tab key must show something ------
+//
+// Reported as "wenn ich auf das hintergrundbild klicke, kommt ein
+// hauch von nix": the background thumbnail called
+// activateSectionTab("library"), a tab removed in the v2.5.0 redesign.
+//
+// The card CSS is a WHITELIST -- `main[data-active-tab] section.card`
+// hides everything and only the four known values switch anything back
+// on -- so an unrecognised key blanks the whole page. Silently: no
+// console error, no visual clue, just an empty Configurator.
+//
+// LEGACY_TAB_ALIASES existed and even mapped library -> appearance, but
+// only the startup path consulted it. In-page callers went straight
+// through.
+{
+  console.error("\nno tab key can blank the page");
+
+  // Scoped to the SECTION_TABS literal: `key: "..."` is a common shape
+  // and a whole-file match picked up every widget option in the file.
+  const stAt = HTML.indexOf("const SECTION_TABS = [");
+  const stBlock = HTML.slice(stAt, HTML.indexOf("];", stAt));
+  const tabKeys = [...stBlock.matchAll(/key:\s*"(\w+)"/g)].map((m) => m[1]);
+  const aliases = {};
+  const am = /LEGACY_TAB_ALIASES = \{([\s\S]*?)\}/.exec(HTML);
+  if (am) for (const m of am[1].matchAll(/(\w+):\s*"(\w+)"/g)) aliases[m[1]] = m[2];
+  // The CSS whitelist, read from the stylesheet rather than restated.
+  const shown = new Set(
+    [...HTML.matchAll(/main\[data-active-tab="(\w+)"\]/g)].map((m) => m[1]));
+
+  check("the tab keys were parsed", tabKeys.length >= 4, tabKeys.join(","));
+  check("the CSS whitelist was parsed", shown.size >= 4, [...shown].join(","));
+  check("every declared tab has a CSS rule that shows its cards",
+        tabKeys.every((k) => shown.has(k)),
+        tabKeys.filter((k) => !shown.has(k)).join(",") + " would show nothing");
+
+  // Every literal key passed to activateSectionTab in the page has to
+  // survive the alias pass and land on something visible. This is the
+  // reported bug, generalised to any caller.
+  const calls = [...HTML.matchAll(/activateSectionTab\("(\w+)"\)/g)].map((m) => m[1]);
+  check("literal activateSectionTab calls were found", calls.length > 0,
+        "if this finds none the next check proves nothing");
+  const dead = calls.filter((k) => !shown.has(aliases[k] || k));
+  check("no caller asks for a tab that shows nothing",
+        dead.length === 0,
+        dead.join(",") + " resolves to no visible card");
+
+  // And the resolution has to happen inside activateSectionTab, not
+  // only at startup -- that gap is what made a mapped alias useless.
+  const fnAt = HTML.indexOf("function activateSectionTab(key)");
+  const fnEnd = HTML.indexOf("\nfunction ", fnAt + 10);
+  const fn = fnAt === -1 ? "" : HTML.slice(fnAt, fnEnd === -1 ? fnAt + 3000 : fnEnd);
+  check("activateSectionTab was located", fn.length > 200);
+  check("it resolves legacy aliases itself",
+        /LEGACY_TAB_ALIASES\[key\]/.test(fn),
+        "resolving only at startup leaves in-page callers broken");
+  check("it falls back for a wholly unknown key",
+        /SECTION_TABS\.some\([\s\S]{0,60}?key = "appearance"/.test(fn),
+        "an unknown key must not hide every card");
+  // Both guards must run BEFORE the attribute is written, or the page
+  // is already blank by the time they execute.
+  const aliasAt = fn.indexOf("LEGACY_TAB_ALIASES[key]");
+  const writeAt = fn.indexOf("dataset.activeTab = key");
+  check("the key is sanitised before it reaches the DOM",
+        aliasAt !== -1 && writeAt !== -1 && aliasAt < writeAt,
+        `alias\${aliasAt} write\${writeAt}`);
 }
 
 console.error("\n" + "=".repeat(68));
