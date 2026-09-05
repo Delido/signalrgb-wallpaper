@@ -116,8 +116,17 @@ check("no --glow use affects brightness/opacity/colour", nonBlur.length === 0,
 // loosened by accident; this one is unambiguous.
 check("--glow never drives opacity",
       !/opacity[^;\n]*var\(--glow/.test(PAGE));
+// v2.5.2-beta.5: `--glow-bright` is a DIFFERENT variable and legitimately
+// drives brightness() -- it is the real brightness control, added
+// because Spread never was one. The word boundary keeps this check
+// about `--glow` itself; without it the prefix matches and this test
+// forbids the very control whose absence it documents.
 check("--glow never drives brightness()",
-      !/brightness\([^)]*var\(--glow/.test(PAGE));
+      !/brightness\([^)]*var\(--glow\s*[,)]/.test(PAGE),
+      "Spread scales blur radius; brightness belongs to --glow-bright");
+check("--glow-bright is the one that does",
+      /brightness\(var\(--glow-bright/.test(PAGE),
+      "if this disappears the brightness slider silently does nothing");
 
 // --- 3. No behaviour change -----------------------------------------
 

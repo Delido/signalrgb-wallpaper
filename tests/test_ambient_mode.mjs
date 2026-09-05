@@ -184,6 +184,71 @@ check("the switch knob moves when checked",
       /\.mode-toggle-input:checked ~ \.mode-toggle-switch::after/.test(conf),
       "a track that changes colour without the knob moving reads as broken");
 
+// -- v2.5.2-beta.5: a real brightness control -------------------------
+//
+// "A brightness slider for the ambilight would be nice." The wallpaper
+// never had one: glowStrength scales the BLUR RADIUS, which is why
+// v2.5.0 relabelled it "Spread" -- turning it down sharpens the glow
+// rather than dimming it.
+console.log("\nglow brightness");
+
+check("the setting has a default", /"glowBrightness":\s*100/.test(bridge),
+      "100 % = unchanged, so every existing install looks the same");
+check("it is on the settable whitelist", /"glowBrightness"/.test(wl));
+check("presets carry it", /"glowBrightness"/.test(ps));
+check("quick looks may set it", !/glowBrightness/.test(fb));
+check("the page handles it", /case "glowBrightness":/.test(page));
+check("it drives its own variable, not --glow",
+      /setProperty\(\s*\n?\s*"--glow-bright"/.test(page),
+      "reusing --glow would scale the blur, which is the other control");
+
+// The filter trap: `filter` is ONE property, so a later declaration
+// REPLACES an earlier one rather than merging. Brightness therefore
+// has to live inside each existing chain, not in a rule of its own --
+// a separate `filter: brightness(...)` would silently delete the blur.
+// This project has hit that exact bug before.
+const chains = [...page.matchAll(/filter:\s*[^;]*blur\(calc\(var\(--grid-blur/g)];
+check("every glow blur chain was found", chains.length === 4,
+      `${chains.length} chains -- if this count changes, the next check `
+      + "may be inspecting the wrong set");
+const allHaveBright = [...page.matchAll(/filter:\s*([^;]*blur\(calc\(var\(--grid-blur[^;]*);/g)]
+  .every((m) => /brightness\(var\(--glow-bright/.test(m[1]));
+check("brightness is in every one of them", allHaveBright,
+      "a chain without it keeps full output while the others dim");
+// A brightness-only declaration -- one whose whole value ends before
+// any blur() -- would replace the blur wherever it wins the cascade.
+// Checked by examining each full `filter: ...;` declaration that
+// mentions --glow-bright and requiring blur inside the SAME one.
+const brightDecls = [...page.matchAll(/filter:([^;]*--glow-bright[^;]*);/g)];
+check("brightness never appears without the blur beside it",
+      brightDecls.length > 0 &&
+      brightDecls.every((m) => /blur\(/.test(m[1])),
+      `${brightDecls.length} declarations; filter is one property, so a `
+      + "brightness-only rule would delete the blur rather than add to it");
+// Order matters: dim first, then blur. Blurring at full intensity and
+// dimming after spreads brighter light before it is reduced.
+check("brightness is applied before the blur",
+      page.indexOf("brightness(var(--glow-bright") <
+        page.indexOf("blur(calc(var(--grid-blur"),
+      "dim the source, then spread it");
+
+// The control.
+check("there is a slider", /id="glow-brightness"/.test(conf));
+check("it writes the setting",
+      /bindRangeChange\(els\.glowBrightness,[^)]*"glowBrightness"/.test(conf));
+check("it reflects the saved value",
+      /els\.glowBrightness\.value = String\(settings\.glowBrightness/.test(conf));
+const sl = /id="glow-brightness"[^>]*min="(\d+)"[^>]*max="(\d+)"/.exec(conf);
+check("the slider has a sane range", sl && Number(sl[1]) >= 1 && Number(sl[2]) === 100,
+      `min=${sl && sl[1]} max=${sl && sl[2]} -- 0 would be indistinguishable `
+      + "from a broken install; lay-off already exists for switching it off");
+check("it sits next to Spread",
+      conf.indexOf('id="glow-strength"') < conf.indexOf('id="glow-brightness"') &&
+      conf.indexOf('id="glow-brightness"') < conf.indexOf('id="grid-blur"'),
+      "the two names are confusable; adjacency is what explains them");
+check("it is translated",
+      /"glow\.brightness":\s*\{\s*en:\s*"Brightness",\s*de:\s*"Helligkeit"/.test(conf));
+
 console.log("\nthe Ambilight quick look");
 
 const bundleAt = conf.indexOf('id: "ambilight"');
@@ -210,6 +275,11 @@ for (const off of ["ambientEffect", "audioGlow", "pixelfx"]) {
 }
 check("no widgets", /widgets:\s*\[\s*\]/.test(bundle),
       "a widget is a dark rectangle in the middle of a light source");
+// The look uses it -- that request is what prompted the control.
+check("the Ambilight look dims the screen",
+      /glowBrightness:\s*(\d+)/.test(bundle) &&
+      Number(/glowBrightness:\s*(\d+)/.exec(bundle)[1]) < 100,
+      "a light source in peripheral vision at full output is glare");
 check("the look is translated", /"looks\.ambilight\.name":/.test(conf) &&
                                  /"looks\.ambilight\.desc":/.test(conf));
 

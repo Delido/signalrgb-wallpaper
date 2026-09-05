@@ -910,7 +910,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.2-beta.4"
+APP_VERSION = "2.5.2-beta.5"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -933,7 +933,7 @@ APP_VERSION = "2.5.2-beta.4"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.17"
+WALLPAPER_VERSION = "2.4.18"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1006,6 +1006,40 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.5.2-beta.5": {
+        "title_en": "What\'s new in v2.5.2-beta.5",
+        "title_de": "Was ist neu in v2.5.2-beta.5",
+        "body_en": (
+            "**New: a Brightness slider for the glow.**\n\n"
+            "The wallpaper never had one. *Spread* looks like it "
+            "should dim the glow, but it scales the blur radius — "
+            "turning it down sharpens the glow instead of "
+            "dimming it.\n\n"
+            "Brightness sits directly under Spread, in "
+            "**Appearance → Glow**, and goes down to 10 %.\n\n"
+            "Suggested for ambilight screens: a monitor used as a "
+            "light source beside the one you are watching wants far "
+            "less output at night than the same screen does under "
+            "music. The **Ambilight** quick look now sets 70 %.\n\n"
+            "**Re-import the wallpaper bundles.**\n"
+        ),
+        "body_de": (
+            "**Neu: ein Helligkeitsregler f\u00fcr das Glow.**\n\n"
+            "Den gab es bisher nicht. *Ausbreitung* sieht aus, als "
+            "w\u00fcrde sie das Glow dunkler machen, sie skaliert aber "
+            "den Weichzeichner-Radius — kleiner gedreht wird das "
+            "Glow sch\u00e4rfer, nicht dunkler.\n\n"
+            "Die Helligkeit steht direkt darunter, unter "
+            "**Aussehen → Glow**, und geht bis auf 10 % "
+            "herunter.\n\n"
+            "Vorgeschlagen f\u00fcr Ambilight-Bildschirme: Ein Monitor, "
+            "der neben dem eigentlichen Bild als Lichtquelle dient, "
+            "braucht nachts deutlich weniger Leuchtkraft als "
+            "derselbe Bildschirm bei Musik. Der Quick Look "
+            "**Ambilight** setzt jetzt 70 %.\n\n"
+            "**Wallpaper-Bundles neu importieren.**\n"
+        ),
+    },
     "2.5.2-beta.4": {
         "title_en": "What\'s new in v2.5.2-beta.4",
         "title_de": "Was ist neu in v2.5.2-beta.4",
@@ -3229,6 +3263,18 @@ DEFAULT_SCREEN_SETTINGS = {
     "barLayout":    "lay-grid",
     "showBars":     True,
     "glowStrength": 100,
+    # v2.5.2-beta.5: actual output brightness, 10-100 %.
+    #
+    # Distinct from glowStrength despite the similar name: that one
+    # scales the BLUR RADIUS (hence the "Spread" label since v2.5.0)
+    # and never affected brightness at all. Requested for ambilight
+    # setups, where a screen used as a light source beside a film at
+    # night wants far less output than it does under music.
+    #
+    # Floor is 10, not 0: a zero here is indistinguishable from a
+    # broken install, and "Hidden (image only)" already exists for
+    # switching the glow off deliberately.
+    "glowBrightness": 100,
     "gridBlur":     30,
     # v1.2.12: which grid-layout renderer the wallpaper page should
     # use — "dom" (one solid-colour <div> per zone) or "canvas"
@@ -3440,6 +3486,7 @@ _NON_MIRRORED_KEYS = frozenset({
 PRESET_SNAPSHOT_KEYS = (
     "bgImage", "bgImageUrl", "bgFit", "bgTileScale", "bgDim",
     "barLayout", "showBars", "glowStrength", "ambientMode",
+    "glowBrightness",
     "gridBlur", "stripesBlur", "barHeight", "barWidth",
     "showStatus",
     "widgets", "widgetTileStyle",
@@ -3489,7 +3536,7 @@ PRESET_SNAPSHOT_KEYS = (
 # user's own perf trade-off.
 QUICK_LOOK_VISUAL_KEYS = (
     "ambientMode",
-    "glowStrength", "gridBlur",
+    "glowStrength", "glowBrightness", "gridBlur",
     "barLayout", "showBars",
     "ambientEffect", "ambientTint", "ambientDensity",
     "pixelfx", "parallax3d",
@@ -12484,6 +12531,7 @@ class BridgeRuntime:
         "barLayout", "showBars", "glowStrength",
         "gridBlur", "stripesBlur", "barHeight", "barWidth",
         "gridRenderer", "glassQuality", "frameRate", "ambientMode",
+        "glowBrightness",
         # v1.6.3-beta: effect-canvas quality bucket (performance /
         # balanced / quality). Controls ambient + pixelfx + audio-glow
         # canvas backing resolution + DPR + frame cap. Missing from

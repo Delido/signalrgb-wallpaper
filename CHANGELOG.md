@@ -6,6 +6,64 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.2-beta.5] - 2026-08-31
+
+### Added — a real brightness control for the glow
+
+Requested by the ambilight user: "A brightness slider for the ambilight
+would be nice."
+
+The wallpaper genuinely never had one. `glowStrength` scales the **blur
+radius** — all six of its uses multiply a blur or a shadow spread —
+which is why v2.5.0 relabelled it *Spread*. Turning it down sharpens
+the glow until the grid cells show their edges; it does not dim
+anything.
+
+`glowBrightness` (10-100 %, default 100) is applied as a CSS
+`brightness()` filter on the glow layers rather than by scaling the RGB
+bytes in `renderFrame`. The render loop writes every zone every frame
+across two separate paths — canvas `putImageData` and per-zone DOM
+`background` — so a multiply there costs work per zone per frame,
+while the filter is one GPU operation on a layer already promoted for
+the blur.
+
+`filter` is a single property, so a later declaration **replaces** an
+earlier one rather than merging. Brightness therefore had to go inside
+each of the four existing blur chains (`#bars.lay-grid`,
+`#bars-canvas`, and both `body.fx-ripple` variants), not into a rule of
+its own — which would have silently deleted the blur. That exact
+mistake has shipped in this project before.
+
+Order within the chain is deliberate: `brightness()` before `blur()`,
+so the source is dimmed and then spread rather than spread at full
+intensity and dimmed afterwards.
+
+The slider sits directly under Spread. The two names are easy to
+confuse, and adjacency is what makes the distinction legible: one
+changes how far the glow bleeds, the other how much light comes out.
+
+The floor is 10 %, not 0: zero is indistinguishable from a broken
+install, and `Hidden (image only)` already exists for switching the
+glow off on purpose.
+
+The **Ambilight** quick look now sets 70 %. A light source in
+peripheral vision at full output is glare.
+
+### Testing
+
+`test_ambient_mode.mjs` covers the chain and the filter trap
+specifically: it counts the blur chains, requires brightness in every
+one, requires blur inside the same declaration as brightness, and pins
+the order. 11/11 mutations caught, including a standalone
+`filter: brightness(...)` rule and dimming only one of the four layers.
+
+`test_glow_spread.mjs` had to be made more precise rather than
+loosened. Its v2.5.0 check — that `--glow` never drives brightness —
+matched `--glow-bright` by prefix and so forbade the very control whose
+absence it documents. A word boundary keeps it about `--glow` itself,
+and a mutation putting `--glow` back into `brightness()` is still
+caught.
+
 ## [2.5.2-beta.4] - 2026-08-30
 
 ### Fixed — clicking the background thumbnail blanked the page

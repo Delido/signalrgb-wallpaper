@@ -3113,6 +3113,17 @@
         <input type="range" id="glow-strength" min="0" max="200" step="1">
         <span class="val" id="glow-strength-val">100 %</span>
       </div>
+      <!-- v2.5.2-beta.5: directly under Spread on purpose. The two are
+           easy to confuse by name, and seeing them adjacent is what
+           makes the distinction obvious: Spread changes how far the
+           glow bleeds, Brightness changes how much light comes out.
+           Requested for ambilight screens, which want less output at
+           night than the same screen does under music. -->
+      <div class="row">
+        <label for="glow-brightness" data-i18n="glow.brightness">Brightness</label>
+        <input type="range" id="glow-brightness" min="10" max="100" step="1">
+        <span class="val" id="glow-brightness-val">100 %</span>
+      </div>
       <div class="row">
         <label for="grid-blur" data-i18n="glow.grid_blur">Grid blur</label>
         <input type="range" id="grid-blur" min="0" max="400" step="1">
@@ -4814,6 +4825,7 @@ const TRANSLATIONS = {
   "glow.show":              { en: "Show glow layer",      de: "Glow-Schicht anzeigen" },
   "glow.layout":            { en: "Layout",               de: "Layout" },
   "glow.strength":          { en: "Spread",               de: "Ausbreitung" },
+  "glow.brightness":        { en: "Brightness",           de: "Helligkeit" },
   "glow.spread_hint":       {
     en: "Spread multiplies Grid blur — at 50 % a 30 px blur becomes 15 px. Too little blur and the glow grid's individual cells become visible as blocks; raise Grid blur to compensate.",
     de: "Ausbreitung multipliziert den Raster-Weichzeichner — bei 50 % werden aus 30 px nur 15 px. Zu wenig Weichzeichnung lässt die einzelnen Rasterkästchen als Blöcke sichtbar werden; dann den Raster-Weichzeichner erhöhen."
@@ -5546,6 +5558,11 @@ const LOOK_BUNDLES = [
     settings: {
       ambientMode:     true,
       glowStrength:    100,
+      // Dimmed on purpose. A screen used as a light source sits in
+      // peripheral vision beside the one being watched, usually at
+      // night -- full output is glare rather than ambience. The user
+      // who asked for this control can raise it for music.
+      glowBrightness:  70,
       barLayout:       "lay-grid",
       showBars:        true,
       // Far above the old 120 ceiling. At a typical 32x32 SignalRGB
@@ -5949,6 +5966,8 @@ const els = {
   glowLayout:     $("glow-layout"),
   glowStrength:   $("glow-strength"),
   glowStrengthVal:$("glow-strength-val"),
+  glowBrightness:    $("glow-brightness"),
+  glowBrightnessVal: $("glow-brightness-val"),
   gridBlur:       $("grid-blur"),
   gridBlurVal:    $("grid-blur-val"),
   gridRenderer:   $("grid-renderer"),
@@ -11573,6 +11592,7 @@ function bindRangeChange(rangeEl, valEl, key, suffix, format) {
   rangeEl.addEventListener("change", () => setSetting(key, parseInt(rangeEl.value, 10)));
 }
 bindRangeChange(els.glowStrength,   els.glowStrengthVal,   "glowStrength", " %");
+bindRangeChange(els.glowBrightness, els.glowBrightnessVal, "glowBrightness", " %");
 bindRangeChange(els.gridBlur,       els.gridBlurVal,       "gridBlur",     " px");
 bindRangeChange(els.stripesBlur,    els.stripesBlurVal,    "stripesBlur",  " px");
 // barWidth is stored in tenths of a vw (14 -> 1.4vw), so its readout
@@ -13375,6 +13395,8 @@ function renderAll() {
   }
   els.glowStrength.value = String(settings.glowStrength ?? 100);
   els.glowStrengthVal.textContent = (settings.glowStrength ?? 100) + " %";
+  els.glowBrightness.value = String(settings.glowBrightness ?? 100);
+  els.glowBrightnessVal.textContent = (settings.glowBrightness ?? 100) + " %";
   els.gridBlur.value     = String(settings.gridBlur ?? 30);
   els.gridBlurVal.textContent     = (settings.gridBlur ?? 30) + " px";
   els.stripesBlur.value  = String(settings.stripesBlur ?? 60);

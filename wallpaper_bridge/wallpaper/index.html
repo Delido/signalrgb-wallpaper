@@ -305,7 +305,8 @@
     display: grid;
     grid-template-columns: repeat(var(--cols, 16), 1fr);
     grid-template-rows: repeat(var(--rows, 1), 1fr);
-    filter: blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+    filter: brightness(var(--glow-bright, 1))
+            blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
     /* v2.3.1: `will-change: filter` promotes #bars to its own GPU
        compositing layer. Without this, every source change inside
        the grid triggered the browser to re-composite the WHOLE
@@ -343,7 +344,8 @@
     position: fixed; inset: 0; z-index: 1;
     pointer-events: none;
     width: 100%; height: 100%;
-    filter: blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+    filter: brightness(var(--glow-bright, 1))
+            blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
     /* `pixelated` looks blocky; default `auto` smooths bilinearly,
        and combined with the blur the result is visually identical to
        the DOM-div grid. */
@@ -843,10 +845,12 @@
      Note this path only runs when glRipple.usable() is false — on the
      WebGL path #bars is never touched and never had the bug. */
   body.fx-ripple #bars {
-    filter: url(#fx-ripple-filter) blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+    filter: url(#fx-ripple-filter) brightness(var(--glow-bright, 1))
+            blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
   }
   body.fx-ripple #bars-canvas {
-    filter: url(#fx-ripple-filter) blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
+    filter: url(#fx-ripple-filter) brightness(var(--glow-bright, 1))
+            blur(calc(var(--grid-blur, 30px) * var(--glow, 1)));
   }
   /* Stripe layouts blur the .zone children, not #bars itself, so they
      are unaffected by the rule above and keep working as before. */
@@ -3225,6 +3229,26 @@ function applyProperty(name, val) {
       break;
     case "glowStrength":
       document.documentElement.style.setProperty("--glow", String((parseInt(val) || 100) / 100));
+      break;
+    case "glowBrightness":
+      // v2.5.2-beta.5: the actual brightness control, which the wallpaper
+      // never had. `glowStrength` scales the BLUR RADIUS -- that is why
+      // v2.5.0 renamed its label to "Spread"; turning it down sharpens
+      // the glow, it does not dim it.
+      //
+      // Requested for ambilight use: "A brightness slider for the
+      // ambilight would be nice." A screen used as a light source next
+      // to a film at night wants far less output than the same screen
+      // does under music.
+      //
+      // Applied as a CSS filter on the glow layers rather than by
+      // scaling the RGB bytes in renderFrame: the render loop writes
+      // every zone every frame on two separate paths (canvas
+      // putImageData and per-zone DOM background), so a multiply there
+      // costs work per zone per frame, while the filter is one GPU
+      // operation on a layer that is already promoted for the blur.
+      document.documentElement.style.setProperty(
+        "--glow-bright", String((parseInt(val) || 100) / 100));
       break;
     case "barHeight":
       document.documentElement.style.setProperty("--bar-h", (parseInt(val) || 38) + "vh");
