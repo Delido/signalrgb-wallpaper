@@ -413,6 +413,162 @@ const applyFn = extractBlock(CONF, "function applyLookBundle(");
 check("applying a sensor look warns when no sensor source is available",
       /if \(bundle\.needsSensors\) _warnIfNoSensors\(\);/.test(applyFn));
 
+// ── 2d. the real mount path: createWidget -> applyWidgetOptions ────────
+//
+// Reported after v2.6.0-beta.2 as "irgendwas geht nicht mehr?": the
+// wallpaper showed only "CPU —", every other widget of the Hardware
+// Monitor look was missing. createWidget read `w.opts`, but widgets from
+// the bridge carry `options`, so every new widget got the DEFAULT markup
+// whatever its skin; applyWidgetOptions only swapped markup when options
+// CHANGED, which is never true on the first application; the ring then
+// rendered into classic markup, `.sg-label` was null, the tick threw --
+// and that unguarded tick ran inside setWidgets' loop, so every later
+// widget was never created.
+//
+// Everything above passed throughout, because it built markup and
+// options by hand. This section runs the two shipped functions the way
+// setWidgets does.
+console.error("\nwidget mount path (shipped createWidget / applyWidgetOptions)\n" + "=".repeat(68));
+
+function domNode(ctx) {
+  const n = fakeNode(ctx);
+  n.addEventListener = () => {};
+  n.remove = () => {};
+  return n;
+}
+function domEl() {
+  const el = {
+    className: "", dataset: {}, _html: "", _q: {},
+    style: { setProperty() {}, removeProperty() {} },
+    addEventListener() {},
+    get innerHTML() { return this._html; },
+    set innerHTML(v) { this._html = String(v); this._q = {}; },
+    classList: {
+      _el: null,
+      list() { return this._el.className.split(/\s+/).filter(Boolean); },
+      add(c) { const l = this.list(); if (!l.includes(c)) l.push(c); this._el.className = l.join(" "); },
+      remove(c) { this._el.className = this.list().filter((x) => x !== c).join(" "); },
+      toggle(c, on) { (on === undefined ? !this.contains(c) : on) ? this.add(c) : this.remove(c); },
+      contains(c) { return this.list().includes(c); },
+    },
+    querySelector(sel) {
+      if (this._q[sel]) return this._q[sel];
+      if (sel === ".widget-body") {
+        const self = this;
+        const body = domNode(ctx2d);
+        Object.defineProperty(body, "innerHTML", {
+          get() { return (/<div class="widget-body">([\s\S]*)<\/div><div class="widget-handle">/.exec(self._html) || [])[1] || ""; },
+          set(v) { self._html = self._html.replace(
+            /(<div class="widget-body">)[\s\S]*(<\/div><div class="widget-handle">)/,
+            (_, a, b) => a + v + b); self._q = {}; },
+        });
+        return (this._q[sel] = body);
+      }
+      const first = sel.split(" ")[0];
+      const found = first.charAt(0) === "."
+        ? new RegExp('class="[^"]*\\b' + first.slice(1).replace(/-/g, "\\-") + '\\b').test(this._html)
+        : new RegExp("<" + first + "[\\s>]").test(this._html);
+      if (!found) return null;
+      return (this._q[sel] = domNode(ctx2d));
+    },
+    querySelectorAll(sel) {
+      if (this._q[sel]) return this._q[sel];
+      const has = this.querySelector(sel.split(" ")[0]);
+      return (this._q[sel] = has ? Array.from({ length: 14 }, () => domNode(ctx2d)) : []);
+    },
+  };
+  el.classList._el = el;
+  return el;
+}
+
+const mountCode = [
+  extractBlock(PAGE, "function escapeHtml("),
+  extractBlock(PAGE, "function createWidget("),
+  extractBlock(PAGE, "function applyWidgetOptions("),
+  "globalThis.__mount = { createWidget, applyWidgetOptions };",
+].join("\n");
+const warned = [];
+Object.assign(sandbox, {
+  console: Object.assign(Object.create(console), {
+    warn: (...a) => warned.push(a.map(String).join(" ")),
+  }),
+  document: { createElement: () => domEl() },
+  WIDGET_TILE_STYLES: ["off", "glass", "solid", "clear"],
+  sendWidgetCmd() {}, _sendPluginMessage() {},
+});
+let mounted = true;
+try { vm.runInContext(mountCode, sandbox); } catch (e) { mounted = false; console.error(e); }
+check("createWidget / applyWidgetOptions run from the shipped page", mounted && sandbox.__mount);
+const { createWidget, applyWidgetOptions } = sandbox.__mount || {};
+const mount = (w) => { const rec = createWidget(w); applyWidgetOptions(rec, w); return rec; };
+
+sandbox.lastSysStats = { cpu: 36, ram: 58, hwmon: SIG };
+let wr = { id: "a", type: "cpu-meter", options: { skin: "ring" } };
+let rc = createWidget(wr);
+check("a widget from the bridge (`options`) is built with its skin's markup",
+      /class="sg-ring"/.test(rc.el.innerHTML) && rc.el.className.includes("widget-skin-ring"),
+      "the reported bug: `w.opts` is undefined on bridge widgets -> default markup");
+check("the record knows which skin is in the DOM", rc.skin === "ring");
+let threw = null;
+try { applyWidgetOptions(rc, wr); } catch (e) { threw = e; }
+check("the first application does not throw", threw === null, String(threw));
+check("and the ring actually shows the value",
+      rc.el.querySelector(".sg-arc") &&
+      rc.el.querySelector(".sg-arc").attrs["stroke-dasharray"] === "36.0 100");
+
+wr = { id: "a", type: "cpu-meter", options: { skin: "bar" } };
+applyWidgetOptions(rc, wr);
+check("switching skins rebuilds the markup",
+      /class="sg-bar"/.test(rc.el.innerHTML) && !/class="sg-ring"/.test(rc.el.innerHTML) &&
+      rc.el.className.includes("widget-skin-bar") && !rc.el.className.includes("widget-skin-ring") &&
+      rc.skin === "bar");
+applyWidgetOptions(rc, { id: "a", type: "cpu-meter", options: {} });
+check("back to classic rebuilds the classic markup",
+      /class="stat-value"/.test(rc.el.innerHTML) && !/sg-bar/.test(rc.el.innerHTML) &&
+      rc.skin === "default");
+const html1 = rc.el.innerHTML;
+applyWidgetOptions(rc, { id: "a", type: "cpu-meter", options: { skin: "neon" } });
+check("an unknown skin renders as classic and does not rebuild",
+      rc.skin === "default" && rc.el.innerHTML === html1);
+
+// The exact failure mode: one widget throws, the rest of the layout must
+// still be built -- like setWidgets' loop does it.
+sandbox.WIDGET_REGISTRY.boom = {
+  label: "Boom", markup: () => '<div class="x"></div>',
+  tick: () => { throw new Error("broken widget"); },
+};
+const ticked = [];
+sandbox.WIDGET_REGISTRY.probe = {
+  label: "Probe", markup: () => '<div class="y"></div>', tick: (r) => ticked.push(r.type),
+};
+const layout = [
+  { id: "1", type: "boom", options: {} },
+  { id: "2", type: "probe", options: {} },
+  { id: "3", type: "hardware-sensor", options: { skin: "ring", sensorAuto: "gpu-load", decimals: 0 } },
+];
+let loopErr = null;
+const recs = [];
+try { for (const w of layout) recs.push(mount(w)); } catch (e) { loopErr = e; }
+check("one throwing widget does not abort the layout", loopErr === null, String(loopErr));
+check("...and the failure is logged, not swallowed",
+      warned.some((w) => w.includes("[widget tick]") && w.includes("broken widget")));
+check("no other widget warned on the way",
+      warned.filter((w) => !w.includes("broken widget")).length === 0,
+      warned.filter((w) => !w.includes("broken widget")).join(" | "));
+check("the widgets after it are still created and ticked",
+      recs.length === 3 && ticked.includes("probe"));
+check("including a skinned sensor widget resolved by meaning",
+      recs[2] && recs[2].el.querySelector(".sg-value").textContent === "30");
+delete sandbox.WIDGET_REGISTRY.boom;
+delete sandbox.WIDGET_REGISTRY.probe;
+
+// Defence in depth: a skin whose markup is not in the DOM degrades to
+// classic instead of throwing.
+const bare = { el: domEl(), type: "cpu-meter", opts: { skin: "ring" }, reg: REG["cpu-meter"] };
+bare.el.innerHTML = REG["cpu-meter"].markup();
+check("a skin without its markup falls back to classic, no throw",
+      _renderSensorSkin(bare) === false);
+
 // ── 3. perf rules ───────────────────────────────────────────────────────
 console.error("\nperformance rules\n" + "=".repeat(68));
 const skinsSrc = PAGE.slice(skinsBlockStart, skinsBlockEnd);

@@ -5093,7 +5093,16 @@ function createWidget(w) {
   const el = document.createElement("div");
   // v2.3.4-beta: skin class on the widget element so per-skin CSS
   // can target without hitting widget-type defaults.
-  const skinId = (w.opts && w.opts.skin) ? String(w.opts.skin) : "default";
+  //
+  // v2.6.0-beta.3: widgets from the bridge carry `options`, not `opts`.
+  // Reading `w.opts` meant every new widget was built with the DEFAULT
+  // markup whatever its skin, and the skin's renderer then ran against
+  // markup it does not own -- `.sg-label` was null, the tick threw, and
+  // (see applyWidgetOptions) every widget after it was never created.
+  // Latent since skins arrived in v2.3.4 (weather); exposed by the
+  // Hardware Monitor Quick Look, which places skinned widgets directly.
+  const wOpts = w.options || w.opts || {};
+  const skinId = wOpts.skin ? String(wOpts.skin) : "default";
   el.className = "widget widget-" + w.type + " widget-skin-" + skinId;
   el.dataset.id = w.id;
   // ── v1.1.5+ widget shell ──
@@ -5108,7 +5117,7 @@ function createWidget(w) {
     (reg.editOptions ? '<button type="button" class="widget-act widget-settings" title="Configure" tabindex="-1">⚙</button>' : '') +
     '<button type="button" class="widget-act widget-remove" title="Remove widget" tabindex="-1">×</button>';
   // v2.3.4-beta: if a non-default skin is active, prefer its markup.
-  const _skin = _widgetSkinForOpts(w.type, w.opts);
+  const _skin = _widgetSkinForOpts(w.type, wOpts);
   const _body = (_skin && typeof _skin.markup === "function")
     ? _skin.markup() : reg.markup();
   el.innerHTML =
@@ -5123,7 +5132,11 @@ function createWidget(w) {
     e.stopPropagation();
     sendWidgetCmd({ type: "widget-remove", id: w.id });
   });
-  const rec = { el, type: w.type, reg, opts: {}, last: { x: 0, y: 0, w: 0, h: 0 } };
+  // `skin` records which markup is actually in the DOM. applyWidgetOptions
+  // compares against it, not against "did the options change", which is
+  // false on the very first application.
+  const rec = { el, type: w.type, reg, opts: {}, skin: _skin ? skinId : "default",
+                last: { x: 0, y: 0, w: 0, h: 0 } };
   if (reg.editOptions) {
     el.querySelector(".widget-settings").addEventListener("click", (e) => {
       e.stopPropagation();
@@ -5176,14 +5189,17 @@ function applyWidgetOptions(rec, w) {
   const nextSig = JSON.stringify(nextOpts);
   const changed = prevSig !== undefined && prevSig !== nextSig;
   rec._optsSig = nextSig;
-  const prevSkin = (rec.opts && rec.opts.skin) ? String(rec.opts.skin) : "default";
-  const nextSkin = nextOpts.skin ? String(nextOpts.skin) : "default";
+  const prevSkin = rec.skin || "default";
+  // An unknown or unimplemented skin id renders as default, so treat it
+  // as default here too -- otherwise it would rebuild the body forever.
+  const nextSkin = _widgetSkinForOpts(rec.type, nextOpts)
+    ? String(nextOpts.skin) : "default";
   rec.opts = nextOpts;
   // v2.3.4-beta: a skin change requires regenerating the widget body
   // markup, because skins own their own DOM structure (not just CSS).
   // Swap body content + the widget-skin-<id> class, then drop cache
   // so the next tick repaints freshly.
-  if (changed && prevSkin !== nextSkin) {
+  if (prevSkin !== nextSkin) {
     const reg = WIDGET_REGISTRY[rec.type];
     if (reg) {
       const _skin = _widgetSkinForOpts(rec.type, nextOpts);
@@ -5193,6 +5209,8 @@ function applyWidgetOptions(rec, w) {
       if (bodyEl) bodyEl.innerHTML = _body;
       rec.el.classList.remove("widget-skin-" + prevSkin);
       rec.el.classList.add("widget-skin-" + nextSkin);
+      rec.skin = nextSkin;
+      rec.cache = null;
     }
   }
   if (changed) {
@@ -5253,7 +5271,13 @@ function applyWidgetOptions(rec, w) {
   // pre-v1.1.5 look is preserved). True → reveal the header strip
   // baked into every widget at create-time.
   rec.el.classList.toggle("with-header", !!rec.opts.showHeader);
-  if (rec.tick) rec.tick();
+  // v2.6.0-beta.3: guarded like the first tick in _drainFirstTicks. This
+  // runs inside setWidgets' loop over the whole layout, so an exception
+  // here aborted the loop and every later widget was never created --
+  // one broken widget blanked the screen.
+  if (rec.tick) {
+    try { rec.tick(); } catch (e) { console.warn("[widget tick]", rec.type, e); }
+  }
 }
 
 function bindInteract(rec) {
@@ -8260,6 +8284,9 @@ function _sgValueText(r) {
 function _renderSensorSkin(rec) {
   const skin = _widgetActiveSkin(rec);
   if (!skin || typeof skin.render !== "function") return false;
+  // Defence in depth: if the DOM does not hold this skin's markup, draw
+  // the classic look into the classic markup rather than throwing.
+  if (!rec.el.querySelector(".sg-label")) return false;
   skin.render(rec);
   return true;
 }

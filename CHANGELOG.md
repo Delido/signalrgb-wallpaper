@@ -6,6 +6,53 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.0-beta.3] - 2026-10-18
+
+### Fixed — a skinned widget blanked every widget after it
+
+Reported as "irgendwas geht nicht mehr?" with a screenshot: after the
+Hardware Monitor Quick Look the wallpaper showed only "CPU —"; the
+layout preview listed all six widgets.
+
+Measured, not guessed: the live page's console (headless Edge, preview
+mode so nothing is written back) showed
+`[widget first tick] TypeError: Cannot set properties of null` and
+`bad text frame` for the same error. Three defects stacked:
+
+1. `createWidget(w)` read `w.opts`; widgets from the bridge carry
+   `options`. Every new widget was built with the **default** markup
+   whatever its skin. Latent since skins arrived in v2.3.4 (weather),
+   where nobody seems to have used one.
+2. `applyWidgetOptions` swapped markup only when the options had
+   *changed*, which is never true on the first application. So the skin
+   was never mounted, its renderer ran against classic markup, and
+   `.sg-label` was `null`.
+3. `applyWidgetOptions` ends with an **unguarded** `rec.tick()` and runs
+   inside `setWidgets`' loop over the whole layout. One throwing widget
+   aborted the loop, so every widget after it was never created. The
+   first-tick path had a `try/catch`; this one did not.
+
+Fixes: `createWidget` reads `options`; `rec.skin` records which markup is
+actually in the DOM and `applyWidgetOptions` compares against that (an
+unknown skin counts as default, so it cannot rebuild forever); the tick
+is guarded and logged; and a sensor skin whose markup is missing falls
+back to classic instead of throwing.
+
+Verified end to end before and after: the pre-fix page reproduces the
+reporter's screen exactly, the fixed one builds all six widgets with no
+console error, and a passive client on the live bridge confirms the
+sysstats push carries the three sensors the look resolves.
+
+### Testing
+
+Every earlier check passed throughout, because `test_sensor_skins.mjs`
+built markup and options by hand rather than going through the mount
+path. It now runs the shipped `createWidget` and `applyWidgetOptions`
+against a minimal DOM, including a layout where one widget throws and
+the ones after it must still exist and the failure must be logged. 6/7
+mutations caught; the seventh (re-adding the `changed &&` guard) is
+equivalent once `createWidget` builds the right markup.
+
 ## [2.6.0-beta.2] - 2026-10-18
 
 ### Fixed — a Quick Look overwrote the user's Preset 1
