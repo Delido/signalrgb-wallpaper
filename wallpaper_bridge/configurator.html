@@ -662,6 +662,8 @@
     color: var(--warn);
   }
 
+  .ver-line .sub.sub-dim { color: var(--text-dim); }
+
   /* Inline warning inside a .hint — used by the version line when a
      connected bundle is behind the one the bridge ships. */
   .hint .warn { color: var(--warn, #e0a33e); }
@@ -3655,6 +3657,16 @@
         <label data-i18n="system.versions.label">Versions</label>
         <span id="wallpaper-version-note" class="ver-line"></span>
       </div>
+      <!-- v2.6.0: where hardware sensors come from, and if SignalRGB's
+           own sensors are missing, WHY: too old, Monitoring off, or not
+           running. The sensor interface only exists in recent SignalRGB
+           versions, so this is probed rather than assumed. -->
+      <div class="row">
+        <label data-i18n="sensors.label">Sensors</label>
+        <span id="sensor-source-note" class="ver-line"></span>
+        <button type="button" class="btn" id="sensor-source-check"
+                style="flex:0 0 auto" data-i18n="sensors.check">Check</button>
+      </div>
 
       <!-- v2.4.4-beta.19: language picker. The config field, the
            validation and the whole translation table have existed for
@@ -4644,6 +4656,29 @@ const TRANSLATIONS = {
   "system.versions.label":  { en: "Versions",             de: "Versionen" },
   "system.versions.bridge_prefix":    { en: "Bridge",    de: "Bridge" },
   "system.versions.wallpaper_prefix": { en: "wallpaper", de: "Wallpaper" },
+  "sensors.label":          { en: "Sensors",              de: "Sensoren" },
+  "sensors.check":          { en: "Check",                de: "Prüfen" },
+  "sensors.sig.online":     { en: "SignalRGB: {n} sensors",
+                              de: "SignalRGB: {n} Sensoren" },
+  "sensors.sig.monitoring_off": {
+    en: "SignalRGB: switch on Settings → Monitoring in SignalRGB",
+    de: "SignalRGB: in SignalRGB unter Settings → Monitoring einschalten" },
+  "sensors.sig.incompatible": {
+    en: "SignalRGB: this version does not provide sensors — update SignalRGB (works with 2.5.80)",
+    de: "SignalRGB: diese Version stellt keine Sensoren bereit — SignalRGB aktualisieren (funktioniert mit 2.5.80)" },
+  "sensors.sig.unavailable": {
+    en: "SignalRGB {v}: too old for sensors — update SignalRGB",
+    de: "SignalRGB {v}: zu alt für Sensoren — SignalRGB aktualisieren" },
+  "sensors.sig.not_running": { en: "SignalRGB is not running",
+                               de: "SignalRGB läuft nicht" },
+  "sensors.sig.idle":       { en: "SignalRGB: not checked yet",
+                              de: "SignalRGB: noch nicht geprüft" },
+  "sensors.lhm.online":     { en: "LibreHardwareMonitor: {n} sensors",
+                              de: "LibreHardwareMonitor: {n} Sensoren" },
+  "sensors.lhm.offline":    { en: "LibreHardwareMonitor: not running (optional)",
+                              de: "LibreHardwareMonitor: läuft nicht (optional)" },
+  "sensors.picker_none":    { en: "(no sensors — {hint})",
+                              de: "(keine Sensoren — {hint})" },
   "system.versions.uptodate": { en: "— up to date",
                                 de: "— aktuell" },
   "system.versions.none":   {
@@ -5721,6 +5756,21 @@ function _widgetLabel(def) {
   }
   return def.label || "";
 }
+// v2.6.0: skin catalogue for the three sensor widgets. Mirrors
+// SENSOR_SKIN_LIST in wallpaper/index.html and the bridge's
+// /widgets/skins catalogue; test_sensor_skins.mjs fails if they drift.
+const SENSOR_SKIN_OPTIONS = [
+  { value: "default", label: "Classic" },
+  { value: "ring",    label: "Ring" },
+  { value: "bar",     label: "Bar" },
+  { value: "graph",   label: "Graph" },
+];
+function _sensorSkinLabel(o) {
+  const id = (o && o.skin) || "default";
+  const hit = SENSOR_SKIN_OPTIONS.find((x) => x.value === id);
+  return hit ? hit.label : "Classic";
+}
+
 const WIDGET_CATALOG = {
   "clock": {
     labelKey: "widget.clock.label",
@@ -5835,9 +5885,11 @@ const WIDGET_CATALOG = {
           '<line x1="2" y1="9" x2="6" y2="9"/><line x1="2" y1="15" x2="6" y2="15"/>' +
           '<line x1="18" y1="9" x2="22" y2="9"/><line x1="18" y1="15" x2="22" y2="15"/></svg>',
     schema: [
+      { key: "skin",         label: "Look",                  type: "select",
+        options: SENSOR_SKIN_OPTIONS },
       { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
     ],
-    describe: () => "1 Hz sparkline",
+    describe: (o) => _sensorSkinLabel(o),
   },
   "ram-meter": {
     labelKey: "widget.ram-meter.label",
@@ -5846,9 +5898,11 @@ const WIDGET_CATALOG = {
           '<line x1="6" y1="8" x2="6" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>' +
           '<line x1="14" y1="8" x2="14" y2="16"/><line x1="18" y1="8" x2="18" y2="16"/></svg>',
     schema: [
+      { key: "skin",         label: "Look",                  type: "select",
+        options: SENSOR_SKIN_OPTIONS },
       { key: "tintFromGlow", label: "Tint with glow colour", type: "boolean" },
     ],
-    describe: () => "1 Hz sparkline",
+    describe: (o) => _sensorSkinLabel(o),
   },
   "audio-spectrum": {
     labelKey: "widget.audio-spectrum.label",
@@ -5880,10 +5934,16 @@ const WIDGET_CATALOG = {
       { key: "decimals",     label: "Decimals", type: "select",
         options: [{ value: 0, label: "0" }, { value: 1, label: "1" },
                   { value: 2, label: "2" }] },
+      { key: "skin",         label: "Look",                  type: "select",
+        options: SENSOR_SKIN_OPTIONS },
+      // v2.6.0: ceiling for Ring / Bar / Graph. Blank = automatic: the
+      // sensor's own range when SignalRGB reports one, else 100 for % and
+      // °C, else the recent peak.
+      { key: "gaugeMax",     label: "Scale maximum (blank = auto)", type: "number" },
       { key: "tintFromGlow", label: "Tint with glow colour",  type: "boolean" },
     ],
     describe: (o) => o.sensorPath
-      ? (o.label || o.sensorPath.split(" / ").pop())
+      ? (o.label || o.sensorPath.split(" / ").pop()) + " · " + _sensorSkinLabel(o)
       : "(no sensor picked)",
   },
   "now-playing": {
@@ -6296,8 +6356,56 @@ function renderWallpaperVersionNote(h) {
 
 
 
+// v2.6.0: hardware sensor sources. SignalRGB's own sensors only exist in
+// recent versions; the bridge PROBES for them and reports a state, and
+// this line turns that state into the one thing to do about it.
+const SENSOR_STATE_CLASS = {
+  online: "is-ok", monitoring_off: "is-warn", incompatible: "is-warn",
+  unavailable: "is-warn", not_running: "is-idle", idle: "is-idle",
+};
+function sensorStateText(state, count, version) {
+  const key = "sensors.sig." + (SENSOR_STATE_CLASS[state] ? state : "idle");
+  // An unknown SignalRGB version still reads as a sentence.
+  return t(key, { n: count || 0, v: version || "" }).replace(/\s{2,}/g, " ")
+           .replace("SignalRGB :", "SignalRGB:");
+}
+function renderSensorSourceNote(h) {
+  const el = document.getElementById("sensor-source-note");
+  if (!el || !h) return;
+  const state = h.signalrgb_sensors_state || "idle";
+  let cls = SENSOR_STATE_CLASS[state] || "is-idle";
+  // LibreHardwareMonitor alone is a working setup too.
+  if (cls !== "is-ok" && h.lhm_online) cls = "is-ok";
+  const mark = cls === "is-ok" ? "✓" : cls === "is-warn" ? "●" : "–";
+  el.className = "ver-line " + cls;
+  const lhm = h.lhm_online
+    ? t("sensors.lhm.online", { n: h.lhm_count || 0 })
+    : t("sensors.lhm.offline");
+  el.innerHTML = '<span class="mark">' + mark + "</span>" +
+    escapeHtml(sensorStateText(state, h.signalrgb_sensors_count, h.signalrgb_version)) +
+    '<span class="sub sub-dim">' + escapeHtml(lhm) + "</span>";
+}
+(function wireSensorCheck() {
+  const btn = document.getElementById("sensor-source-check");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      // /hwmon/sensors runs the bridge's one-shot probe; health then
+      // reports the state it found.
+      await fetch("/hwmon/sensors", { cache: "no-store" });
+      const r = await fetch("/health", { cache: "no-store" });
+      if (r.ok) renderSensorSourceNote(await r.json());
+    } catch (_) {
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+
 function renderSetupStatus(h) {
   renderWallpaperVersionNote(h);
+  renderSensorSourceNote(h);
   const el = document.getElementById("setup-status");
   if (!el) return;
   if (!h || h.available === false) { el.classList.add("hidden"); return; }
@@ -12763,7 +12871,13 @@ function _buildSensorOptions(payload, currentValue) {
   const options = [];
   if (items.length === 0) {
     let placeholder;
-    if (!online && (lastError === "offline" || lastError === "")) {
+    // v2.6.0: SignalRGB's own sensors come first -- they need no extra
+    // app -- so when there are none, say why before mentioning LHM.
+    const sig = (status.sources && status.sources.signalrgb) || null;
+    if (sig && sig.state && sig.state !== "online") {
+      placeholder = t("sensors.picker_none",
+        { hint: sensorStateText(sig.state, 0, sig.version) });
+    } else if (!online && (lastError === "offline" || lastError === "")) {
       placeholder = "(LibreHardwareMonitor not detected — see Help → Tips)";
     } else if (online && bytes > 0) {
       placeholder = "(LHM reachable, " + bytes + " B response, but 0 sensors parsed — check bridge log)";

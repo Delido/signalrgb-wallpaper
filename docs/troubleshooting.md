@@ -362,6 +362,23 @@ Get-Process -Name SignalRGBBridge -ErrorAction SilentlyContinue | Stop-Process -
 
 Or Task Manager → End all `SignalRGBBridge.exe` entries. Then start fresh.
 
+## Hardware sensor widget lists no SignalRGB sensors
+
+Since v2.6.0 the bridge reads hardware sensors (temperatures, loads,
+clocks, fans, pump) straight from SignalRGB, so LibreHardwareMonitor is
+no longer needed. That interface only exists in **recent SignalRGB
+versions** (it works with 2.5.80). The Configurator's **System → Sensors**
+line says which case you are in; **Check** tests it right away:
+
+| Message | Fix |
+| --- | --- |
+| *too old for sensors* / *does not provide sensors* | Update SignalRGB |
+| *switch on Settings → Monitoring* | In SignalRGB: Settings → Monitoring → on |
+| *SignalRGB is not running* | Start SignalRGB |
+
+LibreHardwareMonitor still works as a second source if you prefer it or
+run an older SignalRGB.
+
 ## Still stuck?
 
 File an issue at [github.com/Delido/signalrgb-wallpaper/issues](https://github.com/Delido/signalrgb-wallpaper/issues)

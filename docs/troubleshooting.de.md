@@ -383,6 +383,24 @@ Get-Process -Name SignalRGBBridge -ErrorAction SilentlyContinue | Stop-Process -
 Oder Task-Manager → alle `SignalRGBBridge.exe`-Einträge beenden.
 Dann neu starten.
 
+## Hardware-Sensor-Widget zeigt keine SignalRGB-Sensoren
+
+Seit v2.6.0 liest die Bridge Hardware-Sensoren (Temperaturen, Auslastung,
+Takt, Lüfter, Pumpe) direkt aus SignalRGB, LibreHardwareMonitor ist dafür
+nicht mehr nötig. Diese Schnittstelle gibt es aber erst in **aktuellen
+SignalRGB-Versionen** (funktioniert mit 2.5.80). Die Zeile **System →
+Sensoren** im Configurator sagt, welcher Fall vorliegt; **Prüfen** testet
+es sofort:
+
+| Meldung | Lösung |
+| --- | --- |
+| *zu alt für Sensoren* / *stellt keine Sensoren bereit* | SignalRGB aktualisieren |
+| *unter Settings → Monitoring einschalten* | In SignalRGB: Settings → Monitoring → an |
+| *SignalRGB läuft nicht* | SignalRGB starten |
+
+LibreHardwareMonitor funktioniert weiterhin als zweite Quelle, etwa mit
+einer älteren SignalRGB-Version.
+
 ## Steckst du immer noch fest?
 
 Issue einreichen bei

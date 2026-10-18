@@ -31,10 +31,12 @@ PY_SUITES = [
     ("Pages per screen (python)", HERE / "test_pages_per_screen.py"),
     ("Wallpaper compatibility (python)", HERE / "test_wallpaper_compat.py"),
     ("Quick Look reset (python)", HERE / "test_quick_look_reset.py"),
+    ("SignalRGB WebPipe sensors (python)", HERE / "test_signalrgb_webpipe.py"),
 ]
 JS_SUITES = [
     ("Standby card (node)", HERE / "test_standby_card.mjs"),
     ("Ambilight mode (node)", HERE / "test_ambient_mode.mjs"),
+    ("Sensor skins (node)", HERE / "test_sensor_skins.mjs"),
     ("Wallpaper source (node)", HERE / "test_wallpaper_source.mjs"),
     ("Tint colour helper (node)", HERE / "test_tint_colour.mjs"),
     ("glRipple WebGL path (node)", HERE / "test_glripple.mjs"),

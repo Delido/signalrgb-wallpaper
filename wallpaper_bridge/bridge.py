@@ -60,6 +60,8 @@ import os
 import random
 import secrets
 import re
+import select
+import socket
 import struct
 
 # v1.4.0: OpenRGB output channel — talks to OpenRGB's network SDK
@@ -910,7 +912,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.5.2-beta.5"
+APP_VERSION = "2.6.0-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -933,7 +935,7 @@ APP_VERSION = "2.5.2-beta.5"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.18"
+WALLPAPER_VERSION = "2.4.19"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1006,6 +1008,51 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.6.0-beta.1": {
+        "title_en": "What\'s new in v2.6.0-beta.1",
+        "title_de": "Was ist neu in v2.6.0-beta.1",
+        "body_en": (
+            "**New: Ring, Bar and Graph looks for the sensor widgets.**\n\n"
+            "CPU, RAM and Hardware sensor can now show a donut gauge "
+            "with the value in the middle, a segmented bar, or a "
+            "graph of the last minute. Pick one under the widget\'s "
+            "gear \u2192 **Look**. Colours follow your widget theme "
+            "or the glow colour. The classic look stays the default.\n\n"
+            "**New: hardware sensors straight from SignalRGB.**\n\n"
+            "Recent SignalRGB versions measure temperatures, loads, "
+            "clocks, fans and pumps themselves. The Hardware sensor "
+            "widget now lists those directly — no "
+            "LibreHardwareMonitor needed.\n\n"
+            "Older SignalRGB versions do not have this. **System \u2192 "
+            "Sensors** shows which case you are in (update SignalRGB, "
+            "switch on Monitoring, or start SignalRGB), and **Check** "
+            "tests it immediately.\n\n"
+            "**Fixed:** the Hardware sensor\'s sparkline was never "
+            "drawn. It is now.\n\n"
+            "**Re-import the wallpaper bundles.**\n"
+        ),
+        "body_de": (
+            "**Neu: Ring, Balken und Graph f\u00fcr die Sensor-Widgets.**\n\n"
+            "CPU, RAM und Hardware-Sensor k\u00f6nnen jetzt einen Ring mit "
+            "dem Wert in der Mitte zeigen, einen Segment-Balken oder "
+            "einen Graphen der letzten Minute. Auswahl \u00fcber das "
+            "Zahnrad des Widgets \u2192 **Look**. Die Farben folgen dem "
+            "Widget-Theme oder der Glow-Farbe. Der klassische Look "
+            "bleibt Standard.\n\n"
+            "**Neu: Hardware-Sensoren direkt aus SignalRGB.**\n\n"
+            "Aktuelle SignalRGB-Versionen messen Temperaturen, Last, "
+            "Takt, L\u00fcfter und Pumpen selbst. Das Hardware-Sensor-"
+            "Widget listet diese jetzt direkt — ohne "
+            "LibreHardwareMonitor.\n\n"
+            "\u00c4ltere SignalRGB-Versionen k\u00f6nnen das nicht. **System "
+            "\u2192 Sensoren** zeigt, was zu tun ist (SignalRGB "
+            "aktualisieren, Monitoring einschalten oder SignalRGB "
+            "starten), **Pr\u00fcfen** testet es sofort.\n\n"
+            "**Behoben:** Die Sparkline des Hardware-Sensors wurde nie "
+            "gezeichnet. Jetzt schon.\n\n"
+            "**Wallpaper-Bundles neu importieren.**\n"
+        ),
+    },
     "2.5.2-beta.5": {
         "title_en": "What\'s new in v2.5.2-beta.5",
         "title_de": "Was ist neu in v2.5.2-beta.5",
@@ -3558,6 +3605,16 @@ PRESET_SLOTS = 4
 # Each entry: position + size at spawn, the type-specific options blob, and
 # a tray-menu label. The wallpaper page mirrors the keys in its WIDGET_REGISTRY
 # so the in-page picker and the tray "Add…" submenu both stay in sync.
+# v2.6.0: Ring / Bar / Graph looks for the three sensor widgets. Mirrors
+# SENSOR_SKIN_LIST in wallpaper/index.html and SENSOR_SKIN_OPTIONS in
+# configurator.html; test_sensor_skins.mjs fails if the three drift.
+SENSOR_SKINS = [
+    {"id": "default", "label": "Classic"},
+    {"id": "ring",    "label": "Ring"},
+    {"id": "bar",     "label": "Bar"},
+    {"id": "graph",   "label": "Graph"},
+]
+
 WIDGET_DEFAULTS = {
     "clock": {
         "label":   "Clock",
@@ -6319,6 +6376,10 @@ class Broadcaster:
                     {"id": "compact", "label": "Compact"},
                     {"id": "hexagon", "label": "Hexagon"},
                 ],
+                # v2.6.0: shared sensor skins.
+                "cpu-meter":       SENSOR_SKINS,
+                "ram-meter":       SENSOR_SKINS,
+                "hardware-sensor": SENSOR_SKINS,
             }
             if want:
                 resp_obj = {"type": want, "skins": catalog.get(want, [])}
@@ -6355,11 +6416,26 @@ class Broadcaster:
         if method == "GET" and target.split("?", 1)[0] == "/hwmon/sensors":
             try:
                 hw = getattr(self, "hwmon_provider", None)
+                # v2.6.0: the SignalRGB source only connects while a
+                # sensor widget is placed, so someone opening the picker
+                # to place their FIRST one would see nothing. Probe once
+                # here -- in an executor, because it reads a ~9 MB reply
+                # and this coroutine shares the loop with every page.
+                probe = getattr(hw, "probe_if_stale", None) if hw else None
+                if probe is not None:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.get_running_loop().run_in_executor(None, probe),
+                            timeout=8.0)
+                    except Exception:
+                        pass
                 snap = hw.get_snapshot() if hw else {}
                 status = hw.get_status() if hw else {"online": False, "sensorCount": 0}
                 items = [
                     {"path": p, "value": entry.get("value"),
-                     "unit": entry.get("unit"), "raw": entry.get("raw")}
+                     "unit": entry.get("unit"), "raw": entry.get("raw"),
+                     "min": entry.get("min"), "max": entry.get("max"),
+                     "source": entry.get("source", "lhm")}
                     for p, entry in sorted(snap.items())
                 ]
                 payload = json.dumps({"status": status, "items": items}).encode("utf-8")
@@ -8527,6 +8603,552 @@ class HwMonPoller:
                     }
         for kid in kids:
             cls._walk(kid, new_path, out)
+
+
+_SIGNALRGB_APP_VER_RE = re.compile(r"[\\/]app-(\d+(?:\.\d+)+)[\\/]", re.I)
+
+
+def _signalrgb_process_info() -> tuple[bool, str]:
+    """(running, version). Version comes from the install path
+    (`...\\VortxEngine\\app-2.5.80\\...`) and is display-only: whether the
+    sensor interface works is decided by probing it, never by comparing
+    version numbers, because we do not know the exact first version that
+    shipped it and its shape may change again."""
+    if psutil is None:
+        return False, ""
+    running, version = False, ""
+    try:
+        for p in psutil.process_iter(["name", "exe"]):
+            name = (p.info.get("name") or "").lower()
+            if "signalrgb" not in name:
+                continue
+            running = True
+            m = _SIGNALRGB_APP_VER_RE.search(p.info.get("exe") or "")
+            if m:
+                version = m.group(1)
+                break
+    except Exception:
+        pass
+    return running, version
+
+
+class _WebPipeIncompatible(Exception):
+    """The port answered, but not with a sensor interface we understand."""
+
+
+class SignalRgbWebPipePoller:
+    """Reads hardware sensors from SignalRGB's WebPipe.
+
+    v2.6.0. SignalRGB measures CPU/GPU temperatures, loads, clocks, fans,
+    pump and liquid temperature itself and exposes them on an internal,
+    undocumented WebSocket (`ws://127.0.0.1:16036`, Qt QWebChannel
+    protocol, no login, reading works without Pro). Before this the only
+    hardware source was LibreHardwareMonitor, a second app the user had
+    to install, start and configure.
+
+    Only recent SignalRGB versions have it, so availability is PROBED
+    and reported as a state the Configurator can explain:
+
+        online          sensors arriving
+        monitoring_off  interface present, Settings -> Monitoring is off
+        incompatible    port answers, but not with an interface we know
+        unavailable     nothing listening while SignalRGB runs (too old)
+        not_running     nothing listening, SignalRGB is not running
+        idle            not polled (no sensor widget placed yet)
+
+    Strictly read-only. The WebPipe accepts writes from any local process
+    without authentication (macros, fan curves, effects); this class
+    never sends anything but init and idle.
+
+    The init reply is ~9 MB in many fragments and contains the `user`
+    object (e-mail, uid). Only `monitor` is kept; everything else is
+    dropped unread, and nothing from the reply is ever logged.
+
+    Same shape as HwMonPoller: one daemon thread, a lock-guarded snapshot
+    keyed `path -> {value, raw, unit, min, max, source}`, so the existing
+    hardware-sensor widget and picker read both sources without knowing
+    which is which.
+    """
+
+    HOST = "127.0.0.1"
+    PORT = 16036
+    PREFIX = "SignalRGB"
+    CONNECT_TIMEOUT_S = 2.0
+    READ_TIMEOUT_S = 10.0
+    # A missing interface does not appear by itself; checking every
+    # second would just be a connect storm against a closed port.
+    RETRY_INTERVAL_S = 30.0
+    MONITORING_OFF_RETRY_S = 15.0
+    FRESH_S = 5.0
+    MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+
+    _UNITS = {"c": "°C", "rpm": "RPM", "mhz": "MHz", "mb": "MB",
+              "gb": "GB", "kb": "KB"}
+
+    def __init__(self, should_poll=None, port: int | None = None,
+                 process_info=None):
+        self._should_poll = should_poll
+        self._port = int(port) if port else self.PORT
+        self._process_info = process_info or _signalrgb_process_info
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        # Only one connection at a time: the background loop and the
+        # picker's one-shot probe must never both pull a 9 MB init.
+        self._session_lock = threading.Lock()
+        self._sensors: dict[str, dict] = {}     # QObject id -> fields
+        self._paths: dict[str, str] = {}        # QObject id -> path
+        self._prop_names: dict[str, str] = {}   # property index -> name
+        self._monitor_idx: dict[str, str] = {}  # monitor prop index -> name
+        self._state = "idle"
+        self._last_ok_ts = 0.0
+        self._last_error = ""
+        self._last_attempt_ts = 0.0
+        self._next_attempt_ts = 0.0
+        self._version = ""
+
+    # ── public ────────────────────────────────────────────────────────
+    def start(self):
+        threading.Thread(target=self._run, daemon=True,
+                         name="signalrgb-sensors").start()
+
+    def stop(self):
+        self._stop.set()
+
+    def get_snapshot(self) -> dict:
+        with self._lock:
+            if self._state != "online":
+                return {}
+            out = {}
+            for oid, s in self._sensors.items():
+                path = self._paths.get(oid)
+                val = s.get("value")
+                if not path or not isinstance(val, (int, float)) or isinstance(val, bool):
+                    continue
+                out[path] = {
+                    "value":  round(float(val), 2),
+                    "raw":    str(s.get("valueStr") or ""),
+                    "unit":   self._norm_unit(s.get("unit")),
+                    "min":    s.get("min"),
+                    "max":    s.get("max"),
+                    "source": "signalrgb",
+                }
+            return out
+
+    def get_status(self) -> dict:
+        with self._lock:
+            online = self._state == "online" and \
+                     (time.time() - self._last_ok_ts) < 30
+            return {
+                "state":       self._state,
+                "online":      online,
+                "sensorCount": len(self._paths) if online else 0,
+                "lastError":   self._last_error,
+                "lastOkTs":    int(self._last_ok_ts * 1000),
+                "version":     self._version,
+            }
+
+    def probe_if_stale(self) -> None:
+        """One-shot read for the Configurator's sensor picker.
+
+        The background loop only runs while a sensor widget is placed, so
+        without this the picker would be empty exactly when someone opens
+        it to place their first one. Blocking -- call from an executor.
+        """
+        with self._lock:
+            fresh = self._state == "online" and \
+                    (time.time() - self._last_ok_ts) < self.FRESH_S
+            recent = (time.time() - self._last_attempt_ts) < self.FRESH_S
+        if fresh or recent:
+            return
+        if not self._session_lock.acquire(blocking=False):
+            return          # the background loop is connected right now
+        try:
+            self._session(one_shot=True)
+        except Exception as e:
+            self._fail(e)
+        finally:
+            self._session_lock.release()
+
+    # ── loop ──────────────────────────────────────────────────────────
+    def _gate(self) -> bool:
+        try:
+            return self._should_poll() if self._should_poll else True
+        except Exception:
+            return True
+
+    def _run(self):
+        while not self._stop.is_set():
+            if not self._gate() or time.time() < self._next_attempt_ts:
+                if self._stop.wait(1.0):
+                    return
+                continue
+            if not self._session_lock.acquire(blocking=False):
+                if self._stop.wait(1.0):
+                    return
+                continue
+            try:
+                self._session(one_shot=False)
+            except Exception as e:
+                self._fail(e)
+            finally:
+                self._session_lock.release()
+
+    def _fail(self, e: Exception):
+        if isinstance(e, (ConnectionRefusedError, socket.timeout, TimeoutError)) \
+                and not isinstance(e, _WebPipeIncompatible):
+            running, version = self._process_info()
+            state = "unavailable" if running else "not_running"
+            err = "nothing listening on port %d" % self._port
+        elif isinstance(e, _WebPipeIncompatible):
+            running, version = self._process_info()
+            state, err = "incompatible", str(e)
+        else:
+            # Lost an established session (SignalRGB quit or restarted).
+            # Re-probe soon; the next attempt sorts out which state it is.
+            running, version = self._process_info()
+            state = "not_running" if not running else "unavailable"
+            err = "%s: %s" % (type(e).__name__, e)
+        with self._lock:
+            prev = self._state
+            self._state = state
+            self._last_error = err
+            self._version = version or self._version
+            self._next_attempt_ts = time.time() + (
+                5.0 if prev == "online" else self.RETRY_INTERVAL_S)
+        if prev != state:
+            print(f"[signalrgb-sensors] {state}: {err}")
+
+    # ── session ───────────────────────────────────────────────────────
+    def _session(self, one_shot: bool):
+        with self._lock:
+            self._last_attempt_ts = time.time()
+        try:
+            sock = socket.create_connection((self.HOST, self._port),
+                                            timeout=self.CONNECT_TIMEOUT_S)
+        except OSError as e:
+            # Nothing listening. Whether that means "too old" or "not
+            # running" is decided in _fail() from the process list.
+            raise ConnectionRefusedError(str(e)) from e
+        try:
+            sock.settimeout(self.READ_TIMEOUT_S)
+            # Past this point something IS listening, so any failure to
+            # speak the protocol -- including silence -- is
+            # "incompatible", never "too old / not running".
+            try:
+                self._handshake(sock)
+                self._send_json(sock, {"type": 3, "id": 0})
+                init = self._recv_json(sock, want_response_id=0)
+            except (socket.timeout, TimeoutError) as e:
+                raise _WebPipeIncompatible(
+                    "no reply to init within %.0f s" % self.READ_TIMEOUT_S) from e
+            except ConnectionError as e:
+                raise _WebPipeIncompatible("closed during init: %s" % e) from e
+            self._load_init(init)
+            del init
+            running, version = self._process_info()
+            with self._lock:
+                if version:
+                    self._version = version
+            if one_shot or self._state != "online":
+                if self._state == "monitoring_off":
+                    with self._lock:
+                        self._next_attempt_ts = time.time() + self.MONITORING_OFF_RETRY_S
+                return
+            print(f"[signalrgb-sensors] online: {len(self._paths)} sensors"
+                  + (f" (SignalRGB {self._version})" if self._version else ""))
+            self._pump(sock)
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    def _pump(self, sock):
+        # Idle goes out immediately after every update, never throttled.
+        #
+        # The server releases ONE message per idle, not everything that
+        # piled up, so holding the idle back starves the sensors behind
+        # whatever else changed (lighting, devices): a 1 s throttle in the
+        # first version left CPU Load updating once in 15 s instead of at
+        # 1 Hz. Draining freely measured 214 KB/s, ~9 messages/s and 0.1 %
+        # of one core on an i9-13900K with 68 sensors -- cheap, and only
+        # while a sensor widget is placed.
+        while not self._stop.is_set() and self._gate():
+            self._send_json(sock, {"type": 4})
+            # The server answers an idle only when something changed.
+            # Wait for readability in short slices so a removed widget
+            # or a shutdown is noticed within a second, and only start
+            # reading once a frame is actually there -- a timeout in
+            # the middle of a frame would desynchronise the stream.
+            while not self._stop.is_set():
+                r, _, _ = select.select([sock], [], [], 1.0)
+                if r:
+                    break
+                if not self._gate():
+                    return
+            else:
+                return
+            msg = self._recv_json(sock)
+            if msg.get("type") == 2:
+                self._apply_update(msg.get("data") or [])
+            with self._lock:
+                if self._state == "online":
+                    self._last_ok_ts = time.time()
+
+    # ── protocol: init + updates ──────────────────────────────────────
+    def _load_init(self, msg: dict):
+        if not isinstance(msg, dict) or msg.get("type") != 10:
+            raise _WebPipeIncompatible("init reply has unexpected shape")
+        data = msg.get("data")
+        monitor = data.get("monitor") if isinstance(data, dict) else None
+        if not isinstance(monitor, dict):
+            raise _WebPipeIncompatible("no 'monitor' object (SignalRGB too old?)")
+        props = monitor.get("properties")
+        if not isinstance(props, list):
+            raise _WebPipeIncompatible("'monitor' has no property list")
+        mon_idx, sensors_val, disabled = {}, None, False
+        for p in props:
+            if not (isinstance(p, list) and len(p) >= 4):
+                continue
+            mon_idx[str(p[0])] = p[1]
+            if p[1] == "sensors":
+                sensors_val = p[3]
+            elif p[1] == "monitoringDisabled":
+                disabled = bool(p[3])
+        if sensors_val is None:
+            raise _WebPipeIncompatible("'monitor' exposes no 'sensors'")
+        with self._lock:
+            self._monitor_idx = mon_idx
+        self._load_sensor_refs(sensors_val if isinstance(sensors_val, list) else [],
+                               disabled)
+
+    def _load_sensor_refs(self, refs: list, disabled: bool = False):
+        sensors, names = {}, {}
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            oid = ref.get("id")
+            props = (ref.get("data") or {}).get("properties")
+            if not oid or not isinstance(props, list):
+                continue
+            fields = {}
+            for p in props:
+                if isinstance(p, list) and len(p) >= 4:
+                    names[str(p[0])] = p[1]
+                    if p[1] != "history":
+                        fields[p[1]] = p[3]
+            sensors[oid] = fields
+        if sensors and not any("value" in f and "name" in f for f in sensors.values()):
+            raise _WebPipeIncompatible("sensor objects lack name/value")
+        with self._lock:
+            self._sensors = sensors
+            self._prop_names = names or self._prop_names
+            self._paths = self._assign_paths(sensors)
+            if disabled or not sensors:
+                self._state = "monitoring_off"
+                self._last_error = "SignalRGB monitoring is switched off"
+            else:
+                if self._state != "online":
+                    self._last_error = ""
+                self._state = "online"
+                self._last_ok_ts = time.time()
+
+    def _assign_paths(self, sensors: dict) -> dict:
+        # `uid` is "group:name" and is not unique (two "CPU Fan"s), and the
+        # QObject id is regenerated per SignalRGB session, so neither can
+        # be what a saved widget points at. group/name with an ordinal for
+        # repeats is stable across restarts as long as the order is.
+        seen: dict[str, int] = {}
+        out = {}
+        for oid, f in sensors.items():
+            group = str(f.get("group") or "Other").strip() or "Other"
+            name = str(f.get("name") or f.get("uid") or "?").strip() or "?"
+            base = f"{self.PREFIX} / {group} / {name}"
+            n = seen.get(base, 0) + 1
+            seen[base] = n
+            out[oid] = base if n == 1 else f"{base} #{n}"
+        return out
+
+    def _apply_update(self, entries: list):
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            oid, props = e.get("object"), e.get("properties")
+            if not isinstance(props, dict):
+                continue
+            if oid == "monitor":
+                with self._lock:
+                    mon_idx = dict(self._monitor_idx)
+                for idx, val in props.items():
+                    name = mon_idx.get(str(idx))
+                    if name == "sensors" and isinstance(val, list):
+                        self._load_sensor_refs(val)
+                    elif name == "monitoringDisabled":
+                        with self._lock:
+                            if val:
+                                self._state = "monitoring_off"
+                                self._last_error = "SignalRGB monitoring is switched off"
+                            elif self._sensors:
+                                self._state = "online"
+                continue
+            with self._lock:
+                s = self._sensors.get(oid)
+                if s is None:
+                    continue
+                for idx, val in props.items():
+                    name = self._prop_names.get(str(idx))
+                    if name and name != "history":
+                        s[name] = val
+
+    @classmethod
+    def _norm_unit(cls, unit) -> str:
+        u = str(unit or "").strip()
+        return cls._UNITS.get(u.lower(), u)
+
+    # ── protocol: WebSocket client (RFC 6455, stdlib only) ────────────
+    def _handshake(self, sock):
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall((
+            f"GET / HTTP/1.1\r\nHost: {self.HOST}:{self._port}\r\n"
+            "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        ).encode())
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = sock.recv(1024)
+            if not chunk:
+                raise _WebPipeIncompatible("connection closed during handshake")
+            head += chunk
+            if len(head) > 16384:
+                raise _WebPipeIncompatible("oversized handshake reply")
+        status = head.split(b"\r\n", 1)[0]
+        if b" 101" not in status:
+            raise _WebPipeIncompatible(
+                "no WebSocket upgrade (%s)" % status.decode("latin-1", "replace")[:60])
+        expected = base64.b64encode(hashlib.sha1(
+            (key + WS_GUID.decode()).encode()).digest())
+        if expected not in head:
+            raise _WebPipeIncompatible("bad Sec-WebSocket-Accept")
+
+    @staticmethod
+    def _recv_exact(sock, n: int) -> bytes:
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = sock.recv(min(n - len(buf), 1 << 20))
+            if not chunk:
+                raise ConnectionError("WebPipe closed the connection")
+            buf += chunk
+        return bytes(buf)
+
+    def _send_frame(self, sock, opcode: int, payload: bytes):
+        # Client frames MUST be masked (RFC 6455 5.3).
+        mask = os.urandom(4)
+        n = len(payload)
+        head = bytearray([0x80 | opcode])
+        if n < 126:
+            head.append(0x80 | n)
+        elif n < 65536:
+            head.append(0x80 | 126)
+            head += struct.pack(">H", n)
+        else:
+            head.append(0x80 | 127)
+            head += struct.pack(">Q", n)
+        masked = bytes(b ^ mask[i & 3] for i, b in enumerate(payload))
+        sock.sendall(bytes(head) + mask + masked)
+
+    def _send_json(self, sock, obj: dict):
+        # The only two messages this class ever sends: init (3) and
+        # idle (4). Anything else would be a write into SignalRGB.
+        # A real raise, not an assert: asserts vanish under `python -O`.
+        if obj.get("type") not in (3, 4):
+            raise ValueError("WebPipe access is read-only")
+        self._send_frame(sock, 0x1, json.dumps(obj).encode())
+
+    def _recv_message(self, sock) -> bytes:
+        parts, total = [], 0
+        while True:
+            b1, b2 = self._recv_exact(sock, 2)
+            fin, opcode = b1 & 0x80, b1 & 0x0F
+            n = b2 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", self._recv_exact(sock, 2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", self._recv_exact(sock, 8))[0]
+            mask = self._recv_exact(sock, 4) if b2 & 0x80 else None
+            if total + n > self.MAX_MESSAGE_BYTES:
+                raise _WebPipeIncompatible("message exceeds %d bytes"
+                                           % self.MAX_MESSAGE_BYTES)
+            data = self._recv_exact(sock, n) if n else b""
+            if mask:
+                data = bytes(b ^ mask[i & 3] for i, b in enumerate(data))
+            if opcode == 0x8:
+                raise ConnectionError("WebPipe sent close")
+            if opcode == 0x9:
+                self._send_frame(sock, 0xA, data)
+                continue
+            if opcode == 0xA:
+                continue
+            parts.append(data)
+            total += n
+            if fin:
+                return b"".join(parts)
+
+    def _recv_json(self, sock, want_response_id=None) -> dict:
+        for _ in range(64):
+            raw = self._recv_message(sock)
+            try:
+                msg = json.loads(raw)
+            except ValueError:
+                raise _WebPipeIncompatible("reply is not JSON")
+            if want_response_id is None:
+                return msg if isinstance(msg, dict) else {}
+            if isinstance(msg, dict) and msg.get("type") == 10 \
+                    and msg.get("id") == want_response_id:
+                return msg
+        raise _WebPipeIncompatible("no init reply")
+
+
+class SensorSources:
+    """LibreHardwareMonitor and SignalRGB behind one interface.
+
+    v2.6.0. Wired in where HwMonPoller used to be (the broadcaster's
+    /hwmon/sensors provider and SysStatsPoller's `hwmon` merge), so the
+    wallpaper page, the hardware-sensor widget and the Configurator's
+    picker see one list and need no second code path. SignalRGB paths
+    carry a "SignalRGB / " prefix, so the two sources cannot collide.
+
+    The legacy status fields keep their LHM meaning -- the picker's
+    placeholder text was written against them -- and per-source detail
+    is added under `sources`.
+    """
+
+    def __init__(self, lhm=None, signalrgb=None):
+        self.lhm = lhm
+        self.signalrgb = signalrgb
+
+    def get_snapshot(self) -> dict:
+        out = {}
+        if self.lhm is not None:
+            out.update(self.lhm.get_snapshot())
+        if self.signalrgb is not None:
+            out.update(self.signalrgb.get_snapshot())
+        return out
+
+    def get_status(self) -> dict:
+        lhm = self.lhm.get_status() if self.lhm is not None else \
+            {"online": False, "sensorCount": 0, "lastError": "", "lastPayloadBytes": 0}
+        sig = self.signalrgb.get_status() if self.signalrgb is not None else \
+            {"state": "idle", "online": False, "sensorCount": 0}
+        status = dict(lhm)
+        status["online"] = bool(lhm.get("online") or sig.get("online"))
+        status["sensorCount"] = int(lhm.get("sensorCount") or 0) + \
+                                int(sig.get("sensorCount") or 0)
+        status["sources"] = {"lhm": lhm, "signalrgb": sig}
+        return status
+
+    def probe_if_stale(self) -> None:
+        if self.signalrgb is not None:
+            self.signalrgb.probe_if_stale()
 
 
 class NowPlayingPoller:
@@ -12306,6 +12928,16 @@ class BridgeRuntime:
                         break
                 if lhm_widget_present:
                     break
+        sig_state, sig_count, sig_version = "idle", 0, ""
+        sig = getattr(self, "signalrgb_sensors", None)
+        if sig is not None:
+            try:
+                st = sig.get_status()
+                sig_state = st.get("state", "idle")
+                sig_count = int(st.get("sensorCount") or 0)
+                sig_version = st.get("version") or ""
+            except Exception:
+                pass
         lhm_online = False
         lhm_count = 0
         if self.hwmon is not None:
@@ -12450,6 +13082,12 @@ class BridgeRuntime:
             "lhm_widget_present": lhm_widget_present,
             "lhm_online":        lhm_online,
             "lhm_count":         lhm_count,
+            # v2.6.0: SignalRGB's own sensor interface. `state` is the
+            # probed capability (see SignalRgbWebPipePoller), never a
+            # version comparison; the version is display-only.
+            "signalrgb_sensors_state": sig_state,
+            "signalrgb_sensors_count": sig_count,
+            "signalrgb_version":       sig_version,
         }
 
     def reset_screen(self, screen: int) -> dict | None:
@@ -13439,7 +14077,14 @@ class BridgeRuntime:
         # poller's snapshot + status. Set here rather than via __init__
         # so the broadcaster doesn't need to know about hwmon at all if
         # the user is on a build without it.
-        self.broadcaster.hwmon_provider = self.hwmon
+        # v2.6.0: SignalRGB's own sensors (WebPipe) next to LHM. Same
+        # gate: it only connects while a hardware-sensor widget is placed;
+        # the picker triggers a one-shot probe through probe_if_stale().
+        self.signalrgb_sensors = SignalRgbWebPipePoller(
+            should_poll=self._poller_gate("hardware-sensor"))
+        self.signalrgb_sensors.start()
+        self.sensor_sources = SensorSources(self.hwmon, self.signalrgb_sensors)
+        self.broadcaster.hwmon_provider = self.sensor_sources
         # Expose the runtime so /backup and /restore HTTP handlers can
         # call back into config + persistence without needing the
         # methods passed individually through the constructor.
@@ -13486,7 +14131,7 @@ class BridgeRuntime:
         # those fields. With none of them placed the bridge is
         # truly idle: no psutil collect, no WS push, no JSON encode.
         self.sysstats = SysStatsPoller(self.broadcaster,
-                                       hwmon=self.hwmon,
+                                       hwmon=self.sensor_sources,
                                        nowplaying=self.nowplaying,
                                        should_poll=self._poller_gate(
                                            "cpu-meter", "ram-meter",

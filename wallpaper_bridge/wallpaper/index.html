@@ -1461,6 +1461,56 @@
   .widget-hardware-sensor canvas {
     width: 100%; flex: 1 1 auto; min-height: 30px; display: block;
   }
+  /* ── v2.6.0: sensor skins (ring / bar / graph) ─────────────────────
+     Colour comes from --sg-c: the widget theme accent, or the glow tint
+     when the widget is tinted. No transitions anywhere in here -- every
+     value below changes once a second in tick(). */
+  .widget { --sg-c: var(--theme-accent, #6ab0ff); }
+  .widget.tinted { --sg-c: var(--w-tint, var(--theme-accent, #6ab0ff)); }
+  .widget-skin-ring .widget-body,
+  .widget-skin-bar .widget-body,
+  .widget-skin-graph .widget-body { display: flex; flex-direction: column; min-height: 0; }
+  .sg-ring {
+    flex: 1 1 auto; min-height: 0; width: 100%; display: block;
+    overflow: visible;
+  }
+  .sg-track { fill: none; stroke: rgba(255,255,255,0.10); stroke-width: 9; }
+  .sg-arc   { fill: none; stroke-width: 9; stroke-linecap: round; }
+  .sg-stop-a { stop-color: var(--sg-c); stop-opacity: 0.45; }
+  .sg-stop-b { stop-color: var(--sg-c); stop-opacity: 1; }
+  .sg-ring .sg-value {
+    fill: var(--theme-fg, #f5f7fb); font-weight: 700;
+    font-family: var(--theme-font, system-ui, sans-serif);
+    font-variant-numeric: tabular-nums;
+  }
+  .sg-ring .sg-unit {
+    fill: var(--theme-fg-muted, rgba(245,247,251,0.65)); font-size: 10px;
+    font-family: var(--theme-font, system-ui, sans-serif);
+  }
+  .sg-bar-value { display: flex; align-items: baseline; gap: 4px; }
+  .sg-bar-value .sg-unit { font-size: 0.5em; opacity: 0.75; }
+  .sg-bar {
+    display: flex; gap: 3px; margin-top: auto;
+    height: clamp(8px, 16%, 18px); padding: 0 4px;
+  }
+  .sg-bar i {
+    flex: 1 1 0; border-radius: 2px; transform: skewX(-24deg);
+    background: rgba(255,255,255,0.09);
+  }
+  .sg-bar i.on {
+    background: var(--sg-c);
+    opacity: calc(0.45 + 0.55 * var(--k, 1));
+  }
+  .sg-graph-head { justify-content: space-between !important; }
+  .sg-graph-head .sg-now {
+    text-transform: none; letter-spacing: 0; font-weight: 600; opacity: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .widget .sg-graph { width: 100%; flex: 1 1 auto; min-height: 30px; display: block; }
+  .sg-axis {
+    display: flex; justify-content: space-between;
+    padding-left: 22px; font-size: 9px; opacity: 0.45; margin-top: 2px;
+  }
   .widget-net-graph .stat-pair {
     display: flex; gap: 12px; justify-content: space-between;
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -3853,12 +3903,22 @@ function wpAlert(message) {
 // internals indirectly via the SKINS constant in bridge.py — kept in
 // sync manually for v2.3.4-beta). Adding a new skin = appending the
 // entry here PLUS implementing the skin under WIDGET_REGISTRY[type].skins.
+const SENSOR_SKIN_LIST = [
+  { id: "default", label: "Classic" },
+  { id: "ring",    label: "Ring" },
+  { id: "bar",     label: "Bar" },
+  { id: "graph",   label: "Graph" },
+];
 const SKIN_CATALOG_MIRROR = {
   weather: [
     { id: "default", label: "Default" },
     { id: "compact", label: "Compact" },
     { id: "hexagon", label: "Hexagon" },
   ],
+  // v2.6.0: the sensor skins, shared by all three sensor widgets.
+  "cpu-meter":       SENSOR_SKIN_LIST,
+  "ram-meter":       SENSOR_SKIN_LIST,
+  "hardware-sensor": SENSOR_SKIN_LIST,
 };
 
 const WIDGET_REGISTRY = {
@@ -8084,6 +8144,220 @@ const parallax = (function () {
 // the keys in sync with WIDGET_DEFAULTS in bridge.py.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── v2.6.0: sensor skins (ring / bar / graph) ─────────────────────────────
+//
+// One set of skins shared by cpu-meter, ram-meter and hardware-sensor.
+// Each of those widgets exposes `reading(rec)` -> {label, value, unit,
+// decimals, lo, hi, history}; the skins only ever draw a reading, so a
+// new sensor source never needs a new skin and a new skin works for
+// every sensor. The default skin is untouched: existing layouts keep
+// looking exactly as they did.
+//
+// Colour is `--sg-c`: the widget theme's accent, or the glow tint when
+// "Tint with glow colour" is on. The gradient is opacity, not
+// color-mix(), because Wallpaper Engine's embedded Chromium is older
+// than the browsers color-mix() can be relied on in.
+//
+// Everything updates in the existing 1 Hz tick: no rAF, no CSS
+// transition on per-tick values (see the perf gotchas in the memory
+// notes -- transitions on per-frame zones were 85 % of GPU load once).
+let _sgSeq = 0;
+const SG_BAR_SEGMENTS = 14;
+const SG_GRAPH_WINDOW = 60;          // samples = seconds at the 1 Hz push
+
+function _hwmonLabel(rec) {
+  // Label: explicit override > last segment of path > generic fallback.
+  // Strip a trailing unit fragment some sensor names carry ("GPU Total
+  // Load %", "CPU Package °C") so the unit is not rendered twice.
+  const path = rec.opts.sensorPath || "";
+  let leaf = path ? path.split(" / ").pop() : "Hardware";
+  leaf = leaf.replace(/\s*[\(\[]?\s*(%|°C|°F|RPM|V|W|mV|MHz|GHz|GB|MB|KB)\s*[\)\]]?\s*$/i, "").trim();
+  return rec.opts.label || leaf || "Hardware";
+}
+
+// [lo, hi] for a ring / bar / graph. A user-set gaugeMax wins; then the
+// sensor's own scale (SignalRGB ships min/max per sensor, e.g. a pump at
+// 0-3000 RPM); then the unit's natural range; and only then the history.
+function _sensorScale(entry, unit, history, gaugeMax) {
+  const gm = Number(gaugeMax);
+  if (gm > 0) return [0, gm];
+  if (entry && typeof entry.min === "number" && typeof entry.max === "number"
+      && entry.max > entry.min) return [entry.min, entry.max];
+  if (unit === "%") return [0, 100];
+  if (/°?F$/.test(unit) && unit.indexOf("°") >= 0) return [0, 212];
+  if (unit === "°C" || unit === "C") return [0, 100];
+  let peak = (entry && typeof entry.value === "number") ? entry.value : 0;
+  for (const v of history) if (v > peak) peak = v;
+  return [0, peak > 0 ? peak * 1.25 : 1];
+}
+
+function _sgFraction(r) {
+  if (typeof r.value !== "number") return 0;
+  const span = r.hi - r.lo;
+  if (!(span > 0)) return 0;
+  return Math.max(0, Math.min(1, (r.value - r.lo) / span));
+}
+
+function _sgValueText(r) {
+  return (typeof r.value === "number") ? r.value.toFixed(r.decimals) : "—";
+}
+
+function _renderSensorSkin(rec) {
+  const skin = _widgetActiveSkin(rec);
+  if (!skin || typeof skin.render !== "function") return false;
+  skin.render(rec);
+  return true;
+}
+
+// Canvas cannot read CSS variables, so the graph resolves --sg-c once
+// per tick from the widget's computed style.
+function _sgColor(rec) {
+  let c = "";
+  try { c = getComputedStyle(rec.el).getPropertyValue("--sg-c").trim(); } catch (_) {}
+  return _cssColorToRgb(c) || "rgb(106,176,255)";
+}
+
+function _cssColorToRgb(c) {
+  if (!c) return "";
+  if (c.charAt(0) === "#") {
+    let h = c.slice(1);
+    if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+    if (h.length < 6) return "";
+    const n = parseInt(h.slice(0, 6), 16);
+    if (isNaN(n)) return "";
+    return "rgb(" + (n >> 16 & 255) + "," + (n >> 8 & 255) + "," + (n & 255) + ")";
+  }
+  return /^rgba?\(/.test(c) ? c : "";
+}
+
+function _fmtAxis(v) {
+  const a = Math.abs(v);
+  return a >= 1000 ? (v / 1000).toFixed(a >= 10000 ? 0 : 1) + "k"
+       : a >= 10 ? String(Math.round(v)) : v.toFixed(1).replace(/\.0$/, "");
+}
+
+function drawAreaGraph(canvas, values, color, lo, hi) {
+  const { w, h, dpr } = sizeCanvasToCss(canvas);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const padL = 22, padT = 5, padB = 3;
+  const gw = Math.max(1, w - padL), gh = Math.max(1, h - padT - padB);
+  const span = (hi - lo) > 0 ? (hi - lo) : 1;
+  const yOf = (v) => padT + gh - Math.max(0, Math.min(1, (v - lo) / span)) * gh;
+  ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.fillStyle = "rgba(255,255,255,0.45)";
+  for (const f of [0, 0.5, 1]) {
+    const y = padT + gh - f * gh;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w, y); ctx.stroke();
+    ctx.fillText(_fmtAxis(lo + f * span), 0, Math.min(h - 1, y + 3));
+  }
+  ctx.setLineDash([]);
+  const pts = (values || []).slice(-SG_GRAPH_WINDOW);
+  if (pts.length < 2) return;
+  // x by sample AGE inside a fixed window, so the axis labels (-1m, -30s,
+  // now) stay true while the buffer is still filling up.
+  const step = gw / (SG_GRAPH_WINDOW - 1);
+  const x0 = padL + gw - (pts.length - 1) * step;
+  ctx.beginPath();
+  pts.forEach((v, i) => {
+    const x = x0 + i * step, y = yOf(v);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.lineTo(x0 + (pts.length - 1) * step, padT + gh);
+  ctx.lineTo(x0, padT + gh);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, padT, 0, padT + gh);
+  g.addColorStop(0, rgbToRgba(color, 0.42));
+  g.addColorStop(1, rgbToRgba(color, 0.0));
+  ctx.fillStyle = g;
+  ctx.fill();
+}
+
+const SENSOR_SKINS = {
+  ring: {
+    markup: () => {
+      const id = "sgg" + (++_sgSeq);
+      return '<div class="stat-head"><span class="sg-label">—</span></div>' +
+        '<svg class="sg-ring" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">' +
+          // Dim at the top-left, bright at the bottom-right: the arc
+          // starts at 12 o'clock, so for typical readings the bright end
+          // is where the arc's head is, like a filling gauge.
+          '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1">' +
+            '<stop offset="0" class="sg-stop-a"/><stop offset="1" class="sg-stop-b"/>' +
+          '</linearGradient></defs>' +
+          '<circle class="sg-track" cx="50" cy="50" r="40"/>' +
+          // pathLength=100 makes the dash length the percentage itself.
+          '<circle class="sg-arc" cx="50" cy="50" r="40" pathLength="100"' +
+            ' stroke-dasharray="0 100" transform="rotate(-90 50 50)"' +
+            ' stroke="url(#' + id + ')"/>' +
+          '<text class="sg-value" x="50" y="55" text-anchor="middle">—</text>' +
+          '<text class="sg-unit" x="50" y="71" text-anchor="middle"></text>' +
+        '</svg>';
+    },
+    render: (rec) => {
+      const r = rec.reg.reading(rec);
+      const f = _sgFraction(r);
+      const el = rec.el;
+      el.querySelector(".sg-label").textContent = r.label;
+      const txt = _sgValueText(r);
+      const val = el.querySelector(".sg-value");
+      val.textContent = txt;
+      // SVG text does not shrink to fit; long readings (2789 RPM) step
+      // down so they stay inside the ring.
+      val.setAttribute("font-size", txt.length > 4 ? "19" : txt.length > 3 ? "22" : "27");
+      el.querySelector(".sg-unit").textContent = r.unit;
+      const arc = el.querySelector(".sg-arc");
+      arc.setAttribute("stroke-dasharray", (f * 100).toFixed(1) + " 100");
+      // A round cap on a zero-length dash still draws a dot.
+      arc.style.display = f > 0 ? "" : "none";
+    },
+  },
+  bar: {
+    markup: () => {
+      let segs = "";
+      for (let i = 0; i < SG_BAR_SEGMENTS; i++) {
+        segs += '<i style="--k:' + (i / (SG_BAR_SEGMENTS - 1)).toFixed(3) + '"></i>';
+      }
+      return '<div class="stat-head"><span class="sg-label">—</span></div>' +
+        '<div class="stat-value sg-bar-value"><span class="sg-value">—</span>' +
+          '<span class="sg-unit"></span></div>' +
+        '<div class="sg-bar">' + segs + '</div>';
+    },
+    render: (rec) => {
+      const r = rec.reg.reading(rec);
+      const lit = Math.round(_sgFraction(r) * SG_BAR_SEGMENTS);
+      const el = rec.el;
+      el.querySelector(".sg-label").textContent = r.label;
+      el.querySelector(".sg-value").textContent = _sgValueText(r);
+      el.querySelector(".sg-unit").textContent = r.unit;
+      const segs = el.querySelectorAll(".sg-bar i");
+      for (let i = 0; i < segs.length; i++) segs[i].classList.toggle("on", i < lit);
+    },
+  },
+  graph: {
+    markup: () =>
+      '<div class="stat-head sg-graph-head"><span class="sg-label">—</span>' +
+        '<span class="sg-now"></span></div>' +
+      '<canvas class="sg-graph"></canvas>' +
+      '<div class="sg-axis"><span>-1m</span><span>-30s</span><span>now</span></div>',
+    render: (rec) => {
+      const r = rec.reg.reading(rec);
+      const el = rec.el;
+      el.querySelector(".sg-label").textContent = r.label;
+      el.querySelector(".sg-now").textContent =
+        (typeof r.value === "number") ? _sgValueText(r) + (r.unit ? " " + r.unit : "") : "";
+      drawAreaGraph(el.querySelector(".sg-graph"), r.history, _sgColor(rec), r.lo, r.hi);
+    },
+  },
+};
+
 WIDGET_REGISTRY["cpu-meter"] = {
   label: "CPU",
   icon: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/>' +
@@ -8093,7 +8367,13 @@ WIDGET_REGISTRY["cpu-meter"] = {
         '<line x1="18" y1="9" x2="22" y2="9"/><line x1="18" y1="15" x2="22" y2="15"/></svg>',
   markup: () => '<div class="stat-head"><span>CPU</span><span></span></div>' +
                 '<div class="stat-value">—</div><canvas></canvas>',
+  skins: SENSOR_SKINS,
+  reading: () => ({
+    label: "CPU", value: lastSysStats ? lastSysStats.cpu : null, unit: "%",
+    decimals: 0, lo: 0, hi: 100, history: sysstatsHistory.map((s) => s.cpu),
+  }),
   tick: (rec) => {
+    if (_renderSensorSkin(rec)) return;
     rec.el.querySelector(".stat-value").textContent =
       lastSysStats ? lastSysStats.cpu.toFixed(0) + "%" : "—";
     drawSparkline(rec.el.querySelector("canvas"),
@@ -8111,7 +8391,13 @@ WIDGET_REGISTRY["ram-meter"] = {
         '<line x1="14" y1="8" x2="14" y2="16"/><line x1="18" y1="8" x2="18" y2="16"/></svg>',
   markup: () => '<div class="stat-head"><span>RAM</span><span></span></div>' +
                 '<div class="stat-value">—</div><canvas></canvas>',
+  skins: SENSOR_SKINS,
+  reading: () => ({
+    label: "RAM", value: lastSysStats ? lastSysStats.ram : null, unit: "%",
+    decimals: 0, lo: 0, hi: 100, history: sysstatsHistory.map((s) => s.ram),
+  }),
   tick: (rec) => {
+    if (_renderSensorSkin(rec)) return;
     rec.el.querySelector(".stat-value").textContent =
       lastSysStats ? lastSysStats.ram.toFixed(0) + "%" : "—";
     drawSparkline(rec.el.querySelector("canvas"),
@@ -8149,22 +8435,27 @@ WIDGET_REGISTRY["hardware-sensor"] = {
                   '<span class="hwmon-value">—</span>' +
                   '<span class="hwmon-unit"></span>' +
                 '</div><canvas></canvas>',
+  skins: SENSOR_SKINS,
+  reading: (rec) => {
+    const path = rec.opts.sensorPath || "";
+    const entry = (lastSysStats && lastSysStats.hwmon) ? lastSysStats.hwmon[path] : null;
+    const history = hwmonHistory[path] || [];
+    const unit = entry ? (entry.unit || "") : "";
+    const value = (entry && typeof entry.value === "number") ? entry.value : null;
+    const scale = _sensorScale(entry, unit, history, rec.opts.gaugeMax);
+    return {
+      label: _hwmonLabel(rec), value, unit,
+      decimals: (rec.opts.decimals == null) ? 1 : (rec.opts.decimals | 0),
+      lo: scale[0], hi: scale[1], history,
+    };
+  },
   tick: (rec) => {
+    if (_renderSensorSkin(rec)) return;
     const path = rec.opts.sensorPath || "";
     const entry = (lastSysStats && lastSysStats.hwmon)
       ? lastSysStats.hwmon[path]
       : null;
-    // Label: explicit override > last segment of path > generic
-    // fallback. The path uses " / " as separator (see
-    // HwMonPoller._flatten), so .pop() of the split gives the leaf.
-    // Strip a trailing unit fragment that some LHM sensor names
-    // carry (e.g. "GPU Total Load %", "CPU Package °C") so we don't
-    // double-render the unit once in the label AND once after the
-    // value. Conservative regex — only the common suffix shapes.
-    let leaf = path ? path.split(" / ").pop() : "Hardware";
-    leaf = leaf.replace(/\s*[\(\[]?\s*(%|°C|°F|RPM|V|W|mV|MHz|GHz|GB|MB|KB)\s*[\)\]]?\s*$/i, "").trim();
-    const label = rec.opts.label || leaf || "Hardware";
-    rec.el.querySelector(".hwmon-label").textContent = label;
+    rec.el.querySelector(".hwmon-label").textContent = _hwmonLabel(rec);
     if (entry && typeof entry.value === "number") {
       const decimals = (rec.opts.decimals == null) ? 1 : (rec.opts.decimals | 0);
       rec.el.querySelector(".hwmon-value").textContent =
@@ -8277,6 +8568,15 @@ function drawSparkline(canvas, values, stroke, maxV) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   if (!values || values.length < 2) return;
+  // v2.6.0: autoscale when no ceiling is given. The hardware-sensor
+  // widget has always called this without maxV "to autoscale", but
+  // nothing here ever did: value / undefined is NaN, canvas silently
+  // ignores NaN coordinates, and the sensor sparkline was never drawn.
+  if (!(maxV > 0)) {
+    let peak = 0;
+    for (const v of values) if (v > peak) peak = v;
+    maxV = peak > 0 ? peak * 1.15 : 1;
+  }
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = stroke;
   ctx.beginPath();

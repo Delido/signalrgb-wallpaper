@@ -6,6 +6,98 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.0-beta.1] - 2026-10-18
+
+### Added — hardware sensors from SignalRGB itself
+
+SignalRGB 2.5.80 measures CPU/GPU temperatures, loads, clocks, fans, pump
+and liquid temperature on its own and exposes them on an internal,
+undocumented WebSocket, the **WebPipe** (`ws://127.0.0.1:16036`, Qt
+QWebChannel, no login, reading works without Pro). Until now the only
+hardware source was LibreHardwareMonitor, a second app users had to
+install, start and configure.
+
+`SignalRgbWebPipePoller` reads it with a small stdlib WebSocket client
+(no new dependency, so no bundle growth and no new Defender surface):
+
+* **Availability is probed, not assumed.** The interface only exists in
+  recent SignalRGB versions, so every outcome is a state the Configurator
+  explains: `online`, `monitoring_off`, `incompatible` (something answers
+  but not with a sensor interface, or never answers init), `unavailable`
+  (nothing listening while SignalRGB runs: too old), `not_running`. The
+  decision is by capability, never by version number; the version is read
+  from the install path for display only. Missing interfaces are retried
+  every 30 s, not every second.
+* **Read-only.** The WebPipe accepts writes from any local process without
+  auth. The client sends nothing but init and idle, enforced by a real
+  `raise` rather than an `assert` (asserts vanish under `python -O`).
+* **Account data is dropped unread.** The 8.6 MB init reply carries the
+  `user` object (e-mail, uid); only `monitor` is kept and nothing from the
+  reply is logged.
+* **Fragmentation.** The real init reply arrives in 17 frames.
+* Property indices come from the init reply, never hard-coded.
+* Paths are `SignalRGB / <group> / <name>`, repeated names (`CPU Fan`)
+  get a stable ordinal; QObject ids are regenerated per SignalRGB session
+  and the `uid` is not unique, so neither could anchor a saved widget.
+
+One lesson came from measuring live rather than reading the protocol
+notes: **idle must follow every update immediately.** The server releases
+one message per idle, not everything queued, so the first version's 1 s
+throttle left CPU Load updating once in 15 s instead of at 1 Hz. Draining
+freely measured 214 KB/s, ~9 messages/s and 0.1 % of one core with 68
+sensors, and only runs while a sensor widget is placed.
+
+`SensorSources` merges LHM and SignalRGB behind the existing
+`hwmon_provider` and the sysstats `hwmon` field, so the wallpaper page,
+the Hardware sensor widget and the picker need no second code path. The
+picker triggers a one-shot probe in an executor, so the list is not empty
+when someone opens it to place their first sensor widget.
+
+The Configurator gained **System -> Sensors** with a **Check** button,
+and an empty picker now says why. `/health` reports
+`signalrgb_sensors_state`, `_count` and `signalrgb_version`.
+
+### Added — Ring, Bar and Graph looks for sensor widgets
+
+Modelled on two dashboard screenshots: a donut gauge with the number in
+the middle, a segmented slanted bar, an area graph with a
+`-1m / -30s / now` axis. Built on the existing skin mechanism
+(`opts.skin`), so `default` keeps the classic look and existing layouts
+do not change. Shared by `cpu-meter`, `ram-meter` and `hardware-sensor`
+through a `reading(rec)` per widget; the skins only ever draw a reading.
+
+* Ring is inline SVG with `pathLength="100"`, so the dash is the
+  percentage. Each ring gets its own gradient id.
+* Scale: explicit *Scale maximum* > the sensor's own range (SignalRGB
+  ships min/max per sensor) > 0-100 for % and °C > recent peak.
+* Colour from `--theme-accent` or the glow tint; the gradient is opacity,
+  not `color-mix()`, which Wallpaper Engine's Chromium may lack.
+* No rAF, no CSS transitions: everything updates in the 1 Hz tick.
+
+The skin catalogue lives in three hand-synced copies (page, Configurator,
+bridge); `test_sensor_skins.mjs` now fails if they drift.
+
+### Fixed — the hardware-sensor sparkline was never drawn
+
+It called `drawSparkline()` without a ceiling "to autoscale", but the
+function never autoscaled: `value / undefined` is `NaN`, canvas ignores
+`NaN` coordinates, so the line was silently empty since the widget
+existed. Found while building the graph skin; it now autoscales.
+
+### Testing
+
+`test_signalrgb_webpipe.py` runs a fake WebPipe server that reproduces
+every state, a multi-MB init in 17 fragments, shifted property indices,
+an account e-mail that must never surface, non-sensor updates queued in
+front of a sensor update, and the write guard. It also reads the
+poller's states from its own source and requires a sentence in both
+languages for each. 21/21 mutations caught; two needed the tests
+tightened first (the write guard tested only today's behaviour, and the
+picker check matched words inside `if (false)`).
+
+`test_sensor_skins.mjs` executes the shipped skin code in `node:vm`.
+17/17 mutations caught.
+
 ## [2.5.2-beta.5] - 2026-08-31
 
 ### Added — a real brightness control for the glow
