@@ -77,6 +77,15 @@ settings.
 3. 0–100 for `%` and `°C`
 4. otherwise the recent peak
 
+**Automatic sensor** (Hardware sensor only): instead of picking a
+sensor, choose a role — CPU temperature, GPU temperature, GPU load,
+liquid temperature or pump speed — and each PC finds its own matching
+sensor. SignalRGB sensors are preferred; LibreHardwareMonitor is the
+fallback. Hot-spot and memory-junction readings never count as "GPU
+temperature". An explicitly picked sensor always wins. This is how the
+**Hardware Monitor** Quick Look works on machines whose sensor names it
+cannot know.
+
 All three widgets expose a `reading(rec)` returning
 `{label, value, unit, decimals, lo, hi, history}`, and the skins only
 ever draw a reading. A new sensor source therefore needs no new skin,

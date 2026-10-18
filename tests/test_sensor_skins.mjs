@@ -282,6 +282,137 @@ drawSparkline({ getContext: () => ctx2d }, [50, 60], "rgb(1,2,3)", 100);
 const y60 = ctx2d.ops.filter((o) => o[0] === "lineTo")[0][2];
 check("an explicit ceiling is still respected", Math.abs(y60 - 40) < 1e-6, String(y60));
 
+// ── 2b. sensors by meaning (sensorAuto) ────────────────────────────────
+//
+// A Quick Look cannot carry "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU
+// Load" -- that path exists on one PC. It names a role instead, resolved
+// here against whatever sensors arrive. The SignalRGB names below are
+// the real ones from SignalRGB 2.5.80 on an i9-13900K / RTX 4070 Ti; the
+// LHM ones follow its Temperatures / Load tree, where "GPU Core" means
+// two different things and only the unit tells them apart.
+console.error("\nsensors by meaning (sensorAuto)\n" + "=".repeat(68));
+const { _resolveAutoSensor } = (() => {
+  vm.runInContext("globalThis.__auto = { _resolveAutoSensor, SENSOR_AUTO_ROLES };", sandbox);
+  return sandbox.__auto;
+})();
+const C = "°C";
+const SIG = {
+  "SignalRGB / 13th Gen Intel(R) Core(TM) i9-13900K / CPU Package Temp": { value: 73, unit: C },
+  "SignalRGB / 13th Gen Intel(R) Core(TM) i9-13900K / CPU Temperature": { value: 64, unit: C },
+  "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Core Temperature": { value: 53, unit: C },
+  "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Hot Spot Temperature": { value: 64, unit: C },
+  "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Memory Junction Temperature": { value: 56, unit: C },
+  "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Load": { value: 30, unit: "%" },
+  "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Core Clock": { value: 390, unit: "MHz" },
+  "SignalRGB / Corsair Commander Core / Liquid Temperature": { value: 48, unit: C },
+  "SignalRGB / Corsair Commander Core / Pump": { value: 2785, unit: "RPM" },
+  "SignalRGB / Corsair Commander Core / Fan 1": { value: 964, unit: "RPM" },
+  "SignalRGB / System / CPU Load": { value: 7, unit: "%" },
+};
+const leaf = (p) => (p || "").split(" / ").pop();
+check("cpu-temp -> CPU Package Temp", leaf(_resolveAutoSensor("cpu-temp", SIG)) === "CPU Package Temp");
+check("gpu-temp -> GPU Core Temperature, not hot spot or memory junction",
+      leaf(_resolveAutoSensor("gpu-temp", SIG)) === "GPU Core Temperature",
+      leaf(_resolveAutoSensor("gpu-temp", SIG)));
+check("gpu-load -> GPU Load", leaf(_resolveAutoSensor("gpu-load", SIG)) === "GPU Load");
+check("liquid-temp -> Liquid Temperature",
+      leaf(_resolveAutoSensor("liquid-temp", SIG)) === "Liquid Temperature");
+check("pump -> Pump, not a fan", leaf(_resolveAutoSensor("pump", SIG)) === "Pump");
+
+const LHM = {
+  "DESKTOP / Intel Core i7-12700K / Temperatures / CPU Package": { value: 60, unit: C },
+  "DESKTOP / Intel Core i7-12700K / Load / CPU Total": { value: 10, unit: "%" },
+  "DESKTOP / NVIDIA RTX 3080 / Temperatures / GPU Core": { value: 55, unit: C },
+  "DESKTOP / NVIDIA RTX 3080 / Temperatures / GPU Hot Spot": { value: 70, unit: C },
+  "DESKTOP / NVIDIA RTX 3080 / Load / GPU Core": { value: 40, unit: "%" },
+  "DESKTOP / NVIDIA RTX 3080 / Load / GPU Memory": { value: 20, unit: "%" },
+  "DESKTOP / NVIDIA RTX 3080 / Clocks / GPU Core": { value: 1800, unit: "MHz" },
+};
+const lhmGpuT = _resolveAutoSensor("gpu-temp", LHM), lhmGpuL = _resolveAutoSensor("gpu-load", LHM);
+check("LHM: 'GPU Core' in °C is the temperature",
+      lhmGpuT === "DESKTOP / NVIDIA RTX 3080 / Temperatures / GPU Core", lhmGpuT);
+check("LHM: 'GPU Core' in % is the load (unit decides, not the name)",
+      lhmGpuL === "DESKTOP / NVIDIA RTX 3080 / Load / GPU Core", lhmGpuL);
+check("LHM: CPU Package is the CPU temperature",
+      leaf(_resolveAutoSensor("cpu-temp", LHM)) === "CPU Package");
+check("AMD (LHM) Tctl/Tdie is the CPU temperature",
+      leaf(_resolveAutoSensor("cpu-temp",
+        { "PC / AMD Ryzen 7 5800X / Temperatures / Core (Tctl/Tdie)": { value: 61, unit: C } }))
+      === "Core (Tctl/Tdie)");
+// Same leaf name in both sources, so only the source preference can
+// decide -- and "DESKTOP / ..." sorts before "SignalRGB / ...".
+const BOTH = {
+  "DESKTOP / NVIDIA RTX 3080 / Load / GPU Load": { value: 41, unit: "%" },
+  "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Load": { value: 30, unit: "%" },
+};
+check("with the same sensor in both sources, SignalRGB is preferred",
+      _resolveAutoSensor("gpu-load", BOTH).startsWith("SignalRGB / "),
+      _resolveAutoSensor("gpu-load", BOTH));
+const HOT_ONLY = {
+  "SignalRGB / GPU / GPU Hot Spot Temperature": { value: 80, unit: C },
+  "SignalRGB / GPU / GPU Memory Junction Temperature": { value: 70, unit: C },
+};
+check("a GPU with only hot-spot / junction readings resolves to nothing",
+      _resolveAutoSensor("gpu-temp", HOT_ONLY) === "",
+      "showing the hot spot as 'GPU Temp' would read 20 °C too high");
+check("no matching sensor -> empty, not a wrong guess",
+      _resolveAutoSensor("pump", LHM) === "" && _resolveAutoSensor("gpu-temp", {}) === "");
+check("unknown role -> empty", _resolveAutoSensor("flux-capacitor", SIG) === "");
+
+sandbox.lastSysStats = { hwmon: SIG };
+r = render("hardware-sensor", "ring", { sensorAuto: "gpu-load", label: "GPU Load", decimals: 0 });
+check("a ring with sensorAuto shows the resolved sensor",
+      r.n[".sg-value"].textContent === "30" && r.n[".sg-label"].textContent === "GPU Load");
+r = render("hardware-sensor", "ring",
+           { sensorAuto: "gpu-load", sensorPath: "SignalRGB / Corsair Commander Core / Pump", decimals: 0 });
+check("an explicitly picked sensor beats sensorAuto", r.n[".sg-value"].textContent === "2785");
+sandbox.lastSysStats = { hwmon: {} };
+r = render("hardware-sensor", "bar", { sensorAuto: "gpu-temp", label: "GPU Temp" });
+check("nothing to resolve yet -> a dash and the bundle's label",
+      r.n[".sg-value"].textContent === "—" && r.n[".sg-label"].textContent === "GPU Temp");
+
+const pageRoles = Object.keys(sandbox.__auto.SENSOR_AUTO_ROLES).sort();
+const confRoles = [...(/const SENSOR_AUTO_OPTIONS = \[([\s\S]*?)\];/.exec(CONF) || ["", ""])[1]
+  .matchAll(/value:\s*"([\w-]*)"/g)].map((m) => m[1]).filter(Boolean).sort();
+check("Configurator offers exactly the roles the page can resolve",
+      pageRoles.join() === confRoles.join(), `${confRoles} vs ${pageRoles}`);
+
+// ── 2c. the Hardware Monitor Quick Look ────────────────────────────────
+console.error("\nHardware Monitor Quick Look\n" + "=".repeat(68));
+const hm = (() => {
+  const at = CONF.indexOf('id: "hardware-monitor"');
+  const open = CONF.lastIndexOf("{", at);
+  let d = 0;
+  for (let i = open; i < CONF.length; i++) {
+    if (CONF[i] === "{") d++;
+    else if (CONF[i] === "}") { d--; if (d === 0) return CONF.slice(open, i + 1); }
+  }
+  return "";
+})();
+check("the bundle exists", hm.length > 200);
+let hmObj = null;
+try { hmObj = vm.runInNewContext("(" + hm + ")"); } catch (e) { console.error(e); }
+check("it parses as an object", !!hmObj);
+const ws = (hmObj && hmObj.widgets) || [];
+const sensorWs = ws.filter((w) => w.type === "hardware-sensor");
+check("it places sensor widgets", sensorWs.length >= 3, String(sensorWs.length));
+check("they pick sensors by meaning, never by a PC-specific path",
+      sensorWs.every((w) => w.options.sensorAuto && !w.options.sensorPath));
+check("every role it uses can be resolved",
+      sensorWs.every((w) => pageRoles.includes(w.options.sensorAuto)));
+check("every widget uses a real skin",
+      ws.filter((w) => w.options && w.options.skin)
+        .every((w) => pIds.includes(w.options.skin)));
+check("it uses the new looks: ring, bar and graph",
+      ["ring", "bar", "graph"].every((k) => ws.some((w) => w.options && w.options.skin === k)));
+check("it asks for a sensor check after applying", hmObj && hmObj.needsSensors === true);
+check("it is translated",
+      /"looks\.hardware-monitor\.name":\s*\{\s*en:\s*"[^"]+",\s*de:\s*"[^"]+"/.test(CONF) &&
+      /"looks\.hardware-monitor\.desc":/.test(CONF));
+const applyFn = extractBlock(CONF, "function applyLookBundle(");
+check("applying a sensor look warns when no sensor source is available",
+      /if \(bundle\.needsSensors\) _warnIfNoSensors\(\);/.test(applyFn));
+
 // ── 3. perf rules ───────────────────────────────────────────────────────
 console.error("\nperformance rules\n" + "=".repeat(68));
 const skinsSrc = PAGE.slice(skinsBlockStart, skinsBlockEnd);

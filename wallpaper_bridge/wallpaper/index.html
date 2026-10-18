@@ -8165,11 +8165,66 @@ let _sgSeq = 0;
 const SG_BAR_SEGMENTS = 14;
 const SG_GRAPH_WINDOW = 60;          // samples = seconds at the 1 Hz push
 
+// v2.6.0-beta.2: sensors chosen by MEANING, for Quick Looks.
+//
+// A Quick Look is the same on every PC, but sensor paths are not:
+// "SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Load" exists on one
+// machine only. A bundle therefore names a role, and each page resolves
+// it against the sensors it actually receives. An explicitly picked
+// sensor always wins.
+//
+// The unit separates sources that reuse a name ("GPU Core" is °C under
+// LibreHardwareMonitor's Temperatures and % under its Load). SignalRGB
+// paths are tried first: they need no extra app. The role ids are
+// mirrored in configurator.html (SENSOR_AUTO_OPTIONS); a test keeps the
+// two in step.
+// Patterns are anchored on purpose: "GPU Hot Spot Temperature" and
+// "GPU Memory Junction Temperature" must never stand in for the GPU
+// temperature, and anchoring keeps them out without an exclude list.
+const SENSOR_AUTO_ROLES = {
+  "cpu-temp":    { units: ["°C"],
+                   prefer: [/^CPU Package( Temp(erature)?)?$/i, /Tctl|Tdie/i,
+                            /^CPU Temp(erature)?$/i] },
+  "gpu-temp":    { units: ["°C"],
+                   prefer: [/^GPU Core Temp(erature)?$/i, /^GPU Temp(erature)?$/i,
+                            /^GPU Core$/i] },
+  "gpu-load":    { units: ["%"],
+                   prefer: [/^GPU Load$/i, /^GPU Core( Load)?$/i,
+                            /^GPU (Usage|Utili[sz]ation)$/i] },
+  "liquid-temp": { units: ["°C"],  prefer: [/liquid|coolant|water/i] },
+  "pump":        { units: ["RPM"], prefer: [/pump/i] },
+};
+
+function _resolveAutoSensor(role, hwmon) {
+  const spec = SENSOR_AUTO_ROLES[role];
+  if (!spec || !hwmon) return "";
+  const paths = Object.keys(hwmon).sort((a, b) => {
+    const sa = a.indexOf("SignalRGB / ") === 0 ? 0 : 1;
+    const sb = b.indexOf("SignalRGB / ") === 0 ? 0 : 1;
+    return (sa - sb) || (a < b ? -1 : a > b ? 1 : 0);
+  });
+  for (const re of spec.prefer) {
+    for (const p of paths) {
+      const e = hwmon[p];
+      if (!e || spec.units.indexOf(e.unit) < 0) continue;
+      if (re.test(p.split(" / ").pop())) return p;
+    }
+  }
+  return "";
+}
+
+function _hwmonPath(rec) {
+  if (rec.opts.sensorPath) return rec.opts.sensorPath;
+  if (!rec.opts.sensorAuto) return "";
+  return _resolveAutoSensor(rec.opts.sensorAuto,
+                            lastSysStats && lastSysStats.hwmon);
+}
+
 function _hwmonLabel(rec) {
   // Label: explicit override > last segment of path > generic fallback.
   // Strip a trailing unit fragment some sensor names carry ("GPU Total
   // Load %", "CPU Package °C") so the unit is not rendered twice.
-  const path = rec.opts.sensorPath || "";
+  const path = _hwmonPath(rec);
   let leaf = path ? path.split(" / ").pop() : "Hardware";
   leaf = leaf.replace(/\s*[\(\[]?\s*(%|°C|°F|RPM|V|W|mV|MHz|GHz|GB|MB|KB)\s*[\)\]]?\s*$/i, "").trim();
   return rec.opts.label || leaf || "Hardware";
@@ -8437,7 +8492,7 @@ WIDGET_REGISTRY["hardware-sensor"] = {
                 '</div><canvas></canvas>',
   skins: SENSOR_SKINS,
   reading: (rec) => {
-    const path = rec.opts.sensorPath || "";
+    const path = _hwmonPath(rec);
     const entry = (lastSysStats && lastSysStats.hwmon) ? lastSysStats.hwmon[path] : null;
     const history = hwmonHistory[path] || [];
     const unit = entry ? (entry.unit || "") : "";
@@ -8451,7 +8506,7 @@ WIDGET_REGISTRY["hardware-sensor"] = {
   },
   tick: (rec) => {
     if (_renderSensorSkin(rec)) return;
-    const path = rec.opts.sensorPath || "";
+    const path = _hwmonPath(rec);
     const entry = (lastSysStats && lastSysStats.hwmon)
       ? lastSysStats.hwmon[path]
       : null;

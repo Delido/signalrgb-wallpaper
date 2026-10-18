@@ -31,6 +31,7 @@ PY_SUITES = [
     ("Pages per screen (python)", HERE / "test_pages_per_screen.py"),
     ("Wallpaper compatibility (python)", HERE / "test_wallpaper_compat.py"),
     ("Quick Look reset (python)", HERE / "test_quick_look_reset.py"),
+    ("Quick Look undo vs presets (python)", HERE / "test_look_undo.py"),
     ("SignalRGB WebPipe sensors (python)", HERE / "test_signalrgb_webpipe.py"),
 ]
 JS_SUITES = [

@@ -2930,6 +2930,15 @@
         current screen's configuration with the bundle.
       </div>
       <div id="looks-grid" class="looks-grid"></div>
+      <!-- v2.6.0-beta.2: a Quick Look used to save the previous state
+           into Preset slot 1, overwriting the user's own preset there.
+           It now keeps it in a separate undo slot, offered here. -->
+      <div class="row looks-undo-row">
+        <button type="button" class="btn" id="looks-undo" disabled
+                data-i18n="looks.undo">Undo last Quick Look</button>
+        <span class="hint" id="looks-undo-hint" data-i18n="looks.undo_hint">
+          Restores the screen as it was before the last Quick Look. Your presets are not touched.</span>
+      </div>
     </div>
   </section>
 
@@ -5030,8 +5039,10 @@ const TRANSLATIONS = {
   "looks.confirm":          { en: "Apply \"{name}\" to {screen}? This replaces effects, widget tile-style, and the widget layout. Existing widgets will be removed. The background stays as-is.",
                               de: "„{name}\" auf {screen} anwenden? Ersetzt Effekte, Widget-Stil und das Widget-Layout. Bestehende Widgets werden entfernt. Der Hintergrund bleibt erhalten." },
   "looks.applied":          { en: "Applied {name}",             de: "{name} angewendet" },
-  "looks.autosnapshot":     { en: "Current state saved to Preset slot 1 (revert via Presets section)",
-                              de: "Aktueller Zustand in Preset-Slot 1 gespeichert (zurücksetzen über Presets-Bereich)" },
+  "looks.undo":             { en: "Undo last Quick Look",        de: "Letzten Quick Look rückgängig" },
+  "looks.undo_hint":        { en: "Restores the screen as it was before the last Quick Look. Your presets are not touched.",
+                              de: "Stellt den Bildschirm wie vor dem letzten Quick Look wieder her. Deine Presets bleiben unberührt." },
+  "looks.undone":           { en: "Previous look restored",      de: "Vorheriger Look wiederhergestellt" },
   "looks.screen_n":         { en: "Screen {n}",                  de: "Bildschirm {n}" },
   // v2.3.13-beta: per-bundle name + description i18n keys. Each
   // LOOK_BUNDLES entry references the matching key via `nameKey`
@@ -5047,6 +5058,12 @@ const TRANSLATIONS = {
   "looks.ambilight.name":   { en: "Ambilight",                   de: "Ambilight" },
   "looks.ambilight.desc":   { en: "Turns a screen into a light source: full-surface glow, heavy blur, black background, nothing else drawn. Built for side monitors next to the one you are actually watching.",
                               de: "Macht aus einem Bildschirm eine Lichtquelle: flächiges Glow, starke Weichzeichnung, schwarzer Hintergrund, sonst nichts. Für Nebenmonitore neben dem, auf den du eigentlich schaust." },
+  "looks.hardware-monitor.name": { en: "Hardware Monitor",        de: "Hardware-Monitor" },
+  "looks.hardware-monitor.desc": {
+    en: "CPU and GPU load as rings, GPU temperature as a bar, CPU temperature as a graph, plus clock and calendar. Sensors are found automatically from SignalRGB.",
+    de: "CPU- und GPU-Last als Ringe, GPU-Temperatur als Balken, CPU-Temperatur als Graph, dazu Uhr und Kalender. Die Sensoren werden automatisch aus SignalRGB gefunden." },
+  "looks.sensors_missing":  { en: "Sensor widgets need data — {hint}",
+                              de: "Die Sensor-Widgets brauchen Daten — {hint}" },
   "looks.gaming.name":      { en: "Gaming",                      de: "Gaming" },
   "looks.gaming.desc":      { en: "Vortex effect, only CPU/GPU/RAM meters in the corner. Stays out of the way of the game.",
                               de: "Vortex-Effekt, nur CPU/GPU/RAM-Meter in der Ecke. Bleibt aus dem Spielgeschehen raus." },
@@ -5614,6 +5631,44 @@ const LOOK_BUNDLES = [
     },
     widgets: [],
   },
+  // v2.6.0-beta.2: the sensor dashboard, modelled on the screenshots
+  // that prompted the Ring / Bar / Graph looks. Sensor widgets use
+  // `sensorAuto` because a bundle cannot know this PC's sensor names.
+  {
+    id: "hardware-monitor",
+    nameKey: "looks.hardware-monitor.name",
+    descKey: "looks.hardware-monitor.desc",
+    name: "Hardware Monitor",
+    desc: "CPU and GPU load as rings, GPU temperature as a bar, CPU temperature as a graph, plus clock and calendar. Sensors are found automatically from SignalRGB.",
+    tint: "rgb(255, 110, 160)",
+    needsSensors: true,
+    settings: {
+      glowStrength:    70,
+      barLayout:       "lay-grid",
+      showBars:        true,
+      ambientEffect:   "off",
+      audioGlow:       "off",
+      widgetTileStyle: "glass",
+      parallax3d:      0,
+    },
+    widgets: [
+      { type: "cpu-meter",       x:   50, y: 50, w: 200, h: 240,
+        options: { skin: "ring", showHeader: false } },
+      { type: "hardware-sensor", x:  270, y: 50, w: 240, h: 112,
+        options: { skin: "bar", sensorAuto: "gpu-temp", label: "GPU Temp",
+                   decimals: 0, showHeader: false } },
+      { type: "hardware-sensor", x:  270, y: 178, w: 240, h: 112,
+        options: { skin: "graph", sensorAuto: "cpu-temp", label: "CPU Temp",
+                   decimals: 0, showHeader: false } },
+      { type: "hardware-sensor", x:  530, y: 50, w: 200, h: 240,
+        options: { skin: "ring", sensorAuto: "gpu-load", label: "GPU Load",
+                   decimals: 0, showHeader: false } },
+      { type: "clock",           x:  750, y: 50, w: 240, h: 240,
+        options: { style: "analog", format24h: true, showHeader: false } },
+      { type: "calendar",        x: 1010, y: 50, w: 260, h: 240,
+        options: { weekStart: 1, showHeader: true } },
+    ],
+  },
   {
     id: "pomodoro",
     nameKey: "looks.pomodoro.name",
@@ -5731,15 +5786,21 @@ function applyLookBundle(bundle, skipConfirm) {
   }
   sendCmd({
     type: "quick-look-apply",
-    snapshotSlot: 0,
+    undoSnapshot: true,
     settings: sentSettings,
     widgets: bundle.widgets.map((w) => ({
       type: w.type, x: w.x, y: w.y, w: w.w, h: w.h,
       options: w.options || {},
     })),
   });
-  toast(t("looks.autosnapshot"), "good");
-  toast(t("looks.applied", { name: bundle.name }) || ("Applied " + bundle.name), "good");
+  // One toast, with Undo right on it. This used to fire two toasts back
+  // to back into the single toast element, so the first one -- the only
+  // hint that Preset slot 1 had just been overwritten -- was replaced
+  // before anyone could read it.
+  if (els.looksUndo) els.looksUndo.disabled = false;
+  toast(t("looks.applied", { name: localName }) || ("Applied " + localName),
+        "good", _undoLastLook);
+  if (bundle.needsSensors) _warnIfNoSensors();
 }
 
 // v2.3.13-beta: every catalog entry gets a `labelKey` pointing
@@ -5765,6 +5826,20 @@ const SENSOR_SKIN_OPTIONS = [
   { value: "bar",     label: "Bar" },
   { value: "graph",   label: "Graph" },
 ];
+// v2.6.0-beta.2: roles for `sensorAuto`. Mirrors SENSOR_AUTO_ROLES in
+// wallpaper/index.html, which does the actual matching.
+const SENSOR_AUTO_OPTIONS = [
+  { value: "",            label: "(none)" },
+  { value: "cpu-temp",    label: "CPU temperature" },
+  { value: "gpu-temp",    label: "GPU temperature" },
+  { value: "gpu-load",    label: "GPU load" },
+  { value: "liquid-temp", label: "Liquid temperature" },
+  { value: "pump",        label: "Pump speed" },
+];
+function _sensorAutoLabel(id) {
+  const hit = SENSOR_AUTO_OPTIONS.find((x) => x.value === id);
+  return hit ? hit.label : id;
+}
 function _sensorSkinLabel(o) {
   const id = (o && o.skin) || "default";
   const hit = SENSOR_SKIN_OPTIONS.find((x) => x.value === id);
@@ -5930,6 +6005,11 @@ const WIDGET_CATALOG = {
       // and the value stays blank.
       { key: "sensorPath",   label: "Sensor",   type: "select",
         options: [{ value: "", label: "(loading…)" }] },
+      // v2.6.0-beta.2: used when no sensor is picked above. Resolved on
+      // each PC, which is how the Hardware Monitor Quick Look works on
+      // machines whose sensor names it cannot know.
+      { key: "sensorAuto",   label: "Automatic sensor (if none picked)", type: "select",
+        options: SENSOR_AUTO_OPTIONS },
       { key: "label",        label: "Label (override)",       type: "text" },
       { key: "decimals",     label: "Decimals", type: "select",
         options: [{ value: 0, label: "0" }, { value: 1, label: "1" },
@@ -5944,7 +6024,9 @@ const WIDGET_CATALOG = {
     ],
     describe: (o) => o.sensorPath
       ? (o.label || o.sensorPath.split(" / ").pop()) + " · " + _sensorSkinLabel(o)
-      : "(no sensor picked)",
+      : o.sensorAuto
+        ? (o.label || _sensorAutoLabel(o.sensorAuto)) + " · auto · " + _sensorSkinLabel(o)
+        : "(no sensor picked)",
   },
   "now-playing": {
     labelKey: "widget.now-playing.label",
@@ -6016,6 +6098,7 @@ const els = {
   bgDimVal:       $("bg-dim-val"),
   bgDebug:        $("bg-debug"),
   ambientMode:    $("ambient-mode"),
+  looksUndo:      $("looks-undo"),
   cycleEnabled:   $("cycle-enabled"),
   cycleConfig:    $("cycle-config"),
   cycleInterval:  $("cycle-interval"),
@@ -11701,6 +11784,31 @@ function bindRangeChange(rangeEl, valEl, key, suffix, format) {
 }
 bindRangeChange(els.glowStrength,   els.glowStrengthVal,   "glowStrength", " %");
 bindRangeChange(els.glowBrightness, els.glowBrightnessVal, "glowBrightness", " %");
+
+// v2.6.0-beta.2: undo goes to the bridge's per-screen `lookUndo` slot.
+// Must stay below `const els`: a top-level use above it is a TDZ error
+// that stops the whole Configurator from loading.
+function _undoLastLook() {
+  sendCmd({ type: "quick-look-undo" });
+  if (els.looksUndo) els.looksUndo.disabled = true;
+  toast(t("looks.undone"), "good");
+}
+if (els.looksUndo) els.looksUndo.addEventListener("click", _undoLastLook);
+
+// A sensor dashboard with no sensor source shows dashes and no reason.
+// Ask the bridge (this runs its one-shot probe) and say what is missing.
+async function _warnIfNoSensors() {
+  try {
+    const r = await fetch("/hwmon/sensors", { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && Array.isArray(d.items) && d.items.length) return;
+    const sig = (d && d.status && d.status.sources && d.status.sources.signalrgb) || {};
+    toast(t("looks.sensors_missing",
+            { hint: sensorStateText(sig.state || "idle", 0, sig.version) }), "bad");
+  } catch (_) {}
+}
+
 bindRangeChange(els.gridBlur,       els.gridBlurVal,       "gridBlur",     " px");
 bindRangeChange(els.stripesBlur,    els.stripesBlurVal,    "stripesBlur",  " px");
 // barWidth is stored in tenths of a vw (14 -> 1.4vw), so its readout
@@ -13486,6 +13594,8 @@ function renderAll() {
   els.bgDimVal.textContent = (settings.bgDim ?? 0) + " %";
   els.bgDebug.checked = !!settings.showStatus;
   els.ambientMode.checked = !!settings.ambientMode;
+  // Offered only while there is something to go back to.
+  if (els.looksUndo) els.looksUndo.disabled = !settings.lookUndo;
   _syncAmbientModeChrome();
   renderCycleBar();
   // Glow

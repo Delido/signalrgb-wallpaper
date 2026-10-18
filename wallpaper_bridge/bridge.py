@@ -912,7 +912,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.6.0-beta.1"
+APP_VERSION = "2.6.0-beta.2"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -935,7 +935,7 @@ APP_VERSION = "2.6.0-beta.1"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.19"
+WALLPAPER_VERSION = "2.4.20"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1008,6 +1008,49 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.6.0-beta.2": {
+        "title_en": "What\'s new in v2.6.0-beta.2",
+        "title_de": "Was ist neu in v2.6.0-beta.2",
+        "body_en": (
+            "**Fixed: a Quick Look overwrote Preset 1.**\n\n"
+            "Every Quick Look saved the previous state into Preset slot "
+            "1, replacing whatever you had saved there — and app "
+            "profiles or the Ctrl+Shift+1 hotkey then loaded that "
+            "instead of your preset. The previous state now has its own "
+            "place: **Undo** on the confirmation, or **Undo last Quick "
+            "Look** in the Quick Looks card. Presets are only ever "
+            "written by you.\n\n"
+            "**New Quick Look: Hardware Monitor.** CPU and GPU load as "
+            "rings, GPU temperature as a bar, CPU temperature as a graph, "
+            "plus clock and calendar. The sensors are found "
+            "automatically on your PC; if none are available, it says "
+            "why.\n\n"
+            "**New: automatic sensor.** A Hardware sensor widget can "
+            "follow a role (CPU temperature, GPU load, pump ...) instead "
+            "of a fixed sensor.\n\n"
+            "**Re-import the wallpaper bundles.**\n"
+        ),
+        "body_de": (
+            "**Behoben: Ein Quick Look hat Preset 1 \u00fcberschrieben.**\n\n"
+            "Jeder Quick Look hat den vorherigen Zustand in Preset-Slot 1 "
+            "gesichert und damit ersetzt, was du dort gespeichert hattest — "
+            "App-Profile und der Hotkey Strg+Umschalt+1 haben danach "
+            "diesen Stand statt deines Presets geladen. Der vorherige "
+            "Zustand hat jetzt einen eigenen Platz: **R\u00fcckg\u00e4ngig** "
+            "direkt in der Best\u00e4tigung oder **Letzten Quick Look "
+            "r\u00fcckg\u00e4ngig** in der Quick-Looks-Karte. Presets "
+            "schreibst nur noch du.\n\n"
+            "**Neuer Quick Look: Hardware-Monitor.** CPU- und GPU-Last "
+            "als Ringe, GPU-Temperatur als Balken, CPU-Temperatur als "
+            "Graph, dazu Uhr und Kalender. Die Sensoren werden auf deinem "
+            "PC automatisch gefunden; gibt es keine, steht dabei, "
+            "warum.\n\n"
+            "**Neu: automatischer Sensor.** Ein Hardware-Sensor-Widget "
+            "kann einer Rolle folgen (CPU-Temperatur, GPU-Last, Pumpe "
+            "...) statt einem festen Sensor.\n\n"
+            "**Wallpaper-Bundles neu importieren.**\n"
+        ),
+    },
     "2.6.0-beta.1": {
         "title_en": "What\'s new in v2.6.0-beta.1",
         "title_de": "Was ist neu in v2.6.0-beta.1",
@@ -3472,6 +3515,12 @@ DEFAULT_SCREEN_SETTINGS = {
     # current state, Apply writes the snapshot back into the screen's
     # settings, Clear sets the slot to None.
     "presets":         [None, None, None, None],
+    # v2.6.0-beta.2: the state a screen had before the last Quick Look,
+    # for "Undo last Quick Look". Deliberately NOT a preset slot: until
+    # this, every Quick Look overwrote Preset slot 1, silently replacing
+    # whatever the user had saved there -- and any per-app profile
+    # pointing at slot 1 then restored the auto-snapshot instead.
+    "lookUndo":        None,
     # Mirror mode: when set to another screen index, this screen's settings
     # are kept in lockstep with that screen's. The bridge:
     #   - copies all mirrorable keys from the source on activation
@@ -3519,6 +3568,9 @@ DEFAULT_SCREEN_SETTINGS = {
 # bgImage change through the existing replication path.
 _NON_MIRRORED_KEYS = frozenset({
     "viewportW", "viewportH", "mirrorOf", "presets", "cycle",
+    # v2.6.0-beta.2: the Quick Look undo state is per-screen scratch like
+    # presets; a mirror cannot run a Quick Look, so it has nothing to undo.
+    "lookUndo",
     # monitorSetup describes the *physical* monitor layout per bridge
     # screen — it's a property of the user's hardware, not a display
     # setting. Mirroring would copy the source's span declaration onto
@@ -3687,8 +3739,11 @@ WIDGET_DEFAULTS = {
     "hardware-sensor": {
         "label":   "Hardware sensor",
         "x": 600, "y": 580, "w": 220, "h": 140,
-        "options": {"sensorPath": "", "label": "", "decimals": 1,
-                    "tintFromGlow": False},
+        # v2.6.0-beta.2: sensorAuto picks a sensor by meaning (cpu-temp,
+        # gpu-temp, gpu-load, liquid-temp, pump) when sensorPath is empty
+        # -- how Quick Looks ship sensor widgets without knowing the PC.
+        "options": {"sensorPath": "", "sensorAuto": "", "label": "",
+                    "decimals": 1, "tintFromGlow": False},
     },
     # Now-playing widget — reads the live media session published by
     # NowPlayingPoller (Windows SMTC). Shows title + artist + a thin
@@ -5478,7 +5533,7 @@ class Broadcaster:
         t = msg.get("type")
         if t in ("widget-update", "widget-add", "widget-remove",
                  "widgets-set", "widgets-lock",
-                 "quick-look-apply",
+                 "quick-look-apply", "quick-look-undo",
                  "setting-update", "viewport", "bridge-setting-update",
                  "system-action",
                  "preset-save", "preset-apply", "preset-clear",
@@ -12373,7 +12428,7 @@ class BridgeRuntime:
         return snap
 
     def quick_look_apply(self, screen: int,
-                         snapshot_slot=None, settings=None, widgets=None) -> dict | None:
+                         undo_snapshot=True, settings=None, widgets=None) -> dict | None:
         """v1.2.16: atomic Quick Look apply. All three sub-ops
         (snapshot current state → preset slot, replace widget array,
         merge non-bg settings) happen inside one _mutate_screen call
@@ -12386,30 +12441,13 @@ class BridgeRuntime:
         if self._block_if_mirror(screen, "quick-look-apply"): return None
         if not isinstance(settings, dict): settings = {}
         if not isinstance(widgets, list):  widgets  = []
-        # Strict slot range — fall back to no-snapshot if the caller
-        # passed something silly.
-        try:
-            slot = int(snapshot_slot) if snapshot_slot is not None else -1
-        except (TypeError, ValueError):
-            slot = -1
         def mutate(s):
-            # 1. Snapshot CURRENT state to the slot if requested.
-            if 0 <= slot < PRESET_SLOTS:
-                snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
-                            for k in PRESET_SNAPSHOT_KEYS}
-                # v1.6.1-beta R2.2: cycle sub-keys (user-config only)
-                # so later Apply doesn't reset rotation runtime state.
-                live_cycle = s.get("cycle") or {}
-                default_cycle = DEFAULT_SCREEN_SETTINGS["cycle"]
-                snapshot["cycle"] = {
-                    k: copy.deepcopy(live_cycle.get(k, default_cycle.get(k)))
-                    for k in PRESET_CYCLE_SUBKEYS
-                }
-                presets = list(s.get("presets") or [None] * PRESET_SLOTS)
-                while len(presets) < PRESET_SLOTS:
-                    presets.append(None)
-                presets[slot] = snapshot
-                s["presets"] = presets
+            # 1. Remember the CURRENT state for "Undo last Quick Look".
+            # v2.6.0-beta.2: into `lookUndo`, never into a preset slot --
+            # that overwrote Preset 1 on every Quick Look. Presets are
+            # only ever written by the user.
+            if undo_snapshot:
+                s["lookUndo"] = self._capture_state(s)
             # 1b. v2.5.2-beta.2: fill in the VISUAL keys the bundle
             # does not mention, from the defaults.
             #
@@ -12556,6 +12594,53 @@ class BridgeRuntime:
 
     # ----- Preset slots -----
 
+    @staticmethod
+    def _capture_state(s: dict) -> dict:
+        """Deep copy of everything a preset or the Quick Look undo
+        restores. `cycle` carries only its user-config sub-keys, so a
+        restore never rewinds the rotation's runtime state."""
+        snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
+                    for k in PRESET_SNAPSHOT_KEYS}
+        live_cycle = s.get("cycle") or {}
+        default_cycle = DEFAULT_SCREEN_SETTINGS["cycle"]
+        snapshot["cycle"] = {
+            k: copy.deepcopy(live_cycle.get(k, default_cycle.get(k)))
+            for k in PRESET_CYCLE_SUBKEYS
+        }
+        return snapshot
+
+    @staticmethod
+    def _restore_state(s: dict, snapshot: dict) -> None:
+        """Write a captured state back. Whitelisted keys only, so a
+        malformed snapshot cannot sneak other fields into the config."""
+        for k in PRESET_SNAPSHOT_KEYS:
+            if k in snapshot:
+                s[k] = copy.deepcopy(snapshot[k])
+        if isinstance(snapshot.get("cycle"), dict):
+            s.setdefault("cycle", dict(DEFAULT_SCREEN_SETTINGS["cycle"]))
+            for k in PRESET_CYCLE_SUBKEYS:
+                if k in snapshot["cycle"]:
+                    s["cycle"][k] = snapshot["cycle"][k]
+
+    def undo_quick_look(self, screen: int) -> dict | None:
+        """Restore the state saved by the last Quick Look, then forget
+        it -- a second click must not bounce between two states."""
+        if self._block_if_mirror(screen, "quick-look-undo"): return None
+        restored = []
+        def mutate(s):
+            snap = s.get("lookUndo")
+            if not isinstance(snap, dict):
+                return
+            self._restore_state(s, snap)
+            s["lookUndo"] = None
+            restored.append(True)
+        snap = self._mutate_screen(screen, mutate)
+        if snap is not None:
+            self.push_settings(screen, snap)
+            self._replicate_to_mirrors(screen)
+            print(f"[looks] undo screen={screen} restored={bool(restored)}")
+        return snap
+
     def save_preset(self, screen: int, slot: int,
                     thumbnail: str | None = None) -> dict | None:
         """Capture the screen's current state into preset slot `slot`.
@@ -12570,17 +12655,7 @@ class BridgeRuntime:
             print(f"[preset] bad slot: {slot}")
             return None
         def mutate(s):
-            snapshot = {k: copy.deepcopy(s.get(k, DEFAULT_SCREEN_SETTINGS.get(k)))
-                        for k in PRESET_SNAPSHOT_KEYS}
-            # v1.6.1-beta R2.2: snapshot only the user-config slice of
-            # `cycle` so applying a preset never resets `lastApplyMs` /
-            # `nextIdx` back to the snapshot's frozen-in-time values.
-            live_cycle = s.get("cycle") or {}
-            default_cycle = DEFAULT_SCREEN_SETTINGS["cycle"]
-            snapshot["cycle"] = {
-                k: copy.deepcopy(live_cycle.get(k, default_cycle.get(k)))
-                for k in PRESET_CYCLE_SUBKEYS
-            }
+            snapshot = self._capture_state(s)
             if thumbnail:
                 snapshot["_thumb"] = thumbnail
             presets = list(s.get("presets") or [None] * PRESET_SLOTS)
@@ -12612,18 +12687,7 @@ class BridgeRuntime:
                 return None
             snapshot = copy.deepcopy(presets[slot])
         def mutate(s):
-            for k in PRESET_SNAPSHOT_KEYS:
-                if k in snapshot:
-                    s[k] = snapshot[k]
-            # v1.6.1-beta R2.2: merge the snapshot's `cycle` sub-keys
-            # into the live cycle dict so runtime state (lastApplyMs /
-            # nextIdx) survives Apply. Older snapshots without
-            # `cycle` skip silently.
-            if isinstance(snapshot.get("cycle"), dict):
-                s.setdefault("cycle", dict(DEFAULT_SCREEN_SETTINGS["cycle"]))
-                for k in PRESET_CYCLE_SUBKEYS:
-                    if k in snapshot["cycle"]:
-                        s["cycle"][k] = snapshot["cycle"][k]
+            self._restore_state(s, snapshot)
         snap = self._mutate_screen(screen, mutate)
         if snap is not None:
             self.push_settings(screen, snap)
@@ -13875,10 +13939,12 @@ class BridgeRuntime:
                 # raced.
                 self.quick_look_apply(
                     screen,
-                    snapshot_slot=msg.get("snapshotSlot"),
+                    undo_snapshot=bool(msg.get("undoSnapshot", True)),
                     settings=msg.get("settings") or {},
                     widgets=msg.get("widgets") or [],
                 )
+            elif t == "quick-look-undo":
+                self.undo_quick_look(screen)
             elif t == "widgets-lock":
                 self.set_widgets_locked(screen, bool(msg.get("locked", True)))
             elif t == "setting-update":

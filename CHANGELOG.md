@@ -6,6 +6,66 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.0-beta.2] - 2026-10-18
+
+### Fixed — a Quick Look overwrote the user's Preset 1
+
+Reported as "habe ein Preset gespeichert, dann ein Quick Look
+ausgewählt, seitdem ist das Preset überschrieben".
+
+Since v1.2.16 `applyLookBundle` sent `snapshotSlot: 0` and
+`quick_look_apply` wrote the pre-look state into **Preset slot 1**,
+replacing whatever the user had saved there. Two other features read
+that slot and inherited the damage: per-app profiles that apply
+"Preset 1" when a game starts, and the Ctrl+Shift+1 hotkey.
+
+The only warning was a toast that could never be read: it was fired
+immediately before a second toast into the same single toast element,
+which replaced it.
+
+The previous state now lives in a separate per-screen `lookUndo` slot
+(not mirrored, not settable, never part of a preset), restored by
+**Undo** on the apply toast or **Undo last Quick Look** in the Quick
+Looks card. Undo forgets the slot, so a second click does nothing.
+`snapshotSlot` is gone from the bridge entirely. Capture and restore are
+now shared helpers (`_capture_state` / `_restore_state`) instead of the
+same block copied into presets and Quick Looks.
+
+`test_look_undo.py` executes the reported sequence against the real
+methods with persistence stubbed out. Its first version passed against
+the bug: the live state at the moment of the Quick Look equalled the
+saved preset, so overwriting it was invisible. The scenario now tweaks
+the screen after saving, as a user does. 10/10 mutations caught.
+
+### Added — Hardware Monitor Quick Look
+
+CPU and GPU load as rings, GPU temperature as a bar, CPU temperature as
+a graph, plus clock and calendar: the dashboard from the screenshots
+that prompted v2.6.0's sensor looks. After applying it, the Configurator
+checks for a sensor source and says what is missing if there is none.
+
+### Added — automatic sensors (`sensorAuto`)
+
+A Quick Look is the same on every PC, but sensor paths are not
+(`SignalRGB / NVIDIA GeForce RTX 4070 Ti / GPU Load`). Hardware sensor
+widgets can therefore name a role (`cpu-temp`, `gpu-temp`, `gpu-load`,
+`liquid-temp`, `pump`) that each page resolves against the sensors it
+receives. An explicitly picked sensor always wins.
+
+* The unit decides between sources that reuse a name: in
+  LibreHardwareMonitor "GPU Core" is °C under Temperatures and % under
+  Load.
+* Patterns are anchored, so "GPU Hot Spot" and "Memory Junction" never
+  stand in for the GPU temperature; a GPU with only those resolves to
+  nothing rather than to a reading 20 °C too high.
+* SignalRGB sensors are preferred over LHM.
+
+The first draft also carried exclude lists; mutation testing showed them
+to be dead code next to the anchored patterns, so they were removed and
+the property they were meant to protect is tested directly. 9/9
+mutations caught, against the real sensor names from SignalRGB 2.5.80
+plus Intel and AMD LibreHardwareMonitor trees.
+
 ## [2.6.0-beta.1] - 2026-10-18
 
 ### Added — hardware sensors from SignalRGB itself
