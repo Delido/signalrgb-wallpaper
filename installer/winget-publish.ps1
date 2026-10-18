@@ -44,6 +44,11 @@ $ghRepo   = "signalrgb-wallpaper"
 if (-not $Version) {
     Push-Location $repoRoot
     try {
+        # release.ps1 creates the tag on GitHub (gh release create), not
+        # locally. Without this fetch the newest local stable tag is the
+        # PREVIOUS release, and v2.6.0 auto-detected as v2.5.0 -- a
+        # manifest for a version winget already has.
+        & git fetch --tags --quiet 2>$null
         # Latest tag matching vX.Y.Z exactly (no -beta / -rc suffix).
         # `git tag --sort=-v:refname` orders by semver-ish desc.
         $tags = & git tag --list "v*" --sort=-v:refname 2>$null
