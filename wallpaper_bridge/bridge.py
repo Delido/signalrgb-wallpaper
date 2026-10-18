@@ -912,7 +912,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.6.0-beta.3"
+APP_VERSION = "2.6.0"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1008,6 +1008,90 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.6.0": {
+        "title_en": "What\'s new in v2.6.0",
+        "title_de": "Was ist neu in v2.6.0",
+        "body_en": (
+            "**New: hardware sensors straight from SignalRGB.** Recent "
+            "SignalRGB versions measure temperatures, loads, clocks, "
+            "fans and pumps themselves, and the Hardware sensor widget "
+            "now lists them — no LibreHardwareMonitor needed. **System "
+            "\u2192 Sensors** shows whether your SignalRGB can do this "
+            "and what to do if not (update, switch on Monitoring, or "
+            "start SignalRGB).\n\n"
+            "**New looks for CPU, RAM and Hardware sensor:** a ring "
+            "with the value in the middle, a segmented bar, or a graph "
+            "of the last minute. Pick one under the widget's gear "
+            "\u2192 **Look**. Colours follow your widget theme or the "
+            "glow colour; the classic look stays the default.\n\n"
+            "**New Quick Look: Hardware Monitor** — CPU and GPU load as "
+            "rings, GPU temperature as a bar, CPU temperature as a "
+            "graph, plus clock and calendar. Its sensors are found "
+            "automatically on your PC.\n\n"
+            "**New: Ambilight mode** (first option under "
+            "**Background**) turns a screen into a light source: pure "
+            "black behind the glow, no image. Built for side monitors "
+            "next to the one you watch; there is a matching "
+            "**Ambilight** Quick Look.\n\n"
+            "**New: a Brightness slider** for the glow, right under "
+            "Spread. Spread never dimmed anything — it changes how far "
+            "the glow bleeds. Grid blur now goes up to 400 px.\n\n"
+            "**Fixed:** a Quick Look overwrote Preset 1 (and with it "
+            "app profiles and the Ctrl+Shift+1 hotkey) — it now has its "
+            "own **Undo** · switching Quick Looks left settings of the "
+            "previous one behind · \"SignalRGB isn't sending anything\" "
+            "flashed every second, and appeared while a game was "
+            "running in the background · clicking the background "
+            "thumbnail emptied the Configurator · the Hardware sensor "
+            "sparkline was never drawn.\n\n"
+            "**Re-import the wallpaper bundles.** In Lively remove the "
+            "wallpaper and import the new zip; in Wallpaper Engine the "
+            "Workshop item updates by itself.\n"
+        ),
+        "body_de": (
+            "**Neu: Hardware-Sensoren direkt aus SignalRGB.** Aktuelle "
+            "SignalRGB-Versionen messen Temperaturen, Last, Takt, "
+            "L\u00fcfter und Pumpen selbst, und das "
+            "Hardware-Sensor-Widget listet sie jetzt direkt — ohne "
+            "LibreHardwareMonitor. **System \u2192 Sensoren** zeigt, ob "
+            "dein SignalRGB das kann, und was sonst zu tun ist "
+            "(aktualisieren, Monitoring einschalten oder SignalRGB "
+            "starten).\n\n"
+            "**Neue Looks f\u00fcr CPU, RAM und Hardware-Sensor:** ein "
+            "Ring mit dem Wert in der Mitte, ein Segment-Balken oder "
+            "ein Graph der letzten Minute. Auswahl \u00fcber das "
+            "Zahnrad des Widgets \u2192 **Look**. Die Farben folgen dem "
+            "Widget-Theme oder der Glow-Farbe; der klassische Look "
+            "bleibt Standard.\n\n"
+            "**Neuer Quick Look: Hardware-Monitor** — CPU- und GPU-Last "
+            "als Ringe, GPU-Temperatur als Balken, CPU-Temperatur als "
+            "Graph, dazu Uhr und Kalender. Die Sensoren werden auf "
+            "deinem PC automatisch gefunden.\n\n"
+            "**Neu: Ambilight-Modus** (erste Option unter "
+            "**Hintergrund**) macht aus einem Bildschirm eine "
+            "Lichtquelle: reines Schwarz hinter dem Glow, kein Bild. "
+            "Gedacht f\u00fcr Nebenmonitore neben dem, auf den du "
+            "schaust; dazu gibt es den Quick Look **Ambilight**.\n\n"
+            "**Neu: ein Helligkeitsregler** f\u00fcr das Glow, direkt "
+            "unter Ausbreitung. Die Ausbreitung hat nie etwas "
+            "abgedunkelt — sie bestimmt, wie weit das Glow "
+            "ausl\u00e4uft. Die Raster-Weichzeichnung geht jetzt bis "
+            "400 px.\n\n"
+            "**Behoben:** Ein Quick Look hat Preset 1 "
+            "\u00fcberschrieben (und damit App-Profile und den Hotkey "
+            "Strg+Umschalt+1) — er hat jetzt ein eigenes "
+            "**R\u00fcckg\u00e4ngig** · beim Wechsel zwischen Quick "
+            "Looks blieben Einstellungen des vorigen h\u00e4ngen · "
+            "\"SignalRGB sendet nichts\" blinkte im Sekundentakt und "
+            "erschien, w\u00e4hrend ein Spiel im Hintergrund lief · ein "
+            "Klick auf das Hintergrundbild leerte den Konfigurator · "
+            "die Sparkline des Hardware-Sensors wurde nie gezeichnet.\n\n"
+            "**Wallpaper-Bundles neu importieren.** In Lively das "
+            "Wallpaper entfernen und die neue Zip importieren; in "
+            "Wallpaper Engine aktualisiert sich der Workshop-Eintrag "
+            "von selbst.\n"
+        ),
+    },
     "2.6.0-beta.3": {
         "title_en": "What\'s new in v2.6.0-beta.3",
         "title_de": "Was ist neu in v2.6.0-beta.3",

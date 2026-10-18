@@ -6,6 +6,44 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-18
+
+Stable release of everything since v2.5.0. The detail, including the
+causes and the tests behind each fix, is in the beta sections below
+(2.5.1, 2.5.2-beta.1 to .5, 2.6.0-beta.1 to .3); 2.5.1 and the 2.5.2
+line were never released as stable on their own.
+
+### Added
+- Hardware sensors read straight from SignalRGB's internal WebPipe, with
+  a probed availability state explained in **System -> Sensors**
+  (2.6.0-beta.1)
+- Ring / Bar / Graph looks for the CPU, RAM and Hardware sensor widgets
+  (2.6.0-beta.1)
+- Hardware Monitor Quick Look and automatic sensors by role
+  (`sensorAuto`) (2.6.0-beta.2)
+- Undo for Quick Looks (2.6.0-beta.2)
+- Ambilight mode and Ambilight Quick Look; grid blur up to 400 px
+  (2.5.2-beta.1, redesigned in beta.3)
+- Glow brightness slider (2.5.2-beta.5)
+
+### Fixed
+- A Quick Look overwrote Preset 1, and with it app profiles and the
+  Ctrl+Shift+1 hotkey (2.6.0-beta.2)
+- A skinned widget blanked every widget after it; latent since v2.3.4
+  (2.6.0-beta.3)
+- Quick Looks left settings of the previous look behind (2.5.2-beta.2)
+- The starvation card flashed at 1 Hz (2.5.2-beta.3) and blamed
+  SignalRGB while a fullscreen app ran in the background (2.5.1)
+- Clicking the background thumbnail blanked the Configurator
+  (2.5.2-beta.4)
+- The hardware-sensor sparkline was never drawn (2.6.0-beta.1)
+
+### Compatibility
+`MIN_WALLPAPER_VERSION` stays 2.4.0. The wallpaper bundle (2.4.21) only
+gained message handlers that default to the old behaviour, so it runs
+unchanged against bridges v2.4.0, v2.4.2 and v2.5.0, which all accept a
+newer bundle without a banner (checked against each tag's `_on_hello`).
+
 ## [2.6.0-beta.3] - 2026-10-18
 
 ### Fixed — a skinned widget blanked every widget after it
