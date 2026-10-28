@@ -476,6 +476,75 @@ class FullscreenWatcher:
                 print(f"[fullscreen] anywhere notify failed: {e}")
 
 # ============================================================================
+# Autostart (HKCU Run key)
+# ============================================================================
+# v2.6.1: the installer's `autostart` task used to be the only way to
+# set this, and a winget install could end up without it. The bridge
+# runs as the logged-on user, so it owns the same HKCU Run value the
+# installer writes ([Registry] in signalrgb-wallpaper.iss) and the
+# Configurator can flip it any time.
+
+_AUTOSTART_RUN_KEY      = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_AUTOSTART_APPROVED_KEY = (r"Software\Microsoft\Windows\CurrentVersion"
+                           r"\Explorer\StartupApproved\Run")
+_AUTOSTART_VALUE        = "SignalRGBWallpaperBridge"
+
+
+def autostart_supported() -> bool:
+    # Only the frozen exe has a stable path worth registering; a dev
+    # run would register python.exe + a script path.
+    return sys.platform == "win32" and getattr(sys, "frozen", False)
+
+
+def autostart_enabled() -> bool:
+    """True when the Run value exists AND Task Manager's Startup tab
+    hasn't disabled it (StartupApproved byte 0 odd = disabled)."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_RUN_KEY) as k:
+            winreg.QueryValueEx(k, _AUTOSTART_VALUE)
+    except Exception:
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_APPROVED_KEY) as k:
+            data, _ = winreg.QueryValueEx(k, _AUTOSTART_VALUE)
+            if isinstance(data, bytes) and data and (data[0] & 1):
+                return False
+    except Exception:
+        pass
+    return True
+
+
+def set_autostart(enabled: bool) -> bool:
+    """Write / remove the Run value. Returns True on success."""
+    if not autostart_supported():
+        return False
+    try:
+        import winreg
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_RUN_KEY) as k:
+            if enabled:
+                winreg.SetValueEx(k, _AUTOSTART_VALUE, 0, winreg.REG_SZ,
+                                  f'"{sys.executable}"')
+            else:
+                try: winreg.DeleteValue(k, _AUTOSTART_VALUE)
+                except FileNotFoundError: pass
+        # Drop a Task-Manager "disabled" marker so enabling here
+        # actually takes effect on next logon.
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _AUTOSTART_APPROVED_KEY,
+                                0, winreg.KEY_SET_VALUE) as k:
+                winreg.DeleteValue(k, _AUTOSTART_VALUE)
+        except FileNotFoundError:
+            pass
+        return True
+    except Exception as e:
+        print(f"[autostart] registry write failed: {e}")
+        return False
+
+# ============================================================================
 # Update checker
 # ============================================================================
 
@@ -758,14 +827,21 @@ class UpdateChecker:
                 # autoinstall + openconfigurator deliberately omitted:
                 # the former would re-download Lively every update,
                 # the latter would pop a browser tab every update.
+                #
+                # v2.6.1: autostart follows the CURRENT Run-key state
+                # (the Configurator can switch it off), and "!autostart"
+                # deselects the previous install's choice so an update
+                # doesn't silently turn it back on. /RELAUNCH=1 makes
+                # the installer restart the bridge even without the
+                # autostart task.
                 mergetasks = (
                     "installplugin,"
                     "installlively,installlively\\autoimport,"
                     "installwallpaperengine,"
-                    "autostart"
+                    + ("autostart" if autostart_enabled() else "!autostart")
                 )
                 args = ('/SILENT /SUPPRESSMSGBOXES /NORESTART '
-                        f'/MERGETASKS="{mergetasks}"')
+                        f'/MERGETASKS="{mergetasks}" /RELAUNCH=1')
                 # nShowCmd=1 (SW_SHOWNORMAL) so the Inno progress
                 # window is visible. ShellExecuteW returns >32 on
                 # success; any value <=32 is a numeric error code.
@@ -783,7 +859,7 @@ class UpdateChecker:
                 subprocess.Popen(
                     [str(target),
                      "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
-                     f"/MERGETASKS={mergetasks}"],
+                     f"/MERGETASKS={mergetasks}", "/RELAUNCH=1"],
                     creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
                 _log("subprocess.Popen fallback spawned")
                 launched = True
@@ -912,7 +988,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.6.1-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1008,6 +1084,36 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.6.1-beta.1": {
+        "title_en": "What's new in v2.6.1-beta.1",
+        "title_de": "Was ist neu in v2.6.1-beta.1",
+        "body_en": (
+            "**Fixed: an open Configurator slowed down the whole "
+            "browser** 2014 YouTube videos in other windows stalled. "
+            "The 17 small effect previews ran at full monitor refresh "
+            "rate all the time, even when the Effects tab was closed. "
+            "They now only animate while you can see them, at 30 fps. "
+            "The floating live preview also stops when you close it.\n\n"
+            "**New: autostart setting.** **System → Start the bridge "
+            "automatically on logon** switches Windows startup on or off "
+            "— useful when the bridge was installed via winget "
+            "without autostart. Updates keep your choice.\n"
+        ),
+        "body_de": (
+            "**Behoben: Ein offener Configurator hat den ganzen Browser "
+            "ausgebremst** — YouTube-Videos in anderen Fenstern "
+            "blieben stehen. Die 17 kleinen Effekt-Vorschauen liefen "
+            "dauerhaft mit voller Bildwiederholrate, auch bei "
+            "geschlossenem Effekte-Tab. Sie laufen jetzt nur noch, wenn "
+            "sie sichtbar sind, mit 30 fps. Auch die schwebende "
+            "Live-Vorschau stoppt jetzt beim Schließen.\n\n"
+            "**Neu: Autostart-Einstellung.** **System → Bridge bei "
+            "der Anmeldung automatisch starten** schaltet den "
+            "Windows-Autostart ein oder aus — praktisch, wenn die "
+            "Bridge per winget ohne Autostart installiert wurde. Updates "
+            "behalten deine Wahl.\n"
+        ),
+    },
     "2.6.0": {
         "title_en": "What\'s new in v2.6.0",
         "title_de": "Was ist neu in v2.6.0",
@@ -12267,6 +12373,9 @@ class BridgeRuntime:
                 # the user chose — echoing _CURRENT_LANG would turn
                 # "Automatic" into "German" the moment it round-trips.
                 "language":             str(self.config.get("language") or "auto"),
+                # v2.6.1: live registry state, not a config field.
+                "autostart":            autostart_enabled(),
+                "autostartSupported":   autostart_supported(),
                 "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
                 # v1.6.2-beta: SDK-server config block surfaced to the
                 # Configurator so the Integrations card can render the
@@ -13611,6 +13720,9 @@ class BridgeRuntime:
         # config.json by hand. Reported as "es sollte einstellbar sein
         # ob man deutsch oder englisch haben will".
         "language",
+        # v2.6.1: HKCU Run key. Not persisted in config — the registry
+        # is the source of truth, read back by _get_bridge_state.
+        "autostart",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -13677,6 +13789,16 @@ class BridgeRuntime:
                 self.hotkey_listener.stop()
                 self.hotkey_listener = HotkeyListener(self)
             print(f"[settings] presetHotkeysEnabled -> {enabled}")
+        elif key == "autostart":
+            ok = set_autostart(bool(value))
+            print(f"[settings] autostart -> {bool(value)} ({'ok' if ok else 'failed'})")
+            # Re-push either way: on failure the toggle snaps back to
+            # the real registry state.
+            for s in range(N_SCREENS):
+                try:
+                    self.push_settings(s, self.get_settings(s))
+                except Exception:
+                    pass
         elif key == "lastSeenAppVersion":
             # v2.3.1: the Configurator writes APP_VERSION here after
             # dismissing the "What's new" modal so it doesn't re-fire

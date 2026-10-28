@@ -3692,6 +3692,17 @@
       </div>
 
       <div class="check-row" style="margin-top: 10px;">
+        <input type="checkbox" id="sys-autostart">
+        <label for="sys-autostart" data-i18n="system.autostart">
+          Start the bridge automatically on logon
+        </label>
+      </div>
+      <div class="hint sub" id="sys-autostart-hint" data-i18n="system.autostart_hint"
+           style="margin: -4px 0 8px 22px; font-size: 11px;">
+        Adds the bridge to Windows startup for the current user.
+      </div>
+
+      <div class="check-row">
         <input type="checkbox" id="sys-preset-hotkeys">
         <label for="sys-preset-hotkeys" data-i18n="system.preset_hotkeys">
           Global preset hotkeys
@@ -4396,6 +4407,12 @@ const TRANSLATIONS = {
                               de: "Wallpaper-Seiten neu laden" },
   "system.reimport_bundles": { en: "Re-import wallpaper bundles…",
                               de: "Wallpaper-Bundles neu importieren…" },
+  "system.autostart":       { en: "Start the bridge automatically on logon",
+                              de: "Bridge bei der Anmeldung automatisch starten" },
+  "system.autostart_hint":  { en: "Adds the bridge to Windows startup for the current user.",
+                              de: "Trägt die Bridge in den Windows-Autostart des aktuellen Benutzers ein." },
+  "system.autostart_dev":   { en: "Only available in the installed bridge, not in a dev run.",
+                              de: "Nur in der installierten Bridge verfügbar, nicht im Dev-Lauf." },
   "system.fullscreen_pause": { en: "Pause on fullscreen apps",
                               de: "Bei Vollbild-Apps pausieren" },
   "system.fullscreen_pause_hint": { en: "Automatically pause glow + animations when a fullscreen game/video is in the foreground.",
@@ -5201,6 +5218,11 @@ function t(key, params) {
     function close() {
       const host = document.getElementById("floating-preview");
       if (host) host.classList.remove("show");
+      // A hidden iframe keeps running the whole wallpaper page (rAF
+      // loops, WebGL, WS). Navigate it away like setLivePreviewVisible
+      // does; open() reloads it via syncFloatingIframe.
+      const ifr = document.getElementById("floating-preview-iframe");
+      if (ifr) { try { ifr.src = "about:blank"; } catch (_) {} }
       document.body.classList.remove("preview-floating");
       btn.classList.remove("active");
       try { localStorage.setItem("cfg.previewFloating", "0"); } catch (_) {}
@@ -9259,6 +9281,7 @@ let bridgeState = {};
 
 function renderSystemSection() {
   const map = {
+    "sys-autostart":       "autostart",
     "sys-preset-hotkeys":  "presetHotkeysEnabled",
     "sys-fullscreen-pause": "fullscreenPause",
     "sys-update-check":    "updateCheckEnabled",
@@ -9268,6 +9291,18 @@ function renderSystemSection() {
     const el = document.getElementById(elId);
     if (!el) continue;
     el.checked = !!bridgeState[key];
+  }
+  // v2.6.1: autostart writes the HKCU Run key, which only makes sense
+  // for the installed exe — a dev run greys the toggle out.
+  const asEl = document.getElementById("sys-autostart");
+  const asHint = document.getElementById("sys-autostart-hint");
+  if (asEl && "autostartSupported" in bridgeState) {
+    asEl.disabled = !bridgeState.autostartSupported;
+    if (asHint) {
+      const k = bridgeState.autostartSupported ? "system.autostart_hint" : "system.autostart_dev";
+      asHint.dataset.i18n = k;
+      asHint.textContent = t(k);
+    }
   }
   // Language is a <select>, not a checkbox, so it sits outside the map
   // above. Falls back to "auto" when the bridge has not sent a value.
@@ -9308,6 +9343,7 @@ function renderSystemSection() {
 
 (function wireSystemSection() {
   const toggleMap = {
+    "sys-autostart":        "autostart",
     "sys-preset-hotkeys":   "presetHotkeysEnabled",
     "sys-fullscreen-pause": "fullscreenPause",
     "sys-update-check":     "updateCheckEnabled",
@@ -11920,15 +11956,47 @@ function buildAmbientTiles() {
 // Tiny standalone preset preview — same shapes as the wallpaper engine but
 // with fewer particles + smaller canvas. Re-uses the same per-frame
 // "spawn / step / render" loop pattern.
+//
+// v2.6.1: all tiles share ONE rAF driver, capped at TILE_PREVIEW_FPS,
+// that only steps tiles currently on screen. Before, every tile ran
+// its own uncapped loop forever — 17 canvases at monitor refresh rate
+// and DPR 2, even with the Effects tab closed. That was ~all of the
+// Configurator's idle CPU and enough GPU to stall YouTube in other
+// browser windows. Off-screen / hidden-tab tiles now cost nothing,
+// and the loop stops entirely when no tile is visible.
+const TILE_PREVIEW_FPS = 30;
+const _tilePreviews = new Set();
+let _tileRaf = 0;
+let _tileLastT = 0;
+function _tilePreviewKick() {
+  if (_tileRaf || document.hidden) return;
+  for (const tp of _tilePreviews) {
+    if (tp.visible) { _tileLastT = 0; _tileRaf = requestAnimationFrame(_tilePreviewTick); return; }
+  }
+}
+function _tilePreviewTick(now) {
+  _tileRaf = 0;
+  if (document.hidden) return;
+  let anyVisible = false;
+  for (const tp of _tilePreviews) if (tp.visible) { anyVisible = true; break; }
+  if (!anyVisible) return;
+  _tileRaf = requestAnimationFrame(_tilePreviewTick);
+  if (_tileLastT && now - _tileLastT < 1000 / TILE_PREVIEW_FPS - 2) return;
+  const dt = _tileLastT ? Math.min(0.1, (now - _tileLastT) / 1000) : 1 / TILE_PREVIEW_FPS;
+  _tileLastT = now;
+  for (const tp of _tilePreviews) if (tp.visible) tp.frame(dt);
+}
+document.addEventListener("visibilitychange", _tilePreviewKick);
+
 function startTilePreview(canvas, preset) {
   function resize() {
     const cw = canvas.clientWidth;
     const ch = canvas.clientHeight;
     if (cw === 0 || ch === 0) return;   // hidden tab — wait until visible
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width  = cw * dpr;
-    canvas.height = ch * dpr;
-    canvas.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+    // DPR 1: the tiles are ~160 px wide; a 2× backing store quadruples
+    // raster cost for no visible gain.
+    canvas.width  = cw;
+    canvas.height = ch;
   }
   setTimeout(resize, 0);
   window.addEventListener("resize", resize);
@@ -11942,11 +12010,20 @@ function startTilePreview(canvas, preset) {
   }
   const ctx = canvas.getContext("2d");
   let particles = [];
-  let lastT = performance.now();
-  function tick(now) {
-    requestAnimationFrame(tick);
-    const dt = Math.min(0.1, (now - lastT) / 1000);
-    lastT = now;
+  const tp = { visible: false, frame: tick };
+  _tilePreviews.add(tp);
+  if (typeof IntersectionObserver !== "undefined") {
+    // display:none (other tab) and scrolled-out both report
+    // isIntersecting=false, so this alone gates the work.
+    new IntersectionObserver((entries) => {
+      for (const e of entries) tp.visible = e.isIntersecting;
+      _tilePreviewKick();
+    }).observe(canvas);
+  } else {
+    tp.visible = true;
+    _tilePreviewKick();
+  }
+  function tick(dt) {
     const w = canvas.clientWidth || 160;
     const h = canvas.clientHeight || 100;
     const def = TILE_PRESETS[preset];
@@ -11960,7 +12037,6 @@ function startTilePreview(canvas, preset) {
     for (const p of particles) def.render(ctx, p, particles);
     if (typeof def.after === "function") def.after(ctx, particles);
   }
-  requestAnimationFrame(tick);
 }
 
 const TILE_PRESETS = {

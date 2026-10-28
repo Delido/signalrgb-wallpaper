@@ -6,6 +6,39 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.1-beta.1] - 2026-10-28
+
+### Fixed — the Configurator overloaded the whole browser
+
+Reported as "nach kurzer Zeit extrem überlastet, YouTube-Videos bleiben
+stehen". Every Effects-tab tile preview (17 canvases) ran its own
+uncapped `requestAnimationFrame` loop at DPR 2 forever, whatever tab was
+open. Measured in headless Edge against the live bridge: ~19 % main-thread
+time with the Configurator idle on its start page; with `rAF` stubbed out
+it dropped to ~0 %, so the tiles were essentially all of it (plus GPU
+raster per canvas per frame on a high-refresh monitor).
+
+- All tiles share one rAF driver capped at 30 fps that only steps tiles
+  an `IntersectionObserver` reports visible; the loop stops when none is
+  visible or the browser tab is hidden. Backing store at DPR 1.
+  Result: idle 19 % → 0.3 %, Effects tab open ~10 %.
+- Closing the floating live preview now navigates its iframe to
+  `about:blank`, like the inline preview already did — before, the
+  hidden iframe kept running the full wallpaper page.
+
+### Added — autostart toggle in System
+
+- **System → Start the bridge automatically on logon** writes / removes
+  the HKCU Run value the installer's `autostart` task creates, and clears
+  a Task-Manager "disabled" marker when switching it on. Greyed out in a
+  dev run. Not stored in config — the registry is the source of truth.
+- The bridge's auto-update passes `autostart` or `!autostart` from the
+  current registry state (so an update no longer re-enables it) plus
+  `/RELAUNCH=1`; a new installer `[Run]` entry restarts the bridge when
+  the autostart task is off.
+- The uninstaller removes the Run value even when the Configurator, not
+  the installer task, created it.
+
 ## [2.6.0] - 2026-10-18
 
 Stable release of everything since v2.5.0. The detail, including the

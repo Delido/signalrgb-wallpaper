@@ -401,6 +401,12 @@ Filename: "powershell.exe"; \
 Filename: "{app}\{#MyAppExeName}"; \
   Description: "Start the SignalRGB Wallpaper Bridge now"; \
   Flags: postinstall nowait shellexec; Tasks: autostart
+; ── v2.6.1: auto-update relaunch when autostart is OFF. The bridge's
+;    update flow now passes "!autostart" when the user switched it off
+;    in the Configurator (so the update doesn't re-create the Run key)
+;    plus /RELAUNCH=1, which brings the bridge back regardless. Never
+;    both entries: RelaunchWithoutAutostart is false when the task is on.
+Filename: "{app}\{#MyAppExeName}";   Flags: nowait shellexec; Check: RelaunchWithoutAutostart
 ; ── Configurator: open the in-browser settings UI so the user can pick
 ;    a wallpaper from the bundled Library, set up screens, etc., right
 ;    after install. Gated on the new openconfigurator task.
@@ -705,6 +711,23 @@ end;
 // installing the bridge + plugin without Lively, then install Lively
 // manually later.
 // ─────────────────────────────────────────────────────────────────────────────
+
+function RelaunchWithoutAutostart(): Boolean;
+begin
+  Result := (ExpandConstant('{param:RELAUNCH|0}') = '1')
+            and (not WizardIsTaskSelected('autostart'));
+end;
+
+// v2.6.1: the Configurator can create the Run value after an install
+// that skipped the autostart task; uninsdeletevalue only covers the
+// task-created one, so remove it explicitly.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\Run',
+      'SignalRGBWallpaperBridge');
+end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
