@@ -155,8 +155,10 @@ check("the section nav comes before the screen strip",
       "picking a section has to come first");
 check("the screen strip comes before the cards",
       iScreenStrip < iMain);
-check("the strip shares the main column",
-      /<div class="shell-main">\s*<nav class="tabs" id="tabs">/.test(HTML),
+// v2.7.0-beta.1: the strip is now the top bar of that column (a
+// view bar), still above the cards and right of the nav.
+check("the strip sits in the main column's top bar",
+      /<div class="shell-main">\s*<header>[\s\S]{0,600}?<nav class="tabs" id="tabs">/.test(HTML),
       "it must sit over the cards it applies to, not beside the nav");
 
 // The old scope note belonged to the workaround and should be gone —

@@ -124,8 +124,14 @@ const declared = [...src.matchAll(/\{\s*key:\s*"([\w-]+)",\s*i18n:/g)].map(m => 
 // every declared tab look populated and the check can never fail.
 const cardTags = [...HTML.matchAll(/<section\b[^>]*data-section-tab="([\w-]+)"[^>]*>/g)];
 const used = [...new Set(cardTags.map(m => m[1]))];
+// v2.7.0-beta.1: the Übersicht ("home") holds no cards by design — it
+// is a dashboard of shortcuts into them, rendered into #home-dash. It
+// still must not be empty, so it has to have that container.
+const hasHomeDash = /<div id="home-dash"/.test(HTML);
+check("the Übersicht has its dashboard container",
+      !declared.includes("home") || hasHomeDash);
 check("every declared tab has at least one card",
-      declared.every(t => used.includes(t)),
+      declared.every(t => used.includes(t) || (t === "home" && hasHomeDash)),
       `declared ${declared.join(",")} / used ${used.join(",")}`);
 check("every used tab is declared",
       used.every(t => declared.includes(t)),

@@ -988,7 +988,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.6.1-beta.1"
+APP_VERSION = "2.7.0-beta.1"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1084,6 +1084,46 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.1": {
+        "title_en": "What's new in v2.7.0-beta.1",
+        "title_de": "Was ist neu in v2.7.0-beta.1",
+        "body_en": (
+            "**New Configurator look.** "
+            "Sections sit in a sidebar on the left, screens are tabs in "
+            "the top bar, and status chips show at a glance whether "
+            "SignalRGB is sending, how many wallpaper pages are "
+            "connected and whether autostart is on.\n\n"
+            "**New start page: Overview.** Current background, a "
+            "settings search, summaries (widgets, effect, glow, "
+            "fullscreen pause), the data flow SignalRGB → Bridge "
+            "→ wallpaper, every screen and every area with its "
+            "current value, and all Quick Looks. Every tile jumps "
+            "straight to the setting behind it.\n\n"
+            "Builder, What's new and the tour moved into the sidebar. "
+            "On wide windows Appearance and System use two columns.\n\n"
+            "This is the first step of the redesign: the cards "
+            "themselves keep their controls for now.\n"
+        ),
+        "body_de": (
+            "**Neuer Configurator-Look nach dem Vorbild von Home "
+            "Assistant.** Die Bereiche sitzen links in einer Seitenleiste, "
+            "die Bildschirme sind Tabs in der oberen Leiste, und "
+            "Status-Chips zeigen auf einen Blick, ob SignalRGB sendet, "
+            "wie viele Wallpaper-Seiten verbunden sind und ob der "
+            "Autostart an ist.\n\n"
+            "**Neue Startseite: Übersicht.** Aktueller Hintergrund, "
+            "eine Einstellungssuche, Zusammenfassungen (Widgets, Effekt, "
+            "Glow, Vollbild-Pause), der Datenfluss SignalRGB → "
+            "Bridge → Wallpaper, alle Bildschirme und Bereiche mit "
+            "ihrem aktuellen Wert und alle Quick Looks. Jede Kachel "
+            "springt direkt zur Einstellung dahinter.\n\n"
+            "Builder, Was ist neu und die Tour sind in die Seitenleiste "
+            "gewandert. In breiten Fenstern nutzen Aussehen und System "
+            "zwei Spalten.\n\n"
+            "Das ist der erste Schritt des Redesigns: die Karten selbst "
+            "behalten vorerst ihre Bedienelemente.\n"
+        ),
+    },
     "2.6.1-beta.1": {
         "title_en": "What's new in v2.6.1-beta.1",
         "title_de": "Was ist neu in v2.6.1-beta.1",

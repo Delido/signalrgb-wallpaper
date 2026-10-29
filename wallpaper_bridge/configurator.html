@@ -9,15 +9,16 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 56'><rect x='6' y='8' width='52' height='34' rx='3' fill='%231b1f2a' stroke='%234a5160' stroke-width='2'/><rect x='10' y='12' width='44' height='26' fill='%23050608'/><rect x='26' y='46' width='12' height='3' fill='%234a5160'/><rect x='20' y='50' width='24' height='2' fill='%234a5160'/><circle cx='17' cy='28' r='3' fill='%23ff2d6a'/><circle cx='25' cy='28' r='3' fill='%23ff8f2d'/><circle cx='33' cy='28' r='3' fill='%23ffe92d'/><circle cx='41' cy='28' r='3' fill='%2342ff85'/><circle cx='49' cy='28' r='3' fill='%232db4ff'/></svg>">
 <style>
   :root {
-    --bg: #14171c;
-    --panel: #1d2128;
-    --panel-2: #262b34;
-    --border: #2f3641;
-    --text: #e7e9ec;
-    --text-dim: #9aa1ad;
-    --accent: #6ab0ff;
-    --accent-bg: #1f3a5a;
-    --accent-bg-hover: #25456a;
+    /* v2.7.0-beta.1: dashboard-style dark palette. */
+    --bg: #111216;
+    --panel: #1c1d22;
+    --panel-2: #24262c;
+    --border: #2a2c33;
+    --text: #e8e9ec;
+    --text-dim: #9ea3ad;
+    --accent: #ff9d2e;
+    --accent-bg: #3a2414;
+    --accent-bg-hover: #4a2e18;
     --good: #4caf50;
     --danger: #ff7575;
     /* v2.5.0: amber for "worth knowing", distinct from --danger which
@@ -69,7 +70,7 @@
   }
   .btn:hover { background: #2c323d; }
   .btn:active { transform: translateY(1px); }
-  .btn.primary { background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc; }
+  .btn.primary { background: var(--accent-bg); border-color: #b5651d; color: #ffd7a8; }
   .btn.primary:hover { background: var(--accent-bg-hover); }
   .btn.danger  { color: var(--danger); border-color: #5a2a2a; background: #2a1a1c; }
   .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
@@ -117,8 +118,8 @@
      a screen tab. Same accent ring the rest of the UI uses for
      active state. */
   .tab.drop-target {
-    background: rgba(58, 107, 168, 0.35);
-    box-shadow: inset 0 0 0 2px rgba(85, 136, 204, 0.9);
+    background: rgba(255, 140, 30, 0.21);
+    box-shadow: inset 0 0 0 2px rgba(255, 157, 46, 0.9);
     color: var(--text);
   }
   /* v2.2.0-beta: window-wide drag-and-drop overlay. Body class is
@@ -130,7 +131,7 @@
     inset: 12px;
     z-index: 10000;
     background: rgba(11, 15, 25, 0.78);
-    border: 3px dashed rgba(85, 136, 204, 0.9);
+    border: 3px dashed rgba(255, 157, 46, 0.9);
     border-radius: 12px;
     color: #fff;
     font-size: 28px;
@@ -169,9 +170,9 @@
   }
   .tab-gear.inactive { display: none; }
   .tab-gear.active {
-    color: #d8e6fc;
+    color: #ffd7a8;
     background: var(--accent-bg);
-    border-color: #3a6ba8;
+    border-color: #b5651d;
   }
 
 
@@ -193,11 +194,11 @@
     border-radius: 6px;
     cursor: pointer; font: inherit;
   }
-  .sc-btn:hover { color: var(--text); border-color: #3a6ba8; }
+  .sc-btn:hover { color: var(--text); border-color: #b5651d; }
   .sc-btn.active {
     background: var(--accent-bg);
-    color: #d8e6fc;
-    border-color: #3a6ba8;
+    color: #ffd7a8;
+    border-color: #b5651d;
   }
 
   main {
@@ -240,7 +241,7 @@
     background: rgba(255, 255, 255, 0.04);
   }
   #section-tabs .stab.active {
-    color: #d8e6fc;
+    color: #ffd7a8;
     background: var(--accent-bg);
     border-color: var(--border);
     border-bottom-color: var(--bg);
@@ -422,12 +423,12 @@
     position: relative;
     transition: border-color 0.15s, transform 0.15s;
   }
-  .overview-thumb:hover  { border-color: #3a6ba8; transform: translateY(-1px); }
-  .overview-thumb.active { border-color: #5b8fd1; box-shadow: 0 0 0 2px rgba(91,143,209,0.25); }
+  .overview-thumb:hover  { border-color: #b5651d; transform: translateY(-1px); }
+  .overview-thumb.active { border-color: #5b8fd1; box-shadow: 0 0 0 2px rgba(255, 157, 46, 0.25); }
   .overview-thumb .label {
     position: absolute; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.65);
-    color: #d8e6fc;
+    color: #ffd7a8;
     font-size: 11px; padding: 2px 4px;
     border-radius: 0 0 3px 3px;
     text-align: center;
@@ -438,7 +439,7 @@
     content: "↳";
     position: absolute; top: 2px; right: 2px;
     width: 18px; height: 18px;
-    background: rgba(91,143,209,0.92);
+    background: rgba(255, 157, 46, 0.92);
     color: #fff;
     border-radius: 3px;
     font-size: 13px; line-height: 18px;
@@ -454,9 +455,9 @@
     margin-left: 6px;
     padding: 1px 6px;
     font-size: 10.5px;
-    color: #d8e6fc;
-    background: rgba(91, 143, 209, 0.22);
-    border: 1px solid #3a6ba8;
+    color: #ffd7a8;
+    background: rgba(255, 157, 46, 0.22);
+    border: 1px solid #b5651d;
     border-radius: 4px;
     letter-spacing: 0.03em;
     pointer-events: none;
@@ -496,8 +497,8 @@
     margin: 4px 0 8px;
   }
   #screen-popover .pop-hint.mirror-active {
-    color: #d8e6fc;
-    background: rgba(91,143,209,0.15);
+    color: #ffd7a8;
+    background: rgba(255, 157, 46, 0.15);
     border-left: 3px solid #5b8fd1;
     padding: 6px 8px;
     border-radius: 4px;
@@ -545,13 +546,13 @@
     transition: background 0.12s, border-color 0.12s, color 0.12s;
   }
   #screen-popover .layout-btn:hover {
-    border-color: #3a6ba8;
+    border-color: #b5651d;
     color: var(--text);
   }
   #screen-popover .layout-btn.active {
-    border-color: #6ab0ff;
+    border-color: #ff9d2e;
     background: var(--accent-bg);
-    color: #d8e6fc;
+    color: #ffd7a8;
   }
   #screen-popover .layout-mock {
     display: flex; gap: 3px;
@@ -564,7 +565,7 @@
   }
   #screen-popover .layout-mon {
     flex: 1 1 0;
-    background: rgba(106, 176, 255, 0.55);
+    background: rgba(255, 157, 46, 0.55);
     border-radius: 2px;
   }
   #screen-popover .layout-mon.portrait {
@@ -576,7 +577,7 @@
     height: 100%;
   }
   #screen-popover .layout-btn.active .layout-mon {
-    background: rgba(106, 176, 255, 0.85);
+    background: rgba(255, 157, 46, 0.85);
   }
   #screen-popover .layout-label {
     font-size: 11px;
@@ -603,10 +604,10 @@
     font: inherit;
     font-size: 11px;
   }
-  #screen-popover .rotate-btn:hover { border-color: #3a6ba8; }
+  #screen-popover .rotate-btn:hover { border-color: #b5651d; }
   #screen-popover .rotate-btn .rot-mock {
     display: block;
-    background: rgba(106, 176, 255, 0.55);
+    background: rgba(255, 157, 46, 0.55);
     border-radius: 2px;
     transition: width 0.15s, height 0.15s;
   }
@@ -842,7 +843,7 @@
     transition: border-color .12s, background .12s;
   }
   .wiz-choice:hover { border-color: #5b8fd1; }
-  .wiz-choice.sel   { border-color: #5b8fd1; background: rgba(91,143,209,0.14); }
+  .wiz-choice.sel   { border-color: #5b8fd1; background: rgba(255, 157, 46, 0.14); }
   .wiz-choice-name  { font-weight: 600; display: block; margin-bottom: 3px; }
   .wiz-choice-desc  { font-size: 12px; color: var(--muted); line-height: 1.4; }
   .wiz-actions {
@@ -886,7 +887,7 @@
   }
   .tour-tooltip .tour-title {
     font-size: 14px; font-weight: 600; margin-bottom: 6px;
-    color: #d8e6fc;
+    color: #ffd7a8;
   }
   .tour-tooltip .tour-body {
     font-size: 12.5px; opacity: 0.88; line-height: 1.5;
@@ -907,7 +908,7 @@
     cursor: pointer;
   }
   .tour-tooltip .tour-btn.primary {
-    background: #3a6ba8; border-color: #4a7bbf; color: #fff;
+    background: #b5651d; border-color: #4a7bbf; color: #fff;
   }
   .tour-tooltip .tour-btn:hover { filter: brightness(1.15); }
   main.cards-disabled section.card .body {
@@ -1009,11 +1010,11 @@
     color: var(--text-dim);
     transition: border-color 0.15s, color 0.15s;
   }
-  .ambient-tile:hover { color: var(--text); border-color: #3a6ba8; }
+  .ambient-tile:hover { color: var(--text); border-color: #b5651d; }
   .ambient-tile.active {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(106,176,255,0.25) inset;
-    color: #d8e6fc;
+    box-shadow: 0 0 0 2px rgba(255, 157, 46, 0.25) inset;
+    color: #ffd7a8;
   }
   .ambient-tile canvas {
     position: absolute; inset: 0;
@@ -1037,7 +1038,7 @@
     padding: 3px;
     background: rgba(0, 0, 0, 0.55);
     border-radius: 50%;
-    color: #d8e6fc;
+    color: #ffd7a8;
     pointer-events: none;
     line-height: 0;
   }
@@ -1064,8 +1065,8 @@
   .seg:hover { color: var(--text); }
   .seg.active {
     background: var(--accent-bg);
-    border-color: #3a6ba8;
-    color: #d8e6fc;
+    border-color: #b5651d;
+    color: #ffd7a8;
   }
 
   /* ── Widget list ──────────────────────────────────────────────────── */
@@ -1101,7 +1102,7 @@
     height: 60px;
     border-radius: 4px;
     margin-bottom: 8px;
-    background: linear-gradient(135deg, var(--look-tint, #3a6ba8), #0c0e13);
+    background: linear-gradient(135deg, var(--look-tint, #b5651d), #0c0e13);
   }
   .look-card .look-title {
     font-weight: 600; font-size: 13px;
@@ -1255,8 +1256,8 @@
     box-shadow: 0 0 8px rgba(255,117,117,0.5);
   }
   .lock-bar.unlocked .lock-state .dot {
-    background: #6ab0ff;
-    box-shadow: 0 0 8px rgba(106,176,255,0.6);
+    background: #ff9d2e;
+    box-shadow: 0 0 8px rgba(255, 157, 46, 0.6);
   }
   .lock-bar .lock-label {
     font-weight: 600;
@@ -1270,8 +1271,8 @@
   }
   .lock-bar.unlocked .btn.toggle {
     background: var(--accent-bg);
-    border-color: #3a6ba8;
-    color: #d8e6fc;
+    border-color: #b5651d;
+    color: #ffd7a8;
   }
 
   /* ── Live preview iframe (v1.2-dev, sits above the schematic
@@ -1310,7 +1311,7 @@
   }
   .live-preview-frame:hover .live-preview-maximize,
   .live-preview-frame.maximized .live-preview-maximize { opacity: 1; }
-  .live-preview-maximize:hover { background: rgba(58, 107, 168, 0.7); }
+  .live-preview-maximize:hover { background: rgba(255, 140, 30, 0.42); }
   .live-preview-frame.maximized {
     position: fixed;
     inset: 16px;
@@ -1369,8 +1370,8 @@
      visually see the cells their widgets will land on. */
   .layout-preview.snap-on {
     background-image:
-      linear-gradient(rgba(106,176,255,0.20) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(106,176,255,0.20) 1px, transparent 1px);
+      linear-gradient(rgba(255, 157, 46, 0.2) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 157, 46, 0.2) 1px, transparent 1px);
     background-size: var(--snap-px, 40px) var(--snap-px, 40px);
   }
 
@@ -1379,7 +1380,7 @@
     background: rgba(50, 80, 140, 0.65);
     border: 1px solid var(--accent);
     border-radius: 4px;
-    color: #d8e6fc;
+    color: #ffd7a8;
     font-size: 11px;
     display: flex; align-items: center; justify-content: center;
     padding: 4px 6px;
@@ -1391,14 +1392,14 @@
   }
   .layout-preview.unlocked .preview-widget {
     cursor: move;
-    background: rgba(106, 176, 255, 0.28);
+    background: rgba(255, 157, 46, 0.28);
   }
   .layout-preview.unlocked .preview-widget:hover {
-    background: rgba(106, 176, 255, 0.42);
+    background: rgba(255, 157, 46, 0.42);
     border-color: #8fc4ff;
   }
   .preview-widget.dragging {
-    background: rgba(106, 176, 255, 0.55) !important;
+    background: rgba(255, 157, 46, 0.55) !important;
     border-color: #8fc4ff;
     box-shadow: 0 4px 14px rgba(0,0,0,0.6);
     z-index: 10;
@@ -1451,8 +1452,8 @@
   }
   .lib-filter-chip.active {
     background: var(--accent-bg);
-    color: #d8e6fc;
-    border-color: #3a6ba8;
+    color: #ffd7a8;
+    border-color: #b5651d;
   }
   .lib-grid {
     display: grid;
@@ -1481,7 +1482,7 @@
     color: var(--text, #e0e4ec);
     font: inherit;
   }
-  .lib-search:focus { outline: none; border-color: #3a6ba8; }
+  .lib-search:focus { outline: none; border-color: #b5651d; }
   .lib-sort {
     flex: 0 0 auto;
     padding: 6px 10px;
@@ -1521,10 +1522,10 @@
   }
   .lib-tag-chip:hover {
     color: var(--text, #e0e4ec);
-    border-color: var(--accent, #5588cc);
+    border-color: var(--accent, #e08a2a);
   }
   .lib-tag-chip.active {
-    background: var(--accent, #5588cc);
+    background: var(--accent, #e08a2a);
     color: #fff;
     border-color: transparent;
   }
@@ -1577,9 +1578,9 @@
     font: inherit;
   }
   .lib-tile-add:hover {
-    color: #d8e6fc;
-    border-color: #3a6ba8;
-    background: rgba(58, 107, 168, 0.08);
+    color: #ffd7a8;
+    border-color: #b5651d;
+    background: rgba(255, 140, 30, 0.05);
   }
   .lib-tile-add .add-plus {
     font-size: 22px; line-height: 1;
@@ -1588,7 +1589,7 @@
     font-size: 10px;
   }
   .lib-tile:hover {
-    border-color: #3a6ba8; transform: translateY(-1px);
+    border-color: #b5651d; transform: translateY(-1px);
   }
   /* v1.2.13: embedded <video> child fills the tile and shows the
      first decoded frame as a static poster. pointer-events:none so
@@ -1604,7 +1605,7 @@
   .lib-tile .label {
     position: absolute; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.6);
-    color: #d8e6fc;
+    color: #ffd7a8;
     font-size: 10px; padding: 1px 3px;
     border-radius: 0 0 3px 3px;
     text-align: center;
@@ -1628,7 +1629,7 @@
   .lib-tile-span-half {
     position: absolute;
     background: rgba(0, 0, 0, 0.45);
-    border: 1.5px solid rgba(85, 136, 204, 0.85);
+    border: 1.5px solid rgba(255, 157, 46, 0.85);
     border-radius: 4px;
     color: #fff;
     font-size: 22px;
@@ -1643,7 +1644,7 @@
   }
   .lib-tile:hover .lib-tile-span-half { opacity: 1; }
   .lib-tile-span-half:hover {
-    background: rgba(58, 107, 168, 0.6);
+    background: rgba(255, 140, 30, 0.36);
   }
   .lib-tile-span-half.left   { top: 22px; left: 4px;  right: 50%; bottom: 22px; margin-right: 2px; }
   .lib-tile-span-half.right  { top: 22px; left: 50%; right: 4px;  bottom: 22px; margin-left: 2px; }
@@ -1679,12 +1680,12 @@
     transition: background 0.15s, border-color 0.15s;
   }
   .fx-tile:hover {
-    background: rgba(58, 107, 168, 0.18);
-    border-color: rgba(58, 107, 168, 0.55);
+    background: rgba(255, 140, 30, 0.11);
+    border-color: rgba(255, 140, 30, 0.33);
   }
   .fx-tile.active {
-    background: rgba(58, 107, 168, 0.32);
-    border-color: rgba(58, 107, 168, 0.92);
+    background: rgba(255, 140, 30, 0.19);
+    border-color: rgba(255, 140, 30, 0.55);
   }
   .fx-tile-head {
     font-weight: 600;
@@ -1718,8 +1719,8 @@
   .lib-bulk-bar {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 10px; margin: 8px 0;
-    background: rgba(58, 107, 168, 0.15);
-    border: 1px solid rgba(58, 107, 168, 0.55);
+    background: rgba(255, 140, 30, 0.09);
+    border: 1px solid rgba(255, 140, 30, 0.33);
     border-radius: 6px;
     font-size: 12px;
   }
@@ -1739,8 +1740,8 @@
   }
   .lib-bulk-bar .btn-danger:hover { background: rgba(186, 60, 60, 0.65); }
   .lib-multiselect-toggle.active {
-    background: rgba(58, 107, 168, 0.4);
-    border-color: rgba(58, 107, 168, 0.85);
+    background: rgba(255, 140, 30, 0.24);
+    border-color: rgba(255, 140, 30, 0.51);
   }
   body.lib-selecting .lib-tile { cursor: pointer; }
   /* v2.3.0-beta.1: hide the always-visible per-tile delete button
@@ -1761,8 +1762,8 @@
   }
   body.lib-selecting .lib-tile.lib-selected::after {
     content: "✓";
-    background: rgba(58, 107, 168, 0.95);
-    border-color: rgba(58, 107, 168, 1);
+    background: rgba(255, 140, 30, 0.57);
+    border-color: rgba(255, 140, 30, 0.6);
     color: #fff;
     font-size: 16px;
     line-height: 18px;
@@ -1770,7 +1771,7 @@
     font-weight: 700;
   }
   body.lib-selecting .lib-tile.lib-selected {
-    outline: 3px solid rgba(58, 107, 168, 0.85);
+    outline: 3px solid rgba(255, 140, 30, 0.51);
     outline-offset: -3px;
   }
   .lib-tile.pinned::before {
@@ -1778,7 +1779,7 @@
     position: absolute;
     top: 2px; left: 2px;
     width: 18px; height: 18px;
-    background: rgba(58, 107, 168, 0.92);
+    background: rgba(255, 140, 30, 0.55);
     color: #fff;
     border-radius: 3px;
     font-size: 11px;
@@ -1788,8 +1789,8 @@
     z-index: 1;
   }
   .lib-tile.dragging { opacity: 0.5; }
-  .lib-tile.drop-before { box-shadow: inset 4px 0 0 #5588cc; }
-  .lib-tile.drop-after  { box-shadow: inset -4px 0 0 #5588cc; }
+  .lib-tile.drop-before { box-shadow: inset 4px 0 0 #e08a2a; }
+  .lib-tile.drop-after  { box-shadow: inset -4px 0 0 #e08a2a; }
   .lib-empty {
     color: var(--text-dim); font-size: 12px; font-style: italic;
     flex: 1; align-self: center;
@@ -1877,12 +1878,12 @@
     border-top: 1px solid var(--border);
   }
   .lib-preview-label {
-    font-size: 12px; color: #d8e6fc;
+    font-size: 12px; color: #ffd7a8;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     flex: 1;
   }
   .lib-preview-apply {
-    background: #3a6ba8; color: #fff;
+    background: #b5651d; color: #fff;
     border: none; border-radius: 4px;
     padding: 4px 12px; font-size: 12px;
     cursor: pointer;
@@ -1910,7 +1911,7 @@
     padding: 6px 14px; font-size: 12.5px;
     cursor: pointer;
   }
-  .lib-ctx-item:hover { background: rgba(58, 107, 168, 0.25); }
+  .lib-ctx-item:hover { background: rgba(255, 140, 30, 0.15); }
   .lib-ctx-item.danger { color: #ffbcbc; }
   .lib-ctx-item.danger:hover { background: rgba(180, 50, 50, 0.3); }
   .lib-ctx-sep {
@@ -1973,8 +1974,8 @@
   }
   .lib-tags-chip input { display: none; }
   .lib-tags-chip.on {
-    background: rgba(58, 107, 168, 0.4);
-    border-color: rgba(58, 107, 168, 0.9);
+    background: rgba(255, 140, 30, 0.24);
+    border-color: rgba(255, 140, 30, 0.54);
   }
   .lib-tags-extra {
     display: flex; flex-direction: column; gap: 4px;
@@ -2026,15 +2027,15 @@
   .lib-packs-link {
     display: inline-block;
     padding: 6px 12px;
-    background: rgba(58, 107, 168, 0.45);
-    border: 1px solid rgba(58, 107, 168, 0.9);
+    background: rgba(255, 140, 30, 0.27);
+    border: 1px solid rgba(255, 140, 30, 0.54);
     border-radius: 6px;
     color: inherit;
     font-size: 12px;
     text-decoration: none;
     margin-bottom: 12px;
   }
-  .lib-packs-link:hover { background: rgba(58, 107, 168, 0.65); }
+  .lib-packs-link:hover { background: rgba(255, 140, 30, 0.39); }
   .lib-packs-link-secondary {
     margin-left: 8px;
     background: rgba(255, 255, 255, 0.08);
@@ -2102,8 +2103,8 @@
     padding: 1px 6px;
     margin-left: 8px;
     border-radius: 999px;
-    background: rgba(58, 107, 168, 0.25);
-    border: 1px solid rgba(58, 107, 168, 0.55);
+    background: rgba(255, 140, 30, 0.15);
+    border: 1px solid rgba(255, 140, 30, 0.33);
     color: #b8d2f0;
     vertical-align: middle;
   }
@@ -2270,7 +2271,7 @@
   #section-tabs .stab.active {
     border: 1px solid var(--border);
     background: var(--accent-bg);
-    color: #d8e6fc;
+    color: #ffd7a8;
   }
   #section-tabs .stab svg {
     width: 15px; height: 15px;
@@ -2466,14 +2467,14 @@
   .lib-chips > .lib-filter-chip:hover,
   .lib-chips > .lib-pack-chip:hover {
     color: var(--text);
-    border-color: rgba(85, 136, 204, 0.6) !important;
+    border-color: rgba(255, 157, 46, 0.6) !important;
   }
   .lib-chips > button.active,
   .lib-chips > .lib-tag-chip.active,
   .lib-chips > .lib-filter-chip.active,
   .lib-chips > .lib-pack-chip.active {
-    background: rgba(58, 107, 168, 0.45);
-    border-color: rgba(85, 136, 204, 0.9) !important;
+    background: rgba(255, 140, 30, 0.27);
+    border-color: rgba(255, 157, 46, 0.9) !important;
     color: #fff;
   }
   /* Hide rows that have no chips so we don't see empty label rows. */
@@ -2524,8 +2525,8 @@
     background: var(--panel-2);
   }
   .screencount-pick.screencount-pick-in-header .sc-btn.active {
-    background: rgba(58, 107, 168, 0.55);
-    border-color: rgba(58, 107, 168, 0.9);
+    background: rgba(255, 140, 30, 0.33);
+    border-color: rgba(255, 140, 30, 0.54);
   }
   /* v2.2.0-beta: maximize button removed — floating preview mode
      covers the same use-case now and the maximize CSS broke when
@@ -2568,7 +2569,7 @@
      completely independent from the Widgets-tab inline preview. */
   #header-toggle-preview.active {
     background: var(--accent-bg);
-    color: #d8e6fc;
+    color: #ffd7a8;
   }
   .floating-preview {
     display: none;
@@ -2642,7 +2643,7 @@
     transition: border-color 0.12s, transform 0.12s;
   }
   .bg-current-thumb:hover {
-    border-color: rgba(85, 136, 204, 0.9);
+    border-color: rgba(255, 157, 46, 0.9);
     transform: translateY(-1px);
   }
   .bg-current-thumb-label {
@@ -2689,23 +2690,438 @@
       font-size: 12px;
     }
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     v2.7.0-beta.1 · dashboard shell
+     ───────────────────────────────────────────────────────────────
+     • full-height sidebar (#section-tabs) with brand, sections,
+       links and the version at its foot
+     • the page header is the top bar of the right column and carries
+       the house button + screen tabs as views
+     • status chips under it, then the cards; Übersicht = #home-dash
+     Last in the sheet on purpose: it overrides the v2.2 overhaul.
+     ═══════════════════════════════════════════════════════════════ */
+  html, body {
+    font-family: Roboto, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    font-size: 13.5px;
+  }
+  .app-shell {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+  .shell-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #section-tabs {
+    flex: 0 0 248px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: none;
+    border-right: 1px solid #24262c;
+    background: #18191d;
+    z-index: 8;
+  }
+  .side-brand {
+    flex: none;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    border-bottom: 1px solid #24262c;
+  }
+  .side-brand .brand-logo { height: 26px; width: auto; margin: 0; flex: none; }
+  .side-brand h1 { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.25; }
+  .side-items { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .side-group { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
+  .side-extra { border-top: 1px solid #24262c; }
+  .side-bottom { margin-top: auto; border-top: 1px solid #24262c; }
+  #section-tabs .stab {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+    height: 44px;
+    padding: 0 12px;
+    margin: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  #section-tabs .stab:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+  #section-tabs .stab svg {
+    width: 22px; height: 22px; flex: none;
+    stroke: var(--text-dim); fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    opacity: 1;
+  }
+  #section-tabs .stab.active {
+    border: 0;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  #section-tabs .stab.active svg { stroke: var(--accent); }
+  .side-version { display: flex; align-items: center; gap: 12px; padding: 8px 10px 4px; }
+  .side-ver-badge {
+    width: 30px; height: 30px; flex: none;
+    border-radius: 50%;
+    background: var(--panel-2);
+    color: var(--accent);
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .side-ver-text { display: flex; flex-direction: column; font-size: 13px; min-width: 0; }
+
+  /* Top bar. Scoped to the shell's own header: a bare `header` rule
+     would also hit every card's header.section-head. */
+  .shell-main > header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: 56px;
+    padding: 0 12px;
+    gap: 6px;
+    display: flex;
+    align-items: center;
+    background: var(--bg);
+    border-bottom: 1px solid #1d1f24;
+  }
+  .home-tab {
+    align-self: stretch;
+    width: 56px;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .home-tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linejoin: round; }
+  .home-tab:hover { color: var(--text); }
+  .home-tab.active { color: #fff; border-bottom-color: var(--accent); }
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    align-self: stretch;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
+    background: var(--bg);
+  }
+  .tab {
+    position: relative;
+    z-index: 0;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 14px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .tab::before {
+    content: "";
+    width: 18px; height: 18px; flex: none;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='12' rx='1'/%3E%3Cpath d='M8 20h8M12 16v4'/%3E%3C/svg%3E") center / contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='12' rx='1'/%3E%3Cpath d='M8 20h8M12 16v4'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+  .tab .tab-text { white-space: nowrap; }
+  .tab.active { background: transparent; color: #fff; border-bottom-color: var(--accent); }
+  /* On the Übersicht the house is the active view, not a screen. */
+  body.on-home .tab.active { color: var(--text-dim); border-bottom-color: transparent; }
+  .tab.inactive { display: none; }
+  /* Tour, What's new and Builder moved to the sidebar; the header
+     controls stay in the DOM because the sidebar links forward to them. */
+  #header-replay-tour, #header-whats-new, .shell-main > header a[href="/builder"] { display: none; }
+  .shell-main > header .btn { background: transparent; border-color: transparent; }
+  .shell-main > header .btn:hover { background: rgba(255, 255, 255, 0.06); }
+
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1006; font-weight: 600; }
+  .btn.primary:hover { background: #ffb15a; }
+
+  /* Status chips. */
+  .status-chips {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    padding: 16px 24px 0;
+  }
+  .status-chips:empty { display: none; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px 6px 10px;
+    border-radius: 999px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font: inherit;
+  }
+  button.chip { cursor: pointer; }
+  button.chip:hover { border-color: #3a3d45; }
+  .chip-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7080; flex: none; }
+  .chip-ok .chip-dot { background: #3ecf8e; }
+  .chip-warn .chip-dot { background: var(--warn); }
+  .chip-text { display: flex; flex-direction: column; line-height: 1.15; text-align: left; }
+  .chip-label { font-size: 10px; color: var(--text-dim); }
+  .chip-val { font-size: 12px; font-weight: 700; }
+
+  /* Content column + cards. */
+  .app-shell > .shell-main > main {
+    width: 100%;
+    max-width: 1560px;
+    margin: 0 auto;
+    padding: 20px 24px 48px;
+  }
+  main section.card {
+    background: var(--panel);
+    border: 1px solid #25272d;
+    border-radius: 12px;
+    padding: 16px 18px 8px;
+    margin-bottom: 16px;
+    break-inside: avoid;
+  }
+  /* The sheet's bare `header` rule (page chrome) also matches card
+     heads; undo its band background, border and sticky offset here. */
+  main section.card > header.section-head {
+    position: relative;
+    z-index: 0;
+    top: auto;
+    padding: 2px 0 12px;
+    background: transparent;
+    border: 0;
+  }
+  main section.card > header.section-head::before { display: none; }
+  main section.card > header.section-head h2 { font-size: 16px; font-weight: 500; }
+  /* Two columns for the long tabs on wide screens, dashboard style.
+     Anything in <main> that is not a card spans both. */
+  @media (min-width: 1360px) {
+    main[data-active-tab="appearance"],
+    main[data-active-tab="system"] { column-count: 2; column-gap: 20px; }
+    main[data-active-tab] > :not(section.card) { column-span: all; }
+  }
+
+  /* Übersicht. */
+  .home-dash { display: none; }
+  main[data-active-tab="home"] .home-dash {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 24px;
+    align-items: start;
+  }
+  .hd-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .hd-h {
+    margin: 10px 0 2px;
+    font-size: 16px; font-weight: 500;
+    display: flex; align-items: center; gap: 10px;
+    color: var(--text);
+  }
+  .hd-col > .hd-h:first-child { margin-top: 0; }
+  .hd-ico {
+    width: 22px; height: 22px; flex: none;
+    stroke: #c9ccd2; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .hd-h .hd-ico { width: 18px; height: 18px; }
+  .hd-sub { font-size: 12px; color: var(--text-dim); margin: 0; }
+  .hd-card {
+    background: var(--panel);
+    border: 1px solid #25272d;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .hd-look-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-dim); }
+  .hd-look-thumb {
+    height: 150px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #0b0c10 center / cover no-repeat;
+    display: flex; align-items: flex-end;
+    padding: 10px 12px;
+    color: #fff; font: inherit; text-align: left;
+    cursor: pointer;
+  }
+  .hd-look-name { font-size: 18px; font-weight: 500; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85); }
+  .hd-search {
+    display: flex; align-items: center; gap: 10px;
+    height: 44px; padding: 0 12px;
+    background: #15161a;
+    border-radius: 8px;
+    border-bottom: 1px solid #3a3d45;
+  }
+  .hd-search:focus-within { border-bottom-color: var(--accent); }
+  .hd-search .hd-ico { width: 18px; height: 18px; stroke: var(--text-dim); }
+  .hd-search input { flex: 1; min-width: 0; background: none; border: 0; color: var(--text); font: inherit; font-size: 14px; outline: none; }
+  .hd-search-results { display: flex; flex-direction: column; gap: 2px; }
+  .hd-search-results:empty { display: none; }
+  .hd-hit {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding: 8px 10px;
+    border: 0; border-radius: 8px;
+    background: none; color: var(--text);
+    font: inherit; text-align: left; cursor: pointer;
+  }
+  .hd-hit:hover, .hd-hit:focus-visible { background: rgba(255, 255, 255, 0.05); }
+  .hd-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .hd-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 16px 8px;
+    background: var(--panel);
+    border: 1px solid #25272d;
+    border-radius: 12px;
+    color: var(--text);
+    font: inherit; font-size: 13px; font-weight: 700;
+    cursor: pointer;
+  }
+  .hd-tile-ico { width: 26px; height: 26px; fill: none; stroke: var(--text-dim); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .hd-tone-accent .hd-tile-ico { stroke: var(--accent); }
+  .hd-tone-blue .hd-tile-ico { stroke: #7ec8ff; }
+  .hd-tone-yellow .hd-tile-ico { stroke: #ffd34d; }
+  .hd-tile:hover, .hd-row:hover { border-color: #3a3d45; background: #202127; }
+  .hd-list { display: flex; flex-direction: column; gap: 8px; }
+  .hd-row {
+    display: flex; align-items: center; gap: 16px;
+    width: 100%; min-height: 60px;
+    padding: 6px 14px 6px 16px;
+    background: var(--panel);
+    border: 1px solid #25272d;
+    border-radius: 12px;
+    color: var(--text);
+    font: inherit; text-align: left;
+    cursor: pointer;
+  }
+  .hd-row-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .hd-row-title { font-size: 15px; font-weight: 500; }
+  .hd-row .hd-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hd-chev { width: 18px; height: 18px; flex: none; stroke: #6b7080; fill: none; stroke-width: 2; stroke-linecap: round; }
+  .hd-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: #6b7080; }
+  .hd-dot.ok { background: #3ecf8e; }
+  .hd-flow { flex-direction: row; align-items: center; gap: 0; padding: 20px 14px; }
+  .hd-node { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 80px; flex: none; }
+  .hd-ring {
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    border: 2px solid #6b7080;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; text-align: center;
+  }
+  .hd-node.ok .hd-ring { border-color: #3ecf8e; }
+  .hd-node.accent .hd-ring { border-color: var(--accent); }
+  .hd-link { flex: 1; min-width: 12px; height: 2px; background: #3a3d45; }
+  .hd-link.ok { background: #3ecf8e; }
+  .hd-preview .btn { align-self: flex-start; }
+  .hd-ql-head { margin-top: 4px; }
+  .hd-looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  .hd-look-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 8px 4px;
+    border: 1px solid transparent; border-radius: 8px;
+    background: none; color: var(--text);
+    font: inherit; font-size: 12px; text-align: center;
+    cursor: pointer;
+  }
+  .hd-look-btn:hover { background: rgba(255, 255, 255, 0.04); border-color: var(--border); }
+  .hd-look-swatch { width: 48px; height: 30px; border-radius: 6px; opacity: 0.85; }
+  /* One-shot highlight after a jump from the Übersicht. */
+  .hd-flash { animation: hdFlash 1.4s ease-out 1; }
+  @keyframes hdFlash {
+    0%   { box-shadow: 0 0 0 2px var(--accent); }
+    100% { box-shadow: 0 0 0 2px transparent; }
+  }
+
+  /* Narrow windows: the sidebar becomes a scrolling row on top. */
+  @media (max-width: 900px) {
+    .app-shell { flex-direction: column; }
+    #section-tabs { flex: none; height: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid #24262c; }
+    .side-brand, .side-version { display: none; }
+    .side-items, .side-group { flex-direction: row; }
+    .side-extra, .side-bottom { border-top: 0; margin-top: 0; }
+    #section-tabs .stab { width: auto; white-space: nowrap; }
+    .shell-main > header { position: static; overflow-x: auto; }
+  }
 </style>
 </head>
 <body>
 
+<!-- v2.7.0-beta.1: dashboard shell.
+
+     Sidebar (#section-tabs) on the left over the full height, and the
+     page header as the top bar of the right column, carrying the screen
+     tabs as views. Sections first,
+     then a screen — the same hierarchy beta.23 introduced, now as two
+     bars instead of a sidebar plus a strip.
+
+     The strip still hides on System and Connections
+     (_applyScreenScopeChrome); the house button next to it leads to the
+     Übersicht and stays. -->
+<div class="app-shell">
+<nav id="section-tabs" aria-label="Section tabs">
+  <div class="side-brand">
+    <svg class="brand-logo" viewBox="0 0 64 56" aria-hidden="true">
+      <rect x="6" y="8" width="52" height="34" rx="3" fill="#1b1f2a" stroke="#4a5160" stroke-width="2"/>
+      <rect x="10" y="12" width="44" height="26" fill="#050608"/>
+      <rect x="26" y="46" width="12" height="3" fill="#4a5160"/>
+      <rect x="20" y="50" width="24" height="2" fill="#4a5160"/>
+      <circle cx="17" cy="28" r="3" fill="#ff2d6a"/>
+      <circle cx="25" cy="28" r="3" fill="#ff8f2d"/>
+      <circle cx="33" cy="28" r="3" fill="#ffe92d"/>
+      <circle cx="41" cy="28" r="3" fill="#42ff85"/>
+      <circle cx="49" cy="28" r="3" fill="#2db4ff"/>
+    </svg>
+    <h1 data-i18n="side.title">SignalRGB Wallpaper</h1>
+  </div>
+  <div class="side-items" id="section-tabs-items">
+    <div class="side-group" id="side-group-main"></div>
+    <div class="side-group side-extra">
+      <a class="stab side-link" id="side-builder" href="/builder" target="_blank">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg>
+        <span data-i18n="side.builder">Builder</span></a>
+      <a class="stab side-link" id="side-whats-new" href="#" data-forward="header-whats-new">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg>
+        <span data-i18n="side.whats_new">What's new</span></a>
+      <a class="stab side-link" id="side-tour" href="#" data-forward="header-replay-tour">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>
+        <span data-i18n="side.tour">Help &amp; tour</span></a>
+    </div>
+    <div class="side-group side-bottom" id="side-group-bottom">
+      <div class="side-version" id="side-version"></div>
+    </div>
+  </div>
+</nav>
+<div class="shell-main">
 <header>
-  <svg class="brand-logo" viewBox="0 0 64 56" aria-hidden="true">
-    <rect x="6" y="8" width="52" height="34" rx="3" fill="#1b1f2a" stroke="#4a5160" stroke-width="2"/>
-    <rect x="10" y="12" width="44" height="26" fill="#050608"/>
-    <rect x="26" y="46" width="12" height="3" fill="#4a5160"/>
-    <rect x="20" y="50" width="24" height="2" fill="#4a5160"/>
-    <circle cx="17" cy="28" r="3" fill="#ff2d6a"/>
-    <circle cx="25" cy="28" r="3" fill="#ff8f2d"/>
-    <circle cx="33" cy="28" r="3" fill="#ffe92d"/>
-    <circle cx="41" cy="28" r="3" fill="#42ff85"/>
-    <circle cx="49" cy="28" r="3" fill="#2db4ff"/>
-  </svg>
-  <h1 data-i18n="header.title">SignalRGB Wallpaper Configurator</h1>
+  <button type="button" class="home-tab" id="home-tab"
+          data-i18n-title="tab.home" title="Übersicht">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/></svg>
+  </button>
+  <nav class="tabs" id="tabs"></nav>
   <span class="spacer"></span>
   <span class="conn bad" id="conn" data-i18n="conn.connecting">connecting…</span>
   <!-- v2.3.0-beta.1: screen-count picker back in the header, next to
@@ -2821,27 +3237,12 @@
           data-i18n="reset_screen.label">Reset this screen…</button>
 </div>
 
-<!-- v1.6.1-beta R2: horizontal section-tab row. Five tabs
-     (Look / Effects / Widgets / Integrations / System) filter the
-     <section.card> elements below by their data-section-tab
-     attribute. Replaces the v1.2.1 left-rail aside. -->
-<div class="app-shell">
-<nav id="section-tabs" aria-label="Section tabs"></nav>
-
-<!-- v2.4.4-beta.23: the screen picker moved inside the app shell and
-     below the section nav.
-
-     It used to sit above everything, which put System and Connections
-     under a "Screen 1 / Screen 2" chooser they have nothing to do with.
-     beta.22 hid the strip on those tabs; that fixed the wrong thing —
-     chrome that appears and disappears is a workaround, not a
-     structure. The hierarchy now matches the meaning: pick a section
-     first, then a screen, and only where a screen is a real dimension
-     of the settings below. -->
-<div class="shell-main">
-<nav class="tabs" id="tabs"></nav>
+<div id="status-chips" class="status-chips" aria-live="polite"></div>
 
 <main data-active-tab="appearance">
+  <!-- v2.7.0-beta.1: Übersicht. Built by renderHomeDashboard() from the
+       settings push, /health and /config; shown only on the "home" tab. -->
+  <div id="home-dash" class="home-dash"></div>
 
   <!-- ── Setup status ──────────────────────────────────────────────────
        v2.4.11. Getting a working wallpaper takes six steps, and two of
@@ -4838,6 +5239,59 @@ const TRANSLATIONS = {
   "tab.appearance":         { en: "Appearance",           de: "Aussehen" },
   "tab.content":            { en: "Content",              de: "Inhalte" },
   "tab.connect":            { en: "Connections",          de: "Verbindungen" },
+  // v2.7.0-beta.1: dashboard shell.
+  "tab.home":               { en: "Overview",             de: "Übersicht" },
+  "side.builder":           { en: "Builder",              de: "Builder" },
+  "side.whats_new":         { en: "What's new",           de: "Was ist neu" },
+  "side.tour":              { en: "Help & tour",          de: "Hilfe & Tour" },
+  "side.version":           { en: "Bridge v{v}",          de: "Bridge v{v}" },
+  "side.port":              { en: "Port {p}",             de: "Port {p}" },
+  "chip.signalrgb":         { en: "SignalRGB",            de: "SignalRGB" },
+  "chip.sending":           { en: "sending · {fps} fps",  de: "sendet · {fps} fps" },
+  "chip.idle":              { en: "running, no frames",   de: "läuft, keine Frames" },
+  "chip.not_running":       { en: "not running",          de: "läuft nicht" },
+  "chip.paused":            { en: "paused",               de: "pausiert" },
+  "chip.fullscreen":        { en: "paused · fullscreen",  de: "pausiert · Vollbild" },
+  "chip.pages":             { en: "Wallpaper pages",      de: "Wallpaper-Seiten" },
+  "chip.pages_n":           { en: "{n} connected",        de: "{n} verbunden" },
+  "chip.autostart":         { en: "Autostart",            de: "Autostart" },
+  "chip.on":                { en: "on",                   de: "an" },
+  "chip.off":               { en: "off",                  de: "aus" },
+  "chip.sensors":           { en: "Sensors",              de: "Sensoren" },
+  "chip.sensors_n":         { en: "{n} from SignalRGB",   de: "{n} aus SignalRGB" },
+  "home.active_look":       { en: "Current background",   de: "Aktueller Hintergrund" },
+  "home.no_bg":             { en: "No background image",  de: "Kein Hintergrundbild" },
+  "home.own_image":         { en: "Your own image",       de: "Eigenes Bild" },
+  "side.title":             { en: "SignalRGB Wallpaper",  de: "SignalRGB Wallpaper" },
+  "home.search":            { en: "Search settings…",     de: "Einstellung suchen…" },
+  "home.search_none":       { en: "Nothing found for “{q}”", de: "Nichts gefunden für „{q}“" },
+  "home.summaries":         { en: "Summaries",            de: "Zusammenfassungen" },
+  "home.widgets_n":         { en: "{n} widgets",          de: "{n} Widgets" },
+  "home.effect":            { en: "Effect: {name}",       de: "Effekt: {name}" },
+  "home.effect_off":        { en: "No effect",            de: "Kein Effekt" },
+  "home.glow":              { en: "Glow {n} %",           de: "Glow {n} %" },
+  "home.glow_off":          { en: "Glow off",             de: "Glow aus" },
+  "home.fs_on":             { en: "Pauses for fullscreen", de: "Pause bei Vollbild" },
+  "home.fs_off":            { en: "Runs in fullscreen",   de: "Läuft bei Vollbild" },
+  "home.flow":              { en: "Data flow",            de: "Datenfluss" },
+  "home.flow_bridge":       { en: "Bridge",               de: "Bridge" },
+  "home.flow_pages":        { en: "Wallpaper",            de: "Wallpaper" },
+  "home.screens":           { en: "Screens",              de: "Bildschirme" },
+  "home.screen_n":          { en: "Screen {n}",           de: "Bildschirm {n}" },
+  "home.screen_mirror":     { en: "mirrors screen {n}",   de: "spiegelt Bildschirm {n}" },
+  "home.screen_no_page":    { en: "no page connected",    de: "keine Seite verbunden" },
+  "home.areas":             { en: "Areas",                de: "Bereiche" },
+  "home.preview":           { en: "Live preview",         de: "Live-Vorschau" },
+  "home.preview_hint":      { en: "Starts on click and stops when closed — it renders the whole wallpaper a second time.",
+                              de: "Startet erst auf Klick und stoppt beim Schließen — sie rendert das ganze Wallpaper ein zweites Mal." },
+  "home.preview_open":      { en: "Open preview",         de: "Vorschau öffnen" },
+  "home.quick_looks":       { en: "Quick Looks",          de: "Quick Looks" },
+  "home.area.bg":           { en: "Background",           de: "Hintergrund" },
+  "home.area.glow":         { en: "Glow",                 de: "Glow" },
+  "home.area.effects":      { en: "Effects",              de: "Effekte" },
+  "home.area.widgets":      { en: "Widgets",              de: "Widgets" },
+  "home.area.presets":      { en: "Presets",              de: "Presets" },
+  "home.area.connect":      { en: "Connections",          de: "Verbindungen" },
   "section.integrations":   { en: "Connections",          de: "Verbindungen" },
   "integrations.hint":      {
     en: "Optional. Send your lighting to other software, or let other software drive this wallpaper. Everything here is beta — none of it is needed for the wallpaper itself.",
@@ -6256,7 +6710,11 @@ for (let i = 0; i < N_SCREENS; i++) {
     if (i !== activeScreen) switchScreen(i);
     showScreenPopover(tab);
   });
-  tab.addEventListener("click", () => switchScreen(i));
+  tab.addEventListener("click", () => {
+    switchScreen(i);
+    // From the Übersicht a screen tab means "edit this screen".
+    if (document.body.classList.contains("on-home")) activateSectionTab("appearance");
+  });
   // v2.2.0-beta: tabs accept a library-tile drag. Dropping a tile
   // on tab N applies that image to screen N without switching
   // active-screen focus first.
@@ -6340,6 +6798,7 @@ async function refreshTabLabels() {
       }
     });
     renderOverviewCard(screens);
+    renderHomeDashboard();
     if (typeof renderTabMirrorBadges === "function") renderTabMirrorBadges();
     // v1.2.12: surface the active screen's measured plugin send rate
     // next to the frame-rate dropdown. Lets a user pick a cap that
@@ -6571,6 +7030,9 @@ async function refreshSetupStatus() {
     const r = await fetch("/health", { cache: "no-store" });
     if (!r.ok) return;
     const h = await r.json();
+    _lastHealth = h;
+    // Isolated: a dashboard error must never hold back the setup banner.
+    try { renderStatusChips(); renderHomeDashboard(); } catch (e) { console.warn("[home]", e); }
     const broken = h && h.available !== false
       && SETUP_STEPS.some((st) => !st.ok(h));
     if (broken) {
@@ -6661,6 +7123,375 @@ function renderOverviewCard(screens) {
     if (!isFinite(i) || i >= n) el.remove();
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2.7.0-beta.1: Übersicht (home dashboard) + status chips
+//
+// The landing page of the dashboard shell. It owns no settings: every
+// tile and row is a shortcut into the card that does, so there is still
+// exactly one control per setting. Data comes from what the page already
+// has — the settings push (`settings`, `bridgeState`), the 5 s /health
+// poll (`_lastHealth`) and the /config poll (`_lastConfigSnapshot`).
+//
+// The skeleton is built once; later renders only patch text, so the
+// search field keeps its focus and caret across the 5 s polls.
+// ─────────────────────────────────────────────────────────────────────────────
+let _lastHealth = null;
+
+const HD_ICONS = {
+  overview: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+  search:   '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  widgets:  '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>',
+  effect:   '<path d="M12 2v20M4.9 6l14.2 12M19.1 6L4.9 18"/>',
+  glow:     '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
+  pause:    '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  flow:     '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  monitor:  '<rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/>',
+  portrait: '<rect x="7" y="2" width="10" height="16" rx="1"/><path d="M9 22h6M12 18v4"/>',
+  image:    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-4 4 3 4-5 5 4"/>',
+  preset:   '<path d="M5 4h14v17l-7-4-7 4z"/>',
+  connect:  '<path d="M9 12h6"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/>',
+  play:     '<rect x="3" y="5" width="18" height="12" rx="1"/><path d="M10 9l4 2-4 2z"/>',
+  chevron:  '<path d="M9 6l6 6-6 6"/>',
+  check:    '<path d="M5 12l4 4 10-10"/>',
+};
+function _hdSvg(name, cls) {
+  return '<svg class="' + (cls || "hd-ico") + '" viewBox="0 0 24 24" aria-hidden="true">' +
+         HD_ICONS[name] + '</svg>';
+}
+
+// Jump to a card: switch to its tab, open it if collapsed, scroll it into
+// view and flash it so the eye lands on the right place. `focusEl` is an
+// element inside the card (a search hit) to scroll to instead.
+function goToCard(cardId, focusEl) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  activateSectionTab(card.dataset.sectionTab || "appearance");
+  card.classList.remove("collapsed");
+  requestAnimationFrame(() => {
+    const target = focusEl && focusEl.offsetParent ? focusEl : card;
+    target.scrollIntoView({ block: "start", behavior: "smooth" });
+    const flash = focusEl && focusEl.offsetParent
+      ? (focusEl.closest(".row, .check-row, details, label") || focusEl) : card;
+    flash.classList.remove("hd-flash");
+    void flash.offsetWidth;
+    flash.classList.add("hd-flash");
+  });
+}
+
+function _hdBuildSkeleton(dash) {
+  dash.innerHTML =
+    '<section class="hd-col">' +
+      '<h2 class="hd-h">' + _hdSvg("overview") + '<span data-i18n="tab.home"></span></h2>' +
+      '<div class="hd-card hd-look">' +
+        '<div class="hd-look-head"><span data-i18n="home.active_look"></span><span id="hd-look-screen"></span></div>' +
+        '<button type="button" class="hd-look-thumb" id="hd-look-thumb">' +
+          '<span class="hd-look-name" id="hd-look-name"></span></button>' +
+        '<label class="hd-search">' + _hdSvg("search") +
+          '<input type="search" id="hd-search" autocomplete="off" data-i18n-placeholder="home.search"></label>' +
+        '<div class="hd-search-results" id="hd-search-results"></div>' +
+      '</div>' +
+      '<h2 class="hd-h" data-i18n="home.summaries"></h2>' +
+      '<div class="hd-tiles" id="hd-tiles"></div>' +
+      '<h2 class="hd-h">' + _hdSvg("flow") + '<span data-i18n="home.flow"></span></h2>' +
+      '<div class="hd-card hd-flow" id="hd-flow"></div>' +
+    '</section>' +
+    '<section class="hd-col">' +
+      '<h2 class="hd-h" data-i18n="home.screens"></h2>' +
+      '<div class="hd-list" id="hd-screens"></div>' +
+      '<h2 class="hd-h" data-i18n="home.areas"></h2>' +
+      '<div class="hd-list" id="hd-areas"></div>' +
+    '</section>' +
+    '<section class="hd-col">' +
+      '<h2 class="hd-h">' + _hdSvg("play") + '<span data-i18n="home.preview"></span></h2>' +
+      '<div class="hd-card hd-preview">' +
+        '<p class="hd-sub" data-i18n="home.preview_hint"></p>' +
+        '<button type="button" class="btn primary" id="hd-preview-open" data-i18n="home.preview_open"></button>' +
+        '<div class="hd-sub hd-ql-head" data-i18n="home.quick_looks"></div>' +
+        '<div class="hd-looks" id="hd-looks"></div>' +
+      '</div>' +
+    '</section>';
+  dash.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  const search = dash.querySelector("#hd-search");
+  search.placeholder = t("home.search");
+  let timer = null;
+  search.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => _hdSearch(search.value), 100);
+  });
+  search.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const first = dash.querySelector("#hd-search-results button");
+    if (first) first.click();
+  });
+  dash.querySelector("#hd-look-thumb").addEventListener("click", () => goToCard("card-bg"));
+  dash.querySelector("#hd-preview-open").addEventListener("click", () => {
+    const b = document.getElementById("header-toggle-preview");
+    if (b) b.click();
+  });
+  const looks = dash.querySelector("#hd-looks");
+  for (const bundle of LOOK_BUNDLES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hd-look-btn";
+    const sw = document.createElement("span");
+    sw.className = "hd-look-swatch";
+    sw.style.background = bundle.tint || "var(--panel-2)";
+    const name = document.createElement("span");
+    if (bundle.nameKey) name.setAttribute("data-i18n", bundle.nameKey);
+    name.textContent = bundle.nameKey ? t(bundle.nameKey) : bundle.name;
+    b.append(sw, name);
+    b.addEventListener("click", () => applyLookBundle(bundle));
+    looks.appendChild(b);
+  }
+}
+
+// Settings search over the cards' own labels. Built on demand from the
+// DOM, so a card added later is searchable without a list to maintain.
+function _hdSearchIndex() {
+  const out = [];
+  document.querySelectorAll("main section.card[id]").forEach((card) => {
+    const h2 = card.querySelector("header.section-head h2");
+    const cardTitle = h2 ? h2.textContent.trim() : card.id;
+    out.push({ text: cardTitle, card: card.id, el: null, cardTitle });
+    card.querySelectorAll(".row > label, .check-row > label, h3, summary, .row .lbl, label[for]").forEach((el) => {
+      const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (text && text.length < 80) out.push({ text, card: card.id, el, cardTitle });
+    });
+  });
+  return out;
+}
+function _hdSearch(q) {
+  const box = document.getElementById("hd-search-results");
+  if (!box) return;
+  box.innerHTML = "";
+  q = (q || "").trim().toLowerCase();
+  if (q.length < 2) return;
+  const seen = new Set();
+  const hits = _hdSearchIndex().filter((it) => {
+    if (!it.text.toLowerCase().includes(q)) return false;
+    const k = it.card + "|" + it.text;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).slice(0, 6);
+  if (!hits.length) {
+    const p = document.createElement("div");
+    p.className = "hd-sub";
+    p.textContent = t("home.search_none", { q });
+    box.appendChild(p);
+    return;
+  }
+  for (const h of hits) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hd-hit";
+    const main = document.createElement("span");
+    main.textContent = h.text;
+    const where = document.createElement("span");
+    where.className = "hd-sub";
+    where.textContent = h.el ? h.cardTitle : t("tab." + (document.getElementById(h.card).dataset.sectionTab || "appearance"));
+    b.append(main, where);
+    b.addEventListener("click", () => goToCard(h.card, h.el));
+    box.appendChild(b);
+  }
+}
+
+function _hdRow(icon, title, sub, onClick, trailing) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "hd-row";
+  b.innerHTML = _hdSvg(icon) +
+    '<span class="hd-row-text"><span class="hd-row-title"></span><span class="hd-sub"></span></span>' +
+    (trailing || _hdSvg("chevron", "hd-chev"));
+  b.querySelector(".hd-row-title").textContent = title;
+  b.querySelector(".hd-sub").textContent = sub || "";
+  b.addEventListener("click", onClick);
+  return b;
+}
+function _hdTile(icon, tone, label, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "hd-tile hd-tone-" + tone;
+  b.innerHTML = _hdSvg(icon, "hd-tile-ico") + '<span></span>';
+  b.querySelector("span").textContent = label;
+  b.addEventListener("click", onClick);
+  return b;
+}
+function _hdBaseName(p) {
+  const s = String(p || "").replace(/[?#].*$/, "");
+  const name = s.split(/[\\/]/).pop() || "";
+  const base = decodeURIComponent(name).replace(/\.(webp|png|jpe?g|gif|mp4|webm)$/i, "")
+    .replace(/\.4k$/i, "");
+  // Uploads are stored as screen-<n>-<timestamp>; that name means
+  // nothing to the user.
+  return /^screen-\d+-\d+$/.test(base) ? t("home.own_image") : base;
+}
+function _hdThumbUrl(p) {
+  if (!p) return "";
+  p = String(p).trim();
+  if (/^(https?:|data:|\/)/i.test(p)) return p;
+  return "/image?path=" + encodeURIComponent(p.replace(/^file:\/{2,3}/i, ""));
+}
+function _hdEffectName(key) {
+  return key[0].toUpperCase() + key.slice(1);
+}
+
+function renderHomeDashboard() {
+  const dash = document.getElementById("home-dash");
+  if (!dash || !document.body.classList.contains("on-home")) return;
+  if (!dash.firstChild) _hdBuildSkeleton(dash);
+  const s = settings || {};
+
+  // Current background of the active screen.
+  const thumb = dash.querySelector("#hd-look-thumb");
+  const url = _hdThumbUrl(s.bgImage);
+  const bg = url ? "url(\"" + url + "\")" : "";
+  if (thumb.style.backgroundImage !== bg) thumb.style.backgroundImage = bg;
+  dash.querySelector("#hd-look-name").textContent = s.bgImage ? _hdBaseName(s.bgImage) : t("home.no_bg");
+  dash.querySelector("#hd-look-screen").textContent = t("home.screen_n", { n: activeScreen + 1 });
+  dash.querySelector("#hd-search").placeholder = t("home.search");
+
+  // Summaries: each tile opens the card that owns the value.
+  const tiles = dash.querySelector("#hd-tiles");
+  tiles.innerHTML = "";
+  const nWidgets = Array.isArray(s.widgets) ? s.widgets.length : 0;
+  const eff = s.ambientEffect && s.ambientEffect !== "off" ? s.ambientEffect : "";
+  const glowOn = s.showBars !== false;
+  const fsPause = !!(bridgeState && bridgeState.fullscreenPause);
+  tiles.append(
+    _hdTile("widgets", nWidgets ? "accent" : "dim", t("home.widgets_n", { n: nWidgets }), () => goToCard("card-widgets")),
+    _hdTile("effect", eff ? "blue" : "dim", eff ? t("home.effect", { name: _hdEffectName(eff) }) : t("home.effect_off"), () => goToCard("card-effects")),
+    _hdTile("glow", glowOn ? "yellow" : "dim", glowOn ? t("home.glow", { n: s.glowStrength ?? 100 }) : t("home.glow_off"), () => goToCard("card-glow")),
+    _hdTile("pause", fsPause ? "accent" : "dim", t(fsPause ? "home.fs_on" : "home.fs_off"), () => goToCard("card-system", document.getElementById("sys-fullscreen-pause"))),
+  );
+
+  // Data flow: SignalRGB -> bridge -> wallpaper pages, from /health.
+  const h = _lastHealth || {};
+  const fpsList = (h.fps_per_screen || []).filter((v) => v > 0);
+  const fps = fpsList.length ? Math.round(Math.max(...fpsList)) : 0;
+  const srgbOk = !!h.signalrgb_running && !!h.frames_arriving;
+  const pagesOk = (h.pages_connected || 0) > 0;
+  const flow = dash.querySelector("#hd-flow");
+  flow.innerHTML =
+    '<div class="hd-node ' + (srgbOk ? "ok" : "off") + '"><span class="hd-ring"></span><span class="hd-sub"></span></div>' +
+    '<span class="hd-link ' + (srgbOk ? "ok" : "off") + '"></span>' +
+    '<div class="hd-node accent"><span class="hd-ring"></span><span class="hd-sub"></span></div>' +
+    '<span class="hd-link ' + (pagesOk ? "ok" : "off") + '"></span>' +
+    '<div class="hd-node ' + (pagesOk ? "ok" : "off") + '"><span class="hd-ring"></span><span class="hd-sub"></span></div>';
+  const rings = flow.querySelectorAll(".hd-ring");
+  const subs = flow.querySelectorAll(".hd-sub");
+  rings[0].textContent = fps ? fps + " fps" : "—";
+  subs[0].textContent = "SignalRGB";
+  rings[1].textContent = "v" + String((bridgeState && bridgeState.appVersion) || "").split("-")[0];
+  subs[1].textContent = t("home.flow_bridge");
+  rings[2].textContent = (h.pages_connected || 0) + " / " + (h.screen_count || screenCount || 1);
+  subs[2].textContent = t("home.flow_pages");
+
+  // Screens.
+  const list = dash.querySelector("#hd-screens");
+  list.innerHTML = "";
+  const cfgScreens = (_lastConfigSnapshot && _lastConfigSnapshot.screens) || [];
+  for (let i = 0; i < (screenCount || 1); i++) {
+    const cs = cfgScreens[i] || {};
+    const bits = [];
+    if (cs.viewportW > 0 && cs.viewportH > 0) bits.push(cs.viewportW + " × " + cs.viewportH);
+    if (Number.isInteger(cs.mirrorOf)) bits.push(t("home.screen_mirror", { n: cs.mirrorOf + 1 }));
+    const pages = (h.pages_per_screen || [])[i] || 0;
+    const sFps = Math.round((h.fps_per_screen || [])[i] || 0);
+    if (!pages && _lastHealth) bits.push(t("home.screen_no_page"));
+    else if (sFps) bits.push(sFps + " fps");
+    const portrait = cs.viewportH > cs.viewportW;
+    const dot = '<span class="hd-dot ' + (pages ? "ok" : "off") + '"></span>';
+    list.appendChild(_hdRow(portrait ? "portrait" : "monitor", t("home.screen_n", { n: i + 1 }), bits.join(" · "), () => {
+      switchScreen(i);
+      activateSectionTab("appearance");
+    }, dot));
+  }
+
+  // Areas: the cards, with their current value as the subtitle.
+  const areas = dash.querySelector("#hd-areas");
+  areas.innerHTML = "";
+  const layout = String(s.barLayout || "").replace(/^lay-/, "");
+  const glowSub = glowOn
+    ? [t("home.glow", { n: s.glowStrength ?? 100 }), layout ? _hdEffectName(layout) : ""].filter(Boolean).join(" · ")
+    : t("home.glow_off");
+  const widgetNames = (s.widgets || []).map((w) => {
+    const def = WIDGET_CATALOG[w.type];
+    return def ? _widgetLabel(def) : w.type;
+  });
+  const bs = bridgeState || {};
+  const onOff = (o) => t(o && o.enabled ? "chip.on" : "chip.off");
+  areas.append(
+    _hdRow("image", t("home.area.bg"), s.bgImage ? _hdBaseName(s.bgImage) : t("home.no_bg"), () => goToCard("card-bg")),
+    _hdRow("glow", t("home.area.glow"), glowSub, () => goToCard("card-glow")),
+    _hdRow("effect", t("home.area.effects"), eff ? _hdEffectName(eff) : t("home.effect_off"), () => goToCard("card-effects")),
+    _hdRow("widgets", t("home.area.widgets"), widgetNames.join(" · "), () => goToCard("card-widgets")),
+    _hdRow("preset", t("home.area.presets"), "", () => goToCard("card-presets")),
+    _hdRow("connect", t("home.area.connect"),
+      "OpenRGB " + onOff(bs.openrgbOutput) + " · sACN " + onOff(bs.sacnOutput) + " · MQTT " + onOff(bs.mqttBridge),
+      () => goToCard("card-integrations")),
+  );
+}
+
+// Status chips under the top bar, for the
+// things that decide whether anything shows on the desktop at all.
+function renderStatusChips() {
+  const box = document.getElementById("status-chips");
+  if (!box) return;
+  const h = _lastHealth;
+  const bs = bridgeState || {};
+  const chips = [];
+  if (h && h.available !== false) {
+    const fpsList = (h.fps_per_screen || []).filter((v) => v > 0);
+    const fps = fpsList.length ? Math.round(Math.max(...fpsList)) : 0;
+    let state = "off", val = t("chip.not_running");
+    if (h.paused) { state = "warn"; val = t("chip.paused"); }
+    else if (h.fullscreen_anywhere) { state = "warn"; val = t("chip.fullscreen"); }
+    else if (h.signalrgb_running && h.frames_arriving) { state = "ok"; val = t("chip.sending", { fps }); }
+    else if (h.signalrgb_running) { state = "warn"; val = t("chip.idle"); }
+    chips.push({ state, label: t("chip.signalrgb"), val });
+    chips.push({ state: h.pages_connected > 0 ? "ok" : "off", label: t("chip.pages"),
+                 val: t("chip.pages_n", { n: h.pages_connected || 0 }) });
+    if (h.signalrgb_sensors_state === "online") {
+      chips.push({ state: "ok", label: t("chip.sensors"),
+                   val: t("chip.sensors_n", { n: h.signalrgb_sensors_count || 0 }) });
+    }
+  }
+  if (bs.autostartSupported) {
+    chips.push({ state: bs.autostart ? "ok" : "off", label: t("chip.autostart"),
+                 val: t(bs.autostart ? "chip.on" : "chip.off"),
+                 go: () => goToCard("card-system", document.getElementById("sys-autostart")) });
+  }
+  const sig = JSON.stringify(chips.map((c) => [c.state, c.label, c.val]));
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  box.innerHTML = "";
+  for (const c of chips) {
+    const el = document.createElement(c.go ? "button" : "span");
+    if (c.go) { el.type = "button"; el.addEventListener("click", c.go); }
+    el.className = "chip chip-" + c.state;
+    el.innerHTML = '<span class="chip-dot"></span><span class="chip-text"><span class="chip-label"></span><span class="chip-val"></span></span>';
+    el.querySelector(".chip-label").textContent = c.label;
+    el.querySelector(".chip-val").textContent = c.val;
+    box.appendChild(el);
+  }
+}
+
+function renderSideVersion() {
+  const el = document.getElementById("side-version");
+  if (!el) return;
+  const v = (bridgeState && bridgeState.appVersion) || "";
+  el.innerHTML = '<span class="side-ver-badge"></span><span class="side-ver-text"><span></span><span class="hd-sub"></span></span>';
+  el.querySelector(".side-ver-badge").textContent = v ? v.split(".").slice(0, 2).join(".") : "–";
+  el.querySelector(".side-ver-text > span").textContent = v ? t("side.version", { v }) : "";
+  el.querySelector(".side-ver-text .hd-sub").textContent = t("side.port", { p: location.port || 17320 });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const homeBtn = document.getElementById("home-tab");
+  if (homeBtn) homeBtn.addEventListener("click", () => activateSectionTab("home"));
+});
 
 // v1.2.1: Per-screen settings trigger button. Sits between the tab
 // row and the screen-count picker. Clicking opens #screen-popover
@@ -8830,13 +9661,19 @@ const SECTION_TABS = [
   // with. Order matters: Appearance is where everyone starts, Content
   // is the second thing they want, Connections is optional extras, and
   // System is maintenance almost nobody opens.
+  //
+  // v2.7.0-beta.1: "home" (Übersicht) leads, as the landing page of the
+  // dashboard shell; `bottom: true` pins System to the foot of the
+  // sidebar, where settings usually live.
+  { key: "home", i18n: "tab.home",
+    icon: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>' },
   { key: "appearance", i18n: "tab.appearance",
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4-4 3 3 4-5 3 4"/>' },
   { key: "content", i18n: "tab.content",
     icon: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>' },
   { key: "connect", i18n: "tab.connect",
     icon: '<path d="M9 12h6"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/>' },
-  { key: "system", i18n: "tab.system",
+  { key: "system", i18n: "tab.system", bottom: true,
     icon: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>' },
 ];
 
@@ -8848,10 +9685,25 @@ const LEGACY_TAB_ALIASES = {
   widgets: "content", integrations: "connect", system: "system",
 };
 
+// v2.7.0-beta.1: the sidebar's non-section links are static markup
+// (#side-builder, #side-whats-new, #side-tour) so the Tour can target
+// them. The last two carry data-forward: they click the header control
+// that already owns the behaviour, keeping a single implementation.
+document.querySelectorAll("#section-tabs [data-forward]").forEach((a) => {
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    const target = document.getElementById(a.dataset.forward);
+    if (target) target.click();
+  });
+});
+
 function buildSectionTabs() {
-  const nav = document.getElementById("section-tabs");
-  if (!nav) return;
-  nav.innerHTML = "";
+  const top = document.getElementById("side-group-main");
+  const bottom = document.getElementById("side-group-bottom");
+  const ver = document.getElementById("side-version");
+  if (!top || !bottom) return;
+  top.innerHTML = "";
+  bottom.querySelectorAll(".stab").forEach((b) => b.remove());
   for (const entry of SECTION_TABS) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -8873,11 +9725,13 @@ function buildSectionTabs() {
     btn.title = t(entry.i18n);
     btn.setAttribute("data-i18n-title", entry.i18n);
     btn.addEventListener("click", () => activateSectionTab(entry.key));
-    nav.appendChild(btn);
+    if (entry.bottom) bottom.insertBefore(btn, ver);
+    else top.appendChild(btn);
   }
+  renderSideVersion();
   // Restore last-active tab. URL hash (#tab=…) overrides storage —
   // lets the Tour or external links jump straight to a tab.
-  let initial = "appearance";
+  let initial = "home";
   try {
     const stored = localStorage.getItem("cfg.activeSectionTab");
     if (stored) initial = stored;
@@ -8942,6 +9796,12 @@ function activateSectionTab(key) {
   document.querySelectorAll("#section-tabs .stab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === key);
   });
+  // The house button and the screen tabs share the top bar: on the
+  // Übersicht the house is the active view, elsewhere the screen is.
+  document.body.classList.toggle("on-home", key === "home");
+  const homeBtn = document.getElementById("home-tab");
+  if (homeBtn) homeBtn.classList.toggle("active", key === "home");
+  if (key === "home") renderHomeDashboard();
   try { localStorage.setItem("cfg.activeSectionTab", key); } catch (_) {}
   // Scroll to top so users see the freshly revealed cards from their
   // header — avoids landing mid-card if the previous tab was scrolled.
@@ -11000,7 +11860,7 @@ let _tourStep = 0;
 // to it before measuring; otherwise display:none would skip them.
 const TOUR_STEPS = [
   { selector: null,                  i18n: "welcome" },
-  { selector: "#tabs",               i18n: "tabs" },
+  { selector: "#tabs",               i18n: "tabs", tab: "appearance" },
   // v2.2.0-beta: gear button hidden; tour now points at the
   // Bildschirm-Layout card (lives in the Look tab) directly.
   { selector: "#card-screen-setup",  i18n: "tab_gear", optional: true, tab: "appearance" },
@@ -11013,7 +11873,8 @@ const TOUR_STEPS = [
   // "system" left the step pointing at a card that tab never shows.
   { selector: "#card-presets",       i18n: "presets", tab: "appearance" },
   { selector: "#card-system",        i18n: "system",  optional: true, tab: "system" },
-  { selector: ".btn[href='/builder']", i18n: "builder", optional: true },
+  // v2.7.0-beta.1: the Builder link lives in the sidebar now.
+  { selector: "#side-builder",       i18n: "builder", optional: true },
   { selector: null,                  i18n: "done" },
 ];
 
@@ -13756,6 +14617,10 @@ function renderAll() {
   // case where renderAll() runs before the library catalogue has
   // loaded (the strip's empty-state branch handles that gracefully).
   try { renderLibraryStrip(); } catch (_) {}
+  // v2.7.0-beta.1: shell surfaces that read the same push.
+  try { renderStatusChips(); renderSideVersion(); renderHomeDashboard(); } catch (e) {
+    console.warn("[home]", e);
+  }
 }
 
 function escapeHtml(s) {

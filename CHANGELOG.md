@@ -6,6 +6,37 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.1] - 2026-10-29
+
+### Changed — Configurator redesign, phase 1: new shell
+
+Asked for as a redesign of Configurator and Builder; the scribble was
+approved with "ja umsetzen". Phase 1 replaces
+the shell and adds a landing page; the 13 cards and their logic are
+untouched, so every setting keeps exactly one control.
+
+- Full-height sidebar: brand, sections (Übersicht, Aussehen, Inhalte,
+  Verbindungen), links (Builder, Was ist neu, Hilfe & Tour), System and
+  the bridge version at the foot. The links forward to the existing
+  header controls, which stay in the DOM.
+- The page header is the top bar of the right column and carries a house
+  button plus the screen tabs as views. The strip still
+  hides on System and Connections (`GLOBAL_TABS`).
+- Status chips from `/health` and the settings push: SignalRGB state and
+  fps, connected wallpaper pages, SignalRGB sensors, autostart.
+- New "home" tab (Übersicht), rendered into `#home-dash`: current
+  background, settings search over the cards' own labels, summary tiles,
+  data flow, screens with page/fps state, areas with their current value,
+  Quick Looks. Every entry jumps to its card (`goToCard`) and flashes it.
+  The skeleton is built once and only patched, so the search keeps focus
+  across the 5 s polls. New installs land on it; a stored tab still wins.
+- New dark palette (`#111216` ground, `#1c1d22` cards, orange `#ff9d2e`
+  accent); the hard-coded blues in the stylesheet were mapped to the
+  accent. Appearance and System use two columns from 1360 px.
+- Tests: `test_tab_scope` pins the strip inside the main column's top bar
+  instead of directly under `.shell-main`; `test_configurator_boots`
+  accepts the card-less home tab as long as `#home-dash` exists.
+
 ## [2.6.1-beta.1] - 2026-10-28
 
 ### Fixed — the Configurator overloaded the whole browser
