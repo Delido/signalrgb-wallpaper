@@ -9909,7 +9909,12 @@ document.querySelectorAll("button.adv-toggle").forEach((btn) => {
     btn.setAttribute("aria-expanded", open ? "true" : "false");
     body.classList.toggle("show", open);
     const label = btn.querySelector(".adv-label");
-    if (label) label.textContent = t(open ? "adv.hide" : "adv.show");
+    if (label) {
+      // data-i18n too: this runs before the bridge reports the language,
+      // and applyI18n() only re-translates elements that carry the key.
+      label.setAttribute("data-i18n", open ? "adv.hide" : "adv.show");
+      label.textContent = t(open ? "adv.hide" : "adv.show");
+    }
   };
   paint();
   btn.addEventListener("click", () => {
@@ -10037,14 +10042,40 @@ function buildSectionTabs() {
     const stored = localStorage.getItem("cfg.activeSectionTab");
     if (stored) initial = stored;
   } catch (_) {}
-  const m = /^#tab=([a-z]+)/i.exec(location.hash || "");
-  if (m) initial = m[1];
+  const m = /^#tab=([a-z]+)(?:\/([a-z]+))?/i.exec(location.hash || "");
+  let initialSub;
+  if (m) { initial = m[1]; initialSub = m[2]; }
   // A tab key stored before the redesign, or a bookmarked #tab=look
   // link, maps onto its successor rather than silently resetting.
   if (LEGACY_TAB_ALIASES[initial]) initial = LEGACY_TAB_ALIASES[initial];
   if (!SECTION_TABS.some((e) => e.key === initial)) initial = "appearance";
-  activateSectionTab(initial);
+  activateSectionTab(initial, initialSub);
+  _navReady = true;
 }
+
+// v2.7.0-beta.5: browser history for section changes. The Configurator
+// is one page, so the mouse's back button used to leave it — reported
+// as "maus zurück verlässt die seite". Every section / sub-page change
+// now pushes #tab=<key>[/<sub>]; back and forward step through them.
+// The first activation and anything driven by popstate replace the
+// entry instead, so history never grows on its own.
+var _navReady = false;   // var: activateSectionTab may run before this line
+var _navFromHistory = false;
+function _syncNavHistory(key, sub) {
+  const hash = "#tab=" + key + (sub ? "/" + sub : "");
+  if (location.hash === hash) return;
+  try {
+    const state = { tab: key, sub: sub || null };
+    if (_navReady && !_navFromHistory) history.pushState(state, "", hash);
+    else history.replaceState(state, "", hash);
+  } catch (_) {}
+}
+window.addEventListener("popstate", () => {
+  const m = /^#tab=([a-z]+)(?:\/([a-z]+))?/i.exec(location.hash || "");
+  _navFromHistory = true;
+  try { activateSectionTab(m ? m[1] : "home", m ? m[2] : undefined); }
+  finally { _navFromHistory = false; }
+});
 
 // activateSectionTab(key) — flip <main data-active-tab>, mark the
 // matching tab button active, persist. Exposed globally so the Tour +
@@ -10121,6 +10152,7 @@ function activateSectionTab(key, sub) {
   const homeBtn = document.getElementById("home-tab");
   if (homeBtn) homeBtn.classList.toggle("active", key === "home");
   if (key === "home") renderHomeDashboard();
+  _syncNavHistory(key, subs.length ? sub : null);
   try { localStorage.setItem("cfg.activeSectionTab", key); } catch (_) {}
   // Scroll to top so users see the freshly revealed cards from their
   // header — avoids landing mid-card if the previous tab was scrolled.

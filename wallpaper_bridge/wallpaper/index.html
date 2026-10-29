@@ -1911,7 +1911,10 @@ function _startDiagReporting() {
 }
 
 function wsUrl() {
-  return "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX;
+  // v2.4.22: the Configurator's live preview identifies itself, so the
+  // bridge does not count it as a wallpaper page.
+  return "ws://127.0.0.1:17320/?screen=" + SCREEN_INDEX +
+         (PREVIEW_MODE ? "&role=preview" : "");
 }
 // v1.2.14: exponential backoff so a downed bridge doesn't get
 // hammered at 1500 ms × 4 screens = ~3 attempts/sec. Each ws.onclose

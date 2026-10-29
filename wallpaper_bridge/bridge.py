@@ -988,7 +988,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.4"
+APP_VERSION = "2.7.0-beta.5"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1011,7 +1011,7 @@ APP_VERSION = "2.7.0-beta.4"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.21"
+WALLPAPER_VERSION = "2.4.22"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1084,6 +1084,32 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.5": {
+        "title_en": "What's new in v2.7.0-beta.5",
+        "title_de": "Was ist neu in v2.7.0-beta.5",
+        "body_en": (
+            "**The mouse's back button stays in the Configurator.** "
+            "Switching sections now adds a browser history entry, so "
+            "back and forward step through the pages you visited "
+            "instead of leaving the Configurator.\n\n"
+            "**Fixed:** the Overview counted an open live preview as a "
+            "wallpaper page (\"3 / 2\") \u00b7 \"More settings\" stayed in "
+            "English.\n\n"
+            "Wallpaper bundle 2.4.22 only changes how the preview "
+            "identifies itself \u2014 re-importing is optional.\n"
+        ),
+        "body_de": (
+            "**Die Zur\u00fcck-Taste der Maus bleibt im Configurator.** "
+            "Ein Bereichswechsel legt jetzt einen Verlaufseintrag an, "
+            "sodass Zur\u00fcck und Vor durch die besuchten Seiten gehen, "
+            "statt den Configurator zu verlassen.\n\n"
+            "**Behoben:** Die \u00dcbersicht hat eine offene Live-Vorschau "
+            "als Wallpaper-Seite mitgez\u00e4hlt (\u201e3 / 2\u201c) \u00b7 "
+            "\u201eMehr Einstellungen\u201c blieb auf Englisch.\n\n"
+            "Wallpaper-Bundle 2.4.22 \u00e4ndert nur, wie sich die Vorschau "
+            "meldet \u2014 neu importieren ist optional.\n"
+        ),
+    },
     "2.7.0-beta.4": {
         "title_en": "What's new in v2.7.0-beta.4",
         "title_de": "Was ist neu in v2.7.0-beta.4",
@@ -5680,13 +5706,17 @@ def parse_query_role(target: str) -> str:
     page Lively/WE renders, default for legacy clients) or
     `configurator` (the in-browser settings UI). The Status dialog
     counts only `wallpaper` clients so the user sees actual rendered
-    pages, not their own open Configurator tab."""
+    pages, not their own open Configurator tab.
+
+    v2.7.0-beta.5: `preview` is the Configurator's live-preview iframe.
+    It gets frames like a wallpaper page but is not one: counting it
+    showed "3 / 2" pages with the preview open."""
     if "?" not in target:
         return "wallpaper"
     _, _, query = target.partition("?")
     params = urllib.parse.parse_qs(query)
     role = (params.get("role", ["wallpaper"])[0] or "wallpaper").lower()
-    return role if role in ("wallpaper", "configurator") else "wallpaper"
+    return role if role in ("wallpaper", "configurator", "preview") else "wallpaper"
 
 
 # ============================================================================
@@ -6173,7 +6203,8 @@ class Broadcaster:
             roles = getattr(self, "client_roles", {}) or {}
             all_clients = [w for clients in self.clients_by_screen.values() for w in clients]
             # Filter to wallpaper-role clients only.
-            targets = [w for w in all_clients if roles.get(w, "wallpaper") == "wallpaper"]
+            targets = [w for w in all_clients
+                       if roles.get(w, "wallpaper") in ("wallpaper", "preview")]
         if not targets:
             return
         msg = json.dumps({"type": "reload"})
@@ -13448,8 +13479,12 @@ class BridgeRuntime:
         if self.broadcaster:
             try:
                 seen = getattr(self.broadcaster, "client_wallpaper_versions", {}) or {}
+                vroles = getattr(self.broadcaster, "client_roles", {}) or {}
+                # A preview always runs the bridge's own bundle, so it
+                # would hide an outdated Lively/WE bundle.
                 pages_wallpaper_versions = sorted(
-                    {str(v) for v in seen.values() if v and str(v) != "dev"})
+                    {str(v) for w, v in seen.items()
+                     if v and str(v) != "dev" and vroles.get(w) != "preview"})
             except Exception:
                 pass
 

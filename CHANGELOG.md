@@ -6,6 +6,28 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.5] - 2026-10-29
+
+### Added — browser history for sections
+
+Reported as "maus zurück verlässt die seite": the Configurator is one
+page, so back left it. `activateSectionTab()` now writes
+`#tab=<key>[/<sub>]` via `pushState`; `popstate` re-activates the
+section without pushing again, and the first activation replaces the
+entry. The startup hash parser reads the sub-page too.
+
+### Fixed
+
+- The live preview counted as a wallpaper page ("3 / 2" in the Overview
+  data flow). The wallpaper page connects with `role=preview` in preview
+  mode; the bridge accepts the role, keeps sending it frames and reloads,
+  but leaves it out of `pages_connected`, `pages_per_screen` and the
+  bundle-version list (a preview always runs the bridge's own bundle and
+  would mask an outdated Lively/WE one). WALLPAPER_VERSION 2.4.22; the
+  floor stays, older bundles behave exactly as before.
+- "More settings" stayed English: the label was set before the language
+  arrived and carried no `data-i18n`, so `applyI18n()` skipped it.
+
 ## [2.7.0-beta.4] - 2026-10-29
 
 ### Changed — Appearance split into sub-pages
