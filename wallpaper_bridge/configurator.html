@@ -3066,6 +3066,151 @@
     #section-tabs .stab { width: auto; white-space: nowrap; }
     .shell-main > header { position: static; overflow-x: auto; }
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     v2.7.0-beta.2 · card interiors
+     ───────────────────────────────────────────────────────────────
+     • checkboxes → switches, label left / switch right, list rows
+     • filled fields, orange sliders, short selects → segments
+     The switch knob is a background gradient rather than ::before,
+     which inputs do not render in every engine.
+     ═══════════════════════════════════════════════════════════════ */
+  main input[type="checkbox"]:not(.mode-toggle-input) {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: none;
+    width: 36px; height: 20px;
+    margin: 0;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    vertical-align: middle;
+    background-color: #3a3d45;
+    background-image: radial-gradient(circle, #e8e9ec 0 6.5px, transparent 7px);
+    background-repeat: no-repeat;
+    background-size: 18px 18px;
+    background-position: 1px 50%;
+    transition: background-position 0.15s, background-color 0.15s;
+  }
+  main input[type="checkbox"]:not(.mode-toggle-input):checked {
+    background-color: var(--accent);
+    background-image: radial-gradient(circle, #fff 0 6.5px, transparent 7px);
+    background-position: 17px 50%;
+  }
+  main input[type="checkbox"]:not(.mode-toggle-input):focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  main input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  main .check-row {
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    margin: 0;
+  }
+  main .check-row label { flex: 1; color: var(--text); font-size: 13.5px; cursor: pointer; }
+  /* Hints under a switch used to indent past the checkbox (inline
+     margin-left: 22px); the switch now sits on the right. */
+  main .check-row + .hint { margin-left: 0 !important; margin-top: -6px !important; }
+
+  main section.card .row { min-height: 44px; margin: 0; padding: 2px 0; }
+  main section.card .row > label { flex: 0 0 150px; color: var(--text); font-size: 13px; }
+  main section.card .row .val { color: var(--text-dim); }
+
+  /* Filled fields. */
+  main section.card select,
+  main section.card input[type="text"],
+  main section.card input[type="number"],
+  main section.card input[type="search"],
+  main section.card input[type="url"],
+  main section.card input[type="password"],
+  main section.card textarea {
+    min-height: 36px;
+    padding: 6px 10px;
+    background: #15161a;
+    color: var(--text);
+    border: 1px solid transparent;
+    border-bottom-color: #3a3d45;
+    border-radius: 8px;
+    font: inherit;
+    outline: none;
+  }
+  main section.card select:focus,
+  main section.card input:not([type="checkbox"]):not([type="range"]):focus,
+  main section.card textarea:focus { border-bottom-color: var(--accent); }
+
+  /* Sliders. */
+  main input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #3a3d45;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  main input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--accent);
+  }
+  main input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--accent);
+  }
+  main input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+
+  /* Segmented control built from a short <select> (buildSegments). The
+     select stays in the DOM as the source of truth. */
+  .seg-source { display: none !important; }
+  .seg {
+    flex: 1; min-width: 0;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 4px;
+    background: #15161a;
+    border-radius: 10px;
+  }
+  .seg button {
+    height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: #c9ccd2;
+    font: inherit; font-size: 12.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .seg button:hover { color: var(--text); background: rgba(255, 255, 255, 0.04); }
+  .seg button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+  .seg button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Buttons and hints inside cards. */
+  main section.card .btn {
+    border-radius: 8px;
+    background: var(--panel-2);
+    border-color: #33353d;
+    padding: 7px 14px;
+  }
+  main section.card .btn:hover { background: #2c2e35; }
+  .btn { text-decoration: none; }
+  main section.card .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1006; }
+  main section.card .btn.danger { background: #2a1a1c; border-color: #5a2a2a; color: var(--danger); }
+  .hint { background: #1a1b20; border-color: var(--border); color: #b9bdc6; }
+
+  /* Effect tiles as cards. */
+  .ambient-tile, .fx-tile { border-radius: 12px; border-color: #25272d; }
+  .fx-tile { background: var(--panel-2); }
+  .fx-tile.active, .ambient-tile.active { border-color: var(--accent); }
+  details.integration-block { border-top-color: #25272d; }
 </style>
 </head>
 <body>
@@ -7492,6 +7637,72 @@ document.addEventListener("DOMContentLoaded", () => {
   const homeBtn = document.getElementById("home-tab");
   if (homeBtn) homeBtn.addEventListener("click", () => activateSectionTab("home"));
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2.7.0-beta.2: segmented controls for short selects
+//
+// The <select> stays the source of truth — its existing change listener
+// still sends the setting, and renderAll() still writes select.value.
+// The segment row only mirrors it: a click sets the value and fires
+// `change`, and syncSegments() re-reads value, labels (they follow the
+// language) and disabled state after every render.
+// ─────────────────────────────────────────────────────────────────────────────
+const SEGMENTED_SELECTS = [
+  "grid-renderer", "glass-quality", "frame-rate", "effect-quality",
+  "audioglow-mode", "sys-language", "sacn-destination",
+];
+function _segLabel(text) {
+  // "Balanced (30 Hz)" -> "Balanced"; the full text stays as the title.
+  return (text || "").replace(/\s+[(—–].*$/, "").trim() || text;
+}
+function buildSegments() {
+  for (const id of SEGMENTED_SELECTS) {
+    const sel = document.getElementById(id);
+    if (!sel || sel._seg) continue;
+    const seg = document.createElement("div");
+    seg.className = "seg";
+    seg.setAttribute("role", "radiogroup");
+    const lbl = sel.id ? document.querySelector('label[for="' + sel.id + '"]') : null;
+    if (lbl) seg.setAttribute("aria-label", lbl.textContent.trim());
+    sel.after(seg);
+    sel.classList.add("seg-source");
+    sel._seg = seg;
+    sel.addEventListener("change", syncSegments);
+  }
+  syncSegments();
+}
+function syncSegments() {
+  for (const id of SEGMENTED_SELECTS) {
+    const sel = document.getElementById(id);
+    if (!sel || !sel._seg) continue;
+    const seg = sel._seg;
+    const opts = [...sel.options];
+    if (seg.children.length !== opts.length) {
+      seg.innerHTML = "";
+      for (const o of opts) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "radio");
+        b.addEventListener("click", () => {
+          if (sel.value === o.value) return;
+          sel.value = o.value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        seg.appendChild(b);
+      }
+    }
+    opts.forEach((o, i) => {
+      const b = seg.children[i];
+      const on = o.value === sel.value;
+      b.textContent = _segLabel(o.textContent);
+      b.title = o.textContent;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+      b.disabled = sel.disabled || o.disabled;
+    });
+  }
+}
+buildSegments();
 
 // v1.2.1: Per-screen settings trigger button. Sits between the tab
 // row and the screen-count picker. Clicking opens #screen-popover
@@ -14618,7 +14829,7 @@ function renderAll() {
   // loaded (the strip's empty-state branch handles that gracefully).
   try { renderLibraryStrip(); } catch (_) {}
   // v2.7.0-beta.1: shell surfaces that read the same push.
-  try { renderStatusChips(); renderSideVersion(); renderHomeDashboard(); } catch (e) {
+  try { syncSegments(); renderStatusChips(); renderSideVersion(); renderHomeDashboard(); } catch (e) {
     console.warn("[home]", e);
   }
 }

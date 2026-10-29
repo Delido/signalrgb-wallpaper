@@ -6,6 +6,28 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.2] - 2026-10-29
+
+### Changed — redesign phases 2 and 3: card interiors and the Builder
+
+- Configurator cards: checkboxes are switches (knob drawn as a background
+  gradient, since inputs render no `::before` in every engine), with the
+  label left and the switch right; hints under a switch lose their
+  checkbox indent. Filled fields, orange sliders, unified card buttons,
+  neutral hints, effect tiles with 12 px corners.
+- Seven short selects (`grid-renderer`, `glass-quality`, `frame-rate`,
+  `effect-quality`, `audioglow-mode`, `sys-language`, `sacn-destination`)
+  get a segmented control. The `<select>` stays as the source of truth:
+  a click sets its value and fires `change`, so the existing listener
+  still sends the setting; `syncSegments()` re-reads value, labels and
+  disabled state after every `renderAll()`. The cycle selects stay
+  dropdowns, they share one row.
+- Builder: same palette and the blues mapped to the accent, 56 px top
+  bar with a link back to the Configurator, toolbox as a dark strip,
+  option/file panel sections as cards, Simple/Advanced as a segment
+  switch, switches, sliders and fields as in the Configurator. The top
+  bar rule is scoped to `body > header`: modals build their own header.
+
 ## [2.7.0-beta.1] - 2026-10-29
 
 ### Changed — Configurator redesign, phase 1: new shell

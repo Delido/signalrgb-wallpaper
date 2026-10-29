@@ -7,15 +7,16 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 56'><rect x='6' y='8' width='52' height='34' rx='3' fill='%231b1f2a' stroke='%234a5160' stroke-width='2'/><rect x='10' y='12' width='44' height='26' fill='%23050608'/><rect x='26' y='46' width='12' height='3' fill='%234a5160'/><rect x='20' y='50' width='24' height='2' fill='%234a5160'/><circle cx='17' cy='28' r='3' fill='%23ff2d6a'/><circle cx='25' cy='28' r='3' fill='%23ff8f2d'/><circle cx='33' cy='28' r='3' fill='%23ffe92d'/><circle cx='41' cy='28' r='3' fill='%2342ff85'/><circle cx='49' cy='28' r='3' fill='%232db4ff'/></svg>">
 <style>
   :root {
-    --bg: #14171c;
-    --panel: #1d2128;
-    --panel-2: #262b34;
-    --border: #2f3641;
-    --text: #e7e9ec;
-    --text-dim: #9aa1ad;
-    --accent: #6ab0ff;
-    --accent-bg: #1f3a5a;
-    --accent-bg-hover: #25456a;
+    /* v2.7.0-beta.2: same dark palette as the Configurator. */
+    --bg: #111216;
+    --panel: #1c1d22;
+    --panel-2: #24262c;
+    --border: #2a2c33;
+    --text: #e8e9ec;
+    --text-dim: #9ea3ad;
+    --accent: #ff9d2e;
+    --accent-bg: #3a2414;
+    --accent-bg-hover: #4a2e18;
     --good: #4caf50;
     --danger: #ff7575;
   }
@@ -60,7 +61,7 @@
   }
   .mode-pick .mode-btn:hover { background: var(--panel-2); color: var(--text); }
   .mode-pick .mode-btn.active {
-    background: var(--accent-bg); color: #d8e6fc;
+    background: var(--accent-bg); color: #ffd7a8;
   }
   /* Simple-mode element visibility. Hide the brush tools, merge
      workflow, history panel, and the canvas brush options that
@@ -86,10 +87,10 @@
     display: none;
     margin: 10px 0 14px;
     padding: 10px 12px;
-    background: rgba(106, 176, 255, 0.08);
-    border: 1px solid #2c476e;
+    background: rgba(255, 157, 46, 0.08);
+    border: 1px solid #4a3420;
     border-radius: 6px;
-    color: #cfdcef;
+    color: #e8dccd;
     font-size: 12px; line-height: 1.5;
   }
   body.simple-mode .simple-workflow-hint { display: block; }
@@ -136,8 +137,8 @@
   .tool-btn:hover { background: var(--panel-2); color: var(--text); }
   .tool-btn.active {
     background: var(--accent-bg);
-    border-color: #3a6ba8;
-    color: #d8e6fc;
+    border-color: #b5651d;
+    color: #ffd7a8;
   }
   .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
   /* One-shot attention pulse used by the v1.2.3 Simple-mode "Try
@@ -148,8 +149,8 @@
     animation: builder-tool-pulse 1.6s ease-out 3;
   }
   @keyframes builder-tool-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(106, 176, 255, 0.0); }
-    50%      { box-shadow: 0 0 0 6px rgba(106, 176, 255, 0.35); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 157, 46, 0.0); }
+    50%      { box-shadow: 0 0 0 6px rgba(255, 157, 46, 0.35); }
   }
   .tool-btn svg {
     width: 22px; height: 22px;
@@ -174,7 +175,7 @@
   }
   .seg-row .seg:hover { color: var(--text); }
   .seg-row .seg.active {
-    background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc;
+    background: var(--accent-bg); border-color: #b5651d; color: #ffd7a8;
   }
   .seg-row .seg svg {
     width: 14px; height: 14px;
@@ -199,7 +200,7 @@
   .btn:hover { background: #2c323d; }
   .btn:active { transform: translateY(1px); }
   .btn.primary,
-  .btn-primary { background: var(--accent-bg); border-color: #3a6ba8; color: #d8e6fc; }
+  .btn-primary { background: var(--accent-bg); border-color: #b5651d; color: #ffd7a8; }
   .btn.primary:hover,
   .btn-primary:hover { background: var(--accent-bg-hover); }
   .btn.danger { color: var(--danger); border-color: #5a2a2a; background: #2a1a1c; }
@@ -404,7 +405,7 @@
   .canvas-host #selection-rect {
     position: absolute;
     border: 1px dashed #fff;
-    background: rgba(106, 176, 255, 0.18);
+    background: rgba(255, 157, 46, 0.18);
     pointer-events: none;
     display: none;
   }
@@ -431,7 +432,7 @@
   }
   .canvas-host #shape-overlay.active { display: block; }
   .canvas-host #shape-overlay .shape-fill {
-    fill: rgba(106, 176, 255, 0.18);
+    fill: rgba(255, 157, 46, 0.18);
     stroke: #fff;
     stroke-dasharray: 4 4;
     stroke-width: 1.5;
@@ -444,7 +445,7 @@
   }
   .canvas-host #shape-overlay .shape-fill.moving { cursor: grabbing; }
   .canvas-host #shape-overlay .handle {
-    fill: #6ab0ff;
+    fill: #ff9d2e;
     stroke: #fff;
     stroke-width: 1.5;
     cursor: grab;
@@ -634,12 +635,12 @@
     transition: border-color 0.15s, transform 0.15s;
   }
   .lib-dialog-tile:hover {
-    border-color: #3a6ba8; transform: translateY(-1px);
+    border-color: #b5651d; transform: translateY(-1px);
   }
   .lib-dialog-tile .label {
     position: absolute; left: 0; right: 0; bottom: 0;
     background: rgba(0,0,0,0.65);
-    color: #d8e6fc;
+    color: #ffd7a8;
     font-size: 11px; padding: 2px 4px;
     border-radius: 0 0 3px 3px;
     text-align: center;
@@ -711,14 +712,14 @@
     overflow: hidden;
     transition: border-color 0.12s, transform 0.12s;
   }
-  .wall-frame:hover     { border-color: #3a6ba8; transform: translateY(-1px); }
+  .wall-frame:hover     { border-color: #b5651d; transform: translateY(-1px); }
   /* v1.2.14: visible focus ring for keyboard nav. Same accent colour
      as the hover state but more saturated + offset so screen-reader /
      keyboard users can see where Tab landed. */
   .wall-frame:focus-visible {
-    outline: 2px solid #6ab0ff;
+    outline: 2px solid #ff9d2e;
     outline-offset: 2px;
-    border-color: #6ab0ff;
+    border-color: #ff9d2e;
   }
   .wall-frame.dragover  { border-color: #5b8fd1; background-color: #1a2438; }
   .wall-frame.loaded    { border-color: #3aa86d; box-shadow: inset 0 0 0 2px #0c0e13, 0 0 0 2px rgba(58,168,109,0.35), 0 2px 6px rgba(0,0,0,0.5); }
@@ -727,7 +728,7 @@
   .wall-frame .label {
     position: absolute; left: 4px; top: 4px;
     background: rgba(0,0,0,0.75);
-    color: #d8e6fc;
+    color: #ffd7a8;
     font-size: 10px; padding: 2px 6px;
     border-radius: 3px;
     pointer-events: none;
@@ -754,7 +755,7 @@
   /* Wall section is the primary nav now — give it a soft accent
      border so users land on it before the secondary sections. */
   .wall-section { margin-bottom: 16px; }
-  .wall-section > h2 { color: #d8e6fc; }
+  .wall-section > h2 { color: #ffd7a8; }
 
   /* Apply Wall is the climax of the Builder workflow — make it visibly
      the primary action. Sized 1.1× normal buttons, full width, the
@@ -802,7 +803,7 @@
   }
   details.merge-details[open] > summary::before { transform: rotate(90deg); }
   details.merge-details > summary:hover { color: var(--text); }
-  details.merge-details[open] > summary { color: #d8e6fc; }
+  details.merge-details[open] > summary { color: #ffd7a8; }
 
   /* v1.2.2: first-run tour. Same overlay + spotlight + tooltip
      pattern as the Configurator tour; styles are duplicated here
@@ -836,7 +837,7 @@
   }
   .tour-tooltip .tour-title {
     font-size: 14px; font-weight: 600; margin-bottom: 6px;
-    color: #d8e6fc;
+    color: #ffd7a8;
   }
   .tour-tooltip .tour-body {
     font-size: 12.5px; line-height: 1.45; color: var(--text);
@@ -858,7 +859,7 @@
     cursor: pointer; font: inherit; font-size: 12px;
   }
   .tour-tooltip .tour-btn.primary {
-    background: var(--accent-bg); color: #d8e6fc; border-color: #3a6ba8;
+    background: var(--accent-bg); color: #ffd7a8; border-color: #b5651d;
   }
   .tour-tooltip .tour-btn:hover { filter: brightness(1.15); }
 
@@ -885,7 +886,7 @@
     font: inherit; font-size: 12.5px;
     cursor: pointer;
   }
-  .wall-frame-menu button:hover { background: rgba(58,107,168,0.25); }
+  .wall-frame-menu button:hover { background: rgba(255, 140, 30, 0.15); }
   .wall-frame-menu button:disabled { opacity: 0.35; cursor: not-allowed; }
   .wall-frame-menu button .icon {
     width: 18px; display: inline-block; text-align: center;
@@ -935,7 +936,7 @@
     border-radius: 3px;
   }
   .monitor-setup-row .ms-preview .ms-tile {
-    background: rgba(106, 176, 255, 0.45);
+    background: rgba(255, 157, 46, 0.45);
     border-radius: 1px;
   }
   .monitor-setup-row .ms-orient-btn {
@@ -969,9 +970,9 @@
     display: flex; align-items: center; gap: 10px;
     padding: 8px 14px;
     background: linear-gradient(90deg,
-      rgba(91, 143, 209, 0.20),
-      rgba(91, 143, 209, 0.10));
-    border-bottom: 1px solid #3a6ba8;
+      rgba(255, 157, 46, 0.2),
+      rgba(255, 157, 46, 0.1));
+    border-bottom: 1px solid #b5651d;
     font-size: 12.5px;
   }
   .editing-slot-banner .banner-label {
@@ -980,11 +981,148 @@
     font-weight: 500;
   }
   .editing-slot-banner .btn { padding: 5px 12px; font-size: 12px; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     v2.7.0-beta.2 · Builder in the Configurator's dashboard style
+     ───────────────────────────────────────────────────────────────
+     Same palette, top bar, cards, switches, sliders and fields as the
+     Configurator, so the two pages read as one app. Layout unchanged:
+     toolbox | options | canvas | files. Last in the sheet on purpose.
+     ═══════════════════════════════════════════════════════════════ */
+  html, body {
+    font-family: Roboto, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    font-size: 13.5px;
+  }
+  /* Scoped to the page header: modals build their own <header>. */
+  body > header {
+    height: 56px;
+    padding: 0 16px;
+    gap: 12px;
+    background: var(--bg);
+    border-bottom: 1px solid #1d1f24;
+  }
+  body > header h1 { font-size: 16px; font-weight: 500; }
+  body > header .sub { font-size: 12px; }
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 36px; padding: 0 12px 0 8px;
+    border-radius: 8px;
+    color: var(--text); text-decoration: none;
+    font-size: 13px;
+  }
+  .back-link:hover { background: rgba(255, 255, 255, 0.06); }
+  .back-link svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  main { height: calc(100vh - 56px); }
+
+  .mode-pick {
+    gap: 4px; padding: 4px;
+    border: 0; border-radius: 10px;
+    background: #15161a;
+  }
+  .mode-pick .mode-btn { height: 30px; padding: 0 14px; border-radius: 7px; color: #c9ccd2; }
+  .mode-pick .mode-btn.active { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+
+  /* Toolbox = the sidebar strip. */
+  .panel.toolbox { background: #18191d; border-right: 1px solid #24262c; }
+  .tool-btn { height: 44px; border-radius: 8px; border: 0; }
+  .tool-btn:hover { background: rgba(255, 255, 255, 0.05); }
+  .tool-btn.active { background: var(--accent-bg); color: var(--accent); border: 0; }
+  .tool-btn-divider { background: #24262c; }
+
+  /* Option and file panels: page ground with sections as cards. */
+  .panel.padded { background: var(--bg); padding: 12px; }
+  .panel.left.padded { border-right: 1px solid #1d1f24; }
+  .panel.right { border-left: 1px solid #1d1f24; }
+  .panel.padded > section {
+    background: var(--panel);
+    border: 1px solid #25272d;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .panel h2 {
+    font-size: 15px; font-weight: 500;
+    text-transform: none; letter-spacing: 0;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .canvas-area { background: #0b0c10; }
+
+  /* Controls — same shapes as the Configurator's cards. */
+  input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: none;
+    width: 36px; height: 20px;
+    margin: 0;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    vertical-align: middle;
+    background-color: #3a3d45;
+    background-image: radial-gradient(circle, #e8e9ec 0 6.5px, transparent 7px);
+    background-repeat: no-repeat;
+    background-size: 18px 18px;
+    background-position: 1px 50%;
+    transition: background-position 0.15s, background-color 0.15s;
+  }
+  input[type="checkbox"]:checked {
+    background-color: var(--accent);
+    background-image: radial-gradient(circle, #fff 0 6.5px, transparent 7px);
+    background-position: 17px 50%;
+  }
+  input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #3a3d45;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px; border-radius: 50%; border: 0;
+    background: var(--accent);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; border: 0;
+    background: var(--accent);
+  }
+  input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+  .panel select,
+  .panel input[type="text"],
+  .panel input[type="number"],
+  .panel textarea {
+    min-height: 34px;
+    padding: 5px 10px;
+    background: #15161a;
+    color: var(--text);
+    border: 1px solid transparent;
+    border-bottom-color: #3a3d45;
+    border-radius: 8px;
+    font: inherit;
+    outline: none;
+  }
+  .panel select:focus, .panel input:not([type="checkbox"]):not([type="range"]):focus,
+  .panel textarea:focus { border-bottom-color: var(--accent); }
+  .btn { border-radius: 8px; text-decoration: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1006; font-weight: 600; }
+  .btn.primary:hover { background: #ffb15a; }
+  .hint { background: #1a1b20; border-color: var(--border); color: #b9bdc6; border-radius: 8px; }
+  .simple-workflow-hint { background: #1a1b20; border-color: var(--border); color: #c9ccd2; border-radius: 10px; }
 </style>
 </head>
 <body>
 
 <header>
+  <!-- v2.7.0-beta.2: way back to the Configurator, which links here
+       from its sidebar. -->
+  <a class="back-link" href="/configurator">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    <span data-i18n="header.back">Configurator</span></a>
   <svg class="brand-logo" viewBox="0 0 64 56" aria-hidden="true">
     <rect x="6" y="8" width="52" height="34" rx="3" fill="#1b1f2a" stroke="#4a5160" stroke-width="2"/>
     <rect x="10" y="12" width="44" height="26" fill="#050608"/>
@@ -1728,6 +1866,7 @@ const TOOL_KEYS = {
 
 const TRANSLATIONS = {
   "header.title": { en: "SignalRGB Wallpaper Builder", de: "SignalRGB Wallpaper Builder" },
+  "header.back":  { en: "Configurator", de: "Configurator" },
   "header.sub":   { en: "Click bright areas to make them transparent, then apply to a screen.",
                     de: "Helle Bereiche anklicken, um sie transparent zu machen, dann auf einen Bildschirm anwenden." },
 

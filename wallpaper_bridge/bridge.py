@@ -988,7 +988,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.1"
+APP_VERSION = "2.7.0-beta.2"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1084,6 +1084,34 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.2": {
+        "title_en": "What's new in v2.7.0-beta.2",
+        "title_de": "Was ist neu in v2.7.0-beta.2",
+        "body_en": (
+            "**The redesign reaches the cards and the Builder.**\n\n"
+            "Inside the Configurator's cards, checkboxes became switches "
+            "on the right of each row, short choices (language, frame "
+            "rate, quality, renderer, audio glow, sACN destination) are "
+            "segment buttons, and sliders, fields and buttons share one "
+            "look.\n\n"
+            "The Builder uses the same colours and shapes: its panels are "
+            "cards, the toolbox is a dark strip, Simple / Advanced is a "
+            "segment switch, and a link in the top left leads back to "
+            "the Configurator.\n"
+        ),
+        "body_de": (
+            "**Das Redesign erreicht die Karten und den Builder.**\n\n"
+            "In den Karten des Configurators sind aus Checkboxen "
+            "Schalter rechts in der Zeile geworden, kurze Auswahlen "
+            "(Sprache, Bildrate, Qualit\u00e4t, Renderer, Audio-Glow, "
+            "sACN-Ziel) sind Segment-Buttons, und Regler, Felder und "
+            "Buttons haben einen einheitlichen Look.\n\n"
+            "Der Builder nutzt dieselben Farben und Formen: Seine Panels "
+            "sind Karten, die Werkzeugleiste ist eine dunkle Leiste, "
+            "Einfach / Erweitert ist ein Segment-Schalter, und oben links "
+            "f\u00fchrt ein Link zur\u00fcck zum Configurator.\n"
+        ),
+    },
     "2.7.0-beta.1": {
         "title_en": "What's new in v2.7.0-beta.1",
         "title_de": "Was ist neu in v2.7.0-beta.1",
