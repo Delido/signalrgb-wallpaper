@@ -122,7 +122,7 @@ check("a scope helper exists", /function _applyScreenScopeChrome\(/.test(HTML));
 // window broke the moment a comment was added at the top of the
 // function, reporting a missing call that was still right there.
 {
-  const _at = HTML.indexOf("function activateSectionTab(key)");
+  const _at = HTML.indexOf("function activateSectionTab(key");
   const _end = HTML.indexOf("\nfunction ", _at + 10);
   const _fn = _at === -1 ? "" : HTML.slice(_at, _end === -1 ? _at + 3000 : _end);
   check("it is called from activateSectionTab",
@@ -434,7 +434,7 @@ check("the layout preview re-render uses the current tab key",
 
   // And the resolution has to happen inside activateSectionTab, not
   // only at startup -- that gap is what made a mapped alias useless.
-  const fnAt = HTML.indexOf("function activateSectionTab(key)");
+  const fnAt = HTML.indexOf("function activateSectionTab(key");
   const fnEnd = HTML.indexOf("\nfunction ", fnAt + 10);
   const fn = fnAt === -1 ? "" : HTML.slice(fnAt, fnEnd === -1 ? fnAt + 3000 : fnEnd);
   check("activateSectionTab was located", fn.length > 200);

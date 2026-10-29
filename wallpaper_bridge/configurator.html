@@ -3219,6 +3219,33 @@
   .fx-tile { background: var(--panel-2); }
   .fx-tile.active, .ambient-tile.active { border-color: var(--accent); }
   details.integration-block { border-top-color: #25272d; }
+
+  /* ═══ v2.7.0-beta.4 · Appearance sub-pages ═══ */
+  main[data-active-tab="appearance"][data-sub="background"] section.card[data-sub]:not([data-sub="background"]),
+  main[data-active-tab="appearance"][data-sub="looks"] section.card[data-sub]:not([data-sub="looks"]),
+  main[data-active-tab="appearance"][data-sub="glow"] section.card[data-sub]:not([data-sub="glow"]),
+  main[data-active-tab="appearance"][data-sub="effects"] section.card[data-sub]:not([data-sub="effects"]) {
+    display: none;
+  }
+  /* A sub-page holds one to three cards: one column, readable width. */
+  @media (min-width: 1360px) {
+    main[data-active-tab="appearance"] { column-count: 1; }
+  }
+  .app-shell > .shell-main > main[data-active-tab="appearance"] { max-width: 1100px; }
+  #section-tabs .stab.stab-sub {
+    height: 36px;
+    padding-left: 52px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  #section-tabs .stab.stab-sub:hover { color: var(--text); }
+  #section-tabs .stab.stab-sub.active { background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+  /* The parent of an active sub-page: orange text, no fill — the fill
+     marks the sub-page itself. */
+  #section-tabs .stab.has-sub-active { background: transparent; }
+  @media (max-width: 900px) {
+    #section-tabs .stab.stab-sub { padding-left: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -3454,7 +3481,7 @@
        configure…" opens the same popover anchored under this
        button, so users without the tooltip discovery still find
        span / mirror / reset. -->
-  <section class="card" id="card-screen-setup" data-section-tab="appearance">
+  <section class="card" id="card-screen-setup" data-section-tab="appearance" data-sub="background">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="setup.card_head">Screen layout</h2>
@@ -3472,7 +3499,7 @@
     </div>
   </section>
 
-  <section class="card" id="card-looks" data-section-tab="appearance">
+  <section class="card" id="card-looks" data-section-tab="appearance" data-sub="looks">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.looks">Quick Looks</h2>
@@ -3497,7 +3524,7 @@
   </section>
 
   <!-- ── Background ─────────────────────────────────────────────────── -->
-  <section class="card" id="card-bg" data-section-tab="appearance">
+  <section class="card" id="card-bg" data-section-tab="appearance" data-sub="background">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.bg">Background</h2>
@@ -3644,7 +3671,7 @@
   </section>
 
   <!-- ── Glow ───────────────────────────────────────────────────────── -->
-  <section class="card" id="card-glow" data-section-tab="appearance">
+  <section class="card" id="card-glow" data-section-tab="appearance" data-sub="glow">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.glow">Glow</h2>
@@ -3784,7 +3811,7 @@
        Moved out of the Background card's strip when the bundled set
        crossed ~20 items and the strip became unusable. Tag-aware
        search, sort dropdown, double-click apply, larger tiles. -->
-  <section class="card" id="card-library" data-section-tab="appearance">
+  <section class="card" id="card-library" data-section-tab="appearance" data-sub="background">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.library">Library</h2>
@@ -3889,7 +3916,7 @@
   </section>
 
   <!-- ── Effects ────────────────────────────────────────────────────── -->
-  <section class="card" id="card-effects" data-section-tab="appearance">
+  <section class="card" id="card-effects" data-section-tab="appearance" data-sub="effects">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.effects">Effects</h2>
@@ -4179,7 +4206,7 @@
        data-section-tab; CSS hides anything that doesn't match the
        active tab so the order on screen is: screen-setup → looks →
        bg → glow → presets. -->
-  <section class="card" id="card-presets" data-section-tab="appearance">
+  <section class="card" id="card-presets" data-section-tab="appearance" data-sub="looks">
     <header class="section-head" data-toggle>
       <span class="chev">▾</span>
       <h2 data-i18n="section.presets">Presets</h2>
@@ -5394,6 +5421,10 @@ const TRANSLATIONS = {
   "tab.connect":            { en: "Connections",          de: "Verbindungen" },
   // v2.7.0-beta.1: dashboard shell.
   "tab.home":               { en: "Overview",             de: "Übersicht" },
+  "sub.background":         { en: "Background & library", de: "Hintergrund & Bibliothek" },
+  "sub.looks":              { en: "Quick Looks & presets", de: "Quick Looks & Presets" },
+  "sub.glow":               { en: "Glow",                 de: "Glow" },
+  "sub.effects":            { en: "Effects",              de: "Effekte" },
   "side.builder":           { en: "Builder",              de: "Builder" },
   "side.whats_new":         { en: "What's new",           de: "Was ist neu" },
   "side.tour":              { en: "Help & tour",          de: "Hilfe & Tour" },
@@ -7320,7 +7351,7 @@ function _hdSvg(name, cls) {
 function goToCard(cardId, focusEl) {
   const card = document.getElementById(cardId);
   if (!card) return;
-  activateSectionTab(card.dataset.sectionTab || "appearance");
+  activateSectionTab(card.dataset.sectionTab || "appearance", card.dataset.sub);
   card.classList.remove("collapsed");
   requestAnimationFrame(() => {
     const target = focusEl && focusEl.offsetParent ? focusEl : card;
@@ -9918,7 +9949,16 @@ const SECTION_TABS = [
   // sidebar, where settings usually live.
   { key: "home", i18n: "tab.home",
     icon: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>' },
+  // v2.7.0-beta.4: Appearance is split into sub-pages — seven cards on
+  // one page was "echt zu viel auf einer seite". Each card names its
+  // page in data-sub; the CSS shows only that page's cards.
   { key: "appearance", i18n: "tab.appearance",
+    subs: [
+      { id: "background", i18n: "sub.background" },
+      { id: "looks",      i18n: "sub.looks" },
+      { id: "glow",       i18n: "sub.glow" },
+      { id: "effects",    i18n: "sub.effects" },
+    ],
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.7"/><path d="M5 17l4-4 3 3 4-5 3 4"/>' },
   { key: "content", i18n: "tab.content",
     icon: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>' },
@@ -9978,6 +10018,16 @@ function buildSectionTabs() {
     btn.addEventListener("click", () => activateSectionTab(entry.key));
     if (entry.bottom) bottom.insertBefore(btn, ver);
     else top.appendChild(btn);
+    for (const sub of entry.subs || []) {
+      const sb = document.createElement("button");
+      sb.type = "button";
+      sb.className = "stab stab-sub";
+      sb.dataset.tab = entry.key;
+      sb.dataset.sub = sub.id;
+      sb.innerHTML = '<span data-i18n="' + sub.i18n + '">' + escapeHtml(t(sub.i18n)) + '</span>';
+      sb.addEventListener("click", () => activateSectionTab(entry.key, sub.id));
+      top.appendChild(sb);
+    }
   }
   renderSideVersion();
   // Restore last-active tab. URL hash (#tab=…) overrides storage —
@@ -10020,7 +10070,11 @@ function _applyScreenScopeChrome(key) {
   if (strip) strip.style.display = GLOBAL_TABS.has(key) ? "none" : "";
 }
 
-function activateSectionTab(key) {
+// Old tab keys that now name a sub-page of Appearance.
+const LEGACY_SUB_ALIASES = { library: "background", look: "looks", effects: "effects" };
+
+function activateSectionTab(key, sub) {
+  if (!sub && LEGACY_SUB_ALIASES[key]) sub = LEGACY_SUB_ALIASES[key];
   // v2.5.2-beta.4: resolve legacy keys HERE, not only at startup.
   //
   // The redesign folded six tabs into four and mapped the old names in
@@ -10044,8 +10098,22 @@ function activateSectionTab(key) {
   const mainEl = document.querySelector("main");
   if (mainEl) mainEl.dataset.activeTab = key;
   _applyScreenScopeChrome(key);
+  // Sub-page: the one asked for, else the last one used, else the first.
+  const entry = SECTION_TABS.find((e) => e.key === key);
+  const subs = (entry && entry.subs) || [];
+  if (subs.length) {
+    if (!subs.some((x) => x.id === sub)) {
+      try { sub = localStorage.getItem("cfg.sub." + key); } catch (_) { sub = null; }
+      if (!subs.some((x) => x.id === sub)) sub = subs[0].id;
+    }
+    if (mainEl) mainEl.dataset.sub = sub;
+    try { localStorage.setItem("cfg.sub." + key, sub); } catch (_) {}
+  } else if (mainEl) {
+    delete mainEl.dataset.sub;
+  }
   document.querySelectorAll("#section-tabs .stab").forEach((b) => {
-    b.classList.toggle("active", b.dataset.tab === key);
+    b.classList.toggle("active", b.dataset.tab === key && (!b.dataset.sub || b.dataset.sub === sub));
+    b.classList.toggle("has-sub-active", b.dataset.tab === key && !b.dataset.sub && subs.length > 0);
   });
   // The house button and the screen tabs share the top bar: on the
   // Übersicht the house is the active view, elsewhere the screen is.
@@ -10109,8 +10177,9 @@ setTimeout(() => {
   const gotoBtn = document.getElementById("bg-goto-library");
   if (gotoBtn && typeof window.activateSectionTab === "function") {
     gotoBtn.addEventListener("click", () => {
-      // The library lives in Appearance since the v2.5.0 redesign.
-      window.activateSectionTab("appearance");
+      // The library lives in Appearance since the v2.5.0 redesign,
+      // on its Background sub-page since v2.7.0-beta.4.
+      goToCard("card-library");
     });
   }
   // v2.2.0-beta: the BG thumbnail in the Look tab also routes to the
@@ -10118,8 +10187,9 @@ setTimeout(() => {
   const thumbBtn = document.getElementById("bg-current-thumb");
   if (thumbBtn && typeof window.activateSectionTab === "function") {
     thumbBtn.addEventListener("click", () => {
-      // The library lives in Appearance since the v2.5.0 redesign.
-      window.activateSectionTab("appearance");
+      // The library lives in Appearance since the v2.5.0 redesign,
+      // on its Background sub-page since v2.7.0-beta.4.
+      goToCard("card-library");
     });
   }
 }, 0);
@@ -12196,7 +12266,10 @@ function _renderTourStep() {
   // before measurement. Without this, getBoundingClientRect() returns
   // 0 height on display:none cards and the step gets skipped.
   if (step.tab && typeof window.activateSectionTab === "function") {
-    window.activateSectionTab(step.tab);
+    // v2.7.0-beta.4: open the sub-page that holds the step's card.
+    const target = document.querySelector(step.selector);
+    const card = target && target.closest("section.card[data-sub]");
+    window.activateSectionTab(step.tab, card ? card.dataset.sub : undefined);
   }
   const el = document.querySelector(step.selector);
   if (!el || el.getBoundingClientRect().height === 0) {

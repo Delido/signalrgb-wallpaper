@@ -988,7 +988,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.3"
+APP_VERSION = "2.7.0-beta.4"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1084,6 +1084,28 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.4": {
+        "title_en": "What's new in v2.7.0-beta.4",
+        "title_de": "Was ist neu in v2.7.0-beta.4",
+        "body_en": (
+            "**Appearance is split into four pages.** Seven cards on one "
+            "page was too much. The sidebar now lists them under "
+            "Appearance: **Background & library**, **Quick Looks & "
+            "presets**, **Glow** and **Effects**. Each page shows only "
+            "its own cards, and the Configurator remembers the one you "
+            "used last. Search hits and the Overview jump straight to "
+            "the right page.\n"
+        ),
+        "body_de": (
+            "**Aussehen ist in vier Seiten aufgeteilt.** Sieben Karten "
+            "auf einer Seite waren zu viel. Die Seitenleiste listet sie "
+            "jetzt unter Aussehen: **Hintergrund & Bibliothek**, "
+            "**Quick Looks & Presets**, **Glow** und **Effekte**. Jede "
+            "Seite zeigt nur ihre Karten, und der Configurator merkt "
+            "sich die zuletzt benutzte. Suchtreffer und die \u00dcbersicht "
+            "springen direkt auf die richtige Seite.\n"
+        ),
+    },
     "2.7.0-beta.3": {
         "title_en": "What's new in v2.7.0-beta.3",
         "title_de": "Was ist neu in v2.7.0-beta.3",

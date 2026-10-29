@@ -6,6 +6,27 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.4] - 2026-10-29
+
+### Changed — Appearance split into sub-pages
+
+Reported as "in dem Bereich ist echt zu viel auf einer seite, ggf. mehr
+aufteilen". Appearance stacked seven cards, the library among them.
+
+- Four sub-pages, listed under Appearance in the sidebar: Background &
+  library (`card-screen-setup`, `card-bg`, `card-library`), Quick Looks
+  & presets (`card-looks`, `card-presets`), Glow, Effects. Each card
+  carries `data-sub`; `main[data-sub]` hides the other pages' cards.
+- `activateSectionTab(key, sub)`: an unknown or missing sub falls back
+  to the last one used (`cfg.sub.<tab>`), then the first. Old keys map
+  onto their page (`library` -> Background, `effects` -> Effects).
+- `goToCard()`, the tour and the library shortcuts in the background
+  card open the page that holds the card.
+- Sub-page entries use `id:` rather than `key:` so the tests that read
+  `SECTION_TABS` do not take them for top-level tabs; `test_tab_scope`
+  locates `activateSectionTab` by prefix since its signature grew.
+- Appearance renders one column at up to 1100 px.
+
 ## [2.7.0-beta.3] - 2026-10-29
 
 ### Fixed — the Overview showed only one screen
