@@ -120,6 +120,7 @@ class FakeWebPipe(threading.Thread):
         self.init_kw = init_kw
         self.received = []          # (opcode, masked, decoded JSON)
         self.connections = 0
+        self._open = 0
         self.srv = socket.socket()
         self.srv.bind(("127.0.0.1", 0))
         self.srv.listen(4)
@@ -133,7 +134,11 @@ class FakeWebPipe(threading.Thread):
             except OSError:
                 return
             self.connections += 1
+            self._open += 1
             threading.Thread(target=self.serve, args=(c,), daemon=True).start()
+
+    def open_connections(self):
+        return self._open
 
     def close(self):
         try:
@@ -222,6 +227,7 @@ class FakeWebPipe(threading.Thread):
         except (OSError, ConnectionError, IndexError):
             pass
         finally:
+            self._open -= 1
             try:
                 c.close()
             except OSError:
@@ -230,10 +236,11 @@ class FakeWebPipe(threading.Thread):
 
 # ── helpers ─────────────────────────────────────────────────────────────
 
-def make_poller(b, port, running=True, gate=True):
+def make_poller(b, port, running=True, gate=True, suspend=None):
     P = b.SignalRgbWebPipePoller
     p = P(should_poll=(lambda: gate) if not callable(gate) else gate,
-          port=port, process_info=lambda: (running, "2.5.80" if running else ""))
+          port=port, process_info=lambda: (running, "2.5.80" if running else ""),
+          suspend=suspend)
     p.READ_TIMEOUT_S = 1.0
     p.CONNECT_TIMEOUT_S = 1.0
     return p
@@ -423,6 +430,58 @@ def main():
           f"{srv.connections} connections")
     srv.close()
 
+    # v2.7.0-beta.6: a paused wallpaper disconnects the reader. A
+    # connected reader costs SignalRGB CPU even without idles (measured:
+    # +0.45 % of the machine, backlog queued), so holding the socket open
+    # and staying quiet saves nothing -- it has to close.
+    paused = [False]
+    srv = FakeWebPipe()
+    p = make_poller(b, srv.port, suspend=lambda: paused[0])
+    p.start()
+    check("suspend: reader comes online normally",
+          wait_for(lambda: p.get_status()["state"] == "online"), str(p.get_status()))
+    paused[0] = True
+    gone = wait_for(lambda: p.get_status()["state"] == "paused", 4.0)
+    check("suspend: a paused wallpaper sets the state to 'paused'", gone,
+          str(p.get_status()))
+    check("suspend: ...and closes the connection to SignalRGB",
+          wait_for(lambda: srv.open_connections() == 0, 4.0),
+          f"{srv.open_connections()} still open")
+    conns = srv.connections
+    time.sleep(1.5)
+    check("suspend: no reconnect while still paused", srv.connections == conns,
+          f"{srv.connections - conns} new connections")
+    check("suspend: a paused reader reports no sensors", p.get_snapshot() == {})
+    paused[0] = False
+    check("suspend: resume reconnects and comes back online",
+          wait_for(lambda: p.get_status()["state"] == "online", 5.0)
+          and srv.connections == conns + 1, str(p.get_status()))
+    p.stop()
+    srv.close()
+
+    # The grace period: a short pause (alt-tab) must not cost a re-init.
+    rt = type("RT", (), {})()
+    rt._flag = False
+    rt._is_paused = lambda: rt._flag
+    f = b.BridgeRuntime._paused_for(rt, 0.4)
+    rt._flag = True
+    first = f()
+    time.sleep(0.2)
+    mid = f()
+    time.sleep(0.3)
+    late = f()
+    rt._flag = False
+    after = f()
+    rt._flag = True
+    restarted = f()
+    check("grace: not suspended at the start of a pause", first is False)
+    check("grace: still not suspended inside the grace period", mid is False)
+    check("grace: suspended once the pause outlasts it", late is True)
+    check("grace: resuming clears it immediately", after is False)
+    check("grace: a new pause starts a new grace period", restarted is False)
+    check("the runtime uses a 60 s grace period",
+          b.SIGNALRGB_SENSOR_PAUSE_GRACE_S == 60.0)
+
     # Retry policy: a missing interface is not hammered every second.
     p = make_poller(b, free_port(), running=True, gate=True)
     p.start()
@@ -466,8 +525,10 @@ def main():
     check("...and to the sysstats push the widgets read",
           "hwmon=self.sensor_sources," in SRC)
     check("the poller is gated on a placed sensor widget",
-          'SignalRgbWebPipePoller(\n            should_poll=self._poller_gate("hardware-sensor"))'
+          'SignalRgbWebPipePoller(\n            should_poll=self._poller_gate("hardware-sensor"),'
           in SRC)
+    check("...and suspended while the wallpaper stays paused",
+          "suspend=self._paused_for(SIGNALRGB_SENSOR_PAUSE_GRACE_S))" in SRC)
     route = SRC[SRC.index("async def _route_hwmon_sensors"):
                 SRC.index("async def _route_health")]
     check("the picker probe runs in an executor, not on the loop",

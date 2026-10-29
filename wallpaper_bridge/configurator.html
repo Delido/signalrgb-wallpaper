@@ -5280,6 +5280,8 @@ const TRANSLATIONS = {
                                de: "SignalRGB läuft nicht" },
   "sensors.sig.idle":       { en: "SignalRGB: not checked yet",
                               de: "SignalRGB: noch nicht geprüft" },
+  "sensors.sig.paused":     { en: "SignalRGB: reading paused while the wallpaper is paused",
+                              de: "SignalRGB: Abfrage ruht, solange das Wallpaper pausiert" },
   "sensors.lhm.online":     { en: "LibreHardwareMonitor: {n} sensors",
                               de: "LibreHardwareMonitor: {n} Sensoren" },
   "sensors.lhm.offline":    { en: "LibreHardwareMonitor: not running (optional)",
@@ -7109,7 +7111,7 @@ function renderWallpaperVersionNote(h) {
 // recent versions; the bridge PROBES for them and reports a state, and
 // this line turns that state into the one thing to do about it.
 const SENSOR_STATE_CLASS = {
-  online: "is-ok", monitoring_off: "is-warn", incompatible: "is-warn",
+  online: "is-ok", paused: "is-idle", monitoring_off: "is-warn", incompatible: "is-warn",
   unavailable: "is-warn", not_running: "is-idle", idle: "is-idle",
 };
 function sensorStateText(state, count, version) {

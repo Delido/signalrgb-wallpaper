@@ -548,6 +548,10 @@ def set_autostart(enabled: bool) -> bool:
 # Update checker
 # ============================================================================
 
+# v2.7.0-beta.6: how long the wallpaper must stay paused before the
+# SignalRGB sensor reader disconnects (see SignalRgbWebPipePoller).
+SIGNALRGB_SENSOR_PAUSE_GRACE_S = 60.0
+
 UPDATE_API_URL          = "https://api.github.com/repos/Delido/signalrgb-wallpaper/releases"
 UPDATE_RELEASES_HTML    = "https://github.com/Delido/signalrgb-wallpaper/releases"
 UPDATE_CHECK_INTERVAL_S = 24 * 3600    # daily background poll
@@ -988,7 +992,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.5"
+APP_VERSION = "2.7.0-beta.6"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1084,6 +1088,30 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.6": {
+        "title_en": "What's new in v2.7.0-beta.6",
+        "title_de": "Was ist neu in v2.7.0-beta.6",
+        "body_en": (
+            "**Less load on SignalRGB while you play.** Reading "
+            "SignalRGB's hardware sensors costs SignalRGB about half a "
+            "percent of the whole CPU, and it kept running while the "
+            "wallpaper was paused for a fullscreen game. Once the "
+            "wallpaper has been paused for a minute, the bridge now "
+            "disconnects from SignalRGB; when it resumes, the sensors are "
+            "back within about two seconds. A quick alt-tab changes "
+            "nothing.\n"
+        ),
+        "body_de": (
+            "**Weniger Last f\u00fcr SignalRGB beim Spielen.** Das Auslesen "
+            "der Hardware-Sensoren kostet SignalRGB etwa ein halbes "
+            "Prozent der gesamten CPU \u2014 und lief weiter, w\u00e4hrend "
+            "das Wallpaper f\u00fcr ein Vollbild-Spiel pausiert war. Ist "
+            "das Wallpaper eine Minute pausiert, trennt sich die Bridge "
+            "jetzt von SignalRGB; nach der Pause sind die Sensoren nach "
+            "etwa zwei Sekunden wieder da. Kurzes Alt-Tab \u00e4ndert "
+            "nichts.\n"
+        ),
+    },
     "2.7.0-beta.5": {
         "title_en": "What's new in v2.7.0-beta.5",
         "title_de": "Was ist neu in v2.7.0-beta.5",
@@ -9068,6 +9096,7 @@ class SignalRgbWebPipePoller:
         unavailable     nothing listening while SignalRGB runs (too old)
         not_running     nothing listening, SignalRGB is not running
         idle            not polled (no sensor widget placed yet)
+        paused          disconnected while the wallpaper is paused
 
     Strictly read-only. The WebPipe accepts writes from any local process
     without authentication (macros, fan curves, effects); this class
@@ -9099,8 +9128,14 @@ class SignalRgbWebPipePoller:
               "gb": "GB", "kb": "KB"}
 
     def __init__(self, should_poll=None, port: int | None = None,
-                 process_info=None):
+                 process_info=None, suspend=None):
         self._should_poll = should_poll
+        # v2.7.0-beta.6: True while the wallpaper has been paused for a
+        # while (fullscreen game, manual pause). A connected reader costs
+        # SignalRGB ~0.5 % of the whole CPU even when it sends no idle --
+        # measured: the server keeps serialising and queues the backlog --
+        # so the only saving is to disconnect.
+        self._suspend = suspend
         self._port = int(port) if port else self.PORT
         self._process_info = process_info or _signalrgb_process_info
         self._stop = threading.Event()
@@ -9189,8 +9224,23 @@ class SignalRgbWebPipePoller:
         except Exception:
             return True
 
+    def _suspended(self) -> bool:
+        try:
+            return bool(self._suspend()) if self._suspend else False
+        except Exception:
+            return False
+
     def _run(self):
         while not self._stop.is_set():
+            if self._gate() and self._suspended():
+                with self._lock:
+                    if self._state == "online":
+                        self._state = "paused"
+                        print("[signalrgb-sensors] paused: wallpaper is paused, "
+                              "disconnected from SignalRGB")
+                if self._stop.wait(1.0):
+                    return
+                continue
             if not self._gate() or time.time() < self._next_attempt_ts:
                 if self._stop.wait(1.0):
                     return
@@ -9286,7 +9336,7 @@ class SignalRgbWebPipePoller:
         # 1 Hz. Draining freely measured 214 KB/s, ~9 messages/s and 0.1 %
         # of one core on an i9-13900K with 68 sensors -- cheap, and only
         # while a sensor widget is placed.
-        while not self._stop.is_set() and self._gate():
+        while not self._stop.is_set() and self._gate() and not self._suspended():
             self._send_json(sock, {"type": 4})
             # The server answers an idle only when something changed.
             # Wait for readability in short slices so a removed widget
@@ -9297,7 +9347,7 @@ class SignalRgbWebPipePoller:
                 r, _, _ = select.select([sock], [], [], 1.0)
                 if r:
                     break
-                if not self._gate():
+                if not self._gate() or self._suspended():
                     return
             else:
                 return
@@ -12463,6 +12513,22 @@ class BridgeRuntime:
                 return True
         return gate
 
+    def _paused_for(self, seconds: float):
+        """Returns a callable that is True once the wallpaper has been
+        paused (fullscreen or manual) for `seconds` without a break.
+        The grace period keeps a quick alt-tab from costing SignalRGB a
+        ~9 MB re-init on every switch."""
+        since = [None]
+        def check() -> bool:
+            if not self._is_paused():
+                since[0] = None
+                return False
+            now = time.monotonic()
+            if since[0] is None:
+                since[0] = now
+            return now - since[0] >= seconds
+        return check
+
     def _get_settings(self, screen: int) -> dict:
         with self.config_lock:
             return dict(self.config["screens"].get(str(screen), DEFAULT_SCREEN_SETTINGS))
@@ -14525,7 +14591,8 @@ class BridgeRuntime:
         # gate: it only connects while a hardware-sensor widget is placed;
         # the picker triggers a one-shot probe through probe_if_stale().
         self.signalrgb_sensors = SignalRgbWebPipePoller(
-            should_poll=self._poller_gate("hardware-sensor"))
+            should_poll=self._poller_gate("hardware-sensor"),
+            suspend=self._paused_for(SIGNALRGB_SENSOR_PAUSE_GRACE_S))
         self.signalrgb_sensors.start()
         self.sensor_sources = SensorSources(self.hwmon, self.signalrgb_sensors)
         self.broadcaster.hwmon_provider = self.sensor_sources

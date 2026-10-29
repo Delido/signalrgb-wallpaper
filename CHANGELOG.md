@@ -6,6 +6,31 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.6] - 2026-10-30
+
+### Changed — the SignalRGB sensor reader disconnects during a long pause
+
+Asked as "wird zu viel getriggert?". Measured live against SignalRGB
+2.5.80 (68 sensors, A/B over 30 s windows, SignalRGB CPU as % of the
+whole machine): bridge reader only 3.93 / 3.96 %, plus a second reader
+that is connected but silent 4.40 %, plus a second draining reader
+4.52 %. Traffic 7.7 msg/s, ~375 KB/s (SignalRGB sends each sensor's
+history array along). A silent reader is not free: after 30 s without
+idles the server released 217 queued messages in 5 s — it keeps
+serialising and queues the backlog. Holding the socket open therefore
+saves nothing; only closing it does.
+
+- `SignalRgbWebPipePoller` takes a `suspend` predicate. While it is true
+  the loop closes the session and stays disconnected; state `paused`
+  (Configurator: "reading paused while the wallpaper is paused").
+- `BridgeRuntime._paused_for(60)` is true once the wallpaper has been
+  paused (fullscreen or manual) for 60 s without a break, so an alt-tab
+  does not cost a ~9.5 MB re-init. Resuming reconnects at once.
+- The Configurator-only case stays polled on purpose: an open
+  Configurator should show the live values.
+- `test_signalrgb_webpipe.py`: suspend closes the connection, does not
+  reconnect while paused, reconnects on resume; grace period semantics.
+
 ## [2.7.0-beta.5] - 2026-10-29
 
 ### Added — browser history for sections
