@@ -2969,6 +2969,14 @@
     cursor: pointer;
   }
   .hd-look-name { font-size: 18px; font-weight: 500; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85); }
+  .hd-thumbs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .hd-thumbs.multi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hd-thumbs .hd-look-thumb { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 2px; }
+  .hd-thumbs.multi .hd-look-thumb { height: 104px; }
+  .hd-thumbs.multi .hd-look-name { font-size: 13px; }
+  .hd-look-screen { font-size: 11px; color: #e8e9ec; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); }
+  .hd-look-thumb.active { border-color: var(--accent); }
+  .hd-look-name { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hd-search {
     display: flex; align-items: center; gap: 10px;
     height: 44px; padding: 0 12px;
@@ -5405,6 +5413,7 @@ const TRANSLATIONS = {
   "chip.sensors":           { en: "Sensors",              de: "Sensoren" },
   "chip.sensors_n":         { en: "{n} from SignalRGB",   de: "{n} aus SignalRGB" },
   "home.active_look":       { en: "Current background",   de: "Aktueller Hintergrund" },
+  "home.backgrounds":       { en: "Backgrounds",          de: "Hintergründe" },
   "home.no_bg":             { en: "No background image",  de: "Kein Hintergrundbild" },
   "home.own_image":         { en: "Your own image",       de: "Eigenes Bild" },
   "side.title":             { en: "SignalRGB Wallpaper",  de: "SignalRGB Wallpaper" },
@@ -7329,14 +7338,13 @@ function _hdBuildSkeleton(dash) {
     '<section class="hd-col">' +
       '<h2 class="hd-h">' + _hdSvg("overview") + '<span data-i18n="tab.home"></span></h2>' +
       '<div class="hd-card hd-look">' +
-        '<div class="hd-look-head"><span data-i18n="home.active_look"></span><span id="hd-look-screen"></span></div>' +
-        '<button type="button" class="hd-look-thumb" id="hd-look-thumb">' +
-          '<span class="hd-look-name" id="hd-look-name"></span></button>' +
+        '<div class="hd-look-head"><span data-i18n="home.backgrounds"></span></div>' +
+        '<div class="hd-thumbs" id="hd-thumbs"></div>' +
         '<label class="hd-search">' + _hdSvg("search") +
           '<input type="search" id="hd-search" autocomplete="off" data-i18n-placeholder="home.search"></label>' +
         '<div class="hd-search-results" id="hd-search-results"></div>' +
       '</div>' +
-      '<h2 class="hd-h" data-i18n="home.summaries"></h2>' +
+      '<h2 class="hd-h"><span data-i18n="home.summaries"></span><span class="hd-sub" id="hd-sum-screen"></span></h2>' +
       '<div class="hd-tiles" id="hd-tiles"></div>' +
       '<h2 class="hd-h">' + _hdSvg("flow") + '<span data-i18n="home.flow"></span></h2>' +
       '<div class="hd-card hd-flow" id="hd-flow"></div>' +
@@ -7369,7 +7377,6 @@ function _hdBuildSkeleton(dash) {
     const first = dash.querySelector("#hd-search-results button");
     if (first) first.click();
   });
-  dash.querySelector("#hd-look-thumb").addEventListener("click", () => goToCard("card-bg"));
   dash.querySelector("#hd-preview-open").addEventListener("click", () => {
     const b = document.getElementById("header-toggle-preview");
     if (b) b.click();
@@ -7488,13 +7495,46 @@ function renderHomeDashboard() {
   if (!dash.firstChild) _hdBuildSkeleton(dash);
   const s = settings || {};
 
-  // Current background of the active screen.
-  const thumb = dash.querySelector("#hd-look-thumb");
-  const url = _hdThumbUrl(s.bgImage);
-  const bg = url ? "url(\"" + url + "\")" : "";
-  if (thumb.style.backgroundImage !== bg) thumb.style.backgroundImage = bg;
-  dash.querySelector("#hd-look-name").textContent = s.bgImage ? _hdBaseName(s.bgImage) : t("home.no_bg");
-  dash.querySelector("#hd-look-screen").textContent = t("home.screen_n", { n: activeScreen + 1 });
+  // v2.7.0-beta.3: one thumbnail per screen. beta.1 showed only the
+  // active screen, so the overview looked like a single-monitor setup —
+  // reported as "im overview nur ein bildschirm zu sehen, immer das
+  // screen was zuletzt angeklickt wurde". The active screen reads the
+  // live push (`settings`), the others the 5 s /config poll; patched in
+  // place so the images do not flicker on every poll.
+  const thumbs = dash.querySelector("#hd-thumbs");
+  const snapScreens = (_lastConfigSnapshot && _lastConfigSnapshot.screens) || [];
+  const nThumbs = Math.max(1, screenCount || 1);
+  thumbs.classList.toggle("multi", nThumbs > 1);
+  for (let i = 0; i < nThumbs; i++) {
+    let b = thumbs.children[i];
+    if (!b) {
+      b = document.createElement("button");
+      b.type = "button";
+      b.className = "hd-look-thumb";
+      b.innerHTML = '<span class="hd-look-screen"></span><span class="hd-look-name"></span>';
+      b.addEventListener("click", () => {
+        switchScreen(i);
+        goToCard("card-bg");
+      });
+      thumbs.appendChild(b);
+    }
+    const cs = i === activeScreen ? s : (snapScreens[i] || {});
+    const src = Number.isInteger(cs.mirrorOf)
+      ? (cs.mirrorOf === activeScreen ? s : (snapScreens[cs.mirrorOf] || {}))
+      : cs;
+    const url = _hdThumbUrl(src.bgImage);
+    const bg = url ? "url(\"" + url + "\")" : "";
+    if (b.style.backgroundImage !== bg) b.style.backgroundImage = bg;
+    b.classList.toggle("active", nThumbs > 1 && i === activeScreen);
+    b.querySelector(".hd-look-screen").textContent = t("home.screen_n", { n: i + 1 });
+    b.querySelector(".hd-look-name").textContent = Number.isInteger(cs.mirrorOf)
+      ? t("home.screen_mirror", { n: cs.mirrorOf + 1 })
+      : (src.bgImage ? _hdBaseName(src.bgImage) : t("home.no_bg"));
+  }
+  while (thumbs.children.length > nThumbs) thumbs.lastChild.remove();
+  // Summaries below are per screen; say which one.
+  dash.querySelector("#hd-sum-screen").textContent = nThumbs > 1
+    ? t("home.screen_n", { n: activeScreen + 1 }) : "";
   dash.querySelector("#hd-search").placeholder = t("home.search");
 
   // Summaries: each tile opens the card that owns the value.

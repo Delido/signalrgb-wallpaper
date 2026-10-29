@@ -6,6 +6,21 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.3] - 2026-10-29
+
+### Fixed — the Overview showed only one screen
+
+Reported as "im overview nur ein bildschirm zu sehen, immer das screen
+was zuletzt angeklickt wurde". The background card rendered `settings`,
+which only ever holds the active screen.
+
+- One thumbnail per screen (`#hd-thumbs`): the active screen from the
+  live push, the others from the `/config` poll, mirrored screens with
+  their source's image. Patched in place so images do not flicker on
+  the 5 s poll. A click switches to that screen and opens its background
+  card; the active one is outlined.
+- The summaries heading names the screen it describes.
+
 ## [2.7.0-beta.2] - 2026-10-29
 
 ### Changed — redesign phases 2 and 3: card interiors and the Builder

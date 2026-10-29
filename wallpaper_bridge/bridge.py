@@ -988,7 +988,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.2"
+APP_VERSION = "2.7.0-beta.3"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1084,6 +1084,26 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.3": {
+        "title_en": "What's new in v2.7.0-beta.3",
+        "title_de": "Was ist neu in v2.7.0-beta.3",
+        "body_en": (
+            "**Fixed: the Overview showed only one screen** \u2014 always "
+            "the one clicked last. It now shows the background of every "
+            "screen side by side; the active one is outlined, and a "
+            "click opens that screen's background settings. The "
+            "summaries below name the screen they describe.\n"
+        ),
+        "body_de": (
+            "**Behoben: Die \u00dcbersicht zeigte nur einen Bildschirm** "
+            "\u2014 immer den zuletzt angeklickten. Jetzt stehen die "
+            "Hintergr\u00fcnde aller Bildschirme nebeneinander; der aktive "
+            "ist umrandet, und ein Klick \u00f6ffnet die "
+            "Hintergrund-Einstellungen dieses Bildschirms. Die "
+            "Zusammenfassungen darunter nennen den Bildschirm, f\u00fcr den "
+            "sie gelten.\n"
+        ),
+    },
     "2.7.0-beta.2": {
         "title_en": "What's new in v2.7.0-beta.2",
         "title_de": "Was ist neu in v2.7.0-beta.2",
