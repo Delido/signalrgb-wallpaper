@@ -6,6 +6,28 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.8] - 2026-10-30
+
+### Fixed — sensor widgets stayed empty after a long pause
+
+Reported after a 1-2 h game: "jetzt wo beendet kommen die Widgets nicht
+wieder". `/health` showed `paused: false` but `signalrgb_sensors_state:
+paused`; the log had "paused: ... disconnected" at 19:44 and nothing
+after.
+
+beta.6 sets the state to `paused` when it disconnects and relied on the
+re-init to set it back to `online` (`_load_sensor_refs`). beta.7's single
+mode keeps its catalogue across a pause -- still valid within a SignalRGB
+session -- so it never re-initialised, the state stayed `paused` and
+`get_snapshot()` returned nothing although values were being read. The
+beta.6 resume test ran in full mode only.
+
+- `_resume_from_pause()` sets `online` after the first successful single
+  round (or straight away when no SignalRGB sensor is on screen).
+- Regression test in single mode: pause, disconnect, resume, `online`,
+  fresh values, and no second catalogue init. Fails on beta.7 (2 of 5),
+  passes now.
+
 ## [2.7.0-beta.7] - 2026-10-30
 
 ### Changed — SignalRGB sensors read one by one (new default)

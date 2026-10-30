@@ -992,7 +992,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.7"
+APP_VERSION = "2.7.0-beta.8"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1088,6 +1088,25 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.8": {
+        "title_en": "What's new in v2.7.0-beta.8",
+        "title_de": "Was ist neu in v2.7.0-beta.8",
+        "body_en": (
+            "**Fixed: sensor widgets stayed empty after a long pause.** "
+            "After the wallpaper had been paused for more than a minute "
+            "(a fullscreen game), the SignalRGB sensors did not come back "
+            "when it resumed \u2014 the widgets showed only dashes until the "
+            "bridge was restarted. They now return within a few seconds.\n"
+        ),
+        "body_de": (
+            "**Behoben: Sensor-Widgets blieben nach einer langen Pause "
+            "leer.** War das Wallpaper l\u00e4nger als eine Minute pausiert "
+            "(Vollbild-Spiel), kamen die SignalRGB-Sensoren danach nicht "
+            "zur\u00fcck \u2014 die Widgets zeigten nur Striche, bis die Bridge "
+            "neu gestartet wurde. Jetzt sind sie nach wenigen Sekunden "
+            "wieder da.\n"
+        ),
+    },
     "2.7.0-beta.7": {
         "title_en": "What's new in v2.7.0-beta.7",
         "title_de": "Was ist neu in v2.7.0-beta.7",
@@ -9394,6 +9413,7 @@ class SignalRgbWebPipePoller:
         if not targets:
             # Nothing of SignalRGB's is on screen (LHM paths only, or a
             # widget without a sensor yet): no connection at all.
+            self._resume_from_pause()
             self._stop.wait(self.SINGLE_INTERVAL_S)
             return
         # 2. A connection WITHOUT init. SignalRGB sends such a client no
@@ -9405,6 +9425,7 @@ class SignalRgbWebPipePoller:
             self._handshake(sock)
             req = 100
             nulls: dict[str, int] = {}
+            got_any = False
             while (not self._stop.is_set() and self._gate()
                    and not self._suspended() and self._mode() == "single"):
                 t0 = time.time()
@@ -9426,11 +9447,14 @@ class SignalRgbWebPipePoller:
                             return
                         continue
                     nulls.pop(name, None)
+                    got_any = True
                     with self._lock:
                         f = self._sensors.get(oid)
                         if f is not None:
                             f["value"] = val
                             f["valueStr"] = str(raw)
+                if got_any:
+                    self._resume_from_pause()
                 with self._lock:
                     if self._state == "online":
                         self._last_ok_ts = time.time()
@@ -9445,6 +9469,21 @@ class SignalRgbWebPipePoller:
                 sock.close()
             except Exception:
                 pass
+
+    def _resume_from_pause(self):
+        # v2.7.0-beta.8: leaving a pause in single mode. Full mode re-inits
+        # and _load_sensor_refs sets "online"; single mode keeps the
+        # catalogue (still valid within a SignalRGB session) and so never
+        # passed through there -- the state stuck at "paused" and
+        # get_snapshot() kept returning nothing. Reported after a 1-2 h
+        # game: "jetzt wo beendet kommen die Widgets nicht wieder".
+        with self._lock:
+            if self._state != "paused":
+                return
+            self._state = "online"
+            self._last_error = ""
+            self._last_ok_ts = time.time()
+        print("[signalrgb-sensors] online again after the pause")
 
     _VALUE_RE = re.compile(r"\s*(-?\d+(?:[.,]\d+)?)")
 

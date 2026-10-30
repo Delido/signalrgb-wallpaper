@@ -558,6 +558,35 @@ def main():
     p.stop()
     srv.close()
 
+    # v2.7.0-beta.8: pause and resume IN SINGLE MODE. The beta.6 test above
+    # runs in full mode, which re-inits on resume; single mode keeps its
+    # catalogue, never re-entered "online", and the widgets stayed blank
+    # after a 1-2 h game ("kommen die Widgets nicht wieder").
+    paused = [False]
+    srv = FakeWebPipe()
+    p = make_poller(b, srv.port, mode=lambda: "single", wanted=lambda: {load},
+                    suspend=lambda: paused[0])
+    p.start()
+    check("single + pause: online with values first",
+          wait_for(lambda: (p.get_snapshot().get(load) or {}).get("value") is not None, 4.0),
+          str(p.get_status()))
+    paused[0] = True
+    check("single + pause: goes to 'paused' and disconnects",
+          wait_for(lambda: p.get_status()["state"] == "paused"
+                   and srv.open_connections() == 0, 4.0), str(p.get_status()))
+    srv.values["CPU Load"] = "77%"
+    paused[0] = False
+    check("single + pause: back 'online' after the pause",
+          wait_for(lambda: p.get_status()["state"] == "online", 4.0), str(p.get_status()))
+    check("single + pause: ...and the widgets get fresh values again",
+          wait_for(lambda: (p.get_snapshot().get(load) or {}).get("value") == 77.0, 4.0),
+          str(p.get_snapshot().get(load)))
+    check("single + pause: without a second 9 MB catalogue init",
+          srv.no_init_conns == 2 and srv.connections == 3,
+          f"{srv.connections} connections, {srv.no_init_conns} without init")
+    p.stop()
+    srv.close()
+
     # A name that exists twice cannot be asked for by name.
     srv = FakeWebPipe()
     p = make_poller(b, srv.port, mode=lambda: "single",
