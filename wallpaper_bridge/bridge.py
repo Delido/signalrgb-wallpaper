@@ -992,7 +992,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.6"
+APP_VERSION = "2.7.0-beta.7"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1088,6 +1088,34 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.7": {
+        "title_en": "What's new in v2.7.0-beta.7",
+        "title_de": "Was ist neu in v2.7.0-beta.7",
+        "body_en": (
+            "**SignalRGB sensors now cost SignalRGB almost nothing.** "
+            "Instead of receiving every change of all sensors (about half "
+            "a percent of CPU in SignalRGB), the bridge now asks once a "
+            "second for exactly the sensors your widgets show.\n\n"
+            "For many sensor widgets, **System \u2192 More settings \u2192 "
+            "SignalRGB sensors** switches back to *All sensors*. The "
+            "sensor line in System shows which mode runs. If a sensor "
+            "name exists twice on your PC (for example two \"CPU Fan\"), "
+            "the bridge uses *All sensors* for it automatically.\n"
+        ),
+        "body_de": (
+            "**SignalRGB-Sensoren kosten SignalRGB jetzt fast nichts "
+            "mehr.** Statt jede \u00c4nderung aller Sensoren zu empfangen "
+            "(etwa ein halbes Prozent CPU in SignalRGB), fragt die Bridge "
+            "einmal pro Sekunde genau die Sensoren ab, die deine Widgets "
+            "zeigen.\n\n"
+            "Bei vielen Sensor-Widgets schaltet **System \u2192 Mehr "
+            "Einstellungen \u2192 SignalRGB-Sensoren** zur\u00fcck auf "
+            "*Alle Sensoren*. Die Sensorzeile unter System zeigt, welcher "
+            "Modus l\u00e4uft. Kommt ein Sensorname auf deinem PC doppelt "
+            "vor (etwa zweimal \u201eCPU Fan\u201c), nimmt die Bridge daf\u00fcr "
+            "automatisch *Alle Sensoren*.\n"
+        ),
+    },
     "2.7.0-beta.6": {
         "title_en": "What's new in v2.7.0-beta.6",
         "title_de": "Was ist neu in v2.7.0-beta.6",
@@ -9100,7 +9128,22 @@ class SignalRgbWebPipePoller:
 
     Strictly read-only. The WebPipe accepts writes from any local process
     without authentication (macros, fan curves, effects); this class
-    never sends anything but init and idle.
+    never sends anything but init, idle and -- in single mode -- the
+    read-only getter `monitor.getValueByName`.
+
+    v2.7.0-beta.7, two modes (Configurator: System -> More settings):
+
+        single  (default) one init per SignalRGB session for the catalogue
+                and the method index, then a SEPARATE connection without
+                init that asks only for the sensors placed widgets use,
+                once a second. Measured: no unsolicited traffic on that
+                connection and no measurable SignalRGB CPU (3.85 % vs
+                3.83 / 3.87 % baseline), against ~0.5 % for a full reader.
+        full    init, then drain every update (~375 KB/s, all sensors).
+
+    Single falls back to full when SignalRGB has no getValueByName, or
+    when a wanted sensor's name is not unique on this PC (two "CPU Fan"):
+    the getter addresses by name and could answer for the wrong one.
 
     The init reply is ~9 MB in many fragments and contains the `user`
     object (e-mail, uid). Only `monitor` is kept; everything else is
@@ -9127,9 +9170,21 @@ class SignalRgbWebPipePoller:
     _UNITS = {"c": "°C", "rpm": "RPM", "mhz": "MHz", "mb": "MB",
               "gb": "GB", "kb": "KB"}
 
+    SINGLE_INTERVAL_S = 1.0
+
     def __init__(self, should_poll=None, port: int | None = None,
-                 process_info=None, suspend=None):
+                 process_info=None, suspend=None, mode=None, wanted=None):
         self._should_poll = should_poll
+        # v2.7.0-beta.7: "single" | "full" (callable, read every round)
+        # and the set of SignalRGB sensor paths placed widgets need.
+        self._mode_fn = mode
+        self._wanted_fn = wanted
+        self._by_name_idx = None      # method index, from the init reply
+        self._catalog_ok = False      # catalogue loaded this SignalRGB session
+        self._effective_mode = ""     # decided on the first session
+        self._fallback = ""
+        self._pump_for = "full"       # "full" (user's choice) | "fallback"
+        self._pump_check_ts = 0.0
         # v2.7.0-beta.6: True while the wallpaper has been paused for a
         # while (fullscreen game, manual pause). A connected reader costs
         # SignalRGB ~0.5 % of the whole CPU even when it sends no idle --
@@ -9193,6 +9248,8 @@ class SignalRgbWebPipePoller:
                 "lastError":   self._last_error,
                 "lastOkTs":    int(self._last_ok_ts * 1000),
                 "version":     self._version,
+                "mode":        self._effective_mode,
+                "fallback":    self._fallback,
             }
 
     def probe_if_stale(self) -> None:
@@ -9230,6 +9287,52 @@ class SignalRgbWebPipePoller:
         except Exception:
             return False
 
+    def _mode(self) -> str:
+        try:
+            m = self._mode_fn() if self._mode_fn else "full"
+        except Exception:
+            m = "full"
+        return m if m in ("single", "full") else "single"
+
+    def _pump_ok(self) -> bool:
+        """Keep draining? A user-chosen full mode stops when switched to
+        single; a fallback stops once single mode could serve again (the
+        ambiguous widget is gone), checked every 10 s."""
+        if self._pump_for == "full":
+            return self._mode() == "full"
+        if self._mode() == "full":
+            return True
+        now = time.time()
+        if now - self._pump_check_ts < 10.0:
+            return True
+        self._pump_check_ts = now
+        return self._by_name_idx is None or self._single_targets() is None
+
+    def _single_targets(self):
+        """[(oid, name)] to ask for, or None when single mode cannot
+        serve them (a wanted name is not unique) and full mode must."""
+        try:
+            wanted = set(self._wanted_fn() or ()) if self._wanted_fn else set()
+        except Exception:
+            wanted = set()
+        with self._lock:
+            by_path = {path: oid for oid, path in self._paths.items()}
+            counts: dict[str, int] = {}
+            for f in self._sensors.values():
+                n = str(f.get("name") or "")
+                counts[n] = counts.get(n, 0) + 1
+            out = []
+            for path in sorted(wanted):
+                oid = by_path.get(path)
+                if oid is None:
+                    continue        # not on this PC (any more); widget shows a dash
+                name = str(self._sensors.get(oid, {}).get("name") or "")
+                if not name or counts.get(name, 0) != 1:
+                    self._fallback = "sensor name not unique: %s" % name
+                    return None
+                out.append((oid, name))
+        return out
+
     def _run(self):
         while not self._stop.is_set():
             if self._gate() and self._suspended():
@@ -9250,11 +9353,110 @@ class SignalRgbWebPipePoller:
                     return
                 continue
             try:
-                self._session(one_shot=False)
+                if self._mode() == "single":
+                    self._session_single()
+                else:
+                    with self._lock:
+                        self._effective_mode, self._fallback = "full", ""
+                    self._pump_for = "full"
+                    self._session(one_shot=False)
             except Exception as e:
                 self._fail(e)
             finally:
                 self._session_lock.release()
+
+    def _session_single(self):
+        # 1. The catalogue (names, paths, units) and the getter's index
+        #    come from ONE init per SignalRGB session; that connection is
+        #    closed straight away, so it never queues updates.
+        if not self._catalog_ok or self._by_name_idx is None:
+            self._session(one_shot=True)
+            with self._lock:
+                self._catalog_ok = self._state == "online"
+            if self._state != "online":
+                return
+        if self._by_name_idx is None:
+            with self._lock:
+                self._fallback = "SignalRGB has no getValueByName"
+                self._effective_mode = "full"
+            self._pump_for = "fallback"
+            self._session(one_shot=False)
+            return
+        targets = self._single_targets()
+        if targets is None:
+            with self._lock:
+                self._effective_mode = "full"
+            self._pump_for = "fallback"
+            self._session(one_shot=False)
+            return
+        with self._lock:
+            self._effective_mode, self._fallback = "single", ""
+        if not targets:
+            # Nothing of SignalRGB's is on screen (LHM paths only, or a
+            # widget without a sensor yet): no connection at all.
+            self._stop.wait(self.SINGLE_INTERVAL_S)
+            return
+        # 2. A connection WITHOUT init. SignalRGB sends such a client no
+        #    property updates at all (measured), only the replies.
+        sock = socket.create_connection((self.HOST, self._port),
+                                        timeout=self.CONNECT_TIMEOUT_S)
+        try:
+            sock.settimeout(self.READ_TIMEOUT_S)
+            self._handshake(sock)
+            req = 100
+            nulls: dict[str, int] = {}
+            while (not self._stop.is_set() and self._gate()
+                   and not self._suspended() and self._mode() == "single"):
+                t0 = time.time()
+                targets = self._single_targets()
+                if targets is None:
+                    return          # next round runs full mode
+                for oid, name in targets:
+                    req += 1
+                    self._send_invoke(sock, req, name)
+                    raw = self._recv_reply(sock, req)
+                    val = self._parse_value(raw)
+                    if val is None:
+                        nulls[name] = nulls.get(name, 0) + 1
+                        if nulls[name] >= 5:
+                            # Gone or renamed (SignalRGB restarted, hardware
+                            # changed): reload the catalogue.
+                            with self._lock:
+                                self._catalog_ok = False
+                            return
+                        continue
+                    nulls.pop(name, None)
+                    with self._lock:
+                        f = self._sensors.get(oid)
+                        if f is not None:
+                            f["value"] = val
+                            f["valueStr"] = str(raw)
+                with self._lock:
+                    if self._state == "online":
+                        self._last_ok_ts = time.time()
+                while time.time() - t0 < self.SINGLE_INTERVAL_S:
+                    if self._stop.wait(0.25):
+                        return
+                    if (not self._gate() or self._suspended()
+                            or self._mode() != "single"):
+                        return
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    _VALUE_RE = re.compile(r"\s*(-?\d+(?:[.,]\d+)?)")
+
+    @classmethod
+    def _parse_value(cls, raw):
+        # getValueByName answers with valueStr ("53°C", "0.89V", "38%").
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return float(raw)
+        if not isinstance(raw, str):
+            return None
+        m = cls._VALUE_RE.match(raw)
+        return float(m.group(1).replace(",", ".")) if m else None
 
     def _fail(self, e: Exception):
         if isinstance(e, (ConnectionRefusedError, socket.timeout, TimeoutError)) \
@@ -9275,6 +9477,7 @@ class SignalRgbWebPipePoller:
             prev = self._state
             self._state = state
             self._last_error = err
+            self._catalog_ok = False
             self._version = version or self._version
             self._next_attempt_ts = time.time() + (
                 5.0 if prev == "online" else self.RETRY_INTERVAL_S)
@@ -9336,7 +9539,8 @@ class SignalRgbWebPipePoller:
         # 1 Hz. Draining freely measured 214 KB/s, ~9 messages/s and 0.1 %
         # of one core on an i9-13900K with 68 sensors -- cheap, and only
         # while a sensor widget is placed.
-        while not self._stop.is_set() and self._gate() and not self._suspended():
+        while (not self._stop.is_set() and self._gate()
+               and not self._suspended() and self._pump_ok()):
             self._send_json(sock, {"type": 4})
             # The server answers an idle only when something changed.
             # Wait for readability in short slices so a removed widget
@@ -9347,7 +9551,7 @@ class SignalRgbWebPipePoller:
                 r, _, _ = select.select([sock], [], [], 1.0)
                 if r:
                     break
-                if not self._gate() or self._suspended():
+                if not self._gate() or self._suspended() or not self._pump_ok():
                     return
             else:
                 return
@@ -9380,8 +9584,14 @@ class SignalRgbWebPipePoller:
                 disabled = bool(p[3])
         if sensors_val is None:
             raise _WebPipeIncompatible("'monitor' exposes no 'sensors'")
+        by_name_idx = None
+        for m in monitor.get("methods") or []:
+            if isinstance(m, list) and len(m) >= 2 and m[0] == "getValueByName" \
+                    and isinstance(m[1], int):
+                by_name_idx = m[1]
         with self._lock:
             self._monitor_idx = mon_idx
+            self._by_name_idx = by_name_idx
         self._load_sensor_refs(sensors_val if isinstance(sensors_val, list) else [],
                                disabled)
 
@@ -9503,6 +9713,22 @@ class SignalRgbWebPipePoller:
             buf += chunk
         return bytes(buf)
 
+    def _send_invoke(self, sock, req_id: int, name: str):
+        """The single exception to init/idle: monitor.getValueByName, a
+        read-only getter, at the index the init reply named. Nothing
+        else can be invoked through here."""
+        if self._by_name_idx is None:
+            raise ValueError("getValueByName index unknown")
+        self._send_frame(sock, 0x1, json.dumps(
+            {"type": 6, "id": int(req_id), "object": "monitor",
+             "method": self._by_name_idx, "args": [str(name)]}).encode())
+
+    def _recv_reply(self, sock, req_id: int):
+        while True:
+            msg = self._recv_json(sock)
+            if msg.get("type") == 10 and msg.get("id") == req_id:
+                return msg.get("data")
+
     def _send_frame(self, sock, opcode: int, payload: bytes):
         # Client frames MUST be masked (RFC 6455 5.3).
         mask = os.urandom(4)
@@ -9569,6 +9795,39 @@ class SignalRgbWebPipePoller:
                     and msg.get("id") == want_response_id:
                 return msg
         raise _WebPipeIncompatible("no init reply")
+
+
+# v2.7.0-beta.7: the wallpaper page's SENSOR_AUTO_ROLES / _resolveAutoSensor
+# (wallpaper/index.html), mirrored so single mode asks SignalRGB for
+# exactly the sensor the page will show. test_signalrgb_webpipe.py keeps
+# the two in step.
+_SENSOR_AUTO_ROLES = {
+    "cpu-temp":    (("°C",), (r"^CPU Package( Temp(erature)?)?$", r"Tctl|Tdie",
+                              r"^CPU Temp(erature)?$")),
+    "gpu-temp":    (("°C",), (r"^GPU Core Temp(erature)?$", r"^GPU Temp(erature)?$",
+                              r"^GPU Core$")),
+    "gpu-load":    (("%",),  (r"^GPU Load$", r"^GPU Core( Load)?$",
+                              r"^GPU (Usage|Utili[sz]ation)$")),
+    "liquid-temp": (("°C",), (r"liquid|coolant|water",)),
+    "pump":        (("RPM",), (r"pump",)),
+}
+
+
+def _resolve_auto_sensor(role: str, snap: dict) -> str:
+    spec = _SENSOR_AUTO_ROLES.get(role)
+    if not spec or not snap:
+        return ""
+    units, prefer = spec
+    paths = sorted(snap, key=lambda p: (0 if p.startswith("SignalRGB / ") else 1, p))
+    for pat in prefer:
+        rx = re.compile(pat, re.I)
+        for p in paths:
+            e = snap.get(p)
+            if not e or e.get("unit") not in units:
+                continue
+            if rx.search(p.split(" / ")[-1]):
+                return p
+    return ""
 
 
 class SensorSources:
@@ -12513,6 +12772,36 @@ class BridgeRuntime:
                 return True
         return gate
 
+    def _signalrgb_sensor_mode(self) -> str:
+        return str(self.config.get("signalrgbSensorMode") or "single")
+
+    def _signalrgb_wanted_paths(self) -> set:
+        """SignalRGB sensor paths the placed hardware-sensor widgets show:
+        picked paths as stored, auto roles resolved exactly like the
+        wallpaper page does (_resolve_auto_sensor)."""
+        paths, roles = set(), set()
+        for s in (self.config.get("screens", {}) or {}).values():
+            if not isinstance(s, dict):
+                continue
+            for w in (s.get("widgets", []) or []):
+                if not isinstance(w, dict) or w.get("type") != "hardware-sensor":
+                    continue
+                o = w.get("options") or {}
+                p = str(o.get("sensorPath") or "")
+                if p:
+                    if p.startswith("SignalRGB / "):
+                        paths.add(p)
+                elif o.get("sensorAuto"):
+                    roles.add(str(o.get("sensorAuto")))
+        if roles:
+            src = getattr(self, "sensor_sources", None)
+            snap = src.get_snapshot() if src is not None else {}
+            for r in roles:
+                rp = _resolve_auto_sensor(r, snap)
+                if rp.startswith("SignalRGB / "):
+                    paths.add(rp)
+        return paths
+
     def _paused_for(self, seconds: float):
         """Returns a callable that is True once the wallpaper has been
         paused (fullscreen or manual) for `seconds` without a break.
@@ -12582,6 +12871,7 @@ class BridgeRuntime:
                 "language":             str(self.config.get("language") or "auto"),
                 # v2.6.1: live registry state, not a config field.
                 "autostart":            autostart_enabled(),
+                "signalrgbSensorMode":  str(self.config.get("signalrgbSensorMode") or "single"),
                 "autostartSupported":   autostart_supported(),
                 "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
                 # v1.6.2-beta: SDK-server config block surfaced to the
@@ -13420,6 +13710,7 @@ class BridgeRuntime:
                 if lhm_widget_present:
                     break
         sig_state, sig_count, sig_version = "idle", 0, ""
+        sig_mode, sig_fallback = "", ""
         sig = getattr(self, "signalrgb_sensors", None)
         if sig is not None:
             try:
@@ -13427,6 +13718,8 @@ class BridgeRuntime:
                 sig_state = st.get("state", "idle")
                 sig_count = int(st.get("sensorCount") or 0)
                 sig_version = st.get("version") or ""
+                sig_mode = st.get("mode") or ""
+                sig_fallback = st.get("fallback") or ""
             except Exception:
                 pass
         lhm_online = False
@@ -13582,6 +13875,10 @@ class BridgeRuntime:
             # version comparison; the version is display-only.
             "signalrgb_sensors_state": sig_state,
             "signalrgb_sensors_count": sig_count,
+            # v2.7.0-beta.7: the mode actually running ("single" | "full")
+            # and why single fell back to full, if it did.
+            "signalrgb_sensors_mode": sig_mode,
+            "signalrgb_sensors_fallback": sig_fallback,
             "signalrgb_version":       sig_version,
         }
 
@@ -13934,6 +14231,8 @@ class BridgeRuntime:
         # v2.6.1: HKCU Run key. Not persisted in config — the registry
         # is the source of truth, read back by _get_bridge_state.
         "autostart",
+        # v2.7.0-beta.7: "single" (default) | "full" SignalRGB sensor reading.
+        "signalrgbSensorMode",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -14000,6 +14299,25 @@ class BridgeRuntime:
                 self.hotkey_listener.stop()
                 self.hotkey_listener = HotkeyListener(self)
             print(f"[settings] presetHotkeysEnabled -> {enabled}")
+        elif key == "signalrgbSensorMode":
+            mode = str(value or "single")
+            if mode not in ("single", "full"):
+                return
+            with self.config_lock:
+                if str(self.config.get("signalrgbSensorMode") or "single") == mode:
+                    return
+                self.config["signalrgbSensorMode"] = mode
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            for s in range(N_SCREENS):
+                try:
+                    self.push_settings(s, snapshot["screens"][str(s)])
+                except Exception:
+                    pass
+            print(f"[settings] signalrgbSensorMode -> {mode}")
         elif key == "autostart":
             ok = set_autostart(bool(value))
             print(f"[settings] autostart -> {bool(value)} ({'ok' if ok else 'failed'})")
@@ -14592,7 +14910,9 @@ class BridgeRuntime:
         # the picker triggers a one-shot probe through probe_if_stale().
         self.signalrgb_sensors = SignalRgbWebPipePoller(
             should_poll=self._poller_gate("hardware-sensor"),
-            suspend=self._paused_for(SIGNALRGB_SENSOR_PAUSE_GRACE_S))
+            suspend=self._paused_for(SIGNALRGB_SENSOR_PAUSE_GRACE_S),
+            mode=self._signalrgb_sensor_mode,
+            wanted=self._signalrgb_wanted_paths)
         self.signalrgb_sensors.start()
         self.sensor_sources = SensorSources(self.hwmon, self.signalrgb_sensors)
         self.broadcaster.hwmon_provider = self.sensor_sources

@@ -6,6 +6,42 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.7] - 2026-10-30
+
+### Changed — SignalRGB sensors read one by one (new default)
+
+Asked whether specific sensors can be requested instead of all of them.
+The WebPipe has no per-object subscription, but `monitor.getValueByName`
+is a read-only getter. Measured against SignalRGB 2.5.80 (30 s windows,
+SignalRGB CPU as % of the machine): full reader only 3.83 / 3.87 %, plus
+a client WITHOUT init asking 4 sensors once a second 3.85 %; 112 of 112
+calls answered, ~40 bytes each, max 73 ms; zero unsolicited messages on
+that connection although it sent idles.
+
+- Two modes, System -> More settings -> SignalRGB sensors
+  (`signalrgbSensorMode`, bridge-scoped): `single` (default) and `full`
+  (the previous behaviour). Switching takes effect without a restart.
+- `single`: one init per SignalRGB session for the catalogue, paths,
+  units and the getter's method index (never hard-coded), closed at once;
+  then a separate connection without init asks only for the paths placed
+  hardware-sensor widgets use, once a second. A value of 53°C / 0.89V /
+  38% is parsed from `valueStr`. Five nulls in a row reload the catalogue.
+  No SignalRGB sensor on screen -> no reading connection at all.
+- Falls back to `full` when SignalRGB has no `getValueByName`, or when a
+  wanted sensor's name is not unique on the PC (the getter addresses by
+  name). A fallback re-checks every 10 s and returns to `single` once the
+  ambiguous widget is gone.
+- Auto roles (`sensorAuto`) are resolved in the bridge exactly like the
+  wallpaper page does (`_SENSOR_AUTO_ROLES`, `_resolve_auto_sensor`); a
+  test compares both role tables.
+- `_send_invoke` is the only call besides init/idle and can only send
+  `monitor.getValueByName`; `_send_json` keeps refusing everything else.
+- `/health` adds `signalrgb_sensors_mode` and
+  `signalrgb_sensors_fallback`; the System sensor line shows the mode.
+- Live check with the repo poller on SignalRGB 2.5.80: CPU Package Temp
+  and GPU Load auto-resolved, values updating, SignalRGB CPU 3.92 %
+  before, 3.77 % with single mode running, 3.86 % after.
+
 ## [2.7.0-beta.6] - 2026-10-30
 
 ### Changed — the SignalRGB sensor reader disconnects during a long pause

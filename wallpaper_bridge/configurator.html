@@ -4257,6 +4257,26 @@
         <button type="button" class="btn" id="sensor-source-check"
                 style="flex:0 0 auto" data-i18n="sensors.check">Check</button>
       </div>
+      <!-- v2.7.0-beta.7: expert switch for how SignalRGB's sensors are
+           read. "single" asks only for the sensors placed widgets show
+           (no measurable load on SignalRGB); "full" takes every update
+           (~0.5 % CPU in SignalRGB, worth it with many sensor widgets). -->
+      <button class="adv-toggle" type="button" aria-expanded="false">
+        <span class="chev">›</span>
+        <span class="adv-label">More settings</span>
+      </button>
+      <div class="adv-body">
+        <div class="row">
+          <label for="sys-sensor-mode" data-i18n="sensors.mode">SignalRGB sensors</label>
+          <select id="sys-sensor-mode">
+            <option value="single" data-i18n="sensors.mode.single">Only the ones in use</option>
+            <option value="full" data-i18n="sensors.mode.full">All sensors</option>
+          </select>
+        </div>
+        <div class="hint sub" id="sys-sensor-mode-hint" data-i18n="sensors.mode_hint">
+          "Only the ones in use" asks SignalRGB once a second for exactly the sensors your widgets show and costs it almost nothing. "All sensors" receives every update — about half a percent of CPU in SignalRGB, which can pay off with many sensor widgets.
+        </div>
+      </div>
 
       <!-- v2.4.4-beta.19: language picker. The config field, the
            validation and the whole translation table have existed for
@@ -5280,6 +5300,16 @@ const TRANSLATIONS = {
                                de: "SignalRGB läuft nicht" },
   "sensors.sig.idle":       { en: "SignalRGB: not checked yet",
                               de: "SignalRGB: noch nicht geprüft" },
+  "sensors.mode":           { en: "SignalRGB sensors",    de: "SignalRGB-Sensoren" },
+  "sensors.mode.single":    { en: "Only the ones in use", de: "Nur genutzte" },
+  "sensors.mode.full":      { en: "All sensors",          de: "Alle Sensoren" },
+  "sensors.mode_hint":      {
+    en: "\u201cOnly the ones in use\u201d asks SignalRGB once a second for exactly the sensors your widgets show and costs it almost nothing. \u201cAll sensors\u201d receives every update \u2014 about half a percent of CPU in SignalRGB, which can pay off with many sensor widgets.",
+    de: "\u201eNur genutzte\u201c fragt SignalRGB einmal pro Sekunde genau die Sensoren ab, die deine Widgets zeigen, und kostet es fast nichts. \u201eAlle Sensoren\u201c empf\u00e4ngt jede \u00c4nderung \u2014 etwa ein halbes Prozent CPU in SignalRGB, was sich bei vielen Sensor-Widgets lohnen kann." },
+  "sensors.mode_now.single": { en: "reading only the sensors in use", de: "fragt nur genutzte Sensoren ab" },
+  "sensors.mode_now.full":   { en: "receiving all sensors",          de: "empf\u00e4ngt alle Sensoren" },
+  "sensors.mode_fallback":   { en: "all sensors \u2014 a sensor name exists twice on this PC",
+                               de: "alle Sensoren \u2014 ein Sensorname kommt auf diesem PC doppelt vor" },
   "sensors.sig.paused":     { en: "SignalRGB: reading paused while the wallpaper is paused",
                               de: "SignalRGB: Abfrage ruht, solange das Wallpaper pausiert" },
   "sensors.lhm.online":     { en: "LibreHardwareMonitor: {n} sensors",
@@ -7132,8 +7162,16 @@ function renderSensorSourceNote(h) {
   const lhm = h.lhm_online
     ? t("sensors.lhm.online", { n: h.lhm_count || 0 })
     : t("sensors.lhm.offline");
+  // v2.7.0-beta.7: say which reading mode runs, and why if it fell back.
+  let modeTxt = "";
+  if (state === "online" && h.signalrgb_sensors_mode) {
+    modeTxt = " \u00b7 " + (h.signalrgb_sensors_fallback && h.signalrgb_sensors_mode === "full"
+      && (bridgeState.signalrgbSensorMode || "single") === "single"
+      ? t("sensors.mode_fallback")
+      : t("sensors.mode_now." + h.signalrgb_sensors_mode));
+  }
   el.innerHTML = '<span class="mark">' + mark + "</span>" +
-    escapeHtml(sensorStateText(state, h.signalrgb_sensors_count, h.signalrgb_version)) +
+    escapeHtml(sensorStateText(state, h.signalrgb_sensors_count, h.signalrgb_version) + modeTxt) +
     '<span class="sub sub-dim">' + escapeHtml(lhm) + "</span>";
 }
 (function wireSensorCheck() {
@@ -7722,7 +7760,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 const SEGMENTED_SELECTS = [
   "grid-renderer", "glass-quality", "frame-rate", "effect-quality",
-  "audioglow-mode", "sys-language", "sacn-destination",
+  "audioglow-mode", "sys-language", "sacn-destination", "sys-sensor-mode",
 ];
 function _segLabel(text) {
   // "Balanced (30 Hz)" -> "Balanced"; the full text stays as the title.
@@ -10523,6 +10561,8 @@ function renderSystemSection() {
   // above. Falls back to "auto" when the bridge has not sent a value.
   const langSel = document.getElementById("sys-language");
   if (langSel) langSel.value = bridgeState.language || "auto";
+  const modeSel = document.getElementById("sys-sensor-mode");
+  if (modeSel) modeSel.value = bridgeState.signalrgbSensorMode || "single";
   // v1.4.0-beta: OpenRGB output sub-section. bridgeState.openrgbOutput is
   // shipped by the bridge as { enabled, host, port, sourceScreen }.
   const og = (bridgeState && bridgeState.openrgbOutput) || {};
@@ -10575,6 +10615,13 @@ function renderSystemSection() {
   // The language picker sends the same bridge-setting-update the
   // checkboxes do; the bridge re-resolves _CURRENT_LANG and pushes
   // settings back, which is what re-translates this page.
+  const modeSel = document.getElementById("sys-sensor-mode");
+  if (modeSel) {
+    modeSel.addEventListener("change", () => {
+      bridgeState.signalrgbSensorMode = modeSel.value;
+      sendCmd({ type: "bridge-setting-update", key: "signalrgbSensorMode", value: modeSel.value });
+    });
+  }
   const langSel = document.getElementById("sys-language");
   if (langSel) {
     langSel.addEventListener("change", () => {

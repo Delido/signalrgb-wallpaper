@@ -95,7 +95,7 @@ SENSORS = [
 
 
 def init_reply(layout=REAL_LAYOUT, monitor=True, sensors=SENSORS,
-               disabled=False, pad=0):
+               disabled=False, pad=0, by_name=True):
     refs = [sensor_ref("{s%d}" % i, layout, **s) for i, s in enumerate(sensors)]
     data = {
         "user": {"properties": [[0, "email", [], SECRET_MAIL],
@@ -103,7 +103,8 @@ def init_reply(layout=REAL_LAYOUT, monitor=True, sensors=SENSORS,
         "catalog": {"blob": "x" * pad},
     }
     if monitor:
-        data["monitor"] = {"methods": [], "signals": [], "properties": [
+        methods = [["getSensor", 9], ["getValueByName", 13]] if by_name else []
+        data["monitor"] = {"methods": methods, "signals": [], "properties": [
             [0, "objectName", [], ""],
             [1, "sensors", ["sensorsChanged", 3], refs],
             [6, "monitoringDisabled", [], disabled],
@@ -119,6 +120,12 @@ class FakeWebPipe(threading.Thread):
         self.updates = list(updates or [])
         self.init_kw = init_kw
         self.received = []          # (opcode, masked, decoded JSON)
+        self.invokes = []           # names asked for via getValueByName
+        self.no_init_conns = 0
+        self.unsolicited_to_no_init = 0
+        self.values = {}
+        for sn in init_kw.get("sensors", SENSORS):
+            self.values.setdefault(sn["name"], sn["valueStr"])
         self.connections = 0
         self._open = 0
         self.srv = socket.socket()
@@ -192,6 +199,13 @@ class FakeWebPipe(threading.Thread):
         self.received.append((b1 & 0x0F, masked, obj))
         return obj
 
+    def answer_invoke(self, c, msg):
+        name = (msg.get("args") or [None])[0]
+        ok = msg.get("object") == "monitor" and msg.get("method") == 13
+        self.invokes.append(name if ok else ("BAD", msg.get("method")))
+        self.send_msg(c, {"type": 10, "id": msg.get("id"),
+                          "data": self.values.get(name) if ok else None})
+
     def serve(self, c):
         try:
             head = b""
@@ -206,7 +220,16 @@ class FakeWebPipe(threading.Thread):
             c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
                       b"Connection: Upgrade\r\nServer: SignalRGB WebPipe\r\n"
                       b"Sec-WebSocket-Accept: " + acc + b"\r\n\r\n")
-            self.recv_client(c)                          # init request
+            first = self.recv_client(c)                  # init request
+            if first and first.get("type") == 6:
+                # No init: SignalRGB sends such a client nothing but the
+                # replies (measured on 2.5.80), so the fake does the same.
+                self.no_init_conns += 1
+                msg = first
+                while True:
+                    if msg and msg.get("type") == 6:
+                        self.answer_invoke(c, msg)
+                    msg = self.recv_client(c)
             if self.mode == "silent":
                 time.sleep(5)
                 return
@@ -218,6 +241,9 @@ class FakeWebPipe(threading.Thread):
             self.send_msg(c, init_reply(self.layout, pad=self.pad, **self.init_kw))
             while True:
                 msg = self.recv_client(c)
+                if msg and msg.get("type") == 6:
+                    self.answer_invoke(c, msg)
+                    continue
                 if msg is None or msg.get("type") != 4:
                     continue
                 if self.updates:
@@ -236,11 +262,12 @@ class FakeWebPipe(threading.Thread):
 
 # ── helpers ─────────────────────────────────────────────────────────────
 
-def make_poller(b, port, running=True, gate=True, suspend=None):
+def make_poller(b, port, running=True, gate=True, suspend=None,
+                mode=None, wanted=None):
     P = b.SignalRgbWebPipePoller
     p = P(should_poll=(lambda: gate) if not callable(gate) else gate,
           port=port, process_info=lambda: (running, "2.5.80" if running else ""),
-          suspend=suspend)
+          suspend=suspend, mode=mode, wanted=wanted)
     p.READ_TIMEOUT_S = 1.0
     p.CONNECT_TIMEOUT_S = 1.0
     return p
@@ -482,6 +509,127 @@ def main():
     check("the runtime uses a 60 s grace period",
           b.SIGNALRGB_SENSOR_PAUSE_GRACE_S == 60.0)
 
+    # ── v2.7.0-beta.7: single mode ──────────────────────────────────────
+    # One init for the catalogue, then a connection WITHOUT init that asks
+    # only for the wanted sensors via monitor.getValueByName. Measured on
+    # SignalRGB 2.5.80: no unsolicited traffic on that connection and no
+    # measurable CPU, against ~0.5 % of the machine for a full reader.
+    emit("\nsingle mode\n" + "=" * 68)
+    load = "SignalRGB / System / CPU Load"
+    srv = FakeWebPipe()
+    mode = ["single"]
+    p = make_poller(b, srv.port, mode=lambda: mode[0], wanted=lambda: {load})
+    p.start()
+    check("single: comes online",
+          wait_for(lambda: p.get_status()["state"] == "online"), str(p.get_status()))
+    check("single: asks for the wanted sensor by name",
+          wait_for(lambda: "CPU Load" in srv.invokes, 4.0), str(srv.invokes))
+    check("single: ...and only for that one",
+          set(srv.invokes) == {"CPU Load"}, str(set(map(str, srv.invokes))))
+    check("single: the getter index comes from the init reply (13, not 11)",
+          all(x == "CPU Load" for x in srv.invokes), str(srv.invokes[:3]))
+    check("single: one init connection plus one without init",
+          srv.connections == 2 and srv.no_init_conns == 1,
+          f"{srv.connections} connections, {srv.no_init_conns} without init")
+    check("single: the init connection is closed again",
+          wait_for(lambda: srv.open_connections() == 1, 3.0),
+          f"{srv.open_connections()} open")
+    srv.values["CPU Load"] = "33%"
+    check("single: a new value reaches the snapshot",
+          wait_for(lambda: (p.get_snapshot().get(load) or {}).get("value") == 33.0, 3.0),
+          str(p.get_snapshot().get(load)))
+    check("single: the status reports the mode",
+          p.get_status().get("mode") == "single", str(p.get_status()))
+    sent = [m for (_op, _mk, m) in srv.received if isinstance(m, dict)]
+    check("single: the client sends only init, idle and getValueByName",
+          all(m.get("type") in (3, 4) or (m.get("type") == 6 and m.get("method") == 13
+                                          and m.get("object") == "monitor")
+              for m in sent),
+          str([m.get("type") for m in sent][:12]))
+    # Switching to full takes effect without a restart.
+    mode[0] = "full"
+    check("switch to full: starts draining on a new init connection",
+          wait_for(lambda: p.get_status().get("mode") == "full"
+                   and srv.connections >= 3, 5.0), str(p.get_status()))
+    mode[0] = "single"
+    check("switch back to single: asks by name again",
+          wait_for(lambda: p.get_status().get("mode") == "single", 5.0),
+          str(p.get_status()))
+    p.stop()
+    srv.close()
+
+    # A name that exists twice cannot be asked for by name.
+    srv = FakeWebPipe()
+    p = make_poller(b, srv.port, mode=lambda: "single",
+                    wanted=lambda: {"SignalRGB / Mainboard / CPU Fan #2"})
+    p.start()
+    check("ambiguous name: falls back to full mode",
+          wait_for(lambda: p.get_status().get("mode") == "full", 4.0), str(p.get_status()))
+    check("ambiguous name: says why", "not unique" in p.get_status().get("fallback", ""),
+          p.get_status().get("fallback", ""))
+    check("ambiguous name: never asks for it by name", "CPU Fan" not in srv.invokes)
+    p.stop()
+    srv.close()
+
+    # An older SignalRGB without the getter.
+    srv = FakeWebPipe(by_name=False)
+    p = make_poller(b, srv.port, mode=lambda: "single", wanted=lambda: {load})
+    p.start()
+    check("no getValueByName: falls back to full mode",
+          wait_for(lambda: p.get_status().get("mode") == "full", 4.0), str(p.get_status()))
+    check("no getValueByName: never invokes anything", srv.invokes == [], str(srv.invokes))
+    p.stop()
+    srv.close()
+
+    # Nothing of SignalRGB's on screen -> no reading connection at all.
+    srv = FakeWebPipe()
+    p = make_poller(b, srv.port, mode=lambda: "single", wanted=lambda: set())
+    p.start()
+    wait_for(lambda: p.get_status()["state"] == "online")
+    time.sleep(1.5)
+    check("no SignalRGB sensor in use: only the catalogue init, no reader",
+          srv.connections == 1 and srv.no_init_conns == 0 and srv.invokes == [],
+          f"{srv.connections} connections, {srv.invokes}")
+    p.stop()
+    srv.close()
+
+    check("value parsing", [b.SignalRgbWebPipePoller._parse_value(x) for x in
+                            ("53°C", "0.89V", "38%", "2789rpm", "1,5GB", "-3°C", None, "n/a", 7)]
+          == [53.0, 0.89, 38.0, 2789.0, 1.5, -3.0, None, None, 7.0])
+
+    # Auto roles: the bridge resolves them exactly like the page does.
+    import re as _re
+    page = (REPO / "wallpaper_bridge" / "wallpaper" / "index.html").read_text(encoding="utf-8")
+    block = page[page.index("const SENSOR_AUTO_ROLES"):page.index("function _resolveAutoSensor")]
+    js_roles = {}
+    for m in _re.finditer(r'"([\w-]+)":\s*\{\s*units:\s*\[([^\]]*)\],\s*prefer:\s*\[(.*?)\]\s*\}',
+                          block, _re.S):
+        units = tuple(_re.findall(r'"([^"]+)"', m.group(2)))
+        pats = tuple(_re.findall(r"/(.+?)/i", m.group(3)))
+        js_roles[m.group(1)] = (units, pats)
+    check("auto roles parsed from the page", len(js_roles) == 5, str(list(js_roles)))
+    check("auto roles: the bridge mirrors the page exactly",
+          js_roles == b._SENSOR_AUTO_ROLES, f"page {js_roles}\nbridge {b._SENSOR_AUTO_ROLES}")
+    snap = {"LHM / CPU / CPU Package": {"unit": "°C"},
+            "SignalRGB / Intel / CPU Package Temp": {"unit": "°C"},
+            "SignalRGB / RTX / GPU Hot Spot Temperature": {"unit": "°C"},
+            "SignalRGB / RTX / GPU Load": {"unit": "%"}}
+    check("auto: SignalRGB is preferred", b._resolve_auto_sensor("cpu-temp", snap)
+          == "SignalRGB / Intel / CPU Package Temp")
+    check("auto: the hot spot never stands in for the GPU temperature",
+          b._resolve_auto_sensor("gpu-temp", snap) == "")
+    rt = type("RT", (), {})()
+    rt.config = {"screens": {"0": {"widgets": [
+        {"type": "hardware-sensor", "options": {"sensorPath": "SignalRGB / X / Picked"}},
+        {"type": "hardware-sensor", "options": {"sensorPath": "LHM / Y / Other"}},
+        {"type": "hardware-sensor", "options": {"sensorPath": "", "sensorAuto": "gpu-load"}},
+        {"type": "clock", "options": {}}]}}}
+    rt.sensor_sources = type("S", (), {"get_snapshot": lambda self: snap})()
+    check("wanted paths: picked SignalRGB paths plus resolved auto roles, nothing else",
+          b.BridgeRuntime._signalrgb_wanted_paths(rt)
+          == {"SignalRGB / X / Picked", "SignalRGB / RTX / GPU Load"},
+          str(b.BridgeRuntime._signalrgb_wanted_paths(rt)))
+
     # Retry policy: a missing interface is not hammered every second.
     p = make_poller(b, free_port(), running=True, gate=True)
     p.start()
@@ -528,7 +676,10 @@ def main():
           'SignalRgbWebPipePoller(\n            should_poll=self._poller_gate("hardware-sensor"),'
           in SRC)
     check("...and suspended while the wallpaper stays paused",
-          "suspend=self._paused_for(SIGNALRGB_SENSOR_PAUSE_GRACE_S))" in SRC)
+          "suspend=self._paused_for(SIGNALRGB_SENSOR_PAUSE_GRACE_S)," in SRC)
+    check("...and told the reading mode and the sensors widgets use",
+          "mode=self._signalrgb_sensor_mode," in SRC
+          and "wanted=self._signalrgb_wanted_paths)" in SRC)
     route = SRC[SRC.index("async def _route_hwmon_sensors"):
                 SRC.index("async def _route_health")]
     check("the picker probe runs in an executor, not on the loop",
