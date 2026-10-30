@@ -194,110 +194,64 @@
     -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
   }
 
-  /* ── Bridge-offline standby card ── (v1.2.1)
-     Visible only after the WS has been disconnected for >5s, so a
-     bridge restart that completes in <5s never flashes this. Sits
-     above the wallpaper but below widgets so it's the clear focal
-     point on a "no signal" screen. Light scan-line + pulse animation
-     so the user can tell the wallpaper is alive but the bridge is
-     not. Hidden in preview mode (the Configurator already shows its
-     own connection status). */
+  /* ── Standby notice ── (v1.2.1, redesigned v2.4.23)
+     "Bridge offline" / "SignalRGB isn't sending anything". Until 2.4.22
+     a 340 px card in the middle of the desktop with a scan line and a
+     pulse that ran forever; reported as too loud: "das muss dezenter oben
+     am rand erscheinen ... nach Zeit nur so ne art warnschild".
+     Now a small pill at the top edge that collapses to a warning icon
+     after STANDBY_COLLAPSE_MS. No infinite animations: a notice that
+     stays up for hours must not keep the compositor busy. Hidden in
+     preview mode (the Configurator shows its own status). */
   #standby-card {
-    position: fixed; left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
+    position: fixed; left: 50%; top: 12px;
+    transform: translateX(-50%);
     z-index: 5;
     pointer-events: none;
     opacity: 0; transition: opacity 0.4s ease;
-    padding: 28px 36px;
-    /* v1.2.12: dropped backdrop-filter (was blur(14px) saturate(140%))
-       and bumped background opacity 0.78 -> 0.94. The card is visible
-       exactly when the bridge is down — i.e. the wallpaper page has
-       no useful work otherwise — and a per-frame backdrop-blur over
-       the card's ~400×220 px area was burning ~10-15% GPU forever in
-       that state. The solid-ish bg keeps the same hierarchy without
-       the blur cost. */
-    background: rgba(10, 14, 22, 0.94);
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 14px 7px 8px;
+    max-width: min(620px, 90vw);
+    background: rgba(17, 18, 22, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 14px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
     color: rgba(255, 255, 255, 0.92);
     font-family: ui-sans-serif, "Segoe UI", Roboto, sans-serif;
-    text-align: center;
-    min-width: 340px; max-width: 80vw;
-    overflow: hidden;
+    text-align: left;
   }
   #standby-card.on { opacity: 1; }
-  #standby-card::before {
-    /* Slow scan-line — same trick the "no signal" CRT look uses to
-       say "this is dead but the surface is fine". 8s sweep keeps it
-       just visible enough to register movement without being busy. */
-    content: "";
-    position: absolute; left: 0; right: 0; top: 0;
-    height: 2px;
-    background: linear-gradient(90deg,
-      transparent 0%,
-      rgba(106, 176, 255, 0.55) 50%,
-      transparent 100%);
-    animation: standby-scan 4s linear infinite;
-    pointer-events: none;
-  }
-  @keyframes standby-scan {
-    0%   { transform: translateY(0);    opacity: 0; }
-    10%  {                              opacity: 1; }
-    90%  {                              opacity: 1; }
-    100% { transform: translateY(180px); opacity: 0; }
-  }
   #standby-card .standby-icon {
-    width: 56px; height: 56px;
-    margin: 0 auto 14px;
+    flex: none;
+    width: 26px; height: 26px;
     border-radius: 50%;
-    background: rgba(106, 176, 255, 0.12);
-    border: 1px solid rgba(106, 176, 255, 0.45);
+    background: rgba(224, 163, 62, 0.16);
     display: flex; align-items: center; justify-content: center;
-    /* v1.2.12: the pulse animation moved to a ::after pseudo so it
-       uses transform + opacity instead of box-shadow. box-shadow
-       animations are paint operations (browser must re-rasterise
-       the element with a different shadow extent every keyframe
-       step); transform + opacity stay on the compositor and cost
-       essentially nothing. The icon itself just needs to host the
-       pseudo via position: relative. */
-    position: relative;
-  }
-  #standby-card .standby-icon::after {
-    content: "";
-    position: absolute;
-    inset: -2px;
-    border-radius: 50%;
-    background: rgba(106, 176, 255, 0.32);
-    z-index: -1;
-    pointer-events: none;
-    animation: standby-pulse 2.4s ease-in-out infinite;
   }
   #standby-card .standby-icon svg {
-    width: 28px; height: 28px;
-    stroke: rgba(106, 176, 255, 0.85); fill: none;
-    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    width: 16px; height: 16px;
+    stroke: #e0a33e; fill: none;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
   }
-  @keyframes standby-pulse {
-    0%, 100% { transform: scale(0.92); opacity: 0; }
-    50%      { transform: scale(1.32); opacity: 0.7; }
-  }
+  #standby-card .standby-text { min-width: 0; display: flex; flex-direction: column; }
   #standby-card .standby-title {
-    font-size: 17px; font-weight: 600;
-    letter-spacing: 0.02em; margin-bottom: 6px;
+    font-size: 12.5px; font-weight: 600; line-height: 1.3;
   }
   #standby-card .standby-sub {
-    font-size: 12.5px;
+    font-size: 11.5px; line-height: 1.35;
     color: rgba(255, 255, 255, 0.65);
-    line-height: 1.5;
   }
+  /* Collapsed: only the warning icon stays, a little dimmer. */
+  #standby-card.min { padding: 5px; gap: 0; }
+  #standby-card.min.on { opacity: 0.75; }
+  #standby-card.min .standby-text { display: none; }
   #standby-card .standby-sub code {
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: 11.5px;
+    font-size: 11px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 4px;
-    padding: 1px 5px;
+    padding: 0 4px;
   }
 
   /* ── Layout: Pixel Grid (2D — default) ─────────────────────────────────── */
@@ -1747,16 +1701,14 @@
 <div id="standby-card" aria-hidden="true">
   <div class="standby-icon">
     <svg viewBox="0 0 24 24">
-      <path d="M2 12 a 10 10 0 0 1 20 0" />
-      <path d="M5 12 a 7 7 0 0 1 14 0" />
-      <path d="M8 12 a 4 4 0 0 1 8 0" />
-      <circle cx="12" cy="18" r="1.2" fill="currentColor" stroke="none" />
+      <path d="M12 3.5 22 20.5H2z" />
+      <path d="M12 10v4.5" />
+      <path d="M12 17.6v.1" />
     </svg>
   </div>
-  <div class="standby-title">SignalRGB Wallpaper Bridge offline</div>
-  <div class="standby-sub">
-    The wallpaper is running, but the bridge isn't reachable.<br>
-    Start <code>SignalRGBBridge.exe</code> — the glow + widgets will resume automatically.
+  <div class="standby-text">
+    <div class="standby-title">SignalRGB Wallpaper Bridge offline</div>
+    <div class="standby-sub">Start <code>SignalRGBBridge.exe</code> — the glow + widgets will resume automatically.</div>
   </div>
 </div>
 <script src="interact.min.js"></script>
@@ -2336,16 +2288,36 @@ function _renderStandbyCard(reason) {
   const title = standbyCardEl.querySelector(".standby-title");
   const sub = standbyCardEl.querySelector(".standby-sub");
   if (title) title.textContent = txt[0];
-  if (sub) sub.innerHTML = txt[1] + "<br>" + txt[2];
+  // v2.4.23: the notice is one line at the top edge; the "what to do"
+  // line is the useful one, the explanation stays in STANDBY_TEXT.
+  if (sub) sub.innerHTML = txt[2];
 }
+// v2.4.23: after this long the notice shrinks to its warning icon.
+const STANDBY_COLLAPSE_MS = 20000;
+let _standbyCollapseTimer = null;
 function showStandbyCard(show, reason) {
   if (PREVIEW_MODE) return;
   if (!standbyCardEl) return;
+  const changed = show && (!standbyCardEl.classList.contains("on")
+                           || (reason && reason !== _standbyReason));
   if (show) {
     _standbyReason = reason || _standbyReason;
     _renderStandbyCard(_standbyReason);
   }
   standbyCardEl.classList.toggle("on", !!show);
+  // Full text when it appears or its reason changes, the icon after a
+  // while; gone entirely when hidden.
+  if (!show || changed) {
+    clearTimeout(_standbyCollapseTimer);
+    _standbyCollapseTimer = null;
+    standbyCardEl.classList.remove("min");
+  }
+  if (show && changed) {
+    _standbyCollapseTimer = setTimeout(() => {
+      _standbyCollapseTimer = null;
+      standbyCardEl.classList.add("min");
+    }, STANDBY_COLLAPSE_MS);
+  }
 }
 function armStandbyCard() {
   if (PREVIEW_MODE) return;

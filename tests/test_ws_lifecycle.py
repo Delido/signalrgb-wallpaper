@@ -279,6 +279,52 @@ async def test_paused_suppresses_frames(r):
             bool([p for op, p in parse_server_frames(w.written) if op == 0x2]))
 
 
+async def test_unchanged_frames_not_resent(r):
+    """v2.7.0-beta.9: a static colour in SignalRGB still arrives at 25-30
+    frames/s; each one made the page re-blur the full-viewport canvas and
+    DWM recompose the desktop (~4 % GPU, 0 of 250 frames differing)."""
+    loop = asyncio.get_running_loop()
+    b = make_broadcaster(bridge, loop)
+    tapped = []
+    b._frame_taps.append(lambda sc, p: tapped.append(p))
+    w = FakeWriter()
+    await b.add(w, 0, "wallpaper")
+    w.written.clear()
+
+    def sent():
+        return [p for op, p in parse_server_frames(w.written) if op == 0x2]
+
+    same = bytes([7] * 12)
+    for _ in range(5):
+        b._last_broadcast_per_screen.clear()   # bypass the rate cap
+        await b.broadcast_frame(0, same)
+    r.eq("five identical frames reach the page once", len(sent()), 1)
+    r.eq("...but every one reaches the output taps (DMX needs a stream)",
+         len(tapped), 5)
+
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([8] * 12))
+    r.eq("a changed frame is sent at once", len(sent()), 2)
+
+    # Keepalive: the same frame again once FRAME_KEEPALIVE_S has passed.
+    last = b._frame_last[0]
+    b._frame_last[0] = (last[0], last[1] - b.FRAME_KEEPALIVE_S - 0.01)
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([8] * 12))
+    r.eq("an unchanged frame is resent after the keepalive interval", len(sent()), 3)
+
+    # A page that connects now gets the next frame, not the next keepalive.
+    w2 = FakeWriter()
+    await b.add(w2, 0, "wallpaper")
+    w2.written.clear()
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([8] * 12))
+    r.check("a new page gets the current frame immediately",
+            bool([p for op, p in parse_server_frames(w2.written) if op == 0x2]))
+    r.check("the keepalive interval is short of the page's 15 s no-frame check",
+            b.FRAME_KEEPALIVE_S <= 2.0)
+
+
 TESTS = [
     ("frame decoding", test_frame_decoding),
     ("add / remove lifecycle", test_add_and_remove),
@@ -288,6 +334,7 @@ TESTS = [
     ("idle client reaped", test_idle_client_reaped),
     ("half-open socket reaped", test_half_open_socket_reaped),
     ("broadcast routing", test_broadcast_routing),
+    ("unchanged frames not resent", test_unchanged_frames_not_resent),
     ("configurator excluded from frames", test_configurator_excluded_from_frames),
     ("dead writer removed on broadcast", test_dead_writer_removed_on_broadcast),
     ("closing transport not written", test_closing_transport_not_written),

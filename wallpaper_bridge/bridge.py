@@ -992,7 +992,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.8"
+APP_VERSION = "2.7.0-beta.9"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1015,7 +1015,7 @@ APP_VERSION = "2.7.0-beta.8"
 # code (the Matrix-render-pipeline rewrite + glass-tile / pause-GPU
 # fixes from the v1.2.7..13 beta line, cut as 1.3.0). v1.4 + v1.5
 # are bridge-only.
-WALLPAPER_VERSION = "2.4.22"
+WALLPAPER_VERSION = "2.4.23"
 
 # v2.5.0: the oldest wallpaper bundle this bridge still considers
 # fully functional.
@@ -1088,6 +1088,43 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.9": {
+        "title_en": "What's new in v2.7.0-beta.9",
+        "title_de": "Was ist neu in v2.7.0-beta.9",
+        "body_en": (
+            "**Less GPU with a static colour.** SignalRGB keeps sending "
+            "25\u201330 frames per second even when nothing changes, and the "
+            "wallpaper redrew every one of them \u2014 including the "
+            "full-screen blur, which Windows then had to recompose into "
+            "the desktop. The bridge now forwards a frame only when it "
+            "changed (plus one per second as a sign of life). Your "
+            "OpenRGB / sACN outputs still get every frame.\n\n**The "
+            "\"SignalRGB isn't sending anything\" / \"Bridge offline\" notice "
+            "is now a small pill at the top edge** instead of a card in "
+            "the middle of the screen, and after 20 seconds it shrinks to "
+            "a warning icon.\n\n**Re-import the wallpaper bundles** to get "
+            "the new notice (Lively: remove and import the new zip; "
+            "Wallpaper Engine updates from the Workshop). The GPU saving "
+            "works without re-importing."
+        ),
+        "body_de": (
+            "**Weniger GPU bei statischer Farbe.** SignalRGB schickt auch "
+            "dann 25\u201330 Bilder pro Sekunde, wenn sich nichts \u00e4ndert, und "
+            "das Wallpaper hat jedes davon neu gezeichnet \u2014 samt "
+            "Weichzeichner \u00fcber den ganzen Bildschirm, den Windows dann "
+            "wieder in den Desktop einrechnen musste. Die Bridge leitet "
+            "ein Bild jetzt nur noch weiter, wenn es sich ge\u00e4ndert hat "
+            "(plus eines pro Sekunde als Lebenszeichen). OpenRGB- und "
+            "sACN-Ausg\u00e4nge bekommen weiterhin jedes Bild.\n\n**Der Hinweis "
+            "\u201eSignalRGB sendet nichts\u201c / \u201eBridge offline\u201c ist jetzt eine "
+            "kleine Leiste am oberen Rand** statt einer Karte mitten auf "
+            "dem Bildschirm und schrumpft nach 20 Sekunden zu einem "
+            "Warnsymbol.\n\n**Wallpaper-Bundles neu importieren**, damit "
+            "der neue Hinweis erscheint (Lively: Wallpaper entfernen und "
+            "die neue Zip importieren; Wallpaper Engine aktualisiert \u00fcber "
+            "den Workshop). Die GPU-Ersparnis wirkt auch ohne Re-Import."
+        ),
+    },
     "2.7.0-beta.8": {
         "title_en": "What's new in v2.7.0-beta.8",
         "title_de": "Was ist neu in v2.7.0-beta.8",
@@ -5851,6 +5888,9 @@ class Broadcaster:
         # gates its renderFrame at the same value so the bridge
         # never wastes a WS frame the page would just drop.
         self._last_broadcast_per_screen: dict[int, float] = {}
+        # v2.7.0-beta.9: last frame sent per screen and when (see
+        # FRAME_KEEPALIVE_S in broadcast_frame).
+        self._frame_last: dict[int, tuple] = {}
         # v1.4.0: per-frame tap callbacks. `add_frame_tap(cb)` registers
         # one; `cb(screen, rgb_payload)` is called sync on the loop
         # thread for every frame that passes the rate cap above. Used
@@ -5980,7 +6020,13 @@ class Broadcaster:
 
     # ----- client lifecycle -----
 
+    # v2.7.0-beta.9: resend interval for an unchanged frame.
+    FRAME_KEEPALIVE_S = 1.0
+
     async def add(self, writer, screen: int, role: str = "wallpaper"):
+        # A page that just connected must not wait for the keepalive to
+        # see the current colours: forget what this screen last sent.
+        self._frame_last.pop(screen, None)
         async with self._lock:
             self.clients_by_screen.setdefault(screen, set()).add(writer)
             # Side-table for client roles so the Status dialog can
@@ -6184,6 +6230,19 @@ class Broadcaster:
                 tap(screen, payload)
             except Exception as e:
                 print(f"[broadcast] frame tap failed: {e}")
+        # v2.7.0-beta.9: do not resend an unchanged frame. SignalRGB keeps
+        # sending 25-30 frames/s even for a static colour, and every one
+        # made the page putImageData() the grid canvas, which re-runs the
+        # full-viewport blur and has DWM recompose the desktop: ~4 % GPU in
+        # the two Lively WebViews plus DWM, with 0 of 250 frames differing
+        # in 10 s (measured). One copy per FRAME_KEEPALIVE_S keeps the
+        # page's "nothing arriving" check (15 s) satisfied. The taps above
+        # still see every frame: DMX receivers need a continuous stream.
+        last = self._frame_last.get(screen)
+        if last is not None and last[0] == payload \
+                and now - last[1] < self.FRAME_KEEPALIVE_S:
+            return
+        self._frame_last[screen] = (bytes(payload), now)
         async with self._lock:
             clients = list(self.clients_by_screen.get(screen, ()))
             # v1.5.0-beta hotfix: exclude `role=configurator` clients

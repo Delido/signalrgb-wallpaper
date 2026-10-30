@@ -6,6 +6,26 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.9] - 2026-10-30
+
+### Changed — unchanged glow frames are no longer resent
+
+Reported: "trotz static color in signalrgb und 5 widgets ohne effekte GPU 10% Usage". Measured per process (3D engine, 10 s): DWM 3.4 %, the two Lively WebViews 2.6 % and 1.4 %, VS Code 1.4 %. Listening to the glow stream: 249 and 271 frames in 10 s on the two screens, none differing from the previous one. `renderFrame()` `putImageData()`s the grid canvas on every frame, which re-runs the full-viewport blur and makes DWM recompose the desktop.
+
+- `Broadcaster.broadcast_frame` skips a frame identical to the last one sent for that screen, resending it once per `FRAME_KEEPALIVE_S` (1 s; the page's no-frame notice waits 15 s). Frame taps (OpenRGB, sACN) still see every frame — DMX receivers need a stream. A page that connects resets the screen's last frame, so it gets the next frame at once. Bridge-only: works with every installed bundle.
+- Test in `test_ws_lifecycle.py`.
+
+### Changed — the standby notice is a pill at the top edge (bundle 2.4.23)
+
+"das muss dezenter oben am rand erscheinen ggf. auch kleiner werden ... nach Zeit nur so ne art warnschild". The 340 px centred card with an endless scan line and pulse is now a pill at the top edge with a warning icon, the title and the one-line "what to do"; after `STANDBY_COLLAPSE_MS` (20 s) only the icon remains. No infinite animations. The show/hide logic is unchanged (`test_standby_card.mjs` 38/38).
+
+### Added — maintainer tools
+
+- `tools/ui_shot.mjs` — headless-Edge screenshot + console check of a local page through the running bridge.
+- `tools/gpu_by_process.ps1` — GPU utilisation per process.
+- `tools/webpipe_measure.py` — read-only SignalRGB WebPipe load A/B.
+- `tools/release_prep.py` — bumps the version and writes RELEASE_NOTES + CHANGELOG from one JSON file, with escaped literals and a parse check.
+
 ## [2.7.0-beta.8] - 2026-10-30
 
 ### Fixed — sensor widgets stayed empty after a long pause
