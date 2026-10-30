@@ -992,7 +992,7 @@ class UpdateChecker:
 # ============================================================================
 
 APP_NAME    = "SignalRGB Wallpaper Bridge"
-APP_VERSION = "2.7.0-beta.9"
+APP_VERSION = "2.7.0-beta.10"
 
 # v1.5.0-beta: the wallpaper-bundle code (wallpaper/index.html + its
 # adjacent assets) is versioned INDEPENDENTLY of APP_VERSION. The
@@ -1088,6 +1088,33 @@ APP_AUTHOR  = "Sebastian Mendyka"
 # to a generic stub if a version isn't listed here yet.
 # ─────────────────────────────────────────────────────────────────────────────
 RELEASE_NOTES = {
+    "2.7.0-beta.10": {
+        "title_en": "What's new in v2.7.0-beta.10",
+        "title_de": "Was ist neu in v2.7.0-beta.10",
+        "body_en": (
+            "**Less GPU with slow effects like Neon Shift.** Slow effects "
+            "change the colours by only 1\u20132 of 255 steps per frame \u2014 "
+            "invisible under the glow's blur \u2014 but every change made "
+            "Windows recompose the whole desktop. The bridge now bundles "
+            "such tiny changes and sends them at most about four times a "
+            "second; a visible change still goes out at once, so fast "
+            "effects are not affected.\n\nIf a slow effect looks steppy to "
+            "you, switch it off under **System \u2192 More settings \u2192 Bundle "
+            "slow colour changes**."
+        ),
+        "body_de": (
+            "**Weniger GPU bei langsamen Effekten wie Neon Shift.** "
+            "Langsame Effekte \u00e4ndern die Farben pro Frame nur um 1\u20132 von "
+            "255 Stufen \u2014 unter dem Weichzeichner unsichtbar \u2014, aber jede "
+            "\u00c4nderung lie\u00df Windows den ganzen Desktop neu zusammensetzen. "
+            "Die Bridge b\u00fcndelt solche winzigen \u00c4nderungen jetzt und "
+            "schickt sie h\u00f6chstens etwa viermal pro Sekunde; eine "
+            "sichtbare \u00c4nderung geht weiterhin sofort raus, schnelle "
+            "Effekte sind also nicht betroffen.\n\nWirkt ein langsamer "
+            "Effekt f\u00fcr dich stufig, l\u00e4sst sich das unter **System \u2192 Mehr "
+            "Einstellungen \u2192 Langsame Farbwechsel b\u00fcndeln** ausschalten."
+        ),
+    },
     "2.7.0-beta.9": {
         "title_en": "What's new in v2.7.0-beta.9",
         "title_de": "Was ist neu in v2.7.0-beta.9",
@@ -5835,6 +5862,14 @@ def parse_query_role(target: str) -> str:
 # Broadcaster — UDP fan-out + settings push
 # ============================================================================
 
+def _frame_max_delta(a: bytes, b: bytes, stride: int = 5) -> int:
+    """Largest per-byte difference between two equal-length frames,
+    sampled every `stride` bytes (5 is coprime with 3, so every colour
+    channel is sampled). ~0.15 ms for a 114x64 grid in pure Python; a
+    change the sample misses still goes out after FRAME_COALESCE_MAX_S."""
+    return max((abs(x - y) for x, y in zip(a[7::stride], b[7::stride])), default=0)
+
+
 class Broadcaster:
     """
     Routes UDP datagrams to WS clients filtered by screen-index, and pushes
@@ -6022,6 +6057,13 @@ class Broadcaster:
 
     # v2.7.0-beta.9: resend interval for an unchanged frame.
     FRAME_KEEPALIVE_S = 1.0
+    # v2.7.0-beta.10: changes below FRAME_COALESCE_DELTA (of 255, any
+    # channel, against the last frame SENT) are held back for at most
+    # FRAME_COALESCE_MAX_S. Larger changes go out at once, so fast effects
+    # are untouched. Switchable: System -> More settings.
+    FRAME_COALESCE_DELTA = 6
+    FRAME_COALESCE_MAX_S = 0.25
+    coalesce_small_changes = True
 
     async def add(self, writer, screen: int, role: str = "wallpaper"):
         # A page that just connected must not wait for the keepalive to
@@ -6239,9 +6281,20 @@ class Broadcaster:
         # page's "nothing arriving" check (15 s) satisfied. The taps above
         # still see every frame: DMX receivers need a continuous stream.
         last = self._frame_last.get(screen)
-        if last is not None and last[0] == payload \
-                and now - last[1] < self.FRAME_KEEPALIVE_S:
-            return
+        if last is not None:
+            age = now - last[1]
+            if last[0] == payload:
+                if age < self.FRAME_KEEPALIVE_S:
+                    return
+            elif (self.coalesce_small_changes and age < self.FRAME_COALESCE_MAX_S
+                    and len(last[0]) == len(payload)
+                    and _frame_max_delta(last[0], payload) < self.FRAME_COALESCE_DELTA):
+                # v2.7.0-beta.10: a change too small to see under the blur
+                # (Neon Shift: 1-2 of 255 per frame, 8-10 changed frames/s)
+                # waits until it adds up or FRAME_COALESCE_MAX_S passes.
+                # Each forwarded frame costs a DWM recomposition of the
+                # desktop (~0.3 % GPU per update/s, measured).
+                return
         self._frame_last[screen] = (bytes(payload), now)
         async with self._lock:
             clients = list(self.clients_by_screen.get(screen, ()))
@@ -12970,6 +13023,7 @@ class BridgeRuntime:
                 # v2.6.1: live registry state, not a config field.
                 "autostart":            autostart_enabled(),
                 "signalrgbSensorMode":  str(self.config.get("signalrgbSensorMode") or "single"),
+                "glowCoalesce":         self.config.get("glowCoalesce", True) is not False,
                 "autostartSupported":   autostart_supported(),
                 "openrgbOutput": copy.deepcopy(self.config.get("openrgbOutput") or {}),
                 # v1.6.2-beta: SDK-server config block surfaced to the
@@ -14331,6 +14385,8 @@ class BridgeRuntime:
         "autostart",
         # v2.7.0-beta.7: "single" (default) | "full" SignalRGB sensor reading.
         "signalrgbSensorMode",
+        # v2.7.0-beta.10: hold back glow changes too small to see.
+        "glowCoalesce",
     }
 
     def update_bridge_setting(self, key: str, value):
@@ -14397,6 +14453,25 @@ class BridgeRuntime:
                 self.hotkey_listener.stop()
                 self.hotkey_listener = HotkeyListener(self)
             print(f"[settings] presetHotkeysEnabled -> {enabled}")
+        elif key == "glowCoalesce":
+            on = bool(value)
+            with self.config_lock:
+                if (self.config.get("glowCoalesce", True) is not False) == on:
+                    return
+                self.config["glowCoalesce"] = on
+                snapshot = json.loads(json.dumps(self.config))
+            try:
+                save_config(snapshot)
+            except Exception as e:
+                print(f"[settings] save_config failed: {e}")
+            if self.broadcaster:
+                self.broadcaster.coalesce_small_changes = on
+            for s in range(N_SCREENS):
+                try:
+                    self.push_settings(s, snapshot["screens"][str(s)])
+                except Exception:
+                    pass
+            print(f"[settings] glowCoalesce -> {on}")
         elif key == "signalrgbSensorMode":
             mode = str(value or "single")
             if mode not in ("single", "full"):
@@ -14984,6 +15059,8 @@ class BridgeRuntime:
             self._get_bridge_state,
             get_fullscreen_anywhere=lambda: self._fullscreen_anywhere,
         )
+        self.broadcaster.coalesce_small_changes = \
+            self.config.get("glowCoalesce", True) is not False
         # System-stats poller pushes 1 Hz snapshots over the WS once the
         # broadcaster is up. No-op if psutil wasn't bundled into this build.
         # The HwMon poller starts even when LHM isn't running — it'll just

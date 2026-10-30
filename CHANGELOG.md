@@ -6,6 +6,17 @@ the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0-beta.10] - 2026-10-30
+
+### Changed — tiny glow changes are bundled (`glowCoalesce`, default on)
+
+Asked after beta.9 with Neon Shift (a slow full-canvas colour drift): "lässt sich da auch was machen?". Measured on the live stream: 8.4 / 10.5 changed frames/s reached the pages, each differing from the previous by at most 1–2 of 255; GPU dwm 3.3 %, the two WebViews 0.3 / 0.2 % — the cost is DWM recomposing the desktop per update (~0.3 % per update/s, from the static-colour vs Neon Shift numbers).
+
+- `broadcast_frame` holds back a frame whose largest channel change against the last frame SENT is below `FRAME_COALESCE_DELTA` (6/255), for at most `FRAME_COALESCE_MAX_S` (250 ms). Larger changes go out at once. `_frame_max_delta` samples every 5th byte (coprime with 3, so R, G and B are all covered): ~0.15 ms for a 114×64 grid in pure Python.
+- Simulated offline on the live Neon Shift stream: 11.5 → 3.3 and 10.8 → 2.7 updates/s, largest single step then 8/255.
+- Bridge setting `glowCoalesce`, switch in System → More settings. Taps (OpenRGB, sACN) still get every frame.
+- Tests in `test_ws_lifecycle.py` (held back, adds up, time cap, switched off, channel coverage).
+
 ## [2.7.0-beta.9] - 2026-10-30
 
 ### Changed — unchanged glow frames are no longer resent

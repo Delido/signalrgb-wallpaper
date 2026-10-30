@@ -303,22 +303,54 @@ async def test_unchanged_frames_not_resent(r):
          len(tapped), 5)
 
     b._last_broadcast_per_screen.clear()
-    await b.broadcast_frame(0, bytes([8] * 12))
-    r.eq("a changed frame is sent at once", len(sent()), 2)
+    await b.broadcast_frame(0, bytes([40] * 12))
+    r.eq("a clearly changed frame is sent at once", len(sent()), 2)
 
     # Keepalive: the same frame again once FRAME_KEEPALIVE_S has passed.
     last = b._frame_last[0]
     b._frame_last[0] = (last[0], last[1] - b.FRAME_KEEPALIVE_S - 0.01)
     b._last_broadcast_per_screen.clear()
-    await b.broadcast_frame(0, bytes([8] * 12))
+    await b.broadcast_frame(0, bytes([40] * 12))
     r.eq("an unchanged frame is resent after the keepalive interval", len(sent()), 3)
+
+    # v2.7.0-beta.10: a change too small to see waits (Neon Shift: 1-2/255).
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([40] * 7 + [42] * 5))
+    r.eq("a tiny change is held back", len(sent()), 3)
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([40] * 7 + [44] * 5))
+    r.eq("...also while it is still below the threshold", len(sent()), 3)
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([40] * 7 + [47] * 5))
+    r.eq("once it adds up to a visible step it goes out", len(sent()), 4)
+    last = b._frame_last[0]
+    b._frame_last[0] = (last[0], last[1] - b.FRAME_COALESCE_MAX_S - 0.01)
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([40] * 7 + [48] * 5))
+    r.eq("a tiny change goes out after FRAME_COALESCE_MAX_S at the latest",
+         len(sent()), 5)
+    b.coalesce_small_changes = False
+    b._last_broadcast_per_screen.clear()
+    await b.broadcast_frame(0, bytes([40] * 7 + [49] * 5))
+    r.eq("switched off, every change goes out", len(sent()), 6)
+    b.coalesce_small_changes = True
+    # Stride 5 is coprime with 3: sampled bytes 0, 5, 10 of the pixel data
+    # are R, B and G of different pixels, so no colour channel goes unseen.
+    base = bytes(7 + 15)
+    seen = []
+    for k in (0, 5, 10):
+        changed = bytearray(base)
+        changed[7 + k] = 9
+        seen.append((k % 3, bridge._frame_max_delta(base, bytes(changed))))
+    r.check("the delta sample covers R, G and B",
+            sorted(c for c, d in seen if d == 9) == [0, 1, 2], str(seen))
 
     # A page that connects now gets the next frame, not the next keepalive.
     w2 = FakeWriter()
     await b.add(w2, 0, "wallpaper")
     w2.written.clear()
     b._last_broadcast_per_screen.clear()
-    await b.broadcast_frame(0, bytes([8] * 12))
+    await b.broadcast_frame(0, bytes([40] * 7 + [49] * 5))
     r.check("a new page gets the current frame immediately",
             bool([p for op, p in parse_server_frames(w2.written) if op == 0x2]))
     r.check("the keepalive interval is short of the page's 15 s no-frame check",

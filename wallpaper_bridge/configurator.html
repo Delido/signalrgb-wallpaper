@@ -4276,6 +4276,14 @@
         <div class="hint sub" id="sys-sensor-mode-hint" data-i18n="sensors.mode_hint">
           "Only the ones in use" asks SignalRGB once a second for exactly the sensors your widgets show and costs it almost nothing. "All sensors" receives every update — about half a percent of CPU in SignalRGB, which can pay off with many sensor widgets.
         </div>
+        <div class="check-row">
+          <input type="checkbox" id="sys-glow-coalesce">
+          <label for="sys-glow-coalesce" data-i18n="system.glow_coalesce">Bundle slow colour changes (saves GPU)</label>
+        </div>
+        <div class="hint sub" data-i18n="system.glow_coalesce_hint"
+             style="margin: -4px 0 8px 22px; font-size: 11px;">
+          Changes too small to see are sent at most four times a second; fast effects are not affected. Switch off if a slow effect looks steppy.
+        </div>
       </div>
 
       <!-- v2.4.4-beta.19: language picker. The config field, the
@@ -5300,6 +5308,11 @@ const TRANSLATIONS = {
                                de: "SignalRGB läuft nicht" },
   "sensors.sig.idle":       { en: "SignalRGB: not checked yet",
                               de: "SignalRGB: noch nicht geprüft" },
+  "system.glow_coalesce":   { en: "Bundle slow colour changes (saves GPU)",
+                              de: "Langsame Farbwechsel bündeln (spart GPU)" },
+  "system.glow_coalesce_hint": {
+    en: "Changes too small to see are sent at most four times a second; fast effects are not affected. Switch off if a slow effect looks steppy.",
+    de: "Unsichtbar kleine Änderungen werden höchstens viermal pro Sekunde übertragen; schnelle Effekte sind nicht betroffen. Ausschalten, falls ein langsamer Effekt stufig wirkt." },
   "sensors.mode":           { en: "SignalRGB sensors",    de: "SignalRGB-Sensoren" },
   "sensors.mode.single":    { en: "Only the ones in use", de: "Nur genutzte" },
   "sensors.mode.full":      { en: "All sensors",          de: "Alle Sensoren" },
@@ -10535,6 +10548,7 @@ let bridgeState = {};
 function renderSystemSection() {
   const map = {
     "sys-autostart":       "autostart",
+    "sys-glow-coalesce":   "glowCoalesce",
     "sys-preset-hotkeys":  "presetHotkeysEnabled",
     "sys-fullscreen-pause": "fullscreenPause",
     "sys-update-check":    "updateCheckEnabled",
@@ -10599,6 +10613,7 @@ function renderSystemSection() {
 (function wireSystemSection() {
   const toggleMap = {
     "sys-autostart":        "autostart",
+    "sys-glow-coalesce":    "glowCoalesce",
     "sys-preset-hotkeys":   "presetHotkeysEnabled",
     "sys-fullscreen-pause": "fullscreenPause",
     "sys-update-check":     "updateCheckEnabled",
